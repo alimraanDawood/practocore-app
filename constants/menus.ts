@@ -10,31 +10,19 @@ export const navMenu: NavMenu[] = [
         link: '/',
       },
       {
-        title: 'Products',
-        icon: 'i-lucide-shopping-bag',
+        title: 'Documents',
+        icon: 'i-lucide-book-text',
         link: '/products',
         children: [
           {
             title: 'Products',
             link: '/products',
           },
-          {
-            title: 'Categories',
-            link: '/products/categories',
-          },
-          {
-            title: 'Groups',
-            link: '/products/groups',
-          },
-          {
-            title: 'Suppliers',
-            link: '/products/suppliers',
-          },
         ],
       },
       {
-        title: 'Content Media',
-        icon: 'i-lucide-folder',
+        title: 'Cases',
+        icon: 'i-lucide-scale',
         children: [
           {
             title: 'Folders',

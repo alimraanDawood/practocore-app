@@ -6,7 +6,7 @@ defineProps<{
 
 <template>
   <div
-      class="relative flex items-center justify-center px-4 h-dvh lg:max-w-none lg:px-0"
+      class="relative flex items-center justify-center lg:px-4 h-dvh lg:max-w-none lg:px-0"
       :class="{ 'flex-row-reverse': reverse }"
   >
     <div class="relative hidden h-full flex-1 flex-col bg-muted p-10 text-white lg:flex dark:border-r">
@@ -17,7 +17,7 @@ defineProps<{
         </svg>
 
         <span class="font-semibold text-sm">
-          SimpliDuuka
+          PractoCore
         </span>
       </div>
       <div class="relative z-20 mt-auto">

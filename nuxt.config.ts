@@ -13,7 +13,7 @@ export default defineNuxtConfig({
     ],
   },
 
-  modules: ['shadcn-nuxt', '@hypernym/nuxt-gsap'],
+  modules: ['shadcn-nuxt', '@hypernym/nuxt-gsap', '@nuxt/icon'],
 
   shadcn: {
     /**
@@ -32,5 +32,8 @@ export default defineNuxtConfig({
       scrollSmoother: true,
       splitText: true
     }
-  }
+  },
+  plugins: [
+      '~/plugins/animxyz',
+  ]
 })

@@ -44,7 +44,7 @@ const user: {
 </script>
 
 <template>
-  <Sidebar collapsible="offcanvas" side="left" variant="sidebar">
+  <Sidebar collapsible="icon" side="left" variant="sidebar">
     <SidebarHeader>
       <LayoutSidebarNavHeader :teams="teams" />
       <Search />
