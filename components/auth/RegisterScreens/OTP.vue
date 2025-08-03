@@ -18,12 +18,15 @@ import {
   PinInputSlot,
 } from '@/components/ui/pin-input'
 import {  Loader2 } from 'lucide-vue-next';
-import {verifyOTP} from "~/services/auth";
+import {resendOTP, verifyOTP} from "~/services/auth";
+import {toast} from "vue-sonner";
 
 const props = defineProps(['userId', 'otpId'])
+const emits = defineEmits(['complete'])
+
 const loading = ref(false);
 const formSchema = toTypedSchema(z.object({
-  pin: z.array(z.coerce.string()).length(5, { message: 'Invalid input' }),
+  pin: z.array(z.coerce.string()).length(5, { message: '' }),
 }))
 
 const { handleSubmit, setFieldValue } = useForm({
@@ -38,23 +41,55 @@ const onSubmit = handleSubmit(async ({ pin }) => {
   try {
     const code = pin.join('');
 
-    const result = await verifyOTP(props.otpId, props.userId, code);
+    const response = await verifyOTP(props.otpId, props.userId, code);
 
-    console.log(result);
+    if(!response.ok) {
+      throw new Error(response.statusText);
+    }
+
+    const result = await response.json();
+    if(result) {
+      toast.success("OTP verification success!");
+      emitComplete();
+    }
   } catch (e) {
+    toast.error("OTP verification failed! Did you put in the right code?");
     console.error(e);
   }
 
   loading.value = false;
-
 })
+
+const resendOTPCode = async () => {
+  loading.value = true;
+
+  try {
+    const response = await resendOTP(props.otpId, props.userId);
+
+    if(!response.ok) {
+      throw new Error(response.statusText);
+    }
+
+    const result = await response.json();
+    toast.success("Successfully sent OTP!");
+  } catch(e) {
+    toast.error("Failed to resend OTP!");
+    console.error(e);
+  }
+
+  loading.value = false;
+}
+
+const emitComplete = () => {
+  emits('complete', true);
+}
 
 const handleComplete = (e: string[]) => console.log(e.join(''))
 </script>
 
 <template>
   <div class="flex flex-col h-full w-full items-center justify-center">
-    <div class="flex text-muted-foreground flex-col gap-1 items-center border bg-muted p-3 rounded-lg w-full">
+    <div class="flex text-muted-foreground flex-col gap-3 items-center border bg-muted p-3 rounded-lg w-full">
       <span class="font-semibold text-lg">Enter code sent to your email</span>
       <form id="register-otp-form" class="flex flex-col items-center rounded-lg w-full" @submit="onSubmit">
         <FormField v-slot="{ componentField, value }" name="pin">
@@ -92,6 +127,11 @@ const handleComplete = (e: string[]) => console.log(e.join(''))
         <Loader2 class="animate-spin" v-if="loading" />
         <span v-else>Submit</span>
       </Button>
+
+      <div class="flex flex-row gap-2">
+        <span>Didnt get the code?</span>
+        <button @click="resendOTPCode" class="flex flex-row text-sm font-semibold text-primary">Resend Code</button>
+      </div>
     </div>
   </div>
 </template>

@@ -1,0 +1,321 @@
+<template>
+  <div class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+    <div class="flex flex-row justify-between w-full items-center p-3 border-b">
+      <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-12"/>
+
+      <div class="flex flex-row gap-2">
+        <Button size="icon" variant="secondary" :disabled="!canGoBack" @click="goBack">
+          <ArrowLeft/>
+        </Button>
+
+        <Button size="icon" variant="secondary" :disabled="!canGoForward" @click="goForward">
+          <ArrowRight/>
+        </Button>
+      </div>
+    </div>
+
+    <div class="flex flex-col h-full w-[95vw] lg:w-[35vw] items-center border-x overflow-hidden">
+      <XyzTransition mode="out-in" xyz="fade in-right out-left">
+        <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" @complete="accountTypeRegistComplete" />
+        <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
+        <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
+        <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
+        <AdminRegister class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
+        <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
+        <OTP class="max-w-sm p-3" :otp-id="otpId" @complete="OTPEntryComplete" :user-id="userId" v-else-if="currentStep === RegistrationSteps.OTP" />
+        <Subscription @complete="subscriptionRegistComplete" v-else-if="currentStep === RegistrationSteps.SUBSCRIPTION" />
+      </XyzTransition>
+    </div>
+
+    <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
+        <span>
+          Already have an account?
+          <NuxtLink to="/auth/login" class="text-primary font-semibold underline">Login Instead</NuxtLink>.
+        </span>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed } from 'vue'; // Import ref, reactive, computed from 'vue'
+import { ArrowLeft, ArrowRight } from 'lucide-vue-next'
+import AccountType from "~/components/auth/RegisterScreens/AccountType.vue";
+import OrganisationRegister from "~/components/auth/RegisterScreens/OrganisationRegister.vue";
+import PrimaryContactRegister from "~/components/auth/RegisterScreens/PrimaryContactRegister.vue";
+import FirmDetailsRegister from "~/components/auth/RegisterScreens/FirmDetailsRegister.vue";
+import AdminRegister from "~/components/auth/RegisterScreens/AdminRegister.vue";
+import CreatingAccount from "~/components/auth/RegisterScreens/CreatingAccount.vue";
+import OTP from '~/components/auth/RegisterScreens/OTP.vue';
+import Subscription from "~/components/auth/RegisterScreens/Subscription.vue";
+
+import {signInWithEmail, submitAccountDetails} from "~/services/auth";
+import {toast} from "vue-sonner";
+
+// query allows us to tell whether the registration is from a link
+const query = useRoute().query;
+
+// --- Registration Steps Enum ---
+enum RegistrationSteps {
+  ACC_TYPE = 1,
+  ORG_REGIST = 2,
+  PRIMARY_CONTACT_REGIST = 3,
+  FIRM_DETAILS_REGIST = 4,
+  ADMIN_REGIST = 5,
+  CREATING = 6,
+  OTP = 7,
+  SUBSCRIPTION = 8
+}
+
+// --- Doubly Linked List for History ---
+
+class RegistrationStepNode {
+  step: RegistrationSteps;
+  prev: RegistrationStepNode | null;
+  next: RegistrationStepNode | null;
+
+  constructor(step: RegistrationSteps) {
+    this.step = step;
+    this.prev = null;
+    this.next = null;
+  }
+}
+
+class RegistrationHistory {
+  head: RegistrationStepNode | null;
+  currentStepNode: RegistrationStepNode | null;
+
+  constructor() {
+    this.head = null;
+    this.currentStepNode = null;
+  }
+
+  reset() {
+    this.head = null;
+    this.currentStepNode = null;
+  }
+
+  /**
+   * Adds a new step to the history.
+   * This invalidates any "forward" history from the current point.
+   */
+  addStep(step: RegistrationSteps) {
+    const newNode = new RegistrationStepNode(step);
+
+    if (!this.head) {
+      this.head = newNode;
+    } else {
+      newNode.prev = this.currentStepNode;
+      if (this.currentStepNode) {
+        this.currentStepNode.next = newNode;
+      }
+      // Any nodes previously linked as 'next' from currentStepNode are now unreferenced
+      // and will be garbage collected, effectively discarding forward history.
+    }
+    this.currentStepNode = newNode;
+  }
+
+  /**
+   * Moves back in history.
+   * @returns {RegistrationSteps | null} The previous step, or null if at the start.
+   */
+  goBack(): RegistrationSteps | null {
+    if (this.currentStepNode && this.currentStepNode.prev) {
+      this.currentStepNode = this.currentStepNode.prev;
+      return this.currentStepNode.step;
+    }
+    return null;
+  }
+
+  /**
+   * Moves forward in history.
+   * @returns {RegistrationSteps | null} The next step, or null if at the end.
+   */
+  goForward(): RegistrationSteps | null {
+    if (this.currentStepNode && this.currentStepNode.next) {
+      this.currentStepNode = this.currentStepNode.next;
+      return this.currentStepNode.step;
+    }
+    return null;
+  }
+
+  /**
+   * Checks if there's a previous step to go back to.
+   */
+  canGoBack(): boolean {
+    return this.currentStepNode !== null && this.currentStepNode.prev !== null;
+  }
+
+  /**
+   * Checks if there's a next step to go forward to.
+   */
+  canGoForward(): boolean {
+    return this.currentStepNode !== null && this.currentStepNode.next !== null;
+  }
+}
+
+// --- Reactive State ---
+// Using ref for currentStep as it's a primitive.
+const currentStep = ref<RegistrationSteps>(RegistrationSteps.ACC_TYPE);
+
+onMounted(() => {
+  if(query?.ref) {
+    currentStep.value = RegistrationSteps.ADMIN_REGIST;
+  }
+})
+
+
+// Use reactive for complex objects if you prefer, or ref for all.
+const registrationData = reactive({
+  type: 'IND',
+  organisation: {
+    firmName: 'Dawood & Associates',
+    legalBusinessName: 'Dawood & Associates LLC',
+    firmEmailDomain: 'dawood.law',
+    firmSize: '2-10',
+    primaryPracticeAreas: ["Corporate Law", "Litigation", "Family Law", "Criminal Defense"],
+    contact: {
+      fullName: 'Al-imraan Dawood',
+      emailAddress: 'alimraandawoodgulam@gmail.com',
+      phoneNumber: '+256740895974'
+    }
+  },
+  user: {
+    id: '',
+    fullName: 'Al-imraan Dawood',
+    emailAddress: 'alimraandawoodgulam@gmail.com',
+    password: 'alimraanD12',
+    confirmPassword: 'alimraanD12',
+  }
+});
+
+const userId = ref('');
+const otpId = ref('');
+
+// Initialize the history manager
+const historyManager = reactive(new RegistrationHistory());
+
+// Immediately add the initial step to history
+historyManager.addStep(currentStep.value);
+
+// --- Computed Properties for Button State ---
+const canGoBack = computed(() => historyManager.canGoBack());
+const canGoForward = computed(() => historyManager.canGoForward());
+
+// --- Navigation Functions (Wrapper for historyManager) ---
+const goToStep = (step: RegistrationSteps) => {
+  historyManager.addStep(step);
+  currentStep.value = step;
+};
+
+const goBack = () => {
+  const previousStep = historyManager.goBack();
+  if (previousStep !== null) {
+    currentStep.value = previousStep;
+  }
+};
+
+const goForward = () => {
+  const nextStep = historyManager.goForward();
+  if (nextStep !== null) {
+    currentStep.value = nextStep;
+  }
+};
+
+// --- Registration Completion Handlers ---
+const accountTypeRegistComplete = (val: 'ORG' | 'IND') => {
+  if(val === 'ORG') {
+    registrationData.type = 'ORG';
+    goToStep(RegistrationSteps.ORG_REGIST);
+  } else if (val === 'IND') {
+    registrationData.type = 'IND';
+    goToStep(RegistrationSteps.ADMIN_REGIST);
+  }
+}
+
+const organisationRegistComplete = (val: any) => { // Consider more specific type for val
+  registrationData.organisation = { ...registrationData.organisation, ...val };
+  goToStep(RegistrationSteps.FIRM_DETAILS_REGIST);
+}
+
+const firmDetailsRegistComplete = (val: any) => { // Consider more specific type for val
+  registrationData.organisation = {...registrationData.organisation, ...val};
+  goToStep(RegistrationSteps.PRIMARY_CONTACT_REGIST);
+}
+
+const primaryContactRegistComplete = (val: any) => { // Consider more specific type for val
+  registrationData.organisation = {...registrationData.organisation,
+    contact: val
+  }
+  goToStep(RegistrationSteps.ADMIN_REGIST);
+}
+
+const adminRegistComplete = (val: any) => { // Consider more specific type for val
+  registrationData.user = val;
+  // For the final step before submission, you might not want to add it to history
+  // if you don't want the user to go back to "Creating Account" or "OTP" from the next step.
+  // I'll keep it simple for now, but you could skip `goToStep` and just set `currentStep.value` directly.
+  currentStep.value = RegistrationSteps.CREATING; // This step is purely for UI feedback
+  submitData();
+}
+
+const adminRegistGoogle = (val: any) => { // registered using google
+  registrationData.user = {...registrationData.user, id: val?.record?.id };
+
+  currentStep.value = RegistrationSteps.CREATING;
+  submitData();
+}
+
+const OTPEntryComplete = async (val: any) => {
+  try {
+    if (val === true) {
+      const signInResult = await signInWithEmail(registrationData.user.emailAddress, registrationData.user.password);
+
+      if(query?.ref) {
+        return;
+      }
+
+      currentStep.value = RegistrationSteps.SUBSCRIPTION;
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+const subscriptionRegistComplete = () => {
+  // debate on what to do here
+  toast.success("Sign up is done!");
+  useRouter().push('/auth/invite');
+}
+
+const submitData = async () => {
+  try {
+    const result = await submitAccountDetails(registrationData, query?.ref ? query?.ref : null);
+
+    if(result) {
+      otpId.value = result.otpId;
+      userId.value = result.userId;
+    }
+    // Directly setting currentStep here, as OTP might be a terminal step not for history nav
+    // If you want OTP to be part of back/forward, use `goToStep(RegistrationSteps.OTP)`
+
+    if(otpId.value !== null) {
+      currentStep.value = RegistrationSteps.OTP;
+    } else {
+      useRouter().push('/main/')
+    }
+
+    historyManager.reset()
+  } catch(e) {
+    toast.error("We were unable to create your account!");
+    console.error(e);
+  }
+}
+
+definePageMeta({
+  layout: 'blank',
+});
+</script>
+
+<style scoped>
+/* Your existing styles */
+</style>

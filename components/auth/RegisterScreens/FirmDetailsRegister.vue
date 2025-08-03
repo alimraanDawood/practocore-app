@@ -7,6 +7,7 @@ import { AutoForm } from '@/components/ui/auto-form'
 import { Button } from '@/components/ui/button'
 import FirmPracticeAreasInput from "~/components/auth/RegisterScreens/FirmPracticeAreasInput.vue";
 
+const props =  defineProps(['firmDetailsData'])
 const emits = defineEmits(['complete'])
 const firmSizes = {
   'Solo Practitioner': 'SOLO_PRACTITIONER',
@@ -14,8 +15,16 @@ const firmSizes = {
   '11-50 attorneys': '11-50',
   '51-100 attorneys': '51-100',
   '100+ attorneys': '100+',
-
 }
+
+const firmSizesRev = {
+  'SOLO_PRACTITIONER': 'Solo Practitioner',
+  '2-10': '2-10 attorneys',
+  '11-50': '11-50 attorneys',
+  '51-100': '51-100 attorneys',
+  '100+': '100+ attorneys',
+}
+
 const schema = z.object({
   firmSize: z.enum(['Solo Practitioner', '2-10 attorneys', '11-50 attorneys', '51-100 attorneys', '100+ attorneys']),
   primaryPracticeAreas: z.array(z.string()),
@@ -23,6 +32,10 @@ const schema = z.object({
 
 const form = useForm({
   validationSchema: toTypedSchema(schema),
+  initialValues: {
+    primaryPracticeAreas: props.firmDetailsData?.primaryPracticeAreas,
+    firmSize: firmSizesRev[props.firmDetailsData?.firmSize]
+  }
 })
 
 function onSubmit(values: Record<string, any>) {
@@ -40,6 +53,10 @@ function onSubmit(values: Record<string, any>) {
 
     <div class="flex flex-col w-full gap-3">
       <AutoForm
+          :initial-values="{
+            primaryPracticeAreas: firmDetailsData?.primaryPracticeAreas,
+            firmSize: firmSizesRev[firmDetailsData?.firmSize]
+          }"
           class="w-full space-y-8"
           :schema="schema"
           :form="form"

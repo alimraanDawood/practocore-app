@@ -14,6 +14,7 @@ const props = defineProps<{
   form?: FormContext<GenericObject>
   fieldConfig?: Config<z.infer<T>>
   dependencies?: Dependency<z.infer<T>>[]
+  initialValues?: any
 }>()
 
 const emits = defineEmits<{
@@ -73,6 +74,7 @@ const formComponentProps = computed(() => {
       keepValues: true,
       validationSchema: formSchema,
       onSubmit: (val: GenericObject) => emits('submit', val),
+      initialValues: props.initialValues,
     }
   }
 })

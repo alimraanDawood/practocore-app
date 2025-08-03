@@ -3,23 +3,26 @@ import type {FieldProps} from "~/components/ui/auto-form";
 import { AutoFormLabel } from "~/components/ui/auto-form";
 import { useField } from "vee-validate";
 
-const props = defineProps<FieldProps>()
+interface FirmPracticeAreasInputProps extends FieldProps {
+  value: any
+}
+const props = defineProps<FirmPracticeAreasInputProps>()
 const emits = defineEmits(['update:modelValue']);
 
 const selectedPracticeAreas = ref<string[]>([])
 const practiceAreas = ["Corporate Law", "Litigation", "Family Law", "Criminal Defense", "Personal Injury", "Real Estate", "Estate Planning", "Immigration", "Intellectual Property", "Employment Law", "Tax Law", "Other"];
 
-const { value } = useField(props.fieldName);
+const { value } = useField(props.fieldName, undefined, { initialValue: props.value });
 const extras = ref([]);
 
 const togglePracticeArea = (area : string) => {
-  if(selectedPracticeAreas.value.includes(area)) {
-    selectedPracticeAreas.value = selectedPracticeAreas.value.filter(a => a !== area);
+  if(value.value.includes(area)) {
+    value.value = value.value.filter(a => a !== area);
   } else {
-    selectedPracticeAreas.value.push(area);
+    value.value.push(area);
   }
 
-  value.value = [...selectedPracticeAreas.value, ...extras.value];
+  value.value = [...value.value, ...extras.value];
 }
 
 </script>
@@ -33,10 +36,10 @@ const togglePracticeArea = (area : string) => {
 
       <FormControl>
         <div class="flex flex-wrap border p-2 rounded gap-2">
-          <Button type="button" @click="togglePracticeArea(area)" v-for="area in practiceAreas" :variant="selectedPracticeAreas.includes(area) ? 'default' : 'secondary'" size="sm">{{ area }}</Button>
+          <Button type="button" @click="togglePracticeArea(area)" v-for="area in practiceAreas" :variant="value.includes(area) ? 'default' : 'secondary'" size="sm">{{ area }}</Button>
         </div>
 
-        <div class="flex flex-row w-full" v-if="selectedPracticeAreas.includes('Other')">
+        <div class="flex flex-row w-full" v-if="value.includes('Other')">
           <TagsInput v-model="extras" class="w-full flex">
             <TagsInputItem class="bg-primary text-primary-foreground rounded h-fit" v-for="item in extras" :key="item" :value="item">
               <TagsInputItemText />

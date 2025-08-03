@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import MobileNavigation from "~/components/shared/MobileNavigation/MobileNavigation.vue";
 </script>
 
 <template>
   <SidebarProvider>
     <LayoutAppSidebar />
-    <SidebarInset>
-      <LayoutHeader />
-      <div class="min-w-0 w-full flex-1 overflow-x-auto p-4 lg:p-6 bg-muted">
+    <SidebarInset class="h-[100dvh]">
+      <LayoutHeader class="hidden lg:flex" />
+      <div class="min-w-0 w-full flex-1 overflow-x-auto lg:p-3 bg-muted h-full overflow-y-scroll">
         <slot />
       </div>
+
+      <MobileNavigation />
     </SidebarInset>
   </SidebarProvider>
 </template>

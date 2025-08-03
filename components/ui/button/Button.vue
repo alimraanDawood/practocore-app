@@ -17,6 +17,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 <template>
   <Primitive
+    v-wave
     data-slot="button"
     :as="as"
     :as-child="asChild"
