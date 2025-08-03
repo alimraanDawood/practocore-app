@@ -1,5 +1,6 @@
 import Pocketbase from "pocketbase";
-const SERVER_URL = 'http://192.168.1.125:8090';
+const SERVER_URL = "https://www.practocore.com";
+
 
 export default defineNuxtRouteMiddleware((to, from) => {
     const pb = new Pocketbase(SERVER_URL);

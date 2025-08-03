@@ -1,5 +1,5 @@
 import Pocketbase from 'pocketbase';
-const SERVER_URL = "http://192.168.1.125:8090";
+const SERVER_URL = "https://www.practocore.com";
 // const SERVER_URL = "https://www.practocore.com";
 
 const pocketbase = new Pocketbase(SERVER_URL);
