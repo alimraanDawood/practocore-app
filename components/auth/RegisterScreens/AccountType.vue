@@ -4,7 +4,7 @@
       <span class="text-xl font-semibold">Get Started with PractoCore</span>
     </div>
     <div class="flex flex-col gap-3">
-      <button @click="registerAs = 'ORG'" class="flex gap-2 flex-row items-start text-left p-3 border rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': registerAs === 'ORG' }">
+      <button  disabled @click="registerAs = 'ORG'" class="flex gap-2 disabled:opacity-50 flex-row items-start text-left p-3 border rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': registerAs === 'ORG' }">
         <div class="size-12 grid shrink-0 place-items-center bg-muted text-muted-foreground">
           <BriefcaseBusiness />
         </div>
