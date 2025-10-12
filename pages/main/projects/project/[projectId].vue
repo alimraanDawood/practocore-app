@@ -1,5 +1,15 @@
 <template>
-    <div class=" flex flex-col w-full h-full">
+    <div class="flex flex-col w-full h-full">
+        <div class="flex flex-row lg:hidden w-full items-center justify-between p-3 border-b">
+            <Button @click="$router.go(-1)" size="icon" variant="ghost">
+                <ArrowLeft />
+            </Button>
+            
+            <Button size="icon" variant="secondary">
+                <Bell />
+            </Button>
+        </div>
+
         <div class="flex flex-col p-3 bg-background border-b w-full">
             <span class="font-semibold text-lg">{{ project?.name }}</span>
 
@@ -8,8 +18,8 @@
             </div>
         </div>
 
-        <div class="flex flex-col h-full w-full ">
-            <div class="flex flex-col w-full">
+        <div class="flex flex-col h-full w-full overflow-y-scroll">
+            <div class="flex flex-col w-full bg-muted">
                 <Calendar @highlight-clicked="toggleDeadlineView" :highlights="project?.expand?.deadlines?.map((d, index) => ({ id: d.id, date: d.date, class: badgeAccentClasses(index, d.completed), completed: d.completed, index: index }))" :weekday-format="'short'" class=" w-full" />
             </div>
 
@@ -42,7 +52,7 @@
 </template>
 
 <script setup>
-import { Plus, CalendarIcon, XCircle, CheckCircle, Clock, Proportions } from 'lucide-vue-next';
+import { Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions } from 'lucide-vue-next';
 import { getProject, subscribeToDeadline, subscribeToProject, unsubscribeToAllDeadlines, unsubscribeToProject } from '~/services/projects';
 import dayjs from 'dayjs';
 import { Calendar } from '@/components/ui/calendar_enhanced';
@@ -96,7 +106,7 @@ const badgeAccentClasses = (accentIndex, completed) => {
 }
 
 onMounted(async () => {
-    project.value = await getProject(useRoute().params.projectId, { expand: 'deadlines' });
+    project.value = await getProject(useRoute().params.projectId, {  });
 
     subscribeToProject(project?.value?.id, reloadProject);
 
@@ -107,7 +117,7 @@ onMounted(async () => {
 
 const reloadProject = async () => {
     try {
-        project.value = await getProject(useRoute().params.projectId, { expand: 'deadlines' });
+        project.value = await getProject(useRoute().params.projectId, {  });
         console.log("Updated!")
     } catch(e) {
         console.error(e);

@@ -1,237 +1,124 @@
 <template>
-    <div class="flex flex-col h-full w-full">
-        <div class="flex flex-col w-full h-full p-3 gap-2">
-
-            <div class="flex flex-row items-center justify-between">
-                <span class="font-semibold text-xl">Your Projects</span>
-
-                <Drawer>
-                    <DrawerTrigger>
-                        <Button size="sm" variant="secondary">{{ sortLabel.label }}
-                            <SortAsc v-if="sortLabel.asc" />
-                            <SortDesc v-else />
-                        </Button>
-                    </DrawerTrigger>
-
-                    <DrawerContent>
-                        <DrawerHeader>
-                            <DrawerTitle>Sort Projects</DrawerTitle>
-                            <DrawerDescription>Lorem ipsum dolor sit amet consectetur adipisicing elit. Dignissimos
-                                blanditiis dolorem quos.</DrawerDescription>
-                        </DrawerHeader>
-
-                        <div class="flex flex-col space-y-3 w-full p-3">
-                            <RadioGroup :model-value="sort" @update:model-value="v => sort = v">
-                                <div class="flex items-center space-x-2">
-                                    <RadioGroupItem id="created" value="created" />
-                                    <SortAsc class="size-4" />
-                                    <Label for="option-one">Date Created Ascending</Label>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <RadioGroupItem id="-created" value="-created" />
-                                    <SortDesc class="size-4" />
-                                    <Label for="option-two">Date Created Descending</Label>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <RadioGroupItem id="deadlines.date" value="deadlines.date" />
-                                    <SortAsc class="size-4" />
-                                    <Label for="option-two">Nearest Deadline</Label>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <RadioGroupItem id="-deadlines.date" value="-deadlines.date" />
-                                    <SortDesc class="size-4" />
-                                    <Label for="option-two">Farthest Deadline</Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
-                    </DrawerContent>
-
-                </Drawer>
+    <div class="flex flex-col gap-5 p-3 lg:p-5 lg:w-[95vw] w-full h-full overflow-y-scroll">
+        <div class="flex flex-col gap-3.5 lg:flex-row justify-between">
+            <div class="lg:flex flex-col hidden">
+                <span class=" text-xl lg:text-2xl font-semibold">{{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0)
+                    }}</span>
+                <span>Welcome to PractoCore, Your litigation deadline expert</span>
             </div>
 
-            <XyzTransition mode="out-in" xyz="fade">
-                <div v-if="loading" class="flex flex-col gap-3">
-                    <div v-for="i in 5" class="rounded w-full aspect-video bg-muted-foreground/20 animate-pulse"></div>
+            <div class="flex flex-col lg:flex-row gap-3">
+                <div class="flex flex-col p-3 border bg-background">
+                    <span class="text-lg font-medium">100</span>
+                    <span class="text-xs">Completed Deadlines</span>
                 </div>
 
-                <div v-else-if="projects !== null && projects?.items?.length > 0" class="flex flex-col gap-3">
-                    <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === project.id) }"
-                        v-for="project, index in projects?.items">
-                        <PageComponentsHomeProject
-                            v-on-long-press="[(e) => { onLongPressCallbackDirective(e, project) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onProjectTap(project) } }, modifiers: { stop: true } }]"
-                            :project="project" :accent-index="index" />
-
-                        <div v-if="selection.selected.find(p => p.id === project.id)"
-                            class="size-5 bg-tertiary grid place-items-center text-white absolute top-0 translate-y-[-50%] right-0 translate-x-[50%] rounded-full">
-                            <Check class="size-3 stroke-3" />
-                        </div>
-                    </div>
+                <div class="flex flex-col p-3 border bg-background">
+                    <span class="text-lg font-medium">32</span>
+                    <span class="text-xs">Active Deadlines</span>
                 </div>
 
-                <div v-else-if="projects?.items?.length === 0"
-                    class="flex flex-col text-center h-full text-muted-foreground w-full items-center justify-center">
-                    <CircleX class="size-24 mb-2 opacity-50" />
-                    <span>You have no projects</span>
-                    <span>Click
-                        <SharedProjectsCreateProject>
-                            <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
-                        </SharedProjectsCreateProject>
-
-                        to add a deadline project
-                    </span>
+                <div class="flex flex-col p-3 border bg-background">
+                    <span class="text-lg font-medium">10</span>
+                    <span class="text-xs">Missed Deadlines</span>
                 </div>
-            </XyzTransition>
+            </div>
         </div>
 
-        <XyzTransition xyz="fade down">
-            <div v-if="selection.active" class="fixed p-3 w-full bottom-[4rem]">
-                <div class="bg-background p-3 rounded border shadow-sm space-x-2 justify-between flex flex-row">
-                    <div class="flex flex-row items-center text-xs gap-2">
-                        <div
-                            class="grid place-items-center size-6 text-xs text-primary-foreground rounded-full bg-primary">
-                            {{ selection.selected.length }}</div>
+        <div class="flex flex-col gap-2 bg-primary/10 p-3 rounded">
+            <div class="flex flex-row gap-2 font-semibold items-center">
+                <Badge>New</Badge>
 
-                        of {{ projects?.items?.length }} selected
+                Feature Discussion
+
+                <Button variant="ghost" size="icon" class="ml-auto"><X /></Button>
+            </div>
+
+            <span class="text-sm">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Numquam eos excepturi non
+                saepe, tempora corporis neque, obcaecati illo recusandae nulla laudantium consequatur. Optio, eveniet
+                iusto?</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+            <div class="flex flex-col lg:col-span-3 gap-3">
+                <div class="flex flex-row justify-between">
+                    <div class="flex flex-row gap-1 items-center">
+                        <span class="font-semibold">Upcoming Deadlines</span>
+
+                        <Button size="icon" class="size-7" variant="ghost">
+                            <Info />
+                        </Button>
                     </div>
 
-                    <div class="flex flex-row gap-2 items-center">
-                        <Button size="sm" @click="selection.selected = projects.items" variant="secondary">Select
-                            All</Button>
+                    <Button class="" size="sm" variant=secondary>View All</Button>
+                </div>
 
-                        <AlertDialog>
-                            <AlertDialogTrigger as-child>
-                                <Button size="icon" variant="destructive">
-                                    <Trash />
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This action cannot be undone. This will permanently delete your
-                                        project and its deadlines.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <Button @click="deleteSelectedProjects" variant="destructive">Delete</Button>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                        <Button size="icon" @click="resetSelection" variant="secondary">
-                            <X />
-                        </Button>
+                <div class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
+                    <div v-for="i in 4" class="flex flex-col lg:flex-row lg:items-center h-full justify-between">
+                        <div class="flex flex-col p-3 ">
+                            <span class="font-semibold text-sm text-muted-foreground">Deadline</span>
+                            <span class="font-medium text-lg">Project Name</span>
+                        </div>
+
+                        <div class="flex flex-row h-full items-center">
+                            <div class="flex flex-col p-3 px-5 h-full justify-center">
+                                <span class="font-semibold text-sm text-muted-foreground">Events</span>
+                                <div class="flex flex-row gap-1 items-center">
+                                    <CalendarIcon class="size-4" />
+                                    <span class="font-medium text-sm">5 events</span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col p-3 px-5 h-full justify-center">
+                                <span class="font-semibold text-sm text-muted-foreground">Completion</span>
+                                <div class="flex flex-row gap-1 items-center">
+                                    <CalendarIcon class="size-4" />
+                                    <span class="font-medium text-sm">5 events</span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col p-3 px-5 h-full justify-center">
+                                <span class="font-semibold text-sm text-muted-foreground">Next Deadline</span>
+                                <div class="flex flex-row gap-1 items-center">
+                                    <Clock class="size-4" />
+                                    <span class="font-medium text-sm">5 days</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </XyzTransition>
+
+            <div class="flex flex-col lg:col-span-1 gap-3">
+                <div class="flex flex-row justify-between">
+                    <div class="flex flex-row gap-1 items-center">
+                        <span class="font-semibold">Your Calendar</span>
+    
+                        <Button size="icon" class="size-7" variant="ghost">
+                            <Info />
+                        </Button>
+                    </div>
+
+                    <Button class="" size="sm" variant=secondary>Details</Button>
+                </div>
+
+                <div class="flex flex-col border p-2 rounded-xl">
+                    <Calendar />
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
-<script setup lang="ts">
-import { vOnLongPress } from '@vueuse/components'
-import { CircleX, SortAsc, SortDesc, Check, Trash, X } from 'lucide-vue-next';
-import { toast } from 'vue-sonner';
-import { getProjects, subscribeToProjects, deleteProject } from '~/services/projects';
+<script setup>
+import { ArrowRight, Info, CalendarIcon, Clock, X } from 'lucide-vue-next';
+import { getSignedInUser } from '~/services/auth';
 
-const longPressedDirective = shallowRef(false)
+const hours = new Date().getHours();
 
-function onLongPressCallbackDirective(e: PointerEvent, project: any) {
-    longPressedDirective.value = true
-    if (!selection.value.active) {
-        selection.value.active = true;
-        selection.value.selected.push(project);
-    }
-}
-
-function resetDirective() {
-    longPressedDirective.value = false
-}
-
-const loading = ref(false);
-const projects = ref(null);
-const sort = ref('deadlines.date');
-const selection = ref({
-    active: false,
-    selected: [] as any
+const welcomeMessage = computed(() => {
+    if (hours < 12) return 'Good Morning';
+    if (hours < 18) return 'Good Afternoon';
+    return 'Good Evening';
 });
-
-const resetSelection = () => {
-    selection.value = {
-        active: false,
-        selected: []
-    }
-}
-
-onMounted(async () => {
-    await reloadProjects();
-
-    subscribeToProjects(reloadProjects);
-});
-
-const sortLabel = computed(() => {
-    switch (sort.value) {
-        case 'created':
-            return { label: 'Date Created', asc: true };
-        case '-created':
-            return { label: 'Date Created', asc: false };
-        case 'deadlines.date':
-            return { label: 'Nearest Deadline', asc: true };
-        case '-deadlines.date':
-            return { label: 'Nearest Deadline', asc: false };
-    }
-})
-
-watch(sort, () => {
-    reloadProjects();
-});
-
-const onProjectTap = (project: any) => {
-    if (selection.value.active) {
-        const exists = selection.value.selected.find(p => p.id === project.id);
-
-        if (exists) {
-            selection.value.selected = selection.value.selected.filter(p => p.id !== project.id);
-
-            if (selection.value.selected.length === 0) {
-                selection.value.active = false;
-            }
-        } else {
-            selection.value.selected.push(project);
-        }
-        return;
-    }
-
-    useRouter().push(`/main/project/${project.id}`);
-}
-
-const deleteSelectedProjects = async () => {
-    if (selection.value.selected.length === 0) return;
-
-    loading.value = true;
-    try {
-        for (const project of selection.value.selected) {
-            await deleteProject(project.id);
-        }
-        await reloadProjects();
-        resetSelection();
-        // Show toast notification
-        toast.success('Selected projects deleted successfully.');
-    } catch (e) {
-        console.error(e);
-        toast.error('Failed to delete selected projects.');
-    }
-    loading.value = false;
-}
-
-const reloadProjects = async () => {
-    loading.value = true;
-    try {
-        projects.value = await getProjects(1, 10, { expand: 'deadlines', sort: sort.value });
-    } catch (e) {
-        console.error(e);
-    }
-    loading.value = false;
-}
-
 </script>

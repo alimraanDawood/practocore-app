@@ -18,9 +18,12 @@
 
     /* --- ADD CUSTOM IN-BETWEEN BREAKPOINTS (as requested) --- */
     /* These will behave like regular Tailwind breakpoints */
-    --breakpoint-xs: 480px; /* Example 'extra small' */
-    --breakpoint-tablet: 768px; /* Redefining md as 'tablet' or just a specific 'tablet' breakpoint */
-    --breakpoint-laptop: 1200px; /* Example 'laptop' */
+    --breakpoint-xs: 480px;
+    /* Example 'extra small' */
+    --breakpoint-tablet: 768px;
+    /* Redefining md as 'tablet' or just a specific 'tablet' breakpoint */
+    --breakpoint-laptop: 1200px;
+    /* Example 'laptop' */
     /* --- FLUID SCALING VARIABLES (Reddit User's Concept) --- */
     /*
       The Reddit user's calc examples:
@@ -37,7 +40,8 @@
       The exact math here is crucial for your design vision.
     */
     /* Example fluid width variables for a grid-like element as per Reddit user's concept */
-    --fluid-grid-width-1920: calc(100vw + 75vh + 0.35em); /* Be very cautious with VH for width! */
+    --fluid-grid-width-1920: calc(100vw + 75vh + 0.35em);
+    /* Be very cautious with VH for width! */
     --fluid-grid-width-1400: calc(80vw + 65vh + 0.15em);
     --fluid-grid-width-1024: calc(65vw + 50vh + 0.5em);
 
@@ -96,34 +100,42 @@
     --color-accents-foreground: #ffffff;
     --animate-accordion-down: accordion-down 0.2s ease-out;
     --animate-accordion-up: accordion-up 0.2s ease-out;
+
     @keyframes accordion-down {
         from {
             height: 0;
         }
+
         to {
             height: var(--reka-accordion-content-height);
         }
     }
+
     @keyframes accordion-up {
         from {
             height: var(--reka-accordion-content-height);
         }
+
         to {
             height: 0;
         }
     }
+
     @keyframes accordion-down {
         from {
             height: 0;
         }
+
         to {
             height: var(--reka-accordion-content-height);
         }
     }
+
     @keyframes accordion-up {
         from {
             height: var(--reka-accordion-content-height);
         }
+
         to {
             height: 0;
         }
@@ -142,7 +154,7 @@
     --primary-foreground: oklch(0.985 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.982 0 89.8 76);
+    --muted: #f8f8f8;
     --muted-foreground: oklch(0.556 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
@@ -215,7 +227,8 @@
         @apply bg-background text-foreground;
     }
 
-    button, a {
+    button,
+    a {
         cursor: pointer;
     }
 

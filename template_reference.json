@@ -1,0 +1,342 @@
+{
+  "id": "t_001",
+  "name": "Summons to file a defence",
+  "date_rules": {
+    "allowWeekends": true,
+    "allowHolidays": true
+  },
+  "deadlines": [
+    {
+      "id": "d_001",
+      "name": "Summons delivery to defendant",
+      "action_label": "Summons Delivered",
+      "type": "offset",
+      "dynamic": true,
+      "offset": {
+        "offsetId": "_date_",
+        "days": 21,
+        "ignoreWeekends": false,
+        "ignoreHolidays": false,
+        "allowWeekends": false,
+        "allowHolidays": false,
+        "includeFirst": false
+      },
+      "reminders": [
+        {
+          "id": "r_001",
+          "title": "15 days left to deliver summons",
+          "body": "Hi <<first_name>>, you have 15 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Please ensure timely service.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>15 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please ensure timely service.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -15,
+          "channels": ["MAIL"]
+        },
+        {
+          "id": "r_002",
+          "title": "10 days left to deliver summons",
+          "body": "Hi <<first_name>>, you have 10 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Please ensure timely service.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>10 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please ensure timely service.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -10,
+          "channels": ["MAIL", "APP"]
+        },
+        {
+          "id": "r_003",
+          "title": "5 days left to deliver summons",
+          "body": "Hi <<first_name>>, you have 5 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Please take action soon.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please take action soon.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -5,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_004",
+          "title": "URGENT: 3 days left to deliver summons",
+          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -3,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_005",
+          "title": "URGENT: 2 days left to deliver summons",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -2,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_006",
+          "title": "URGENT: Tomorrow is the deadline to deliver summons",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to deliver the summons to the defendant (due <<deadline_date>>). Please act immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please act immediately.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -1,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_007",
+          "title": "CRITICAL: Summons delivery deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to deliver the summons to the defendant (<<deadline_date>>). Please complete this immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to deliver the summons to the defendant (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": 0,
+          "channels": ["MAIL", "APP", "ALARM"]
+        }
+      ]
+    },
+    {
+      "id": "d_002",
+      "name": "Defendant's Filing of Defence",
+      "action_label": "Defence Filed",
+      "type": "offset",
+      "dynamic": true,
+      "offset": {
+        "offsetId": "d_001",
+        "days": 15,
+        "ignoreWeekends": false,
+        "ignoreHolidays": false,
+        "allowWeekends": false,
+        "allowHolidays": false,
+        "includeFirst": false
+      },
+      "reminders": [
+        {
+          "id": "r_008",
+          "title": "10 days left for defendant to file defence",
+          "body": "Hi <<first_name>>, the defendant has 10 days remaining to file their defence (due <<deadline_date>>). Monitor for filing.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, the defendant has <strong>10 days</strong> remaining to file their defence (due <strong><<deadline_date>></strong>). Monitor for filing.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -10,
+          "channels": ["MAIL"]
+        },
+        {
+          "id": "r_009",
+          "title": "5 days left for defendant to file defence",
+          "body": "Hi <<first_name>>, the defendant has 5 days remaining to file their defence (due <<deadline_date>>). Prepare for next steps.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, the defendant has <strong>5 days</strong> remaining to file their defence (due <strong><<deadline_date>></strong>). Prepare for next steps.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -5,
+          "channels": ["MAIL", "APP"]
+        },
+        {
+          "id": "r_010",
+          "title": "3 days left for defendant to file defence",
+          "body": "Hi <<first_name>>, the defendant has 3 days remaining to file their defence (due <<deadline_date>>). Be ready to proceed.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, the defendant has <strong>3 days</strong> remaining to file their defence (due <strong><<deadline_date>></strong>). Be ready to proceed.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -3,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_011",
+          "title": "Tomorrow is the defendant's defence filing deadline",
+          "body": "Hi <<first_name>>, tomorrow is the deadline for the defendant to file their defence (due <<deadline_date>>). Monitor closely.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline for the defendant to file their defence (due <strong><<deadline_date>></strong>). Monitor closely.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -1,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_012",
+          "title": "Defendant's defence filing deadline is TODAY",
+          "body": "Hi <<first_name>>, today is the deadline for the defendant to file their defence (<<deadline_date>>). Check for filing or prepare default motion.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline for the defendant to file their defence (<strong><<deadline_date>></strong>). Check for filing or prepare default motion.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": 0,
+          "channels": ["MAIL", "APP", "ALARM"]
+        }
+      ]
+    },
+    {
+      "id": "d_003",
+      "name": "Plaintiff's filing of a reply to Defendant's Defence",
+      "action_label": "Reply Filed",
+      "type": "offset",
+      "dynamic": true,
+      "offset": {
+        "offsetId": "d_002",
+        "days": 15,
+        "ignoreWeekends": false,
+        "ignoreHolidays": false,
+        "allowWeekends": false,
+        "allowHolidays": false,
+        "includeFirst": false
+      },
+      "reminders": [
+        {
+          "id": "r_013",
+          "title": "10 days left to file reply to defence",
+          "body": "Hi <<first_name>>, you have 10 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Begin preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>10 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Begin preparation.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -10,
+          "channels": ["MAIL"]
+        },
+        {
+          "id": "r_014",
+          "title": "5 days left to file reply to defence",
+          "body": "Hi <<first_name>>, you have 5 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Please proceed with filing.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Please proceed with filing.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -5,
+          "channels": ["MAIL", "APP"]
+        },
+        {
+          "id": "r_015",
+          "title": "URGENT: 3 days left to file reply to defence",
+          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Take action now.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Take action now.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -3,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_016",
+          "title": "URGENT: 2 days left to file reply to defence",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -2,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_017",
+          "title": "URGENT: Tomorrow is the deadline to file reply to defence",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to file your reply to the defendant's defence (due <<deadline_date>>). Please act immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Please act immediately.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -1,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_018",
+          "title": "CRITICAL: Reply to defence filing deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to file your reply to the defendant's defence (<<deadline_date>>). Please complete this immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to file your reply to the defendant's defence (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": 0,
+          "channels": ["MAIL", "APP", "ALARM"]
+        }
+      ]
+    },
+    {
+      "id": "d_004",
+      "name": "Plaintiff's taking out of a summons for directions",
+      "action_label": "Summons for Directions",
+      "type": "offset",
+      "dynamic": true,
+      "offset": {
+        "offsetId": "d_003",
+        "days": 28,
+        "ignoreWeekends": false,
+        "ignoreHolidays": false,
+        "allowWeekends": false,
+        "allowHolidays": false,
+        "includeFirst": false
+      },
+      "reminders": [
+        {
+          "id": "r_019",
+          "title": "21 days left to take out summons for directions",
+          "body": "Hi <<first_name>>, you have 21 days remaining to take out a summons for directions (due <<deadline_date>>). Begin preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>21 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Begin preparation.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -21,
+          "channels": ["MAIL"]
+        },
+        {
+          "id": "r_020",
+          "title": "14 days left to take out summons for directions",
+          "body": "Hi <<first_name>>, you have 14 days remaining to take out a summons for directions (due <<deadline_date>>). Please proceed with preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>14 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Please proceed with preparation.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -14,
+          "channels": ["MAIL", "APP"]
+        },
+        {
+          "id": "r_021",
+          "title": "7 days left to take out summons for directions",
+          "body": "Hi <<first_name>>, you have 7 days remaining to take out a summons for directions (due <<deadline_date>>). Please take action soon.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>7 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Please take action soon.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -7,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_022",
+          "title": "URGENT: 5 days left to take out summons for directions",
+          "body": "URGENT: Hi <<first_name>>, you have only 5 days remaining to take out a summons for directions (due <<deadline_date>>). Take action now.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>5 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Take action now.",
+          "priority": "urgent",
+          "escalate": false,
+          "offset": -5,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_023",
+          "title": "URGENT: 3 days left to take out summons for directions",
+          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to take out a summons for directions (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -3,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_024",
+          "title": "URGENT: 2 days left to take out summons for directions",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to take out a summons for directions (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -2,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_025",
+          "title": "URGENT: Tomorrow is the deadline to take out summons for directions",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to take out a summons for directions (due <<deadline_date>>). Please act immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to take out a summons for directions (due <strong><<deadline_date>></strong>). Please act immediately.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": -1,
+          "channels": ["MAIL", "APP", "ALARM"]
+        },
+        {
+          "id": "r_026",
+          "title": "CRITICAL: Summons for directions deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to take out a summons for directions (<<deadline_date>>). Please complete this immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to take out a summons for directions (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "priority": "urgent",
+          "escalate": true,
+          "offset": 0,
+          "channels": ["MAIL", "APP", "ALARM"]
+        }
+      ]
+    }
+  ]
+}
