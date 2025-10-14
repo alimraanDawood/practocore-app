@@ -73,7 +73,7 @@
                         class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
                         <NuxtLink v-for="project in statistics?.projects" :to="`/main/projects/project/${project.id}`">
                             <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between">
-                                <div class="flex flex-col p-3 ">
+                                <div class="flex flex-col p-3 w-full">
                                     <span class="font-semibold text-sm text-muted-foreground">Project</span>
                                     <span class="font-medium text-lg">{{ project.name }}</span>
                                 </div>
