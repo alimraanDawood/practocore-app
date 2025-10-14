@@ -1,6 +1,6 @@
 {
   "id": "t_001",
-  "name": "Summons to file a defence",
+  "name": "Appeal",
   "date_rules": {
     "allowWeekends": true,
     "allowHolidays": true
@@ -8,13 +8,13 @@
   "deadlines": [
     {
       "id": "d_001",
-      "name": "Summons delivery to defendant",
-      "action_label": "Summons Delivered",
+      "name": "File Notice of Appeal",
+      "action_label": "Notice of Appeal Filed!",
       "type": "offset",
       "dynamic": true,
       "offset": {
         "offsetId": "_date_",
-        "days": 21,
+        "days": 14,
         "ignoreWeekends": false,
         "ignoreHolidays": false,
         "allowWeekends": false,
@@ -96,13 +96,13 @@
     },
     {
       "id": "d_002",
-      "name": "Defendant's Filing of Defence",
+      "name": "Serve Notice of Appeal to opposite parties",
       "action_label": "Defence Filed",
       "type": "offset",
       "dynamic": true,
       "offset": {
         "offsetId": "d_001",
-        "days": 15,
+        "days": 7,
         "ignoreWeekends": false,
         "ignoreHolidays": false,
         "allowWeekends": false,
@@ -164,8 +164,8 @@
     },
     {
       "id": "d_003",
-      "name": "Plaintiff's filing of a reply to Defendant's Defence",
-      "action_label": "Reply Filed",
+      "name": "File and Serve Letter asking for Proceedings",
+      "action_label": "Letter Filed and Served!",
       "type": "offset",
       "dynamic": true,
       "offset": {
@@ -242,13 +242,13 @@
     },
     {
       "id": "d_004",
-      "name": "Plaintiff's taking out of a summons for directions",
+      "name": "File Memorandum and Record of Appeal",
       "action_label": "Summons for Directions",
       "type": "offset",
       "dynamic": true,
       "offset": {
         "offsetId": "d_003",
-        "days": 28,
+        "days": 60,
         "ignoreWeekends": false,
         "ignoreHolidays": false,
         "allowWeekends": false,

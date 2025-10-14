@@ -64,63 +64,69 @@
                     </NuxtLink>
                 </div>
 
-                <div v-if="statistics?.projects?.length > 0"
-                    class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
-                    <NuxtLink v-for="project in statistics?.projects" :to="`/main/projects/project/${project.id}`">
-                        <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between">
-                            <div class="flex flex-col p-3 ">
-                                <span class="font-semibold text-sm text-muted-foreground">Project</span>
-                                <span class="font-medium text-lg">{{ project.name }}</span>
+                <XyzTransition xyz="fade" mode="out-in">
+                    <div v-if="loading" class="flex flex-col h-32 w-full bg-muted border rounded-xl place-items-center justify-center">
+                        <Loader class="size-5 animate-spin" />
+                    </div>
+    
+                    <div v-else-if="statistics?.projects?.length > 0"
+                        class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
+                        <NuxtLink v-for="project in statistics?.projects" :to="`/main/projects/project/${project.id}`">
+                            <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between">
+                                <div class="flex flex-col p-3 ">
+                                    <span class="font-semibold text-sm text-muted-foreground">Project</span>
+                                    <span class="font-medium text-lg">{{ project.name }}</span>
+                                </div>
+    
+                                <div class="flex flex-col lg:flex-row h-full w-full lg:items-center">
+                                    <div class="flex flex-col p-3 px-5 h-full justify-center">
+                                        <span class="font-semibold text-sm text-muted-foreground">Events</span>
+                                        <div class="flex flex-row gap-1 items-center">
+                                            <CalendarIcon class="size-4" />
+                                            <span class="font-medium text-sm">{{ project.stats.upcoming }} events</span>
+                                        </div>
+                                    </div>
+    
+                                    <div class="flex flex-col p-3 px-5 h-full justify-center">
+                                        <span class="font-semibold text-sm text-muted-foreground">Completion</span>
+                                        <div v-if="project.stats.completion > 0" class="flex flex-row gap-1 items-center">
+                                            <CircleProgressBar :value="project.stats.completion" :max="100" rounded
+                                                class="size-4" strokeWidth="10" />
+                                            <span class="font-medium text-sm">{{ project.stats.completion }}</span>
+                                        </div>
+                                        <span v-else>-</span>
+                                    </div>
+    
+                                    <div class="flex flex-col p-3 px-5 h-full justify-center">
+                                        <span class="font-semibold text-sm text-muted-foreground">Next Deadline</span>
+                                        <div class="flex flex-row gap-1 items-center" :class="{
+                                            'text-red-500 !font-semibold': project?.stats?.nextDeadlineDate &&
+                                                dayjs(project.stats.nextDeadlineDate).diff(dayjs(), 'day') < 5
+                                        }">
+                                            <Clock class="size-4" />
+                                            <span v-if="project" class="font-medium text-sm">
+                                                {{ dayjs(project?.stats?.nextDeadlineDate).fromNow() }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-
-                            <div class="flex flex-col lg:flex-row h-full w-full lg:items-center">
-                                <div class="flex flex-col p-3 px-5 h-full justify-center">
-                                    <span class="font-semibold text-sm text-muted-foreground">Events</span>
-                                    <div class="flex flex-row gap-1 items-center">
-                                        <CalendarIcon class="size-4" />
-                                        <span class="font-medium text-sm">{{ project.stats.upcoming }} events</span>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col p-3 px-5 h-full justify-center">
-                                    <span class="font-semibold text-sm text-muted-foreground">Completion</span>
-                                    <div v-if="project.stats.completion > 0" class="flex flex-row gap-1 items-center">
-                                        <CircleProgressBar :value="project.stats.completion" :max="100" rounded
-                                            class="size-4" strokeWidth="10" />
-                                        <span class="font-medium text-sm">{{ project.stats.completion }}</span>
-                                    </div>
-                                    <span v-else>-</span>
-                                </div>
-
-                                <div class="flex flex-col p-3 px-5 h-full justify-center">
-                                    <span class="font-semibold text-sm text-muted-foreground">Next Deadline</span>
-                                    <div class="flex flex-row gap-1 items-center" :class="{
-                                        'text-red-500 !font-semibold': project?.stats?.nextDeadlineDate &&
-                                            dayjs(project.stats.nextDeadlineDate).diff(dayjs(), 'day') < 5
-                                    }">
-                                        <Clock class="size-4" />
-                                        <span v-if="project" class="font-medium text-sm">
-                                            {{ dayjs(project?.stats?.nextDeadlineDate).fromNow() }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </NuxtLink>
-                </div>
-
-                <div v-else
-                    class="flex flex-col w-full bg-muted border p-5 rounded-xl items-center text-muted-foreground">
-                    <XCircle class="size-10" />
-                    <span>You have no projects</span>
-                    <span>Click
-                        <SharedProjectsCreateProject>
-                            <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
-                        </SharedProjectsCreateProject>
-
-                        to add a deadline project
-                    </span>
-                </div>
+                        </NuxtLink>
+                    </div>
+    
+                    <div v-else
+                        class="flex flex-col w-full bg-muted border p-5 rounded-xl items-center text-muted-foreground">
+                        <XCircle class="size-10" />
+                        <span>You have no projects</span>
+                        <span>Click
+                            <SharedProjectsCreateProject>
+                                <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
+                            </SharedProjectsCreateProject>
+    
+                            to add a deadline project
+                        </span>
+                    </div>
+                </XyzTransition>
             </div>
 
             <div class="flex flex-col lg:col-span-1 gap-3">
@@ -146,7 +152,7 @@
 
 <script setup>
 import { CircleProgressBar } from 'vue3-m-circle-progress-bar';
-import { ArrowRight, Info, CalendarIcon, Clock, X, XCircle, Plus } from 'lucide-vue-next';
+import { ArrowRight, Info, Loader, CalendarIcon, Clock, X, XCircle, Plus } from 'lucide-vue-next';
 import { getSignedInUser } from '~/services/auth';
 import { getStatistics, subscribeToProjects } from '~/services/projects';
 

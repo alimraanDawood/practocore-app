@@ -52,7 +52,7 @@ export async function updateUser(options : Object) {
 
 export async function updateUserPreferences(options : Object) {
     if(pocketbase.authStore.record) {
-        const result = await pocketbase.collection('Users').update(pocketbase.authStore.record.preferences, options);
+        const result = await pocketbase.collection('UserPreferences').update(pocketbase.authStore.record.preferences, options);
 
         return result;
     }

@@ -42,7 +42,7 @@
 <script setup>
 import { BriefcaseBusiness, User } from 'lucide-vue-next'
 
-const registerAs = ref('ORG'); // ORG | IND
+const registerAs = ref('IND'); // ORG | IND
 
 const emits = defineEmits(['complete']);
 const emitComplete = () => {

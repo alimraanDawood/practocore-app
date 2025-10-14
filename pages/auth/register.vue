@@ -1,7 +1,9 @@
 <template>
   <div class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div class="flex flex-row justify-between w-full items-center p-3 border-b">
-      <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-12"/>
+      <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-12 dark:hidden"/>
+      <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20Dark.svg" class="h-12 hidden dark:block" />
+
 
       <div class="flex flex-row gap-2">
         <Button size="icon" variant="secondary" :disabled="!canGoBack" @click="goBack">
@@ -168,23 +170,23 @@ onMounted(() => {
 const registrationData = reactive({
   type: 'IND',
   organisation: {
-    firmName: 'Dawood & Associates',
-    legalBusinessName: 'Dawood & Associates LLC',
-    firmEmailDomain: 'dawood.law',
-    firmSize: '2-10',
-    primaryPracticeAreas: ["Corporate Law", "Litigation", "Family Law", "Criminal Defense"],
+    firmName: '',
+    legalBusinessName: '',
+    firmEmailDomain: '',
+    firmSize: '',
+    primaryPracticeAreas: [],
     contact: {
-      fullName: 'Al-imraan Dawood',
-      emailAddress: 'alimraandawoodgulam@gmail.com',
-      phoneNumber: '+256740895974'
+      fullName: '',
+      emailAddress: '',
+      phoneNumber: ''
     }
   },
   user: {
     id: '',
-    fullName: 'Al-imraan Dawood',
-    emailAddress: 'alimraandawoodgulam@gmail.com',
-    password: 'alimraanD12',
-    confirmPassword: 'alimraanD12',
+    fullName: '',
+    emailAddress: '',
+    password: '',
+    confirmPassword: '',
   }
 });
 

@@ -15,7 +15,7 @@
     --breakpoint-lg: 1024px;
     --breakpoint-xl: 1280px;
     --breakpoint-2xl: 1536px;
-    
+
     /* --- ADD CUSTOM IN-BETWEEN BREAKPOINTS (as requested) --- */
     /* These will behave like regular Tailwind breakpoints */
     --breakpoint-xs: 480px;
@@ -44,7 +44,7 @@
     /* Be very cautious with VH for width! */
     --fluid-grid-width-1400: calc(80vw + 65vh + 0.15em);
     --fluid-grid-width-1024: calc(65vw + 50vh + 0.5em);
-    
+
     /* More common examples of fluid sizing using clamp() for text/spacing:
     This is often more predictable for general fluid design.
     Scales from 1rem at 320px to 1.5rem at 1920px.
@@ -100,42 +100,42 @@
     --color-accents-foreground: #ffffff;
     --animate-accordion-down: accordion-down 0.2s ease-out;
     --animate-accordion-up: accordion-up 0.2s ease-out;
-    
+
     @keyframes accordion-down {
         from {
             height: 0;
         }
-        
+
         to {
             height: var(--reka-accordion-content-height);
         }
     }
-    
+
     @keyframes accordion-up {
         from {
             height: var(--reka-accordion-content-height);
         }
-        
+
         to {
             height: 0;
         }
     }
-    
+
     @keyframes accordion-down {
         from {
             height: 0;
         }
-        
+
         to {
             height: var(--reka-accordion-content-height);
         }
     }
-    
+
     @keyframes accordion-up {
         from {
             height: var(--reka-accordion-content-height);
         }
-        
+
         to {
             height: 0;
         }
@@ -177,55 +177,55 @@
     --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
     --sidebar-border: oklch(0.92 0.004 286.32);
     --sidebar-ring: oklch(0.705 0.213 47.604);
-    ---accent-1: #52004f;
-    ---accent-2: #9a954c;
-    ---accent-3: #ab5d41;
-    ---accent-4: #7daaa7;
+    --accent-1: #52004f;
+    --accent-2: #9a954c;
+    --accent-3: #ab5d41;
+    --accent-4: #7daaa7;
 }
 
 .dark {
-  --background: oklch(0.27 0 0);
-  --foreground: oklch(0.81 0.01 93.53);
-  --card: oklch(0.27 0 0);
-  --card-foreground: oklch(0.98 0.01 93.48);
-  --popover: oklch(0.31 0 0);
-  --popover-foreground: oklch(0.92 0 0);
-  --primary: oklch(0.684 0.193 35.667);
-  --primary-foreground: oklch(1.00 0 0);
-  --secondary: oklch(0.98 0.01 93.48);
-  --secondary-foreground: oklch(0.31 0 0);
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.77 0.02 100.64);
-  --accent: oklch(0.21 0.01 88.79);
-  --accent-foreground: oklch(0.97 0.01 93.49);
-  --destructive: oklch(0.64 0.21 25.39);
-  --border: oklch(0.36 0.01 106.85);
-  --input: oklch(0.43 0.01 99.03);
-  --ring: oklch(0.59 0.17 252.92);
-  --chart-1: oklch(0.56 0.13 42.95);
-  --chart-2: oklch(0.69 0.16 290.29);
-  --chart-3: oklch(0.21 0.01 88.79);
-  --chart-4: oklch(0.31 0.05 289.74);
-  --chart-5: oklch(0.56 0.13 41.94);
-  --sidebar: oklch(0.24 0 0);
-  --sidebar-foreground: oklch(0.81 0.01 93.53);
-  --sidebar-primary: oklch(0.33 0 0);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.17 0 0);
-  --sidebar-accent-foreground: oklch(0.81 0.01 93.53);
-  --sidebar-border: oklch(0.94 0 0);
-  --sidebar-ring: oklch(0.77 0 0);
-  
-  --shadow-2xs: 0 1px 3px 0px oklch(0.00 0 0 / 0.05);
-  --shadow-xs: 0 1px 3px 0px oklch(0.00 0 0 / 0.05);
-  --shadow-sm: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 1px 2px -1px oklch(0.00 0 0 / 0.10);
-  --shadow: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 1px 2px -1px oklch(0.00 0 0 / 0.10);
-  --shadow-md: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 2px 4px -1px oklch(0.00 0 0 / 0.10);
-  --shadow-lg: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 4px 6px -1px oklch(0.00 0 0 / 0.10);
-  --shadow-xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 8px 10px -1px oklch(0.00 0 0 / 0.10);
-  --shadow-2xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.25);
+    --background: oklch(0.27 0 0);
+    --foreground: oklch(0.81 0.01 93.53);
+    --card: oklch(0.27 0 0);
+    --card-foreground: oklch(0.98 0.01 93.48);
+    --popover: oklch(0.31 0 0);
+    --popover-foreground: oklch(0.92 0 0);
+    --primary: oklch(0.684 0.193 35.667);
+    --primary-foreground: oklch(1.00 0 0);
+    --secondary: oklch(0.98 0.01 93.48);
+    --secondary-foreground: oklch(0.31 0 0);
+    --muted: oklch(0.22 0 0);
+    --muted-foreground: oklch(0.77 0.02 100.64);
+    --accent: oklch(0.21 0.01 88.79);
+    --accent-foreground: oklch(0.97 0.01 93.49);
+    --destructive: oklch(0.64 0.21 25.39);
+    --border: oklch(0.36 0.01 106.85);
+    --input: oklch(0.43 0.01 99.03);
+    --ring: oklch(0.59 0.17 252.92);
+    --chart-1: oklch(0.56 0.13 42.95);
+    --chart-2: oklch(0.69 0.16 290.29);
+    --chart-3: oklch(0.21 0.01 88.79);
+    --chart-4: oklch(0.31 0.05 289.74);
+    --chart-5: oklch(0.56 0.13 41.94);
+    --sidebar: oklch(0.24 0 0);
+    --sidebar-foreground: oklch(0.81 0.01 93.53);
+    --sidebar-primary: oklch(0.33 0 0);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.17 0 0);
+    --sidebar-accent-foreground: oklch(0.81 0.01 93.53);
+    --sidebar-border: oklch(0.94 0 0);
+    --sidebar-ring: oklch(0.77 0 0);
 
-  --accent-1: #d81ddc;
+    --shadow-2xs: 0 1px 3px 0px oklch(0.00 0 0 / 0.05);
+    --shadow-xs: 0 1px 3px 0px oklch(0.00 0 0 / 0.05);
+    --shadow-sm: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 1px 2px -1px oklch(0.00 0 0 / 0.10);
+    --shadow: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 1px 2px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-md: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 2px 4px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-lg: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 4px 6px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 8px 10px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-2xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.25);
+
+    --accent-1: #dd89c4;
     --accent-2: #9a954c;
     --accent-3: #ab5d41;
     --accent-4: #7daaa7;
@@ -236,7 +236,7 @@
     * {
         @apply border-border outline-ring/50;
     }
-    
+
     body {
         font-family: "Geist", sans-serif;
         font-optical-sizing: auto;
@@ -244,17 +244,17 @@
         font-style: normal;
         @apply bg-background text-foreground;
     }
-    
+
     button,
     a {
         cursor: pointer;
     }
-    
+
     .gold {
         font-family: "IBM Plex Mono", mono;
         font-weight: 400;
     }
-    
+
     .ibm-plex-sans {
         font-family: "IBM Plex Sans", sans-serif;
         font-optical-sizing: auto;
