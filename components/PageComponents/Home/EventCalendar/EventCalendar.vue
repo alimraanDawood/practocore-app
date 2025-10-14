@@ -15,17 +15,17 @@
                 <SheetTitle>Events on {{ currentDate }}</SheetTitle>
             </SheetHeader>
             <div class="flex flex-col w-full h-full gap-2 p-3">
-              <SharedDeadlineViewDeadline @updated="isModalOpen = false" :index="index" :deadline="deadline" v-for="deadline, index in currentDateDeadlines">
-                <div class="flex text-left flex-row border p-3 gap-3" :class="accentClasses(index, deadline?.completed)">
+              <SharedDeadlineViewDeadline @updated="isModalOpen = false" :index="index" :deadline="deadline" v-for="(deadline, index) in currentDateDeadlines">
+                <div class="flex text-left flex-row border p-3 gap-3" :class="accentClasses(deadline?.color)">
                   <CalendarIcon class="size-4" />
                   
                   <div class="flex flex-col gap-1">
                     <span class="font-semibold text-sm">{{ deadline.name }}</span>
                     <span class="text-sm font-semibold">{{ dayjs(deadline.date).subtract(1, 'D').format("DD/MM/YYYY") }}</span>
                     
-                    <Badge v-if="deadline.completed === false && (new Date() < new Date(deadline.date))" :class="badgeAccentClasses(index)"><Clock /> PENDING</Badge>
-                    <Badge v-else-if="deadline.completed === false && (new Date() > new Date(deadline.date))" :class="badgeAccentClasses(index)"><XCircle /> MISSED</Badge>
-                    <Badge v-else-if="deadline.completed === true" :class="badgeAccentClasses(index)"><CheckCircle /> COMPLETED</Badge>
+                    <Badge v-if="deadline.completed === false && (new Date() < new Date(deadline.date))" :class="badgeAccentClasses(deadline?.color, false)"><Clock /> PENDING</Badge>
+                    <Badge v-else-if="deadline.completed === false && (new Date() > new Date(deadline.date))" :class="badgeAccentClasses(deadline?.color, false)"><XCircle /> MISSED</Badge>
+                    <Badge v-else-if="deadline.completed === true" :class="badgeAccentClasses(deadline?.color, true)"><CheckCircle /> COMPLETED</Badge>
                   </div>
                 </div>
               </SharedDeadlineViewDeadline>
@@ -55,25 +55,17 @@ const isModalOpen = ref(false);
 
 const currentDate = ref(toISO(new Date()));
 
-const accentClasses = (accentIndex :  number) => {
-    const accentMap = [
-      'bg-accent-1/10 text-accent-1 border-accent-1',
-      'bg-accent-2/10 text-accent-2 border-accent-2',
-      'bg-accent-3/10 text-accent-3 border-accent-3',
-      'bg-accent-4/10 text-accent-4 border-accent-4'
-    ];
-    return accentMap[accentIndex % 4];
+const accentClasses = (color: string) => {
+    // Build Tailwind classes dynamically to match calendar event color
+    return `bg-${color}/10 text-${color} border-${color}`;
 };
 
-const badgeAccentClasses = (accentIndex, completed) => {
-    const accentMap = {
-        0: completed ? 'bg-accent-1/10 text-accent-1 border-2 border-accent-1' : 'bg-accent-1 !text-accents-foreground data-[selected]:!bg-accent-1 hover:bg-accent-1 data-[selected]:hover:!bg-accent-1',
-        1: completed ? 'bg-accent-2/10 text-accent-2 border-2 border-accent-2' : 'bg-accent-2 !text-accents-foreground data-[selected]:!bg-accent-2 hover:bg-accent-2 data-[selected]:hover:!bg-accent-2',
-        2: completed ? 'bg-accent-3/10 text-accent-3 border-2 border-accent-3' : 'bg-accent-3 !text-accents-foreground data-[selected]:!bg-accent-3 hover:bg-accent-3 data-[selected]:hover:!bg-accent-3',
-        3: completed ? 'bg-accent-4/10 text-accent-4 border-2 border-accent-4' : 'bg-accent-4 !text-accents-foreground data-[selected]:!bg-accent-4 hover:bg-accent-4 data-[selected]:hover:!bg-accent-4'
-    };
-
-    return accentMap[accentIndex % 4];
+const badgeAccentClasses = (color: string, completed: boolean) => {
+    // Completed = subtle outline; otherwise solid badge
+    if (completed) {
+        return `bg-${color}/10 text-${color} border-2 border-${color}`;
+    }
+    return `bg-${color} !text-accents-foreground data-[selected]:!bg-${color} hover:bg-${color} data-[selected]:hover:!bg-${color}`;
 }
 
 
@@ -111,29 +103,36 @@ const currentDateDeadlines = computed(() => {
 })
 
 onMounted(async () => {
-  deadlines.value = await getAllDeadlines({ filter: 'completed = false' });
+  const fetched = await getAllDeadlines({ filter: 'completed = false' });
+  deadlines.value = fetched.map((d: any) => ({ ...d, color: getAccentById(d.id) }));
 
   subscribeToDeadlines(reloadDeadlines)
 });
 
 const reloadDeadlines = async () => {
-  deadlines.value = await getAllDeadlines({ filter: 'completed = false' });
+  const fetched = await getAllDeadlines({ filter: 'completed = false' });
+  deadlines.value = fetched.map((d: any) => ({ ...d, color: getAccentById(d.id) }));
 }
 
 onBeforeMount(() => {
     unsubscribeToAllDeadlines();
 })
 
+function getAccentById(id: string) {
+  // Simple hash to 0..3 then map to accent-X
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+  const idx = Math.abs(hash) % 4;
+  return `accent-${idx + 1}`;
+}
+
 const mockEvents = computed(() => {
-  const accentMap = [
-  'accent-1',
-  'accent-2',
-  'accent-3',
-  'accent-4'
-  ];
-  
-  return deadlines.value.map((d, accentIndex) => {
-    return { id: d.id, date: d.date, title: d.name, color: accentMap[accentIndex % 4] }
+  return deadlines.value.map((d: any) => {
+    const color = d.color || getAccentById(d.id);
+    return { id: d.id, date: d.date, title: d.name, color };
   });
 })
 

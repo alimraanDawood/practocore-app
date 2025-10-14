@@ -91,7 +91,7 @@
                     <div v-else-if="projects !== null && projects?.items?.length > 0"
                         class="grid grid-cols-1 lg:grid-cols-3 gap-3">
                         <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === project.id) }"
-                            v-for="project, index in projects?.items">
+                            v-for="(project, index) in projects?.items">
                             <PageComponentsHomeProject
                                 v-on-long-press="[(e) => { onLongPressCallbackDirective(e, project) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onProjectTap(project) } }, modifiers: { stop: true } }]"
                                 :project="project" :accent-index="index" />
@@ -170,47 +170,35 @@
 import { vOnLongPress } from '@vueuse/components'
 import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { getProjects, subscribeToProjects, deleteProject } from '~/services/projects';
+import { deleteProject } from '~/services/projects';
+import { storeToRefs } from 'pinia';
+import { useProjectsStore } from '~/stores/projects';
 
 const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();
 
 const longPressedDirective = shallowRef(false)
 
+const projectsStore = useProjectsStore();
+const { result: projects, loading, sort, query, selection } = storeToRefs(projectsStore);
+
 function onLongPressCallbackDirective(e: PointerEvent, project: any) {
     longPressedDirective.value = true
-    if (!selection.value.active) {
-        selection.value.active = true;
-        selection.value.selected.push(project);
-    }
+    projectsStore.activateSelectionWith(project);
 }
 
 function resetDirective() {
     longPressedDirective.value = false
 }
 
-const loading = ref(false);
-const projects = ref(null);
-const sort = ref('deadlines.date');
-const query = ref('');
-
-const selection = ref({
-    active: false,
-    selected: [] as any
-});
-
 const delete_open = ref(false);
 
 const resetSelection = () => {
-    selection.value = {
-        active: false,
-        selected: []
-    }
+    projectsStore.resetSelection();
 }
 
 onMounted(async () => {
-    await reloadProjects();
-
-    subscribeToProjects(reloadProjects);
+    projectsStore.ensureSubscribed();
+    await projectsStore.fetchProjects(false);
 });
 
 const sortLabel = computed(() => {
@@ -219,19 +207,19 @@ const sortLabel = computed(() => {
             return { label: 'Date Created', asc: true };
         case '-created':
             return { label: 'Date Created', asc: false };
-        case 'deadlines.date':
+        case 'Deadlines_via_project.date':
             return { label: 'Nearest Deadline', asc: true };
-        case '-deadlines.date':
+        case '-name':
             return { label: 'Nearest Deadline', asc: false };
     }
 })
 
 watch(sort, () => {
-    reloadProjects();
+    projectsStore.fetchProjects();
 });
 
 watch(query, () => {
-    reloadProjects();
+    projectsStore.fetchProjects();
 });
 
 const onProjectTap = (project: any) => {
@@ -274,17 +262,7 @@ const deleteSelectedProjects = async () => {
 
     // TODO: Fix the issue and restart this section
     resetSelection();
-    await reloadProjects();
-}
-
-const reloadProjects = async () => {
-    loading.value = true;
-    try {
-        projects.value = await getProjects(1, 10, { expand: '', sort: '', filter: `name ~ '${query.value}'` });
-    } catch (e) {
-        console.error(e);
-    }
-    loading.value = false;
+    await projectsStore.fetchProjects(true);
 }
 
 </script>

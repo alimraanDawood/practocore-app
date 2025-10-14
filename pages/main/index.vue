@@ -139,7 +139,9 @@
                         </Button>
                     </div>
 
-                    <Button class="" size="sm" variant=secondary>Details</Button>
+                    <NuxtLink to="/main/calendar">
+                      <Button class="" size="sm" variant=secondary>Details</Button>
+                    </NuxtLink>
                 </div>
 
                 <div class="flex flex-col border p-2 rounded-xl">
@@ -154,38 +156,33 @@
 import { CircleProgressBar } from 'vue3-m-circle-progress-bar';
 import { ArrowRight, Info, Loader, CalendarIcon, Clock, X, XCircle, Plus } from 'lucide-vue-next';
 import { getSignedInUser } from '~/services/auth';
-import { getStatistics, subscribeToProjects } from '~/services/projects';
-
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
+import { storeToRefs } from 'pinia';
+import { useDashboardStore } from '~/stores/dashboard';
 
-dayjs.extend(relativeTime);
-dayjs.extend(utc);
-dayjs.extend(timezone);
+ dayjs.extend(relativeTime);
+ dayjs.extend(utc);
+ dayjs.extend(timezone);
 
-const hours = new Date().getHours();
-const statistics = ref(null);
-const loading = ref(true);
+ const hours = new Date().getHours();
+ const dashboard = useDashboardStore();
+ const { statistics, loading } = storeToRefs(dashboard);
 
-const welcomeMessage = computed(() => {
-    if (hours < 12) return 'Good Morning';
-    if (hours < 18) return 'Good Afternoon';
-    return 'Good Evening';
-});
+ const welcomeMessage = computed(() => {
+     if (hours < 12) return 'Good Morning';
+     if (hours < 18) return 'Good Afternoon';
+     return 'Good Evening';
+ });
 
-onMounted(async () => {
-    statistics.value = await getStatistics();
-    loading.value = false;
+ onMounted(async () => {
+     await dashboard.init();
+ });
 
-    subscribeToProjects(reloadStatistics);
-});
-
-const reloadStatistics = async () => {
-    loading.value = true;
-    statistics.value = await getStatistics();
-    loading.value = false;
-}
+ const reloadStatistics = async () => {
+     await dashboard.fetchStatistics(true);
+ }
 
 </script>
