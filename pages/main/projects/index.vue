@@ -63,7 +63,6 @@
                 </div>
             </DefineSearchFilterTemplate>
 
-
             <div class="flex flex-col w-full h-full p-3 gap-2">
 
                 <div class="flex flex-row items-center justify-between">

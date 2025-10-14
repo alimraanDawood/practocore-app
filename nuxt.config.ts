@@ -23,8 +23,14 @@ export default defineNuxtConfig({
         '@hypernym/nuxt-gsap',
         '@vueuse/nuxt',
         'nuxt-viewport',
-        'v-wave/nuxt'
+        'v-wave/nuxt',
+        // '@nuxtjs/tailwindcss',
+        '@nuxtjs/color-mode'
     ],
+
+    colorMode: {
+        classSuffix: ''
+    },
 
     shadcn: {
         /**

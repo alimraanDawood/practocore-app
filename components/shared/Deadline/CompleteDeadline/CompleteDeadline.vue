@@ -1,5 +1,52 @@
 <template>
-    <Sheet v-model:open="open">
+    <Dialog v-if="$viewport.isGreaterThan('tablet')" v-model:open="open">
+        <DialogTrigger :as-child="true">
+            <slot />
+        </DialogTrigger>
+
+        <DialogContent side="bottom">
+            <DialogHeader>
+                <DialogTitle>Enter Date</DialogTitle>
+                <DialogDescription>
+                    Enter Date of fulfillment of this deadline.
+                </DialogDescription>
+            </DialogHeader>
+
+            <div class="flex flex-col p-3">
+                <Popover>
+                    <PopoverTrigger as-child>
+                        <Button 
+                            variant="outline" 
+                            :class="cn(
+                                'w-full justify-start text-left font-normal',
+                                !dateValue && 'text-muted-foreground',
+                            )">
+                            <CalendarIcon class="mr-2 h-4 w-4" />
+                            {{ dateValue ? df.format(dateValue.toDate(getLocalTimeZone())) : "Pick a date" }}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent class="w-auto p-0">
+                        <Calendar v-model="dateValue" initial-focus />
+                    </PopoverContent>
+                </Popover>
+            </div>
+
+            <DialogFooter>
+                <Button 
+                    @click="fulfillDeadline" 
+                    class="disabled:opacity-50" 
+                    :disabled="loading">
+                    <span v-if="!loading">Use Date</span>
+                    <Loader v-else class="animate-spin" />
+                </Button>
+                <DialogClose>
+                    <Button variant="secondary">Cancel</Button>
+                </DialogClose>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Sheet v-else v-model:open="open">
         <SheetTrigger :as-child="true">
             <slot />
         </SheetTrigger>

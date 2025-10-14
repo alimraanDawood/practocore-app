@@ -1,11 +1,17 @@
 import Pocketbase from 'pocketbase';
-const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "http://192.168.5.1:8090";
-
+// const SERVER_URL = "https://www.practocore.com";
+const SERVER_URL = "http://192.168.5.1:8090";
+// const SERVER_URL = "http://127.0.0.1:8090"
 const pocketbase = new Pocketbase(SERVER_URL);
 
 export async function signUpWithGoogle() {
     return pocketbase.collection('Users').authWithOAuth2({provider: 'google'});
+}
+
+export async function getUserPreferences() {
+    if(pocketbase.authStore.record) {
+        return await pocketbase.collection('UserPreferences').getOne(pocketbase.authStore.record.preferences);
+    }
 }
 
 export async function submitAccountDetails(accountDetails : any, organisationReference : string | null = null) {
@@ -32,6 +38,26 @@ export async function verifyOTP(otpId : string, userId : string, code : string) 
     return await fetch(`${SERVER_URL}/api/practocore/auth/verify-otp/${otpId}/${userId}/${code}`, {
         method: "GET",
     });
+}
+
+export async function updateUser(options : Object) {
+    if(pocketbase.authStore.record) {
+        const result = await pocketbase.collection('Users').update(pocketbase.authStore.record.id, options);
+
+        return result;
+    }
+
+    throw(new Error('User not signed in!'));
+}
+
+export async function updateUserPreferences(options : Object) {
+    if(pocketbase.authStore.record) {
+        const result = await pocketbase.collection('Users').update(pocketbase.authStore.record.preferences, options);
+
+        return result;
+    }
+
+    throw(new Error('User not signed in!'));
 }
 
 export async function resendOTP(otpId : string, userId : string) {

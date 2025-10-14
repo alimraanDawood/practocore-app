@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col w-full h-full">
+    <div class="flex flex-col w-full h-full lg:hidden">
         <div class="flex flex-row lg:hidden w-full items-center justify-between p-3 border-b">
             <Button @click="$router.go(-1)" size="icon" variant="ghost">
                 <ArrowLeft />
@@ -49,6 +49,24 @@
 
         <SharedDeadlineViewDeadline v-model:open="viewDeadlineOpen" :index="d_index" :deadline="deadline"></SharedDeadlineViewDeadline>
     </div>
+
+    <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
+        <div class="flex flex-row w-[90vw] h-full border-x divide-x">
+            <div class="flex flex-col w-full overflow-y-scroll p-3">
+                <FeaturesCalendarMonthView
+                :events="mockEvents"
+                @event-click="onEventClick" />
+            </div>
+
+            <div class="flex flex-col max-w-sm w-full h-full">
+                <div v-if="selectedDeadline === null" class="flex flex-col w-full h-full text-center items-center justify-center">
+                    <span>Select a deadline to view its details</span>
+                </div>
+
+                <SharedDeadlineViewDeadline :index="project?.expand?.deadlines.indexOf(selectedDeadline)" v-else :deadline="selectedDeadline" :no-sheet="true"></SharedDeadlineViewDeadline>
+            </div>
+        </div>
+    </div>
 </template>
 
 <script setup>
@@ -67,6 +85,8 @@ const d_index = ref(0);
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+const selectedDeadline = ref(null);
+
 const toggleDeadlineView = (deadlineId) => {
     const _deadline = project.value.expand.deadlines.find(d => d.id === deadlineId);
 
@@ -76,6 +96,44 @@ const toggleDeadlineView = (deadlineId) => {
         viewDeadlineOpen.value = true;
     }
 }
+
+const onEventClick = (event) => {
+    selectedDeadline.value = project?.value?.expand?.deadlines.filter(d => d.id === event.id).at(0) || null;
+}
+
+function toISO(input) {
+  const d = toDate(input)
+  
+  if(d) {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  
+  return '';
+}
+
+const updateDate = (date) => {
+    const deadlineMatch = project?.value.expand?.deadlines?.filter((d) => { 
+        return toISO(d.date) === toISO(date.date);
+    });
+
+    if(deadlineMatch.length > 0) {
+        selectedDeadline.value = deadlineMatch.at(0);
+    } else {
+        selectedDeadline.value = null;
+    }
+}
+
+function toDate(input) {
+  if (!input) return undefined
+  if (input instanceof Date) return new Date(input)
+  const d = new Date(input)
+  if (Number.isNaN(d.getTime())) return undefined
+  return d
+}
+
 
 definePageMeta({
     layout: 'no-mobile-nav'
@@ -104,6 +162,19 @@ const badgeAccentClasses = (accentIndex, completed) => {
 
     return accentMap[accentIndex % 4];
 }
+
+const mockEvents = computed(() => {
+  const accentMap = [
+  'accent-1',
+  'accent-2',
+  'accent-3',
+  'accent-4'
+  ];
+  
+  return project?.value?.expand?.deadlines?.map((d, accentIndex) => {
+    return { id: d.id, date: d.date, title: d.name, color: accentMap[accentIndex % 4], completed: d.completed, index: accentIndex }
+  });
+})
 
 onMounted(async () => {
     project.value = await getProject(useRoute().params.projectId, {  });

@@ -1,5 +1,53 @@
 <template>
-    <Sheet :modal="true" v-model:open="open">
+    <div v-if="noSheet" class="flex flex-col w-full h-full">
+        <div class="flex flex-col w-full h-full">
+            <div class="flex text-left flex-row border-y w-full p-3 gap-3"
+                :class="accentClasses(index, deadline?.completed)">
+                <CalendarIcon class="size-4" />
+
+                <div class="flex flex-col gap-1">
+                    <span class="font-semibold text-sm">{{ deadline.name }}</span>
+                    <span class="text-sm font-semibold">
+                        {{ dayjs(deadline.date).subtract(1, 'D').format("DD/MM/YYYY") }}
+                    </span>
+
+                    <Badge v-if="deadline.completed === false && (new Date() < new Date(deadline.date))"
+                        :class="badgeAccentClasses(index)">
+                        <Clock /> PENDING
+                    </Badge>
+                    <Badge v-else-if="deadline.completed === false && (new Date() > new Date(deadline.date))"
+                        :class="badgeAccentClasses(index)">
+                        <XCircle /> MISSED
+                    </Badge>
+                    <Badge v-else-if="deadline.completed === true" :class="badgeAccentClasses(index)">
+                        <CheckCircle /> COMPLETED
+                    </Badge>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-1 p-3">
+                <span class="font-semibold">Description</span>
+                <span>{{ deadline.description }}</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-3 p-3">
+            <SharedDeadlineCompleteDeadline v-if="deadline.dynamic" :deadline="deadline" :index="index"
+                @updated="handleUpdate">
+                <Button v-if="!deadline.completed" class="w-full" :class="badgeAccentClasses(index)">
+                    {{ deadline?.action }}
+                </Button>
+                <Button v-else variant="secondary" class="w-full" :disabled="true">
+                    Deadline Completed!
+                </Button>
+            </SharedDeadlineCompleteDeadline>
+
+            <SharedDeadlineEditDeadline :deadline="deadline" :index="index">
+                <Button class="w-full">Edit Deadline</Button>
+            </SharedDeadlineEditDeadline>
+        </div>
+    </div>
+    <Sheet v-else :modal="true" v-model:open="open">
         <SheetTrigger :as-child="true">
             <slot />
         </SheetTrigger>
@@ -8,17 +56,18 @@
             <SheetHeader>
                 <SheetTitle>Deadline</SheetTitle>
             </SheetHeader>
-            
+
             <div class="flex flex-col">
-                <div class="flex text-left flex-row border-y w-full p-3 gap-3" :class="accentClasses(index, deadline?.completed)">
+                <div class="flex text-left flex-row border-y w-full p-3 gap-3"
+                    :class="accentClasses(index, deadline?.completed)">
                     <CalendarIcon class="size-4" />
-    
+
                     <div class="flex flex-col gap-1">
                         <span class="font-semibold text-sm">{{ deadline.name }}</span>
                         <span class="text-sm font-semibold">
                             {{ dayjs(deadline.date).subtract(1, 'D').format("DD/MM/YYYY") }}
                         </span>
-    
+
                         <Badge v-if="deadline.completed === false && (new Date() < new Date(deadline.date))"
                             :class="badgeAccentClasses(index)">
                             <Clock /> PENDING
@@ -32,7 +81,7 @@
                         </Badge>
                     </div>
                 </div>
-    
+
                 <div class="flex flex-col gap-1 p-3">
                     <span class="font-semibold">Description</span>
                     <span>{{ deadline.description }}</span>
@@ -40,10 +89,7 @@
             </div>
 
             <SheetFooter>
-                <SharedDeadlineCompleteDeadline 
-                    v-if="deadline.dynamic"
-                    :deadline="deadline" 
-                    :index="index"
+                <SharedDeadlineCompleteDeadline v-if="deadline.dynamic" :deadline="deadline" :index="index"
                     @updated="handleUpdate">
                     <Button v-if="!deadline.completed" class="w-full" :class="badgeAccentClasses(index)">
                         {{ deadline?.action }}
@@ -72,7 +118,7 @@ import { CalendarIcon, CheckCircle, Clock, XCircle } from 'lucide-vue-next';
 
 dayjs.extend(relativeTime);
 
-const props = defineProps(['deadline', 'index']);
+const props = defineProps(['deadline', 'index', 'noSheet']);
 const emits = defineEmits(['updated']);
 
 const open = ref(false);

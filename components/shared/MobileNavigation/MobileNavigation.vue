@@ -14,20 +14,26 @@
             </button>
         </NuxtLink>
 
-        <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-calendar' }">
-            <CalendarIcon class="size-5" />
-            <span>Calendar</span>
-        </button>
+        <NuxtLink to="/main/calendar">
+            <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-calendar' }">
+                <CalendarIcon class="size-5" />
+                <span>Calendar</span>
+            </button>
+        </NuxtLink>
 
-        <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-team' }">
+        <!-- <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-team' }">
             <Users class="size-5" />
             <span>Team</span>
-        </button>
+        </button> -->
 
-        <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-settings' }">
-            <Settings class="size-5" />
-            <span>Settings</span>
-        </button>
+
+
+        <NuxtLink to="/main/settings">
+            <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-settings' }">
+                <Settings class="size-5" />
+                <span>Settings</span>
+            </button>
+        </NuxtLink>
     </div>
 </template>
 

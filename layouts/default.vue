@@ -1,14 +1,18 @@
 <template>
-  <div class="flex flex-col  h-[100dvh] w-screen items-center overflow-hidden ">
-    <div class="flex flex-row lg:hidden w-full items-center justify-between p-3 border-b">
+  <div class="flex flex-col bg-background text-foreground h-[100dvh] w-screen items-center overflow-hidden">
+    <div class="flex flex-row  lg:hidden w-full items-center justify-between p-3 border-b">
       <div class="flex flex-col">
         <span class="text-sm text-muted-foreground">{{ welcomeMessage }}</span>
         <span class="font-medium">{{ getSignedInUser()?.name }}</span>
       </div>
 
-      <Button size="icon" variant="secondary">
-        <Bell />
-      </Button>
+      <div class="flex flex-row items-center gap-2">
+        <SharedDarkModeSwitch />
+
+        <Button size="icon" variant="secondary">
+          <Bell />
+        </Button>
+      </div>
     </div>
 
     <div class="bg-background lg:flex flex-col w-full border-b items-center hidden">
@@ -39,19 +43,7 @@
           </div>
         </div>
 
-        <div class="flex flex-row w-full gap-1">
-          <NuxtLink to="/main">
-            <button class="p-2 border-b-2 border-transparent" :class="{ '!border-primary font-medium': $route.name === 'main' }">Home</button>
-          </NuxtLink>
-
-          <NuxtLink to="/main/projects">
-            <button class="p-2 border-b-2 border-transparent" :class="{ '!border-primary font-medium': $route.name === 'main-projects' }">Projects</button>
-          </NuxtLink>
-
-          <button class="p-2 border-b-2 border-transparent">Calendar</button>
-          <button class="p-2 border-b-2 border-transparent">Team</button>
-          <button class="p-2 border-b-2 border-transparent">Settings</button>
-        </div>
+        <SharedTopBar />
       </div>
     </div>
 
