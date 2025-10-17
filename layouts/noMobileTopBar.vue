@@ -1,20 +1,5 @@
 <template>
   <div class="flex flex-col bg-background text-foreground h-[100dvh] w-screen items-center overflow-hidden">
-    <div class="flex flex-row  lg:hidden w-full items-center justify-between p-3 border-b">
-      <div class="flex flex-col">
-        <span class="text-sm text-muted-foreground">{{ welcomeMessage }}</span>
-        <span class="font-medium">{{ getSignedInUser()?.name }}</span>
-      </div>
-
-      <div class="flex flex-row items-center gap-2">
-        <SharedDarkModeSwitch />
-
-        <Button size="icon" variant="secondary">
-          <Bell />
-        </Button>
-      </div>
-    </div>
-
     <div class="bg-background lg:flex flex-col w-full border-b items-center hidden">
       <div class="flex flex-col w-full lg:w-[95vw] bg-background gap-4 text-foreground p-5 pb-0 h-full">
         <div class="flex flex-row items-center gap-2">

@@ -3,7 +3,7 @@
 
         <div class="flex flex-col gap-3.5 lg:flex-row justify-between">
             <div class="lg:flex flex-col hidden">
-                <span class=" text-xl lg:text-2xl font-semibold">{{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0) }}</span>
+                <span class=" text-xl lg:text-2xl font-semibold ibm-plex-sans">{{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0) }}</span>
                 <span>Welcome to PractoCore, Your litigation deadline expert</span>
             </div>
 
@@ -45,14 +45,14 @@
             <div class="flex flex-col lg:col-span-3 gap-3">
                 <div class="flex flex-row justify-between">
                     <div class="flex flex-row gap-1 items-center">
-                        <span class="font-semibold">Upcoming Deadlines</span>
+                        <span class="font-semibold ibm-plex-sans">Upcoming Deadlines</span>
 
                         <Button size="icon" class="size-7" variant="ghost">
                             <Info />
                         </Button>
                     </div>
 
-                    <SharedProjectsCreateProject v-if="statistics?.projects?.length === 0">
+                    <SharedProjectsCreateProject @created="reloadStatistics" v-if="statistics?.projects?.length === 0">
                         <Button>
                             <Plus />
 
@@ -72,7 +72,7 @@
                     <div v-else-if="statistics?.projects?.length > 0"
                         class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
                         <NuxtLink v-for="project in statistics?.projects" :to="`/main/projects/project/${project.id}`">
-                            <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between">
+                            <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between hover:bg-muted hover:text-primary transition-colors ease-in-out duration-500">
                                 <div class="flex flex-col p-3 w-full">
                                     <span class="font-semibold text-sm text-muted-foreground">Project</span>
                                     <span class="font-medium text-lg">{{ project.name }}</span>

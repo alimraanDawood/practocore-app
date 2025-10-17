@@ -21,6 +21,13 @@
             </button>
         </NuxtLink>
 
+        <NuxtLink to="/main/templates">
+            <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-templates' }">
+                <ScrollText class="size-5" />
+                <span>Templates</span>
+            </button>
+        </NuxtLink>
+
         <!-- <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-team' }">
             <Users class="size-5" />
             <span>Team</span>
@@ -38,5 +45,5 @@
 </template>
 
 <script setup>
-import { Plus, Home, Settings, Scale, CalendarIcon, Users } from 'lucide-vue-next';
+import { Plus, Home, Settings, Scale, CalendarIcon, Users, ScrollText } from 'lucide-vue-next';
 </script>

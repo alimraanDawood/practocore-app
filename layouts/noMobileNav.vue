@@ -8,9 +8,7 @@
                     <img src="@/assets/img/logos/Practo Core Horizontal -- Dark.svg" class="w-44 dark:block hidden" />
 
 
-                    <Button variant="outline" size="sm" class="w-[240px] flex flex-row justify-start">
-                        <Search /> Search
-                    </Button>
+                    <SharedSearch></SharedSearch>
 
                     <div class="flex flex-row ml-auto items-center gap-2">
                         <SharedDarkModeSwitch />

@@ -15,6 +15,11 @@
                 :class="{ '!border-primary font-medium': $route?.name === 'main-calendar' }">Calendar</button>
         </NuxtLink>
 
+        <NuxtLink to="/main/templates">
+            <button class="p-2 border-b-2 border-transparent"
+                :class="{ '!border-primary font-medium': $route?.name === 'main-templates' }">Templates</button>
+        </NuxtLink>
+
         <!-- <button class="p-2 border-b-2 border-transparent">Team</button> -->
 
         <NuxtLink to="/main/settings">

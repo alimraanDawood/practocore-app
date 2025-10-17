@@ -2,8 +2,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Manrope:wght@200..800&display=swap');
+
 @import "tailwindcss";
 @import "tw-animate-css";
+@import '@vue-flow/core/dist/style.css';
+@import '@vue-flow/core/dist/theme-default.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -30,11 +34,11 @@
     --1920px-spacing-grid: width: calc(100VW + 75VH + 0.35 EM)
     --1400px-spacing-grid: width: calc(80VW + 65VH + 0.15 EM)
     --1024px-spacing-grid: width: calc(65VW + 50VH + 0.5 EM)
-    
+
     These are quite aggressive and combine VW, VH, and EM, which can be tricky
     to predict across all scenarios, especially VH for horizontal width.
     They are highly specific to the element they describe (a grid item's width).
-    
+
     Let's define these variables. You'll need to adjust the `calc()` values
     to "whatever look good at those screen sizes" as the Reddit user suggests.
     The exact math here is crucial for your design vision.
@@ -140,47 +144,81 @@
             height: 0;
         }
     }
-}
 
+    @keyframes accordion-down {
+        from {
+            height: 0;
+        }
+
+        to {
+            height: var(--reka-accordion-content-height);
+        }
+    }
+
+    @keyframes accordion-up {
+        from {
+            height: var(--reka-accordion-content-height);
+        }
+
+        to {
+            height: 0;
+        }
+    }
+}
 
 :root {
     --tertiary: oklch(0.684 0.193 35.667);
-    --primary: oklch(0.425 0.074 188.312);
-    --radius: 0.625rem;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.141 0.005 285.823);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
-    --primary-foreground: oklch(0.98 0.016 73.684);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.213 47.604);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
-    --sidebar-primary: oklch(0.705 0.213 47.604);
-    --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.213 47.604);
+    --background: oklch(0.98 0.01 93.48);
+    --foreground: oklch(0.34 0.03 94.42);
+    --card: oklch(0.98 0.01 93.48);
+    --card-foreground: oklch(0.19 0 0);
+    --popover: oklch(1.00 0 0);
+    --popover-foreground: oklch(0.27 0.02 99.70);
+    --primary: oklch(0.684 0.193 35.667);
+    --primary-foreground: oklch(1.00 0 0);
+    --secondary: oklch(0.92 0.01 87.42);
+    --secondary-foreground: oklch(0.43 0.02 99.33);
+    --muted: oklch(0.93 0.02 91.55);
+    --muted-foreground: oklch(0.61 0.01 91.49);
+    --accent: oklch(0.92 0.01 87.42);
+    --accent-foreground: oklch(0.27 0.02 99.70);
+    --destructive: oklch(0.19 0 0);
+    --border: oklch(0.88 0.01 100.76);
+    --input: oklch(0.76 0.02 96.91);
+    --ring: oklch(0.59 0.17 252.92);
+    --chart-1: oklch(0.56 0.13 42.95);
+    --chart-2: oklch(0.69 0.16 290.29);
+    --chart-3: oklch(0.88 0.03 91.64);
+    --chart-4: oklch(0.88 0.04 298.21);
+    --chart-5: oklch(0.56 0.13 41.94);
     --accent-1: #52004f;
     --accent-2: #9a954c;
     --accent-3: #ab5d41;
     --accent-4: #7daaa7;
+
+    --sidebar: oklch(0.97 0.01 93.49);
+    --sidebar-foreground: oklch(0.36 0.01 106.85);
+    --sidebar-primary: oklch(0.62 0.14 39.15);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.92 0.01 87.42);
+    --sidebar-accent-foreground: oklch(0.33 0 0);
+    --sidebar-border: oklch(0.94 0 0);
+    --sidebar-ring: oklch(0.77 0 0);
+
+    --font-sans: 'Geist', 'Geist Fallback', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-serif: "Geist", "Geist Fallback", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    --radius: 0.5rem;
+
+    --shadow-2xs: 0 1px 3px 0px oklch(0.00 0 0 / 0.05);
+    --shadow-xs: 0 1px 3px 0px oklch(0.00 0 0 / 0.05);
+    --shadow-sm: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 1px 2px -1px oklch(0.00 0 0 / 0.10);
+    --shadow: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 1px 2px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-md: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 2px 4px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-lg: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 4px 6px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 8px 10px -1px oklch(0.00 0 0 / 0.10);
+    --shadow-2xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.25);
 }
 
 .dark {
@@ -231,7 +269,6 @@
     --accent-4: #7daaa7;
 }
 
-
 @layer base {
     * {
         @apply border-border outline-ring/50;
@@ -262,4 +299,22 @@
         font-style: normal;
         font-variation-settings: "wdth" 100;
     }
+
+    .ibm-plex-serif {
+        font-family: "IBM Plex Serif", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 500;
+        font-style: normal;
+        font-variation-settings: "wdth" 100;
+    }
+
+    .no-scrollbar {
+        -ms-overflow-style: none; /* IE and Edge */
+        scrollbar-width: none; /* Firefox */
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
+    }
+
 }

@@ -1,196 +1,356 @@
 <template>
     <DefineTemplate>
         <div class="p-3">
-            <form @submit="onSubmit" id="project_create" class="grid space-y-6">
-                <FormField v-slot="{ componentField }" name="name">
-                    <FormItem>
-                        <FormLabel>Project Name</FormLabel>
-                        <FormControl>
-                            <Input type="text" placeholder="John Doe vs Jane Doe" v-bind="componentField" />
-                        </FormControl>
-                        <FormDescription>
-                            This is the name of your project.
-                        </FormDescription>
-                        <FormMessage />
-                    </FormItem>
-                </FormField>
+            <Form ref="formRef" v-slot="{ meta, values, setFieldValue, validate }" as="" keep-values
+                :validation-schema="toTypedSchema(formSchema[stepIndex - 1])">
+                <Stepper v-slot="{ isNextDisabled, isPrevDisabled, nextStep, prevStep }" v-model="stepIndex">
+                    <!-- FORM -->
+                    <form @submit="(e) => {
+                        e.preventDefault()
+                        validate()
 
-                <FormField v-slot="{ componentField }" name="template">
-                    <FormItem>
-                        <FormLabel>Project Template</FormLabel>
+                        if (stepIndex === steps.length && meta.valid) {
+                            onSubmit(values)
+                        }
+                    }" id="project_create" class="flex flex-col w-full">
+                        <!-- Stepper Navigation -->
+                        <div class="flex w-full flex-start gap-2">
+                            <StepperItem v-for="step in steps" :key="step.step" v-slot="{ state }"
+                                class="relative flex w-full flex-col items-center justify-center" :step="step.step">
+                                <StepperSeparator v-if="step.step !== steps[steps.length - 1].step"
+                                    class="absolute left-[calc(50%+20px)] right-[calc(-50%+10px)] top-5 block h-0.5 shrink-0 rounded-full bg-muted group-data-[state=completed]:bg-primary" />
 
-                        <Select v-bind="componentField" class="w-full">
-                            <FormControl>
-                                <SelectTrigger class="w-full">
-                                    <SelectValue class="w-full"
-                                        placeholder="Select a template to generate a calendar" />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem v-for="template in templates" :value="template.id">
-                                        {{ template.name }}
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                        <FormDescription>
-                            You can use prebuilt templates to automatically generate deadlines for your legal
-                            matters.
-                        </FormDescription>
-                        <FormMessage />
-                    </FormItem>
-                </FormField>
-
-                <FormField name="date">
-                    <FormItem class="flex flex-col">
-                        <FormLabel>Project Date</FormLabel>
-                        <Popover :modal="true">
-                            <PopoverTrigger as-child>
-                                <FormControl>
-                                    <Button variant="outline" :class="cn(
-                                        'w-full ps-3 text-start font-normal',
-                                        !value && 'text-muted-foreground',
-                                    )">
-                                        <span>{{ value ? df.format(toDate(value)) : "Pick a date" }}</span>
-                                        <CalendarIcon class="ms-auto h-4 w-4 opacity-50" />
+                                <StepperTrigger as-child>
+                                    <Button
+                                        :variant="state === 'completed' || state === 'active' ? 'default' : 'outline'"
+                                        size="icon" class="z-10 rounded-full shrink-0"
+                                        :class="[state === 'active' && 'ring-2 ring-ring ring-offset-2 ring-offset-background']"
+                                        :disabled="state !== 'completed' && !meta.valid">
+                                        <Check v-if="state === 'completed'" class="size-5" />
+                                        <Circle v-if="state === 'active'" />
+                                        <Dot v-if="state === 'inactive'" />
                                     </Button>
-                                    <input hidden>
-                                </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent class="w-auto p-0">
-                                <Calendar v-model:placeholder="placeholder" :model-value="value"
-                                    calendar-label="Project Date" initial-focus
-                                    :min-value="new CalendarDate(1900, 1, 1)" @update:model-value="(v) => {
-                                        if (v) {
-                                            setFieldValue('date', v.toString())
-                                        }
-                                        else {
-                                            setFieldValue('date', undefined)
-                                        }
-                                    }" />
-                            </PopoverContent>
-                        </Popover>
-                        <FormDescription>
-                            The base date used to calculate the deadlines
-                        </FormDescription>
-                        <FormMessage />
-                    </FormItem>
-                </FormField>
-            </form>
+                                </StepperTrigger>
+
+                                <div class="flex flex-col items-center text-center">
+                                    <StepperTitle :class="[state === 'active' && 'text-primary']"
+                                        class="text-xs font-medium transition lg:text-base">
+                                        {{ step.title }}
+                                    </StepperTitle>
+                                    <StepperDescription :class="[state === 'active' && 'text-primary']"
+                                        class="sr-only text-xs text-muted-foreground transition md:not-sr-only">
+                                        {{ step.description }}
+                                    </StepperDescription>
+                                </div>
+                            </StepperItem>
+                        </div>
+
+                        <!-- Step Content -->
+                        <div class="flex flex-col gap-4 mt-4">
+                            <!-- STEP 1 -->
+                            <template v-if="stepIndex === 1">
+                                <FormField v-slot="{ componentField }" name="name">
+                                    <FormItem>
+                                        <FormLabel>Project Name</FormLabel>
+                                        <FormControl>
+                                            <Input type="text" placeholder="John Doe vs Jane Doe"
+                                                v-bind="componentField" />
+                                        </FormControl>
+                                        <FormDescription>This is the name of your project.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                </FormField>
+
+                                <FormField name="date">
+                                    <FormItem class="flex flex-col">
+                                        <FormLabel>Project Date</FormLabel>
+                                        <Popover :modal="true">
+                                            <PopoverTrigger as-child>
+                                                <FormControl>
+                                                    <Button variant="outline" :class="cn(
+                                                        'w-full ps-3 text-start font-normal',
+                                                        !value && 'text-muted-foreground'
+                                                    )
+                                                        ">
+                                                        <span>{{ value ? df.format(toDate(value)) : 'Pick a date'
+                                                            }}</span>
+                                                        <CalendarIcon class="ms-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                    <input hidden />
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent class="w-auto p-0">
+                                                <Calendar v-model:placeholder="placeholder" :model-value="value"
+                                                    calendar-label="Project Date" initial-focus
+                                                    :min-value="new CalendarDate(1900, 1, 1)" @update:model-value="(v) => {
+                                                        if (v) setFieldValue('date', v.toString())
+                                                        else setFieldValue('date', undefined)
+                                                    }" />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <FormDescription>
+                                            The base date used to calculate the deadlines.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                </FormField>
+                            </template>
+
+                            <!-- STEP 2 -->
+                            <template v-if="stepIndex === 2">
+                                <FormField v-slot="{ componentField }" name="template">
+                                    <FormItem>
+                                        <FormLabel>Project Template</FormLabel>
+                                        <FormDescription>
+                                            Use prebuilt templates to generate deadlines for your legal matters.
+                                        </FormDescription>
+                                        <SharedProjectsCreateProjectTemplateSeletor v-bind="componentField" />
+                                        <FormMessage />
+                                    </FormItem>
+                                </FormField>
+                            </template>
+
+                            <!-- STEP 3 (DYNAMIC FIELDS) -->
+                            <template v-if="stepIndex === 3">
+                                <div class="space-y-4">
+                                    <FormField v-for="field in formRef?.values?.template?.fields || []"
+                                        :key="field.name" :name="`fields.${field.id}`" v-slot="{ componentField }">
+                                        <FormItem>
+                                            <FormLabel>{{ field.label }}</FormLabel>
+                                            <FormControl>
+                                                <!-- string -->
+                                                <Input v-if="field.type === 'string'" v-bind="componentField"
+                                                    type="text" :placeholder="field.placeholder || ''" />
+
+                                                <!-- select -->
+                                                <Select v-else-if="field.type === 'select'" v-bind="componentField">
+                                                    <SelectTrigger class="w-full">
+                                                        <SelectValue :placeholder="`Select ${field.label}`" />
+                                                    </SelectTrigger>
+
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            <SelectLabel>{{ field.label }}</SelectLabel>
+                                                            <SelectItem v-for="opt in field.options" :key="opt.value"
+                                                                :value="opt.value">
+                                                                {{ opt.label }}
+                                                            </SelectItem>
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
+
+                                                <!-- boolean -->
+                                                <Switch v-else-if="field.type === 'boolean'"
+                                                    :model-value="componentField.value"
+                                                    @update:model-value="v => setFieldValue(`fields.${field.id}`, v)" />
+
+                                                <!-- fallback -->
+                                                <span v-else class="italic text-muted-foreground">
+                                                    Unsupported type: {{ field.type }}
+                                                </span>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    </FormField>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Navigation Buttons -->
+                        <div class="flex items-center justify-between mt-4">
+                            <Button :disabled="isPrevDisabled" variant="outline" size="sm" @click="prevStep()">
+                                Back
+                            </Button>
+                            <div class="flex items-center gap-3">
+                                <Button v-if="stepIndex !== 3" :type="meta.valid ? 'button' : 'submit'"
+                                    :disabled="isNextDisabled" size="sm" @click="meta.valid && nextStep()">
+                                    Next
+                                </Button>
+                                <Button v-if="stepIndex === 3" size="sm" type="submit">
+                                    Create Project
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+                </Stepper>
+            </Form>
         </div>
     </DefineTemplate>
 
+    <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterThan('tablet')" v-model:open="open">
         <DialogTrigger>
             <slot />
         </DialogTrigger>
-
         <DialogContent>
             <DialogHeader>
                 <DialogTitle>Create a new project</DialogTitle>
-                <DialogDescription>Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
+                <DialogDescription>
+                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
                 </DialogDescription>
             </DialogHeader>
-
             <ReuseTemplate />
-
-            <DialogFooter>
-                <Button :disabled="loading" type="submit" form="project_create">
-                    <span v-if="!loading">Create Project</span>
-                    <Loader v-else class="animate-spin" />
-                </Button>
-            </DialogFooter>
         </DialogContent>
     </Dialog>
-    
+
+    <!-- SHEET -->
     <Sheet v-else v-model:open="open">
         <SheetTrigger>
             <slot />
         </SheetTrigger>
-
         <SheetContent side="bottom">
             <SheetHeader>
                 <SheetTitle>Create a new project</SheetTitle>
-                <SheetDescription>Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
+                <SheetDescription>
+                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
                 </SheetDescription>
             </SheetHeader>
-
             <ReuseTemplate />
-
-            <SheetFooter>
-                <Button :disabled="loading" type="submit" form="project_create">
-                    <span v-if="!loading">Create Project</span>
-                    <Loader v-else class="animate-spin" />
-                </Button>
-            </SheetFooter>
         </SheetContent>
     </Sheet>
 </template>
 
-<script setup>
-import * as z from 'zod';
-import { toTypedSchema } from '@vee-validate/zod';
-import { useForm } from 'vee-validate';
-import { getTemplates } from '~/services/projects';
+<script setup lang="ts">
+import * as z from "zod"
+import { toTypedSchema } from "@vee-validate/zod"
+import { useForm } from "vee-validate"
+import { computed, onMounted, ref, watch } from "vue"
+import { createProject } from "~/services/projects"
+import { getTemplates } from "~/services/templates"
+import { cn } from "~/lib/utils"
+import { CalendarIcon, Check, Circle, Dot } from "lucide-vue-next"
+import { toast } from "vue-sonner"
 import { toDate } from "reka-ui/date"
-import { CalendarDate, DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date"
-import { cn } from '~/lib/utils';
-import { CalendarIcon, Loader } from 'lucide-vue-next';
-import { toast } from 'vue-sonner';
-import { createProject } from '~/services/projects';
+import {
+    CalendarDate,
+    DateFormatter,
+    parseDate,
+} from "@internationalized/date"
+import type { RecordModel } from "pocketbase"
 
-const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
 
-let templates = ref([]);
+const templates = ref<RecordModel[]>([]);
+const stepIndex = ref(1)
+const steps = [
+    { step: 1, title: "Project Details" },
+    { step: 2, title: "Choose Template" },
+    { step: 3, title: "Complete" },
+]
 
 onMounted(async () => {
-    templates.value = await getTemplates();
 });
 
-const formSchema = toTypedSchema(z.object({
-    name: z.string('Please enter the name of this project!').min(3, 'You need atleast 3 characters for a valid name!'),
-    template: z.string('Please Select a Template'),
-    date: z
-        .string()
-        .refine(v => v, { message: "A date of birth is required." })
-}));
+const emits = defineEmits(['created']);
 
+const formRef = ref()
 
-const df = new DateFormatter("en-US", {
-    dateStyle: "long",
+// 🔹 Dynamic schemas
+const buildStep3Schema = () => {
+    const template = formRef.value?.values?.template
+    if (!template?.fields?.length) return null
+
+    console.log(template.fields);
+
+    const fieldShape: Record<string, any> = {}
+    for (const f of template.fields) {
+        switch (f.type) {
+            case "string":
+                fieldShape[f.id] = f.required
+                    ? z.string().min(1, `${f.label} is required`)
+                    : z.string().optional()
+                break
+            case "select":
+                fieldShape[f.id] = f.required
+                    ? z.enum(f.options.map((o: any) => o.value))
+                    : z.enum(f.options.map((o: any) => o.value)).optional()
+                break
+            case "boolean":
+                fieldShape[f.id] = f.required ? z.boolean() : z.boolean().optional()
+                break
+        }
+    }
+    return z.object({
+        fields: z.object(fieldShape)
+    })
+}
+
+const formSchema = computed(() => {
+
+    const step3Schema = buildStep3Schema();
+
+    if (step3Schema) {
+        return [
+            z.object({
+                name: z.string().min(3, "You need at least 3 characters for a valid name!"),
+                date: z.string().refine(v => v, { message: "A date is required." }),
+            }),
+            z.object({
+                template: z.object({
+                    id: z.string(),
+                    fields: z.array(z.any()),
+                }),
+            }),
+            buildStep3Schema()
+        ];
+    }
+
+    return [
+        z.object({
+            name: z.string().min(3, "You need at least 3 characters for a valid name!"),
+            date: z.string().refine(v => v, { message: "A date is required." }),
+        }),
+        z.object({
+            template: z.object({
+                id: z.string(),
+                fields: z.array(z.any()),
+            }),
+        }),
+    ];
 })
 
+
+const df = new DateFormatter("en-US", { dateStyle: "long" })
+const placeholder = ref()
+const loading = ref(false)
+const open = ref(false)
 
 const value = computed({
-    get: () => values.date ? parseDate(values.date) : undefined,
-    set: val => val,
+    get: () =>
+        formRef.value?.values?.date ? parseDate(formRef.value.values.date) : undefined,
+    set: (val) => val,
 })
 
-const placeholder = ref()
-
-const loading = ref(false);
-const open = ref(false);
-
-const { handleSubmit, setFieldValue, values } = useForm({
-    validationSchema: formSchema
-});
-
-const onSubmit = handleSubmit(async (values) => {
-    loading.value = true;
-    try {
-        const result = await createProject({ name: values.name, templateId: values.template, date: values.date });
-
-        if (result) {
-            toast.success("Project Created Successfully!");
-        }
-
-        open.value = false;
-    } catch (e) {
-        toast.error("Unable to create project at this time!");
-        console.error(e);
+// 🔹 Reset dynamic fields if template changes
+watch(
+    () => formRef.value?.values?.template?.id,
+    () => {
+        formRef.value?.setValues({})
     }
-    loading.value = false;
-});
+)
 
+// 🔹 Submission
+const onSubmit = async (values: any) => {
+    loading.value = true
+    try {
+        const result = await createProject({
+            name: values.name,
+            templateId: values.template?.id,
+            date: values.date,
+            fieldValues: values.fields   // ✅ now nested properly
+        });
+
+
+
+        if (result) toast.success("Project Created Successfully!")
+        emits('created');
+
+        open.value = false
+    } catch (e) {
+        toast.error("Unable to create project at this time!")
+        console.error(e)
+    } finally {
+        loading.value = false
+    }
+}
 </script>
