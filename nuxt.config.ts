@@ -25,7 +25,8 @@ export default defineNuxtConfig({
         'nuxt-viewport',
         'v-wave/nuxt',
         // '@nuxtjs/tailwindcss',
-        '@nuxtjs/color-mode'
+        '@nuxtjs/color-mode',
+        'nuxt-tiptap-editor'
     ],
 
     colorMode: {

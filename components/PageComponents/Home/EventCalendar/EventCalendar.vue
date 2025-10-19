@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import FeaturesCalendarMonthView from '@/components/features/calendar/MonthView.vue'
 import { Button } from '@/components/ui/button';
-import { getAllDeadlines, subscribeToDeadlines, unsubscribeToAllDeadlines } from '~/services/projects';
+import { getAllDeadlines, subscribeToDeadlines, unsubscribeToAllDeadlines } from '~/services/matters';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';

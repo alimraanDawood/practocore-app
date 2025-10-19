@@ -11,20 +11,22 @@
         </div>
 
         <div class="flex flex-col p-3 bg-background border-b w-full">
-            <span class="font-semibold text-lg">{{ project?.name }}</span>
+            <span class="font-semibold text-lg">{{ matter?.name }}</span>
 
             <div class="flex flex-row gap-2">
-                <span class="text-xs">Created: {{ dayjs(project?.created).format('DD/MM/YYYY') }}</span>
+                <span class="text-xs">Created: {{ dayjs(matter?.created).format('DD/MM/YYYY') }}</span>
             </div>
         </div>
 
         <div class="flex flex-col h-full w-full overflow-y-scroll">
-            <div class="flex flex-col w-full bg-muted">
-                <Calendar @highlight-clicked="toggleDeadlineView" :highlights="project?.expand?.deadlines?.map((d, index) => ({ id: d.id, date: d.date, class: badgeAccentClasses(index, d.completed), completed: d.completed, index: index }))" :weekday-format="'short'" class=" w-full" />
+            <div class="flex flex-col w-full p-3">
+                <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="toggleDeadlineView" :matter="matter" />
+
+                <!-- <Calendar @highlight-clicked="toggleDeadlineView" :highlights="matter?.expand?.deadlines?.map((d, index) => ({ id: d.id, date: d.date, class: badgeAccentClasses(index, d.completed), completed: d.completed, index: index }))" :weekday-format="'short'" class=" w-full" /> -->
             </div>
 
-            <div class="flex flex-col bg-background gap-3 border-t p-3 h-full">
-                <SharedDeadlineViewDeadline :deadline="deadline" :index="index" v-for="deadline, index in project?.expand?.deadlines">
+            <!-- <div class="flex flex-col bg-background gap-3 border-t p-3 h-full">
+                <SharedDeadlineViewDeadline :deadline="deadline" :index="index" v-for="deadline, index in matter?.expand?.deadlines">
                     <div class="flex text-left flex-row border p-3 gap-3" :class="accentClasses(index, deadline?.completed)">
                         <CalendarIcon class="size-4" />
     
@@ -38,12 +40,21 @@
                         </div>
                     </div>
                 </SharedDeadlineViewDeadline>
-            </div>
+            </div> -->
         </div>
 
-        <div class="p-5 fixed bottom-0 right-0">
-            <Button size="icon">
-                <Plus />
+        <button v-if="actionExpanded" class="fixed left-0 top-0 w-screen h-[100dvh] bg-black/70 z-40" @click="actionExpanded = false"></button>
+        <div class="p-5 fixed bottom-0 right-0 flex flex-col items-end gap-3 z-50">
+            <XyzTransition mode="out-in">
+                <div xyz="fade right" v-if="actionExpanded" class="flex flex-col">
+                    <AdjournDeadline :matter="matter">
+                        <Button size="sm" variant="secondary">Add Adjournment</Button>
+                    </AdjournDeadline>
+                </div>
+            </XyzTransition>
+
+            <Button @click="actionExpanded = !actionExpanded" size="icon">
+                <Plus class="transition-all duration-300 ease-in-out" :class="{ 'rotate-45': actionExpanded }" />
             </Button>
         </div>
 
@@ -53,17 +64,17 @@
     <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
         <div class="flex flex-row w-[90vw] h-full border-x divide-x">
             <div class="flex flex-col w-full overflow-y-scroll p-3">
-                <FeaturesCalendarMonthView
-                :events="mockEvents"
-                @event-click="onEventClick" />
+                <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })" :matter="matter" />
+                <!-- <FeaturesCalendarMonthView
+                    :events="mockEvents"
+                    @event-click="onEventClick" /> -->
             </div>
 
             <div class="flex flex-col max-w-sm w-full h-full">
                 <div v-if="selectedDeadline === null" class="flex flex-col w-full h-full text-center items-center justify-center">
-                    <span>Select a deadline to view its details</span>
+                    <span>{{ selectedDeadline }}</span>
                 </div>
-
-                <SharedDeadlineViewDeadline :index="project?.expand?.deadlines.indexOf(selectedDeadline)" v-else :deadline="selectedDeadline" :no-sheet="true"></SharedDeadlineViewDeadline>
+                <SharedDeadlineViewDeadline :index="matter?.expand?.deadlines.indexOf(selectedDeadline)" v-else :deadline="selectedDeadline" :no-sheet="true"></SharedDeadlineViewDeadline>
             </div>
         </div>
     </div>
@@ -71,16 +82,19 @@
 
 <script setup>
 import { Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions } from 'lucide-vue-next';
-import { getProject, subscribeToDeadline, subscribeToProject, unsubscribeToAllDeadlines, unsubscribeToProject } from '~/services/projects';
+import { getMatter, subscribeToDeadline, subscribeToMatter, unsubscribeToAllDeadlines, unsubscribeToMatter } from '~/services/matters';
 import dayjs from 'dayjs';
 import { Calendar } from '@/components/ui/calendar_enhanced';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
 import { toast } from 'vue-sonner';
+import AdjournDeadline from '~/components/shared/Deadline/AdjournDeadline/AdjournDeadline.vue';
 
 const viewDeadlineOpen = ref(false);
 const deadline = ref(null);
 const d_index = ref(0);
+
+const actionExpanded = ref(false);
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -88,17 +102,18 @@ dayjs.extend(timezone);
 const selectedDeadline = ref(null);
 
 const toggleDeadlineView = (deadlineId) => {
-    const _deadline = project.value.expand.deadlines.find(d => d.id === deadlineId);
+    console.log(deadlineId);
+    const _deadline = matter.value.expand.deadlines.find(d => d.id === deadlineId);
 
     if(_deadline) {
         deadline.value = _deadline;
-        d_index.value = project.value.expand.deadlines?.indexOf(_deadline);
+        d_index.value = matter.value.expand.deadlines?.indexOf(_deadline);
         viewDeadlineOpen.value = true;
     }
 }
 
 const onEventClick = (event) => {
-    selectedDeadline.value = project?.value?.expand?.deadlines.filter(d => d.id === event.id).at(0) || null;
+    selectedDeadline.value = matter?.value?.expand?.deadlines.filter(d => d.id === event.id).at(0) || null;
 }
 
 function toISO(input) {
@@ -115,7 +130,7 @@ function toISO(input) {
 }
 
 const updateDate = (date) => {
-    const deadlineMatch = project?.value.expand?.deadlines?.filter((d) => { 
+    const deadlineMatch = matter?.value.expand?.deadlines?.filter((d) => { 
         return toISO(d.date) === toISO(date.date);
     });
 
@@ -140,7 +155,7 @@ definePageMeta({
 });
 
 
-const project = ref(null);
+const matter = ref(null);
 
 const accentClasses = (accentIndex) => {
     const accentMap = {
@@ -171,24 +186,24 @@ const mockEvents = computed(() => {
   'accent-4'
   ];
   
-  return project?.value?.expand?.deadlines?.map((d, accentIndex) => {
+  return matter?.value?.expand?.deadlines?.map((d, accentIndex) => {
     return { id: d.id, date: d.date, title: d.name, color: accentMap[accentIndex % 4], completed: d.completed, index: accentIndex }
   });
 })
 
 onMounted(async () => {
-    project.value = await getProject(useRoute().params.projectId, {  });
+    matter.value = await getMatter(useRoute().params.matterId, {  });
 
-    subscribeToProject(project?.value?.id, reloadProject);
+    subscribeToMatter(matter?.value?.id, reloadMatter);
 
-    for(let deadline of project.value?.deadlines) {
-        subscribeToDeadline(deadline, useDebounceFn(reloadProject));
+    for(let deadline of matter.value?.deadlines) {
+        subscribeToDeadline(deadline, useDebounceFn(reloadMatter));
     }
 });
 
-const reloadProject = async () => {
+const reloadMatter = async () => {
     try {
-        project.value = await getProject(useRoute().params.projectId, {  });
+        matter.value = await getMatter(useRoute().params.matterId, {  });
         console.log("Updated!")
     } catch(e) {
         console.error(e);
@@ -196,7 +211,7 @@ const reloadProject = async () => {
 }
 
 onBeforeUnmount(() => {
-    unsubscribeToProject(project?.value?.id);
+    unsubscribeToMatter(matter?.value?.id);
     unsubscribeToAllDeadlines();
 });
 </script>

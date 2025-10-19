@@ -1,14 +1,14 @@
 <template>
     <div v-if="noSheet" class="flex flex-col w-full h-full">
         <div class="flex flex-col w-full h-full">
-            <div class="flex text-left flex-row border-y w-full p-3 gap-3"
+            <div class="flex text-left flex-row border-y lg:border-y-0 w-full p-3 gap-3"
                 :class="accentClasses(index, deadline?.completed)">
                 <CalendarIcon class="size-4" />
 
                 <div class="flex flex-col gap-1">
                     <span class="font-semibold text-sm">{{ deadline.name }}</span>
                     <span class="text-sm font-semibold">
-                        {{ dayjs(deadline.date).subtract(1, 'D').format("DD/MM/YYYY") }}
+                        {{ dayjs(deadline.date).subtract(1, 'D').format("D MMM YYYY") }}
                     </span>
 
                     <Badge v-if="deadline.completed === false && (new Date() < new Date(deadline.date))"

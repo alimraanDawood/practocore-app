@@ -9,7 +9,7 @@
                             <Search />
                         </InputGroupAddon>
                         <InputGroupAddon v-if="query.length > 0" align="inline-end">
-                            {{ projects.totalItems }} results
+                            {{ matters.totalItems }} results
                         </InputGroupAddon>
                     </InputGroup>
 
@@ -29,7 +29,7 @@
 
                         <DrawerContent>
                             <DrawerHeader>
-                                <DrawerTitle>Sort Projects</DrawerTitle>
+                                <DrawerTitle>Sort Matters</DrawerTitle>
                                 <DrawerDescription>Lorem ipsum dolor sit amet consectetur adipisicing elit. Dignissimos
                                     blanditiis dolorem quos.</DrawerDescription>
                             </DrawerHeader>
@@ -66,15 +66,15 @@
             <div class="flex flex-col w-full h-full p-3 gap-2">
 
                 <div class="flex flex-row items-center justify-between">
-                    <span class="font-semibold text-xl">Your Projects</span>
+                    <span class="font-semibold text-xl">Your Matters</span>
 
                     <div class="flex flex-row gap-3 items-center">
                         <ReuseSearchFilterTemplate class="hidden lg:flex" />
-                        <SharedProjectsCreateProject>
+                        <SharedMattersCreateMatter>
                             <Button>
-                                <Plus /> Add Project
+                                <Plus /> Add Matter
                             </Button>
-                        </SharedProjectsCreateProject>
+                        </SharedMattersCreateMatter>
                     </div>
                 </div>
 
@@ -88,31 +88,41 @@
                         </div>
                     </div>
 
-                    <div v-else-if="projects !== null && projects?.items?.length > 0"
-                        class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === project.id) }"
-                            v-for="(project, index) in projects?.items">
-                            <PageComponentsHomeProject
-                                v-on-long-press="[(e) => { onLongPressCallbackDirective(e, project) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onProjectTap(project) } }, modifiers: { stop: true } }]"
-                                :project="project" :accent-index="index" />
-
-                            <div v-if="selection.selected.find(p => p.id === project.id)"
-                                class="size-5 bg-tertiary grid place-items-center text-white absolute top-0 translate-y-[-50%] right-0 translate-x-[50%] rounded-full">
-                                <Check class="size-3 stroke-3" />
+                    <template v-else-if="matters !== null && matters?.items?.length > 0 ">
+                        <div class="flex flex-col w-full h-full">
+                            <div class="hidden lg:flex flex-col w-full h-full">
+                                <MatterTable :columns="columns" :data="matters?.items" />
+                            </div>
+    
+                            <div
+                                class="lg:hidden grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }"
+                                    v-for="(matter, index) in matters?.items">
+                                    <PageComponentsHomeMatter
+                                        v-on-long-press="[(e) => { onLongPressCallbackDirective(e, matter) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onMatterTap(matter) } }, modifiers: { stop: true } }]"
+                                        :matter="matter" :accent-index="index" />
+        
+                                    <div v-if="selection.selected.find(p => p.id === matter.id)"
+                                        class="size-5 bg-tertiary grid place-items-center text-white absolute top-0 translate-y-[-50%] right-0 translate-x-[50%] rounded-full">
+                                        <Check class="size-3 stroke-3" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+    
+                        
+                    </template>
 
-                    <div v-else-if="projects?.items?.length === 0"
+                    <div v-else-if="matters?.items?.length === 0"
                         class="flex flex-col text-center h-full text-muted-foreground w-full items-center justify-center">
                         <CircleX class="size-24 mb-2 opacity-50" />
-                        <span>You have no projects</span>
+                        <span>You have no matters</span>
                         <span>Click
-                            <SharedProjectsCreateProject>
+                            <SharedMattersCreateMatter>
                                 <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
-                            </SharedProjectsCreateProject>
+                            </SharedMattersCreateMatter>
 
-                            to add a deadline project
+                            to add a deadline matter
                         </span>
                     </div>
                 </XyzTransition>
@@ -128,11 +138,11 @@
                                 class="grid place-items-center size-6 text-xs text-primary-foreground rounded-full bg-primary">
                                 {{ selection.selected.length }}</div>
 
-                            of {{ projects?.items?.length }} selected
+                            of {{ matters?.items?.length }} selected
                         </div>
 
                         <div class="flex flex-row gap-2 items-center">
-                            <Button size="sm" @click="selection.selected = projects.items" variant="secondary">Select
+                            <Button size="sm" @click="selection.selected = matters.items" variant="secondary">Select
                                 All</Button>
 
                             <AlertDialog v-model:open="delete_open">
@@ -146,12 +156,12 @@
                                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                         <AlertDialogDescription>
                                             This action cannot be undone. This will permanently delete your
-                                            project and its deadlines.
+                                            matter and its deadlines.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <Button @click="deleteSelectedProjects" variant="destructive">Delete</Button>
+                                        <Button @click="deleteSelectedMatters" variant="destructive">Delete</Button>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
@@ -170,20 +180,22 @@
 import { vOnLongPress } from '@vueuse/components'
 import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { deleteProject } from '~/services/projects';
+import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
-import { useProjectsStore } from '~/stores/projects';
+import { useMattersStore } from '@/stores/matters';
+import MatterTable from '~/components/shared/Matters/MatterTable/MatterTable.vue';
+import { columns } from '@/components/shared/Matters/MatterTable/columns';
 
 const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();
 
 const longPressedDirective = shallowRef(false)
 
-const projectsStore = useProjectsStore();
-const { result: projects, loading, sort, query, selection } = storeToRefs(projectsStore);
+const mattersStore = useMattersStore();
+const { result: matters, loading, sort, query, selection } = storeToRefs(mattersStore);
 
-function onLongPressCallbackDirective(e: PointerEvent, project: any) {
+function onLongPressCallbackDirective(e: PointerEvent, matter: any) {
     longPressedDirective.value = true
-    projectsStore.activateSelectionWith(project);
+    mattersStore.activateSelectionWith(matter);
 }
 
 function resetDirective() {
@@ -193,12 +205,12 @@ function resetDirective() {
 const delete_open = ref(false);
 
 const resetSelection = () => {
-    projectsStore.resetSelection();
+    mattersStore.resetSelection();
 }
 
 onMounted(async () => {
-    projectsStore.ensureSubscribed();
-    await projectsStore.fetchProjects(false);
+    mattersStore.ensureSubscribed();
+    await mattersStore.fetchMatters(false);
 });
 
 const sortLabel = computed(() => {
@@ -207,7 +219,7 @@ const sortLabel = computed(() => {
             return { label: 'Date Created', asc: true };
         case '-created':
             return { label: 'Date Created', asc: false };
-        case 'Deadlines_via_project.date':
+        case 'Deadlines_via_matter.date':
             return { label: 'Nearest Deadline', asc: true };
         case '-name':
             return { label: 'Nearest Deadline', asc: false };
@@ -215,45 +227,45 @@ const sortLabel = computed(() => {
 })
 
 watch(sort, () => {
-    projectsStore.fetchProjects();
+    mattersStore.fetchMatters();
 });
 
 watch(query, () => {
-    projectsStore.fetchProjects();
+    mattersStore.fetchMatters();
 });
 
-const onProjectTap = (project: any) => {
+const onMatterTap = (matter: any) => {
     if (selection.value.active) {
-        const exists = selection.value.selected.find(p => p.id === project.id);
+        const exists = selection.value.selected.find(p => p.id === matter.id);
 
         if (exists) {
-            selection.value.selected = selection.value.selected.filter(p => p.id !== project.id);
+            selection.value.selected = selection.value.selected.filter(p => p.id !== matter.id);
 
             if (selection.value.selected.length === 0) {
                 selection.value.active = false;
             }
         } else {
-            selection.value.selected.push(project);
+            selection.value.selected.push(matter);
         }
         return;
     }
 
-    useRouter().push(`/main/projects/project/${project.id}`);
+    useRouter().push(`/main/matters/matter/${matter.id}`);
 }
 
-const deleteSelectedProjects = async () => {
+const deleteSelectedMatters = async () => {
     if (selection.value.selected.length === 0) return;
 
     loading.value = true;
-    for (const project of selection.value.selected) {
+    for (const matter of selection.value.selected) {
         try {
-            await deleteProject(project.id);
+            await deleteMatter(matter.id);
 
             // Show toast notification
-            toast.success('Selected projects deleted successfully.');
+            toast.success('Selected matters deleted successfully.');
         } catch (e) {
             console.error(e);
-            // toast.error('Failed to delete selected projects.');
+            // toast.error('Failed to delete selected matters.');
         }
     }
 
@@ -262,7 +274,7 @@ const deleteSelectedProjects = async () => {
 
     // TODO: Fix the issue and restart this section
     resetSelection();
-    await projectsStore.fetchProjects(true);
+    await mattersStore.fetchMatters(true);
 }
 
 </script>

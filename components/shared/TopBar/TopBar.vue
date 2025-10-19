@@ -5,9 +5,9 @@
                 :class="{ '!border-primary font-medium': $route?.name === 'main' }">Home</button>
         </NuxtLink>
 
-        <NuxtLink to="/main/projects">
+        <NuxtLink to="/main/matters">
             <button class="p-2 border-b-2 border-transparent"
-                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-projects') }">Projects</button>
+                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-matters') }">Matters</button>
         </NuxtLink>
 
         <NuxtLink to="/main/calendar">

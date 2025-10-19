@@ -4,7 +4,7 @@
         :class="accentClasses"
     >
         
-        <span class="font-semibold truncate">{{ project?.name }}</span>
+        <span class="font-semibold truncate">{{ matter?.name }}</span>
         <span>{{ deadlineText }}</span>
 
         <div class="flex flex-col gap-1">
@@ -23,7 +23,7 @@
             />
         </div>
 
-        <div v-if="project?.expand?.deadlines?.filter(d => !d.completed).length !== 0" class="flex flex-row text-sm gap-1 items-center">
+        <div v-if="matter?.expand?.deadlines?.filter(d => !d.completed).length !== 0" class="flex flex-row text-sm gap-1 items-center">
             <Clock class="size-4" />
             <span><span class="font-bold">{{ nextDeadLineText }}</span> to the next deadline</span>
         </div>
@@ -43,7 +43,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
 
 const props = defineProps({
-    project: {
+    matter: {
         type: Object,
         required: true
     },
@@ -84,18 +84,18 @@ const indicatorClass = computed(() => {
 });
 
 const deadlineText = computed(() => {
-    let deadlineCount = props.project.expand.deadlines.filter(d => (d.completed === false)).length;
+    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.completed === false)).length;
     return `${deadlineCount} upcoming deadline${deadlineCount !== 1 ? 's' : ''}`;
 });
 
 const deadlineCompletion = computed(() => {
-    let deadlineCount = props.project.expand.deadlines.filter(d => (d.completed === true)).length;
+    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.completed === true)).length;
     
-    return ((deadlineCount / props.project.deadlines.length) * 100);
+    return ((deadlineCount / props.matter.deadlines.length) * 100);
 });
 
 const nextDeadLineText = computed(() => {
-    let deadlines = props.project.expand.deadlines?.filter(d => d.completed === false);
+    let deadlines = props.matter.expand.deadlines?.filter(d => d.completed === false);
     if(deadlines.length > 0) {
         return `${dayjs().from(deadlines?.at(0)?.date, true)}`;
     }

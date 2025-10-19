@@ -7,12 +7,10 @@
         <SheetContent class="w-screen">
             <SheetHeader>
                 <SheetTitle>Edit Deadline</SheetTitle>
-                <SheetDescription>Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
-                </SheetDescription>
             </SheetHeader>
             
             <div class="p-3">
-                <form @submit="onSubmit" id="project_create" class="grid space-y-6">
+                <form @submit="onSubmit" id="matter_create" class="grid space-y-6">
                     <FormField v-slot="{ componentField }" name="name">
                         <FormItem>
                             <FormLabel>Deadline Name</FormLabel>
@@ -79,7 +77,7 @@
                             </PopoverTrigger>
                             <PopoverContent class="w-auto p-0">
                                 <Calendar v-model:placeholder="placeholder" :model-value="value"
-                                calendar-label="Project Date" initial-focus
+                                calendar-label="Matter Date" initial-focus
                                 :min-value="new CalendarDate(1900, 1, 1)"
                                 @update:model-value="(v) => {
                                     if (v) {
@@ -101,7 +99,7 @@
         </div>
         
         <SheetFooter>
-            <Button :disabled="loading" type="submit" form="project_create">
+            <Button :disabled="loading" type="submit" form="matter_create">
                 <span v-if="!loading">Update Deadline</span>
                 <Loader v-else class="animate-spin" />
             </Button>
@@ -114,19 +112,19 @@
 import * as z from 'zod';
 import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
-import { getTemplates } from '~/services/projects';
+import { getTemplates } from '~/services/templates';
 import { toDate } from "reka-ui/date"
 import { CalendarDate, DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date"
 import { cn } from '~/lib/utils';
 import { CalendarIcon, Loader } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { createProject } from '~/services/projects';
+import { createMatter } from '~/services/matters';
 
 let templates = ref([]);
 
 const props = defineProps(['deadline', 'index']);
 onMounted(async () => {
-    templates.value = await getTemplates();
+    templates.value = await getTemplates(1, 10, {});
 });
 
 const formSchema = toTypedSchema(z.object({
@@ -167,15 +165,15 @@ const { handleSubmit, setFieldValue, values} = useForm({
 const onSubmit = handleSubmit(async (values) => {
     loading.value = true;
     try {
-        // const result = await createProject({ name: values.name, templateId: values.template, date: values.date });
+        // const result = await createMatter({ name: values.name, templateId: values.template, date: values.date });
         
         // if(result) {
-        //     toast.success("Project Created Successfully!");
+        //     toast.success("Matter Created Successfully!");
         // }
         
         open.value = false;
     } catch(e) {
-        toast.error("Unable to create project at this time!");
+        toast.error("Unable to create matter at this time!");
         console.error(e);
     }
     loading.value = false;

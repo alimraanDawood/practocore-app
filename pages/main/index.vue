@@ -52,14 +52,14 @@
                         </Button>
                     </div>
 
-                    <SharedProjectsCreateProject @created="reloadStatistics" v-if="statistics?.projects?.length === 0">
+                    <SharedMattersCreateMatter @created="reloadStatistics" v-if="statistics?.matters?.length === 0">
                         <Button>
                             <Plus />
 
-                            Create Project
+                            Create Matter
                         </Button>
-                    </SharedProjectsCreateProject>
-                    <NuxtLink v-else to="/main/projects">
+                    </SharedMattersCreateMatter>
+                    <NuxtLink v-else to="/main/matters">
                         <Button class="" size="sm" variant=secondary>View All</Button>
                     </NuxtLink>
                 </div>
@@ -69,13 +69,13 @@
                         <Loader class="size-5 animate-spin" />
                     </div>
     
-                    <div v-else-if="statistics?.projects?.length > 0"
+                    <div v-else-if="statistics?.matters?.length > 0"
                         class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
-                        <NuxtLink v-for="project in statistics?.projects" :to="`/main/projects/project/${project.id}`">
+                        <NuxtLink v-for="matter in statistics?.matters" :to="`/main/matters/matter/${matter?.id}`">
                             <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between hover:bg-muted hover:text-primary transition-colors ease-in-out duration-500">
                                 <div class="flex flex-col p-3 w-full">
-                                    <span class="font-semibold text-sm text-muted-foreground">Project</span>
-                                    <span class="font-medium text-lg">{{ project.name }}</span>
+                                    <span class="font-semibold text-sm text-muted-foreground">Matter</span>
+                                    <span class="font-medium text-lg">{{ matter?.name }}</span>
                                 </div>
     
                                 <div class="flex flex-col lg:flex-row h-full w-full lg:items-center">
@@ -83,16 +83,16 @@
                                         <span class="font-semibold text-sm text-muted-foreground">Events</span>
                                         <div class="flex flex-row gap-1 items-center">
                                             <CalendarIcon class="size-4" />
-                                            <span class="font-medium text-sm">{{ project.stats.upcoming }} events</span>
+                                            <span class="font-medium text-sm">{{ matter?.stats?.upcoming }} events</span>
                                         </div>
                                     </div>
     
                                     <div class="flex flex-col p-3 px-5 h-full justify-center">
                                         <span class="font-semibold text-sm text-muted-foreground">Completion</span>
-                                        <div v-if="project.stats.completion > 0" class="flex flex-row gap-1 items-center">
-                                            <CircleProgressBar :value="project.stats.completion" :max="100" rounded
+                                        <div v-if="matter?.stats?.completion > 0" class="flex flex-row gap-1 items-center">
+                                            <CircleProgressBar :value="matter?.stats?.completion" :max="100" rounded
                                                 class="size-4" strokeWidth="10" />
-                                            <span class="font-medium text-sm">{{ project.stats.completion }}</span>
+                                            <span class="font-medium text-sm">{{ matter?.stats?.completion }}</span>
                                         </div>
                                         <span v-else>-</span>
                                     </div>
@@ -100,12 +100,12 @@
                                     <div class="flex flex-col p-3 px-5 h-full justify-center">
                                         <span class="font-semibold text-sm text-muted-foreground">Next Deadline</span>
                                         <div class="flex flex-row gap-1 items-center" :class="{
-                                            'text-red-500 !font-semibold': project?.stats?.nextDeadlineDate &&
-                                                dayjs(project.stats.nextDeadlineDate).diff(dayjs(), 'day') < 5
+                                            'text-red-500 !font-semibold': matter?.stats?.nextDeadlineDate &&
+                                                dayjs(matter?.stats?.nextDeadlineDate).diff(dayjs(), 'day') < 5
                                         }">
                                             <Clock class="size-4" />
-                                            <span v-if="project" class="font-medium text-sm">
-                                                {{ dayjs(project?.stats?.nextDeadlineDate).fromNow() }}
+                                            <span v-if="matter" class="font-medium text-sm">
+                                                {{ dayjs(matter?.stats?.nextDeadlineDate).fromNow() }}
                                             </span>
                                         </div>
                                     </div>
@@ -117,13 +117,13 @@
                     <div v-else
                         class="flex flex-col w-full bg-muted border p-5 rounded-xl items-center text-muted-foreground">
                         <XCircle class="size-10" />
-                        <span>You have no projects</span>
+                        <span>You have no matters</span>
                         <span>Click
-                            <SharedProjectsCreateProject>
+                            <SharedMattersCreateMatter>
                                 <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
-                            </SharedProjectsCreateProject>
+                            </SharedMattersCreateMatter>
     
-                            to add a deadline project
+                            to add a deadline matter
                         </span>
                     </div>
                 </XyzTransition>

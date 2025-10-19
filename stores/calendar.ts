@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getAllDeadlines, subscribeToDeadlines } from '~/services/projects';
+import { getAllDeadlines, subscribeToDeadlines } from '~/services/matters';
 
 // Cache duration in milliseconds (e.g., 1 minute)
 const CACHE_TTL = 60 * 1000;

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getStatistics, subscribeToProjects } from '~/services/projects';
+import { getStatistics, subscribeToMatters } from '~/services/matters';
 
 // Cache duration in milliseconds (e.g., 5 minutes)
 const CACHE_TTL = 5 * 60 * 1000;
@@ -36,8 +36,8 @@ export const useDashboardStore = defineStore('dashboard', {
     },
     ensureSubscribed() {
       if (this._subscribed) return;
-      // Subscribe to projects to refresh statistics when changes occur
-      subscribeToProjects(async () => {
+      // Subscribe to matters to refresh statistics when changes occur
+      subscribeToMatters(async () => {
         // Soft refresh; do not block UI with loading state unless no data yet
         const hadData = !!this.statistics;
         if (!hadData) this.loading = true;

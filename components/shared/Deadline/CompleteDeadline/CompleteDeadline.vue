@@ -8,7 +8,7 @@
             <DialogHeader>
                 <DialogTitle>Enter Date</DialogTitle>
                 <DialogDescription>
-                    Enter Date of fulfillment of this deadline.
+                    {{ deadline.input_prompt }}
                 </DialogDescription>
             </DialogHeader>
 
@@ -55,7 +55,7 @@
             <SheetHeader>
                 <SheetTitle>Enter Date</SheetTitle>
                 <SheetDescription>
-                    Enter Date of fulfillment of this deadline.
+                    {{ deadline.input_prompt }}
                 </SheetDescription>
             </SheetHeader>
 
@@ -96,9 +96,9 @@
 
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date';
-import { DateFormatter, getLocalTimeZone, today } from "@internationalized/date";
+import { DateFormatter, getLocalTimeZone, today, parseDate } from "@internationalized/date";
 import { toast } from 'vue-sonner';
-import { updateDeadline } from '~/services/projects';
+import { updateDeadline } from '~/services/matters';
 import { Loader, CalendarIcon } from 'lucide-vue-next';
 import { Calendar } from '~/components/ui/calendar';
 import { cn } from '~/lib/utils';
@@ -106,7 +106,10 @@ import { cn } from '~/lib/utils';
 const props = defineProps(['deadline', 'index']);
 const emits = defineEmits(['updated']);
 
-const dateValue = ref(today(getLocalTimeZone())) as Ref<DateValue>;
+
+const dateValue = ref(
+    props.deadline?.date && props.deadline?.completed ? parseDate(props.deadline.date.slice(0,10)) : today(getLocalTimeZone())
+) as Ref<DateValue>;
 const loading = ref(false);
 const open = ref(false);
 
@@ -125,7 +128,7 @@ const fulfillDeadline = async () => {
             }
         );
 
-        // open.value = false;
+        open.value = false;
         toast.success("Successfully updated deadline!");
         emits('updated');
     } catch (e) {

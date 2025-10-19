@@ -12,7 +12,7 @@
                         if (stepIndex === steps.length && meta.valid) {
                             onSubmit(values)
                         }
-                    }" id="project_create" class="flex flex-col w-full">
+                    }" id="matter_create" class="flex flex-col w-full">
                         <!-- Stepper Navigation -->
                         <div class="flex w-full flex-start gap-2">
                             <StepperItem v-for="step in steps" :key="step.step" v-slot="{ state }"
@@ -51,12 +51,11 @@
                             <template v-if="stepIndex === 1">
                                 <FormField v-slot="{ componentField }" name="name">
                                     <FormItem>
-                                        <FormLabel>Project Name</FormLabel>
+                                        <FormLabel>Case Name</FormLabel>
                                         <FormControl>
-                                            <Input type="text" placeholder="John Doe vs Jane Doe"
+                                            <Input type="text" placeholder="A vs B"
                                                 v-bind="componentField" />
                                         </FormControl>
-                                        <FormDescription>This is the name of your project.</FormDescription>
                                         <FormMessage />
                                     </FormItem>
                                 </FormField>
@@ -100,11 +99,11 @@
                             <template v-if="stepIndex === 2">
                                 <FormField v-slot="{ componentField }" name="template">
                                     <FormItem>
-                                        <FormLabel>Project Template</FormLabel>
+                                        <FormLabel>Matter Type</FormLabel>
                                         <FormDescription>
                                             Use prebuilt templates to generate deadlines for your legal matters.
                                         </FormDescription>
-                                        <SharedProjectsCreateProjectTemplateSeletor v-bind="componentField" />
+                                        <SharedMattersCreateMatterTemplateSeletor v-bind="componentField" />
                                         <FormMessage />
                                     </FormItem>
                                 </FormField>
@@ -184,10 +183,7 @@
         </DialogTrigger>
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>Create a new project</DialogTitle>
-                <DialogDescription>
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
-                </DialogDescription>
+                <DialogTitle>Adding a new matter</DialogTitle>
             </DialogHeader>
             <ReuseTemplate />
         </DialogContent>
@@ -200,10 +196,7 @@
         </SheetTrigger>
         <SheetContent side="bottom">
             <SheetHeader>
-                <SheetTitle>Create a new project</SheetTitle>
-                <SheetDescription>
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis.
-                </SheetDescription>
+                <SheetTitle>Adding a new matter</SheetTitle>
             </SheetHeader>
             <ReuseTemplate />
         </SheetContent>
@@ -215,7 +208,7 @@ import * as z from "zod"
 import { toTypedSchema } from "@vee-validate/zod"
 import { useForm } from "vee-validate"
 import { computed, onMounted, ref, watch } from "vue"
-import { createProject } from "~/services/projects"
+import { createMatter } from "~/services/matters"
 import { getTemplates } from "~/services/templates"
 import { cn } from "~/lib/utils"
 import { CalendarIcon, Check, Circle, Dot } from "lucide-vue-next"
@@ -333,21 +326,19 @@ watch(
 const onSubmit = async (values: any) => {
     loading.value = true
     try {
-        const result = await createProject({
+        const result = await createMatter({
             name: values.name,
             templateId: values.template?.id,
             date: values.date,
             fieldValues: values.fields   // ✅ now nested properly
         });
 
-
-
-        if (result) toast.success("Project Created Successfully!")
+        if (result) toast.success("Matter Created Successfully!")
         emits('created');
 
         open.value = false
     } catch (e) {
-        toast.error("Unable to create project at this time!")
+        toast.error("Unable to create matter at this time!")
         console.error(e)
     } finally {
         loading.value = false
