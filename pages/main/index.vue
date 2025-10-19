@@ -71,7 +71,7 @@
     
                     <div v-else-if="statistics?.matters?.length > 0"
                         class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
-                        <a v-for="matter in statistics?.matters" :href="`/main/matters/matter/${matter?.id}`">
+                        <NuxtLink v-for="matter in statistics?.matters" :to="`/main/matters/matter/${matter?.id}`">
                             <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between hover:bg-muted hover:text-primary transition-colors ease-in-out duration-500">
                                 <div class="flex flex-col p-3 w-full">
                                     <span class="font-semibold text-sm text-muted-foreground">Matter</span>
@@ -111,7 +111,7 @@
                                     </div>
                                 </div>
                             </div>
-                        </a>
+                        </NuxtLink>
                     </div>
     
                     <div v-else
