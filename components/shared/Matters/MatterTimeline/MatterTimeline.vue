@@ -56,6 +56,7 @@
                         </button>
                     </SharedDeadlineCompleteDeadline>
                 </div>
+                
                 <div class="flex flex-col gap-2 mt-5">
                     <div v-for="adjournment in deadline?.expand?.adjournments?.sort((a1, a2) => { return new Date(a1.from) - new Date(a2.from) })" class="flex flex-col gap-1 text-xs">
                         <div class="flex flex-row font-semibold ibm-plex-serif gap-2 items-center">
