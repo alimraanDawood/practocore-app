@@ -102,13 +102,14 @@ import { updateDeadline } from '~/services/matters';
 import { Loader, CalendarIcon } from 'lucide-vue-next';
 import { Calendar } from '~/components/ui/calendar';
 import { cn } from '~/lib/utils';
+import { getSignedInUser } from '~/services/auth';
 
 const props = defineProps(['deadline', 'index']);
 const emits = defineEmits(['updated']);
 
 
 const dateValue = ref(
-    props.deadline?.date && props.deadline?.completed ? parseDate(props.deadline.date.slice(0,10)) : today(getLocalTimeZone())
+    props.deadline?.date && props.deadline?.completed ? parseDate(props.deadline.date.slice(0, 10)) : today(getLocalTimeZone())
 ) as Ref<DateValue>;
 const loading = ref(false);
 const open = ref(false);

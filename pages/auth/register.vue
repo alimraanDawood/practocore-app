@@ -1,10 +1,6 @@
 <template>
   <div class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
-    <div class="flex flex-row justify-between w-full items-center p-3 border-b">
-      <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-12 dark:hidden"/>
-      <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20Dark.svg" class="h-12 hidden dark:block" />
-
-
+    <div class="flex flex-row justify-center w-full items-center p-3 border-b">
       <div class="flex flex-row gap-2">
         <Button size="icon" variant="secondary" :disabled="!canGoBack" @click="goBack">
           <ArrowLeft/>
@@ -187,11 +183,13 @@ const registrationData = reactive({
     emailAddress: '',
     password: '',
     confirmPassword: '',
+    timezone: ''
   }
 });
 
 const userId = ref('');
 const otpId = ref('');
+const orgId = ref(null);
 
 // Initialize the history manager
 const historyManager = reactive(new RegistrationHistory());
@@ -273,10 +271,15 @@ const OTPEntryComplete = async (val: any) => {
       const signInResult = await signInWithEmail(registrationData.user.emailAddress, registrationData.user.password);
 
       if(query?.ref) {
+        useRouter().push(`/main/`)
         return;
       }
 
-      currentStep.value = RegistrationSteps.SUBSCRIPTION;
+      if(orgId.value !== null) {
+        useRouter().push(`/auth/invite/${orgId.value}`);
+      } else {
+        useRouter().push('/main/');
+      }
     }
   } catch(e) {
     console.error(e);
@@ -296,6 +299,9 @@ const submitData = async () => {
     if(result) {
       otpId.value = result.otpId;
       userId.value = result.userId;
+
+      orgId.value = result.organisation || null;
+
     }
     // Directly setting currentStep here, as OTP might be a terminal step not for history nav
     // If you want OTP to be part of back/forward, use `goToStep(RegistrationSteps.OTP)`

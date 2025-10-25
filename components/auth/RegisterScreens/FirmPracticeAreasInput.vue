@@ -1,60 +1,104 @@
 <script setup lang="ts">
-import type {FieldProps} from "~/components/ui/auto-form";
-import { AutoFormLabel } from "~/components/ui/auto-form";
-import { useField } from "vee-validate";
+import { computed } from 'vue'
+import { Button } from '@/components/ui/button'
+import {
+  TagsInput,
+  TagsInputInput,
+  TagsInputItem,
+  TagsInputItemDelete,
+  TagsInputItemText,
+} from '@/components/ui/tags-input'
 
-interface FirmPracticeAreasInputProps extends FieldProps {
-  value: any
+interface Props {
+  modelValue?: string[]
 }
-const props = defineProps<FirmPracticeAreasInputProps>()
-const emits = defineEmits(['update:modelValue']);
 
-const selectedPracticeAreas = ref<string[]>([])
-const practiceAreas = ["Corporate Law", "Litigation", "Family Law", "Criminal Defense", "Personal Injury", "Real Estate", "Estate Planning", "Immigration", "Intellectual Property", "Employment Law", "Tax Law", "Other"];
+const props = withDefaults(defineProps<Props>(), {
+  modelValue: () => []
+})
 
-const { value } = useField(props.fieldName, undefined, { initialValue: props.value });
-const extras = ref([]);
+const emits = defineEmits<{
+  'update:modelValue': [value: string[]]
+}>()
 
-const togglePracticeArea = (area : string) => {
-  if(value.value.includes(area)) {
-    value.value = value.value.filter(a => a !== area);
-  } else {
-    value.value.push(area);
+const practiceAreas = [
+  "Corporate Law",
+  "Litigation",
+  "Family Law",
+  "Criminal Defense",
+  "Personal Injury",
+  "Real Estate",
+  "Estate Planning",
+  "Immigration",
+  "Intellectual Property",
+  "Employment Law",
+  "Tax Law",
+  "Other"
+]
+
+const extras = ref<string[]>([])
+
+// Separate standard areas from custom ones
+const standardAreas = computed(() => {
+  return props.modelValue?.filter(area => practiceAreas.includes(area)) || []
+})
+
+// Initialize extras with custom areas that aren't in the standard list
+onMounted(() => {
+  const customAreas = props.modelValue?.filter(area => !practiceAreas.includes(area)) || []
+  if (customAreas.length > 0) {
+    extras.value = customAreas
   }
+})
 
-  value.value = [...value.value, ...extras.value];
+const togglePracticeArea = (area: string) => {
+  let updatedAreas = [...(props.modelValue || [])]
+  
+  if (updatedAreas.includes(area)) {
+    updatedAreas = updatedAreas.filter(a => a !== area)
+  } else {
+    updatedAreas.push(area)
+  }
+  
+  emits('update:modelValue', updatedAreas)
 }
 
+// Watch extras and update modelValue with combined standard + custom areas
+watch(extras, (newExtras) => {
+  const standardSelected = standardAreas.value
+  const combined = [...standardSelected, ...newExtras]
+  emits('update:modelValue', combined)
+}, { deep: true })
 </script>
 
 <template>
-  <FormField v-slot="slotProps" :name="fieldName">
-    <FormItem v-bind="$attrs">
-      <AutoFormLabel v-if="!config?.hideLabel" :required="required">
-        {{ config?.label }}
-      </AutoFormLabel>
-
-      <FormControl>
-        <div class="flex flex-wrap border p-2 rounded gap-2">
-          <Button type="button" @click="togglePracticeArea(area)" v-for="area in practiceAreas" :variant="value.includes(area) ? 'default' : 'secondary'" size="sm">{{ area }}</Button>
-        </div>
-
-        <div class="flex flex-row w-full" v-if="value.includes('Other')">
-          <TagsInput v-model="extras" class="w-full flex">
-            <TagsInputItem class="bg-primary text-primary-foreground rounded h-fit" v-for="item in extras" :key="item" :value="item">
-              <TagsInputItemText />
-              <TagsInputItemDelete />
-            </TagsInputItem>
-
-            <TagsInputInput placeholder="Enter your custom practice areas (seperate with commas)" />
-          </TagsInput>
-        </div>
-      </FormControl>
-
-      <FormDescription v-if="config?.description">
-        {{ config.description }}
-      </FormDescription>
-      <FormMessage />
-    </FormItem>
-  </FormField>
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-wrap border p-2 rounded gap-2">
+      <Button
+        v-for="area in practiceAreas"
+        :key="area"
+        type="button"
+        @click="togglePracticeArea(area)"
+        :variant="modelValue?.includes(area) ? 'default' : 'secondary'"
+        size="sm"
+      >
+        {{ area }}
+      </Button>
+    </div>
+    
+    <div v-if="modelValue?.includes('Other')" class="flex flex-row w-full">
+      <TagsInput v-model="extras" class="w-full flex">
+        <TagsInputItem
+          v-for="item in extras"
+          :key="item"
+          :value="item"
+          class="bg-primary text-primary-foreground rounded h-fit"
+        >
+          <TagsInputItemText />
+          <TagsInputItemDelete />
+        </TagsInputItem>
+        <TagsInputInput placeholder="Enter your custom practice areas (separate with commas)" />
+      </TagsInput>
+    </div>
+  </div>
 </template>

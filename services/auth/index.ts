@@ -1,6 +1,6 @@
 import Pocketbase from 'pocketbase';
-const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "http://192.168.100.198:8090";
+// const SERVER_URL = "https://www.practocore.com";
+const SERVER_URL = "http://192.168.5.1:8090";
 // const SERVER_URL = "http://127.0.0.1:8090"
 const pocketbase = new Pocketbase(SERVER_URL);
 
@@ -89,18 +89,22 @@ export async function inviteUsers(emails : string[]) {
     })
 }
 
-export async function requestInviteLink() {
+export async function requestInviteLink(organisationId : string) {
     const user = getSignedInUser();
 
     if (!user) {
         throw("No user found");
     }
 
-    return await fetch(`${SERVER_URL}/api/practocore/auth/request-invite-link`, {
+    return await fetch(`${SERVER_URL}/api/practocore/auth/request-invite-link/${organisationId}`, {
         method: "GET",
         headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": `Bearer ${pocketbase.authStore.token}`,
         },
     }).then(res => res.json());
+}
+
+export async function getOrganisations() {
+    return pocketbase.collection('Organisations').getFullList();
 }

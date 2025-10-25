@@ -22,7 +22,7 @@
         </NuxtLink>
 
         <NuxtLink to="/main/templates">
-            <button disabled class="flex flex-col items-center disabled:opacity-50 text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-templates' }">
+            <button class="flex flex-col items-center disabled:opacity-50 text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-templates' }">
                 <ScrollText class="size-5" />
                 <span>Templates</span>
             </button>

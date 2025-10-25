@@ -17,12 +17,12 @@
                         <DrawerTrigger>
                             <Button class="hidden lg:flex" variant="outline">
                                 <span>{{ sortLabel?.label }}</span>
-                                <SortAsc v-if="sortLabel.asc" />
+                                <SortAsc v-if="sortLabel?.asc" />
                                 <SortDesc v-else />
                             </Button>
 
                             <Button class="flex lg:hidden" size="icon" variant="outline">
-                                <SortAsc v-if="sortLabel.asc" />
+                                <SortAsc v-if="sortLabel?.asc" />
                                 <SortDesc v-else />
                             </Button>
                         </DrawerTrigger>
@@ -81,6 +81,32 @@
 
                 <ReuseSearchFilterTemplate class="lg:hidden" />
 
+                <div class="flex flex-row border-b p-3 pb-0 gap-3" role="tablist" aria-label="Templates tabs">
+                    <button
+                        role="tab"
+                        :aria-selected="activeTab === 'all'"
+                        :class="['text-sm pb-1 border-b-4', activeTab === 'all' ? 'font-semibold border-primary' : 'border-transparent']"
+                        @click="setTab('all')"
+                    >
+                        All
+                    </button>
+                    <button
+                        role="tab"
+                        :aria-selected="activeTab === 'organisation'"
+                        :class="['text-sm pb-1 border-b-4', activeTab === 'organisation' ? 'font-semibold border-primary' : 'border-transparent']"
+                        @click="setTab('organisation')"
+                    >
+                        Organisation
+                    </button>
+                    <button
+                        role="tab"
+                        :aria-selected="activeTab === 'private'"
+                        :class="['text-sm pb-1 border-b-4', activeTab === 'private' ? 'font-semibold border-primary' : 'border-transparent']"
+                        @click="setTab('private')"
+                    >
+                        Private
+                    </button>
+                </div>
 
                 <XyzTransition mode="out-in" xyz="fade">
                     <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -96,7 +122,7 @@
     
                             <div
                                 class="lg:hidden grid grid-cols-1 lg:grid-cols-3 gap-3">
-                                <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }"
+                                <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
                                         v-on-long-press="[(e) => { onLongPressCallbackDirective(e, matter) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onMatterTap(matter) } }, modifiers: { stop: true } }]"
@@ -191,7 +217,11 @@ const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTe
 const longPressedDirective = shallowRef(false)
 
 const mattersStore = useMattersStore();
-const { result: matters, loading, sort, query, selection } = storeToRefs(mattersStore);
+const { result: matters, loading, sort, query, selection, activeTab } = storeToRefs(mattersStore);
+
+const setTab = (newVal : string) => {
+    activeTab.value = newVal;
+}
 
 function onLongPressCallbackDirective(e: PointerEvent, matter: any) {
     longPressedDirective.value = true
@@ -229,6 +259,11 @@ const sortLabel = computed(() => {
 watch(sort, () => {
     mattersStore.fetchMatters();
 });
+
+watch(activeTab, () => {
+    mattersStore.fetchMatters();
+    console.log(activeTab.value);
+})
 
 watch(query, () => {
     mattersStore.fetchMatters();

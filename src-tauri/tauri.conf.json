@@ -1,0 +1,48 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "practocore",
+  "version": "0.1.0",
+  "identifier": "com.practocore.law",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun run dev --host",
+    "beforeBuildCommand": "bun run generate"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "PractoCore: Litigation Deadline Management",
+        "width": 1200,
+        "height": 800,
+        "visible": false,
+        "url": "/",
+        "maximized": true
+      },
+      {
+        "label": "splashscreen",
+        "url": "/splash/desktop",
+        "decorations": false,
+        "width": 640,
+        "height": 400,
+        "center": true,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,30 +1,39 @@
 <script setup lang="ts">
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
-import { h } from 'vue'
 import * as z from 'zod'
-import { AutoForm } from '@/components/ui/auto-form'
 import { Button } from '@/components/ui/button'
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 
 const props = defineProps(['primaryContactData'])
 const emits = defineEmits(['complete'])
 
 const schema = z.object({
-  fullName: z.string().describe("Full Name"),
-  emailAddress: z.string().describe("Email Address"),
-  phoneNumber: z.string().describe("Phone Number").optional(),
+  fullName: z.string().min(1, 'Full name is required'),
+  emailAddress: z.string().email('Please enter a valid email address'),
+  phoneNumber: z.string().optional(),
 })
 
 const form = useForm({
   validationSchema: toTypedSchema(schema),
   initialValues: {
-    ...props.primaryContactData?.contact
+    fullName: props.primaryContactData?.contact?.fullName || '',
+    emailAddress: props.primaryContactData?.contact?.emailAddress || '',
+    phoneNumber: props.primaryContactData?.contact?.phoneNumber || '',
   }
 })
 
-function onSubmit(values: Record<string, any>) {
+const onSubmit = form.handleSubmit((values) => {
   emits('complete', values)
-}
+})
 </script>
 
 <template>
@@ -33,43 +42,62 @@ function onSubmit(values: Record<string, any>) {
       <span class="text-xl font-semibold">Primary Contact Information</span>
       <span class="text-sm">Let's set up your firm's PractoCore workspace</span>
     </div>
+    
+    <form @submit="onSubmit" class="flex flex-col w-full gap-6">
+      <FormField v-slot="{ componentField }" name="fullName">
+        <FormItem>
+          <FormLabel>Full Name</FormLabel>
+          <FormControl>
+            <Input 
+              type="text" 
+              placeholder="John Smith"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-    <div class="flex flex-col w-full gap-3">
-      <AutoForm
-          :initial-values="{ ...primaryContactData?.contact }"
-          class="w-full space-y-8"
-          :schema="schema"
-          :form="form"
-          :field-config="{
-            fullName: {
-              inputProps: {
-                placeholder: 'John Smith'
-              },
-            },
-            emailAddress: {
-              inputProps: {
-                type: 'email',
-                placeholder: 'johnsmith@smithlaw.com'
-              },
-              description: 'This will be the firm\'s primary contact'
-            },
-            phoneNumber: {
-              inputProps: {
-                placeholder: '+1 (555) 123-4567'
-              },
-              description: 'For account verification and important notifications'
-            }
-          }"
-          @submit="onSubmit"
-      >
-        <Button class="w-full" type="submit">
-          Continue
-        </Button>
-      </AutoForm>
-    </div>
+      <FormField v-slot="{ componentField }" name="emailAddress">
+        <FormItem>
+          <FormLabel>Email Address</FormLabel>
+          <FormControl>
+            <Input 
+              type="email" 
+              placeholder="johnsmith@smithlaw.com"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormDescription>
+            This will be the firm's primary contact
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+
+      <FormField v-slot="{ componentField }" name="phoneNumber">
+        <FormItem>
+          <FormLabel>Phone Number</FormLabel>
+          <FormControl>
+            <Input 
+              type="tel" 
+              placeholder="+1 (555) 123-4567"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormDescription>
+            For account verification and important notifications
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+
+      <Button class="w-full" type="submit">
+        Continue
+      </Button>
+    </form>
   </div>
 </template>
 
 <style scoped>
-
 </style>

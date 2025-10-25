@@ -46,6 +46,7 @@ import { getAllDeadlines, subscribeToDeadlines, unsubscribeToAllDeadlines } from
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
+import { CalendarIcon } from 'lucide-vue-next';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);

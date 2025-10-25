@@ -54,7 +54,7 @@
                 :class="`bg-${evt.color}/50 text-${evt.color} border-${evt.color}`"
                 @click.stop="eventClicked(cell.date, evt)">
 
-                <div class="absolute size-4 grid place-items-center rounded-full top-0 left-0 translate-x-[-50%] translate-y-[-50%] text-primary-foreground" :class="`bg-${evt.color}`">
+                <div v-if="evt.completed" class="absolute size-4 grid place-items-center rounded-full top-0 left-0 translate-x-[-50%] translate-y-[-50%] text-primary-foreground" :class="`bg-${evt.color}`">
                   <Check class="size-3" />
                 </div>
                 <div class="flex flex-row w-full  overflow-hidden">

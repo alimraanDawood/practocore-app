@@ -30,7 +30,9 @@ export default defineNuxtConfig({
     ],
 
     colorMode: {
-        classSuffix: ''
+        classSuffix: '',
+        fallback: 'dark',
+        preference: 'dark'
     },
 
     shadcn: {

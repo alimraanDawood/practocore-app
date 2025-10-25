@@ -1,51 +1,57 @@
 <script setup lang="ts">
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
-import { h } from 'vue'
 import * as z from 'zod'
-import { AutoForm } from '@/components/ui/auto-form'
 import { Button } from '@/components/ui/button'
-import AutoFormPasswordInput from "~/components/auth/RegisterScreens/AutoFormPasswordInput.vue";
-import { signUpWithGoogle } from "~/services/auth";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { signUpWithGoogle } from "~/services/auth"
 
-const props = defineProps(['adminData']);
-const emits = defineEmits(['complete', 'google']);
+const props = defineProps(['adminData'])
+const emits = defineEmits(['complete', 'google'])
 
 const schema = z.object({
-  fullName: z.string().describe("Full Name"),
-  emailAddress: z.string().describe("Email"),
-  password: z.string().describe("Password"),
-  confirmPassword: z.string().describe("Confirm Password"),
+  fullName: z.string().min(1, 'Full name is required'),
+  emailAddress: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  confirmPassword: z.string(),
 }).superRefine(({ confirmPassword, password }, ctx) => {
   if (confirmPassword !== password) {
     ctx.addIssue({
       code: "custom",
       message: "The passwords did not match",
       path: ['confirmPassword']
-    });
+    })
   }
-});
+})
 
 const form = useForm({
   validationSchema: toTypedSchema(schema),
   initialValues: {
-    ...props.adminData
+    fullName: props.adminData?.fullName || '',
+    emailAddress: props.adminData?.emailAddress || '',
+    password: props.adminData?.password || '',
+    confirmPassword: props.adminData?.confirmPassword || '',
   }
 })
 
-function onSubmit(values: Record<string, any>) {
-  emits('complete', values)
-}
+const onSubmit = form.handleSubmit((values) => {
+  emits('complete', { ...values, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+});
 
 async function continueWithGoogle() {
   try {
-    const result = await signUpWithGoogle();
-
-    console.log(result);
-
-    emits('google', result);
+    const result = await signUpWithGoogle()
+    console.log(result)
+    emits('google', result)
   } catch(e) {
-    console.error(e);
+    console.error(e)
   }
 }
 </script>
@@ -58,41 +64,67 @@ async function continueWithGoogle() {
     </div>
 
     <div class="flex flex-col w-full gap-3">
-      <AutoForm
-          :initial-values="{ ...props.adminData }"
-          class="w-full space-y-5"
-          :schema="schema"
-          :form="form"
-          :field-config="{
-            fullName: {
-              inputProps: {
-                placeholder: 'John Smith'
-              },
-            },
-            emailAddress: {
-              inputProps: {
-                type: 'email',
-                placeholder: 'johnsmith@smithlaw.com'
-              },
-            },
-            password: {
-              component: AutoFormPasswordInput,
-              label: 'Password',
-            },
-            confirmPassword: {
-              component: AutoFormPasswordInput,
-              label: 'Confirm Password',
-              inputProps: {
-                placeholder: 'Re-enter your password'
-              }
-            }
-          }"
-          @submit="onSubmit"
-      >
+      <form @submit="onSubmit" class="w-full space-y-5">
+        <FormField v-slot="{ componentField }" name="fullName">
+          <FormItem>
+            <FormLabel>Full Name</FormLabel>
+            <FormControl>
+              <Input 
+                type="text" 
+                placeholder="John Smith" 
+                v-bind="componentField" 
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="emailAddress">
+          <FormItem>
+            <FormLabel>Email</FormLabel>
+            <FormControl>
+              <Input 
+                type="email" 
+                placeholder="johnsmith@smithlaw.com" 
+                v-bind="componentField" 
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="password">
+          <FormItem>
+            <FormLabel>Password</FormLabel>
+            <FormControl>
+              <Input 
+                type="password" 
+                placeholder="Enter your password" 
+                v-bind="componentField" 
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="confirmPassword">
+          <FormItem>
+            <FormLabel>Confirm Password</FormLabel>
+            <FormControl>
+              <Input 
+                type="password" 
+                placeholder="Re-enter your password" 
+                v-bind="componentField" 
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
         <Button class="w-full" type="submit">
           Sign Up
         </Button>
-      </AutoForm>
+      </form>
 
       <div class="flex flex-row gap-2 items-center">
         <div class="h-[1px] bg-muted-foreground/50 w-full"></div>
@@ -102,8 +134,7 @@ async function continueWithGoogle() {
 
       <div class="grid grid-cols-2 w-full gap-2">
         <Button class="w-full" variant="secondary">
-          <svg class="szie-4" fill="#000000" viewBox="-52.01 0 560.035 560.035" xmlns="http://www.w3.org/2000/svg"><path d="M380.844 297.529c.787 84.752 74.349 112.955 75.164 113.314-.622 1.988-11.754 40.191-38.756 79.652-23.343 34.117-47.568 68.107-85.731 68.811-37.499.691-49.557-22.236-92.429-22.236-42.859 0-56.256 21.533-91.753 22.928-36.837 1.395-64.889-36.891-88.424-70.883-48.093-69.53-84.846-196.475-35.496-282.165 24.516-42.554 68.328-69.501 115.882-70.192 36.173-.69 70.315 24.336 92.429 24.336 22.1 0 63.59-30.096 107.208-25.676 18.26.76 69.517 7.376 102.429 55.552-2.652 1.644-61.159 35.704-60.523 106.559M310.369 89.418C329.926 65.745 343.089 32.79 339.498 0 311.308 1.133 277.22 18.785 257 42.445c-18.121 20.952-33.991 54.487-29.709 86.628 31.421 2.431 63.52-15.967 83.078-39.655"/></svg>
-
+          <svg class="size-4" fill="#000000" viewBox="-52.01 0 560.035 560.035" xmlns="http://www.w3.org/2000/svg"><path d="M380.844 297.529c.787 84.752 74.349 112.955 75.164 113.314-.622 1.988-11.754 40.191-38.756 79.652-23.343 34.117-47.568 68.107-85.731 68.811-37.499.691-49.557-22.236-92.429-22.236-42.859 0-56.256 21.533-91.753 22.928-36.837 1.395-64.889-36.891-88.424-70.883-48.093-69.53-84.846-196.475-35.496-282.165 24.516-42.554 68.328-69.501 115.882-70.192 36.173-.69 70.315 24.336 92.429 24.336 22.1 0 63.59-30.096 107.208-25.676 18.26.76 69.517 7.376 102.429 55.552-2.652 1.644-61.159 35.704-60.523 106.559M310.369 89.418C329.926 65.745 343.089 32.79 339.498 0 311.308 1.133 277.22 18.785 257 42.445c-18.121 20.952-33.991 54.487-29.709 86.628 31.421 2.431 63.52-15.967 83.078-39.655"/></svg>
           Apple
         </Button>
 

@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col">
+    <div v-if="matter !== null" class="flex flex-col">
         <button @click="$emit('deadlineSelected', deadline.id)"
             v-for="deadline, index in matter?.expand?.deadlines?.sort((d1, d2) => { return new Date(d1.date) - new Date(d2.date); })"
             :key="deadline.id" class="flex flex-row text-left hover:bg-muted/30 group">
@@ -74,6 +74,31 @@
                 </div>
             </div>
         </button>
+    </div>
+    <div v-else class="flex flex-col w-full">
+        <div v-for="i in 5" class="flex flex-row text-left hover:bg-muted/30 group animate-pulse">
+            <div class="flex flex-col px-2 items-center">
+                <div class="w-1 h-5 bg-muted group-first:opacity-0"></div>
+                
+                <div class="size-8 bg-muted shrink-0 rounded-full grid place-items-center">
+                </div>
+
+                <div class="w-1 h-full bg-muted group-last:opacity-0">
+                </div>
+            </div>
+            <div class="flex flex-col gap-2 w-full">
+                <div class="bg-muted w-full h-5 rounded"></div>
+
+                <div class="bg-muted w-full h-10 rounded"></div>
+
+                <div class="flex flex-row gap-3">
+                    <div class="bg-muted w-24 h-5 rounded"></div>
+                    <div class="bg-muted w-24 h-5 rounded"></div>
+                </div>
+
+                <div class="bg-muted w-full h-10 rounded"></div>
+            </div>
+        </div>
     </div>
 </template>
 

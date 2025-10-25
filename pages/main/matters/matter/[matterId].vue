@@ -4,18 +4,19 @@
             <Button @click="$router.go(-1)" size="icon" variant="ghost">
                 <ArrowLeft />
             </Button>
-            
-            <Button size="icon" variant="secondary">
-                <Bell />
-            </Button>
-        </div>
 
-        <div class="flex flex-col p-3 bg-background border-b w-full">
-            <span class="font-semibold text-lg">{{ matter?.name }}</span>
-
-            <div class="flex flex-row gap-2">
-                <span class="text-xs">Created: {{ dayjs(matter?.created).format('DD/MM/YYYY') }}</span>
+            <div class="flex flex-row relative w-full">
+                <marquee class="text-lg font-semibold ibm-plex-serif">{{ matter?.name }}</marquee>
+                <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
             </div>
+
+            <div class="flex flex-row gap-2 items-center">
+                <SharedDarkModeSwitch />
+                <Button size="icon" variant="secondary">
+                    <Bell />
+                </Button>
+            </div>
+            
         </div>
 
         <div class="flex flex-col h-full w-full overflow-y-scroll">
@@ -43,20 +44,20 @@
             </div> -->
         </div>
 
-        <button v-if="actionExpanded" class="fixed left-0 top-0 w-screen h-[100dvh] bg-black/70 z-40" @click="actionExpanded = false"></button>
-        <div class="p-5 fixed bottom-0 right-0 flex flex-col items-end gap-3 z-50">
-            <XyzTransition mode="out-in">
-                <div xyz="fade right" v-if="actionExpanded" class="flex flex-col">
-                    <AdjournDeadline :matter="matter">
-                        <Button size="sm" variant="secondary">Add Adjournment</Button>
-                    </AdjournDeadline>
-                </div>
-            </XyzTransition>
+<!--        <button v-if="actionExpanded" class="fixed left-0 top-0 w-screen h-[100dvh] bg-black/70 z-40" @click="actionExpanded = false"></button>-->
+<!--        <div class="p-5 fixed bottom-0 right-0 flex flex-col items-end gap-3 z-50">-->
+<!--            <XyzTransition mode="out-in">-->
+<!--                <div xyz="fade right" v-if="actionExpanded" class="flex flex-col">-->
+<!--                    <AdjournDeadline :matter="matter">-->
+<!--                        <Button size="sm" variant="secondary">Add Adjournment</Button>-->
+<!--                    </AdjournDeadline>-->
+<!--                </div>-->
+<!--            </XyzTransition>-->
 
-            <Button @click="actionExpanded = !actionExpanded" size="icon">
-                <Plus class="transition-all duration-300 ease-in-out" :class="{ 'rotate-45': actionExpanded }" />
-            </Button>
-        </div>
+<!--            <Button @click="actionExpanded = !actionExpanded" size="icon">-->
+<!--                <Plus class="transition-all duration-300 ease-in-out" :class="{ 'rotate-45': actionExpanded }" />-->
+<!--            </Button>-->
+<!--        </div>-->
 
         <SharedDeadlineViewDeadline v-model:open="viewDeadlineOpen" :index="d_index" :deadline="deadline"></SharedDeadlineViewDeadline>
     </div>

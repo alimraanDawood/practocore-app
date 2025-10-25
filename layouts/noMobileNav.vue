@@ -22,10 +22,7 @@
                         </Button>
 
                         <div class="flex flex-row items-center gap-1">
-                            <Avatar>
-                                <AvatarImage src="https://github.com/unovue.png" alt="@unovue" />
-                                <AvatarFallback class="text-xs bg-primary text-primary-foreground">GH</AvatarFallback>
-                            </Avatar>
+                            <SharedProfile />
                         </div>
                     </div>
                 </div>

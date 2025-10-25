@@ -1,82 +1,106 @@
 <script setup lang="ts">
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
-import { h } from 'vue'
 import * as z from 'zod'
-import { AutoForm } from '@/components/ui/auto-form'
 import { Button } from '@/components/ui/button'
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 
-const props = defineProps(['organisationData']);
-const emits = defineEmits(['complete']);
+const props = defineProps(['organisationData'])
+const emits = defineEmits(['complete'])
+
 const schema = z.object({
-  firmName: z.string().describe("Firm Name"),
-  legalBusinessName: z.string().describe("Legal Business Name").optional(),
-  firmEmailDomain: z.string().describe("Firm Email Domain").optional(),
-})
-
-const formData = ref({});
-
-onMounted(() => {
-  if (props.organisationData) {
-
-  }
+  firmName: z.string().min(1, 'Firm name is required'),
+  legalBusinessName: z.string().optional(),
+  firmEmailDomain: z.string().optional(),
 })
 
 const form = useForm({
   validationSchema: toTypedSchema(schema),
   initialValues: {
-    ...props.organisationData
+    firmName: props.organisationData?.firmName || '',
+    legalBusinessName: props.organisationData?.legalBusinessName || '',
+    firmEmailDomain: props.organisationData?.firmEmailDomain || '',
   }
 })
 
-function onSubmit(values: Record<string, any>) {
-  emits('complete', values);
-}
+const onSubmit = form.handleSubmit((values) => {
+  emits('complete', values)
+})
 </script>
 
 <template>
   <div class="flex flex-col gap-5 h-full justify-center">
     <div class="flex flex-col">
-      <span class="text-xl font-semibold">Register Your Law Firm </span>
+      <span class="text-xl font-semibold">Register Your Law Firm</span>
       <span class="text-sm">Let's set up your firm's PractoCore workspace</span>
     </div>
+    
+    <form @submit="onSubmit" class="flex flex-col w-full gap-6">
+      <FormField v-slot="{ componentField }" name="firmName">
+        <FormItem>
+          <FormLabel>Firm Name</FormLabel>
+          <FormControl>
+            <Input 
+              type="text" 
+              placeholder="Smith & Associates Law Firm"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormDescription>
+            Your firm's official business name
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-    <div class="flex flex-col w-full gap-3">
-      <AutoForm
-          :initial-values="formData"
-          class="w-full space-y-8"
-          :schema="schema"
-          :form="form"
-          :field-config="{
-            firmName: {
-              inputProps: {
-                placeholder: 'Smith & Associates Law Firm'
-              },
-              description: 'Your firm\'s official business name'
-            },
-            legalBusinessName: {
-              inputProps: {
-                placeholder: 'Smith & Associates LLC'
-              },
-              description: 'If different from firm name (for billing purposes)'
-            },
-            firmEmailDomain: {
-              inputProps: {
-                placeholder: 'smithlaw.com'
-              },
-              description: 'Your firm\'s email domain (helps verify team members)'
-            }
-          }"
-          @submit="onSubmit"
-      >
-        <Button class="w-full" type="submit">
-          Continue
-        </Button>
-      </AutoForm>
-    </div>
+      <FormField v-slot="{ componentField }" name="legalBusinessName">
+        <FormItem>
+          <FormLabel>Legal Business Name</FormLabel>
+          <FormControl>
+            <Input 
+              type="text" 
+              placeholder="Smith & Associates LLC"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormDescription>
+            If different from firm name (for billing purposes)
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+
+      <FormField v-slot="{ componentField }" name="firmEmailDomain">
+        <FormItem>
+          <FormLabel>Firm Email Domain</FormLabel>
+          <FormControl>
+            <Input 
+              type="text" 
+              placeholder="smithlaw.com"
+              v-bind="componentField"
+            />
+          </FormControl>
+          <FormDescription>
+            Your firm's email domain (helps verify team members)
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+
+      <Button class="w-full" type="submit">
+        Continue
+      </Button>
+    </form>
   </div>
 </template>
 
 <style scoped>
-
 </style>

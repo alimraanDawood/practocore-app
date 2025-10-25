@@ -21,10 +21,7 @@
             </Button>
 
             <div class="flex flex-row items-center gap-1">
-              <Avatar>
-                <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue" />
-                <AvatarFallback class="text-xs bg-primary text-primary-foreground">AD</AvatarFallback>
-              </Avatar>
+              <SharedProfile />
             </div>
           </div>
         </div>

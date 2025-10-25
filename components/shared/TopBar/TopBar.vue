@@ -14,10 +14,15 @@
             <button class="p-2 border-b-2 border-transparent"
                 :class="{ '!border-primary font-medium': $route?.name === 'main-calendar' }">Calendar</button>
         </NuxtLink>
-
+        
         <NuxtLink to="/main/templates">
             <button class="p-2 border-b-2 border-transparent"
-                :class="{ '!border-primary font-medium': $route?.name === 'main-templates' }">Templates</button>
+                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-templates') }">Templates</button>
+        </NuxtLink>
+
+        <NuxtLink to="/main/organisation">
+            <button class="p-2 border-b-2 border-transparent"
+                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-organisation') }">Organisation</button>
         </NuxtLink>
 
         <!-- <button class="p-2 border-b-2 border-transparent">Team</button> -->

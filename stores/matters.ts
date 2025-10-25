@@ -18,6 +18,7 @@ export const useMattersStore = defineStore('matters', {
     // filters
     query: '' as string,
     sort: 'Deadlines_via_matter.date' as string,
+    activeTab: 'all' as string,
     // pagination (basic; current UI uses 1,10)
     page: 1 as number,
     perPage: 10 as number,
@@ -26,11 +27,13 @@ export const useMattersStore = defineStore('matters', {
       active: false,
       selected: [] as any[],
     } as SelectionState,
+
     // housekeeping
     lastFetched: 0 as number,
     _subscribed: false as boolean,
     _lastQuery: '' as string,
     _lastSort: '' as string,
+    _lastActiveTab: 'all' as string
   }),
   getters: {
     isStale(state) {
@@ -38,6 +41,8 @@ export const useMattersStore = defineStore('matters', {
       // Re-fetch when filters changed or cache expired
       if (state._lastQuery !== state.query) return true;
       if (state._lastSort !== state.sort) return true;
+      if (state._lastActiveTab !== state.activeTab) return true;
+
       return Date.now() - state.lastFetched > CACHE_TTL;
     },
     totalItems: (state) => state.result?.totalItems ?? 0,
@@ -46,21 +51,40 @@ export const useMattersStore = defineStore('matters', {
   actions: {
     async fetchMatters(force = false) {
       // Avoid redundant fetches if we have fresh data
+
       if (!force && this.result && !this.isStale) {
         return this.result;
       }
+
       this.loading = true;
+      
       try {
         // Note: original page didn't apply sort server-side; we keep API shape but pass sort for future use.
+        let secondaryFilter  = '';
+        switch(this.activeTab) {
+          case 'all':
+            secondaryFilter = '';
+            break;
+          case 'organisation':
+            secondaryFilter = `personal = false`;
+            break;
+          case 'private':
+            secondaryFilter = `personal = true`;
+            break;
+        }
+
         const res = await getMatters(this.page, this.perPage, {
           expand: '',
           sort: this.sort || '',
-          filter: `name ~ '${this.query}'`,
+          filter: secondaryFilter.length === 0 ? `name ~ '${this.query}'` : `name ~ '${this.query}' && ${secondaryFilter}`,
         });
+
         this.result = res;
         this.lastFetched = Date.now();
         this._lastQuery = this.query;
         this._lastSort = this.sort;
+        this._lastActiveTab = this.activeTab;
+
         return res;
       } catch (e) {
         console.error(e);

@@ -2,7 +2,8 @@
     <DefineTemplate>
         <div class="p-3">
             <Form ref="formRef" v-slot="{ meta, values, setFieldValue, validate }" as="" keep-values
-                :validation-schema="toTypedSchema(formSchema[stepIndex - 1])">
+                :validation-schema="toTypedSchema(formSchema[stepIndex - 1])"
+                :initial-values="{ template: { id: template?.id, fields: template?.template?.fields } }">
                 <Stepper v-slot="{ isNextDisabled, isPrevDisabled, nextStep, prevStep }" v-model="stepIndex">
                     <!-- FORM -->
                     <form @submit="(e) => {
@@ -37,10 +38,6 @@
                                         class="text-xs font-medium transition lg:text-base">
                                         {{ step.title }}
                                     </StepperTitle>
-                                    <StepperDescription :class="[state === 'active' && 'text-primary']"
-                                        class="sr-only text-xs text-muted-foreground transition md:not-sr-only">
-                                        {{ step.description }}
-                                    </StepperDescription>
                                 </div>
                             </StepperItem>
                         </div>
@@ -51,16 +48,41 @@
                             <template v-if="stepIndex === 1">
                                 <FormField v-slot="{ componentField }" name="name">
                                     <FormItem>
-                                        <FormLabel>Case Name</FormLabel>
+                                        <FormLabel>Case Name*</FormLabel>
                                         <FormControl>
-                                            <Input type="text" placeholder="A vs B"
-                                                v-bind="componentField" />
+                                            <Input type="text" placeholder="A vs B" v-bind="componentField" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 </FormField>
 
-                                <FormField name="date">
+                                <FormField name="caseNumber" v-slot="{ componentField }">
+                                    <FormItem class="flex flex-col">
+                                        <FormLabel>Case Number</FormLabel>
+                                        <FormControl>
+                                            <Input v-bind="componentField" type="number"
+                                                placeholder="Enter Case Number" />
+                                        </FormControl>
+                                    </FormItem>
+                                </FormField>
+
+                                <FormField v-slot="{ value, handleChange }" name="personal">
+                                    <FormItem class="flex flex-row items-start justify-between rounded-lg border p-4">
+                                        <FormControl>
+                                            <Switch :model-value="value" @update:model-value="handleChange" />
+                                        </FormControl>
+                                        <div class="space-y-0.5">
+                                            <FormLabel class="text-base">
+                                                Make this Matter Private
+                                            </FormLabel>
+                                            <FormDescription>
+                                                This will prevent other members of the organisation from viewing this matter.
+                                            </FormDescription>
+                                        </div>
+                                    </FormItem>
+                                </FormField>
+
+                                <!-- <FormField name="date">
                                     <FormItem class="flex flex-col">
                                         <FormLabel>Project Date</FormLabel>
                                         <Popover :modal="true">
@@ -72,7 +94,7 @@
                                                     )
                                                         ">
                                                         <span>{{ value ? df.format(toDate(value)) : 'Pick a date'
-                                                            }}</span>
+                                                        }}</span>
                                                         <CalendarIcon class="ms-auto h-4 w-4 opacity-50" />
                                                     </Button>
                                                     <input hidden />
@@ -92,7 +114,7 @@
                                         </FormDescription>
                                         <FormMessage />
                                     </FormItem>
-                                </FormField>
+                                </FormField> -->
                             </template>
 
                             <!-- STEP 2 -->
@@ -111,18 +133,23 @@
 
                             <!-- STEP 3 (DYNAMIC FIELDS) -->
                             <template v-if="stepIndex === 3">
+
                                 <div class="space-y-4">
-                                    <FormField v-for="field in formRef?.values?.template?.fields || []"
-                                        :key="field.name" :name="`fields.${field.id}`" v-slot="{ componentField }">
+                                    <FormField v-for="field in templateFields || []" :key="field.name"
+                                        :name="`fields.${field.id}`" v-slot="{ componentField }">
                                         <FormItem>
                                             <FormLabel>{{ field.label }}</FormLabel>
-                                            <FormControl>
-                                                <!-- string -->
-                                                <Input v-if="field.type === 'string'" v-bind="componentField"
-                                                    type="text" :placeholder="field.placeholder || ''" />
 
+                                            <!-- string -->
+                                            <FormControl v-if="field.type === 'string'">
+                                                <Input v-bind="componentField" type="text"
+                                                    :placeholder="field.placeholder || ''" />
+                                            </FormControl>
+
+
+                                            <FormControl v-else-if="field.type === 'select'">
                                                 <!-- select -->
-                                                <Select v-else-if="field.type === 'select'" v-bind="componentField">
+                                                <Select v-bind="componentField">
                                                     <SelectTrigger class="w-full">
                                                         <SelectValue :placeholder="`Select ${field.label}`" />
                                                     </SelectTrigger>
@@ -137,17 +164,43 @@
                                                         </SelectGroup>
                                                     </SelectContent>
                                                 </Select>
-
-                                                <!-- boolean -->
-                                                <Switch v-else-if="field.type === 'boolean'"
-                                                    :model-value="componentField.value"
-                                                    @update:model-value="v => setFieldValue(`fields.${field.id}`, v)" />
-
-                                                <!-- fallback -->
-                                                <span v-else class="italic text-muted-foreground">
-                                                    Unsupported type: {{ field.type }}
-                                                </span>
                                             </FormControl>
+
+                                            <!-- boolean -->
+                                            <FormControl v-else-if="field.type === 'boolean'">
+                                                <Switch :model-value="componentField.value"
+                                                    @update:model-value="v => setFieldValue(`fields.${field.id}`, v)" />
+                                            </FormControl>
+
+                                            <!-- date -->
+                                            <Popover v-else-if="field.type === 'date'" :modal="true">
+                                                <PopoverTrigger as-child>
+                                                    <FormControl>
+                                                        <Button variant="outline" :class="cn(
+                                                            'w-full ps-3 text-start font-normal',
+                                                            !value && 'text-muted-foreground')">
+
+                                                            <span>{{ value ? df.format(toDate(value)) : 'Pick a date'
+                                                                }}</span>
+                                                            <CalendarIcon class="ms-auto h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                        <input hidden />
+                                                    </FormControl>
+                                                </PopoverTrigger>
+                                                <PopoverContent class="w-auto p-0">
+                                                    <Calendar v-model:placeholder="placeholder" :model-value="value"
+                                                        calendar-label="Project Date" initial-focus
+                                                        :min-value="new CalendarDate(1900, 1, 1)" @update:model-value="(v) => {
+                                                            if (v) setFieldValue('fields.date', v.toString())
+                                                            else setFieldValue('fields.date', undefined)
+                                                        }" />
+                                                </PopoverContent>
+                                            </Popover>
+
+                                            <!-- fallback -->
+                                            <span v-else class="italic text-muted-foreground">
+                                                Unsupported type: {{ field.type }}
+                                            </span>
                                             <FormMessage />
                                         </FormItem>
                                     </FormField>
@@ -231,22 +284,29 @@ const steps = [
     { step: 3, title: "Complete" },
 ]
 
+const props = defineProps(['template']);
+
 onMounted(async () => {
 });
 
 const emits = defineEmits(['created']);
 
-const formRef = ref()
+const formRef = ref();
+
+const templateFields = ref<Array<any>>([]);
 
 // 🔹 Dynamic schemas
 const buildStep3Schema = () => {
-    const template = formRef.value?.values?.template
-    if (!template?.fields?.length) return null
+    const template = formRef.value?.values?.template;
+    const _templateFields = template?.fields || [];
 
-    console.log(template.fields);
+    console.log(template);
+    templateFields.value = [{ id: 'date', label: template?.triggerPrompt, required: true, type: 'date' }, ..._templateFields];
 
-    const fieldShape: Record<string, any> = {}
-    for (const f of template.fields) {
+    const fieldShape: Record<string, any> = {
+    }
+
+    for (const f of templateFields.value) {
         switch (f.type) {
             case "string":
                 fieldShape[f.id] = f.required
@@ -259,8 +319,10 @@ const buildStep3Schema = () => {
                     : z.enum(f.options.map((o: any) => o.value)).optional()
                 break
             case "boolean":
-                fieldShape[f.id] = f.required ? z.boolean() : z.boolean().optional()
+                fieldShape[f.id] = f.required ? z.boolean() : z.boolean().optional();
                 break
+            case "date":
+                fieldShape[f.id] = f.required ? z.string().refine(v => v, { message: "A date is required." }) : z.string().refine(v => v, { message: "A date is required." }).optional()
         }
     }
     return z.object({
@@ -276,7 +338,9 @@ const formSchema = computed(() => {
         return [
             z.object({
                 name: z.string().min(3, "You need at least 3 characters for a valid name!"),
-                date: z.string().refine(v => v, { message: "A date is required." }),
+                caseNumber: z.number().optional(),
+                personal: z.boolean().optional()
+                // date: z.string().refine(v => v, { message: "A date is required." }),
             }),
             z.object({
                 template: z.object({
@@ -322,14 +386,22 @@ watch(
     }
 )
 
+watch(open, () => {
+    if (open.value === false) {
+        stepIndex.value = 1;
+    }
+});
+
 // 🔹 Submission
 const onSubmit = async (values: any) => {
     loading.value = true
     try {
         const result = await createMatter({
             name: values.name,
+            caseNumber: values.caseNumber.toString(),
+            personal: values.personal ? true : false,
             templateId: values.template?.id,
-            date: values.date,
+            date: values.fields.date,
             fieldValues: values.fields   // ✅ now nested properly
         });
 
@@ -341,7 +413,8 @@ const onSubmit = async (values: any) => {
         toast.error("Unable to create matter at this time!")
         console.error(e)
     } finally {
-        loading.value = false
+        loading.value = false;
+        stepIndex.value = 1;
     }
 }
 </script>

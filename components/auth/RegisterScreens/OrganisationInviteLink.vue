@@ -5,10 +5,12 @@ import {toast} from "vue-sonner";
 
 const loading = ref(true);
 const data = ref(null);
+const props = defineProps(['organisation']);
+
 onMounted(async () => {
   loading.value = true;
   try {
-    data.value = await requestInviteLink();
+    data.value = await requestInviteLink(props.organisation);
 
     loading.value = false;
   } catch(e) {

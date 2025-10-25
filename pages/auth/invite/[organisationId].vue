@@ -4,7 +4,9 @@
       <div class="flex flex-col w-full h-full">
         <div class="flex flex-col gap-2 border-b">
           <div class="flex flex-row p-3 justify-between items-center">
-            <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-8 lg:h-12"/>
+            <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-8 dark:hidden"/>
+            <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20dark.svg" class="h-8 dark:block hidden"/>
+
 
             <div class="flex flex-row gap-2">
               <NuxtLink to="/main/">
@@ -20,14 +22,14 @@
 
         <div class="flex flex-col w-full p-3 h-full gap-8 overflow-y-scroll">
           <div class="flex flex-col">
-            <span class="text-lg tablet:text-2xl font-semibold ibm-plex-sans">Invite members to your organisation</span>
+            <span class="text-lg tablet:text-2xl font-semibold ibm-plex-serif">Invite members to your organisation</span>
             <span class=" text-sm text-muted-foreground">You have registered your organisation with Practocore. Invite your team to collaborate on future projects and cases.</span>
           </div>
 
           <div class="flex flex-col gap-3">
             <div class=" flex flex-col gap-3">
               <div class="flex flex-row justify-between items-center">
-                <span class="font-semibold ibm-plex-sans">Join Organisation Using Link</span>
+                <span class="font-semibold ibm-plex-serif">Join Organisation Using Link</span>
 
                 <div class="flex flex-row gap-3 items-center">
                   <XyzTransition xyz="fade">
@@ -41,7 +43,7 @@
               </div>
 
               <XyzTransition xyz="fade left">
-                <OrganisationInviteLink v-if="useJoinLink" />
+                <OrganisationInviteLink :organisation="organisationId" v-if="useJoinLink" />
               </XyzTransition>
             </div>
 
@@ -115,7 +117,9 @@ import OrganisationInviteLink from "~/components/auth/RegisterScreens/Organisati
 
 definePageMeta({
   layout: 'none'
-})
+});
+
+const organisationId = useRoute().params.organisationId;
 
 const useJoinLink = ref(false);
 
