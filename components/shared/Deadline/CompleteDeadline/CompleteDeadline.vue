@@ -1,5 +1,5 @@
 <template>
-    <Dialog v-if="$viewport.isGreaterThan('tablet')" v-model:open="open">
+    <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
         <DialogTrigger :as-child="true">
             <slot />
         </DialogTrigger>
@@ -34,13 +34,13 @@
             <DialogFooter>
                 <Button 
                     @click="fulfillDeadline" 
-                    class="disabled:opacity-50" 
+                    class="disabled:opacity-50 "
                     :disabled="loading">
                     <span v-if="!loading">Use Date</span>
                     <Loader v-else class="animate-spin" />
                 </Button>
-                <DialogClose>
-                    <Button variant="secondary">Cancel</Button>
+                <DialogClose class="w-full">
+                    <Button class="w-full" variant="secondary">Cancel</Button>
                 </DialogClose>
             </DialogFooter>
         </DialogContent>

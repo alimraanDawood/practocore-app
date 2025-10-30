@@ -1,7 +1,7 @@
 <template>
-    <div class="flex flex-col w-full items-center h-full">
+    <div class="flex flex-col w-full items-center overflow-hidden h-full">
         <div class="flex flex-col w-full relative lg:w-fit h-full">
-            <div class="flex flex-row lg:hidden w-full items-center justify-between p-3 border-b">
+            <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
                 <Button @click="$router.go(-1)" size="icon" variant="ghost">
                     <ArrowLeft />
                 </Button>
@@ -31,23 +31,21 @@
                         </div>
                     </div>
     
-                    <span>Created By: <b class="ibm-plex-serif font-semibold">{{ template?.organisation === '' ? template?.author === '' ? 'PractoCore Team' : template?.author : template?.organisation  }}</b></span>
+                    <span>Created By: <b class="ibm-plex-serif font-semibold">{{ template?.organisation === '' ? template?.author === '' ? 'PractoCore Team' : template?.authorName : template?.organisation  }}</b></span>
 
-                    <div>
+                    <div class="flex flex-row gap-1">
                         <SharedMattersCreateMatter :template="template">
                             <Button size="sm">Use Template</Button>
                         </SharedMattersCreateMatter>
+
+                        <NuxtLink :to="`/main/templates/template/${template?.id}/editor`">
+                          <Button size="sm" variant="outline">Edit Template</Button>
+                        </NuxtLink>
                     </div>
                 </div>
 
     
                 <div class="prose prose-pink dark:prose-invert mt-5 prose-code:bg-muted prose-code:p-3 prose-code:flex prose-code:flex-col prose-code:text-muted-foreground prose-code:border prose-code:rounded-lg" v-html="template?.description"></div>
-            </div>
-    
-            <div class="lg:hidden flex flex-col p-5 absolute top-0 right-0">
-                <SharedMattersCreateMatter :template="template">
-                    <Button>Use Template</Button>
-                </SharedMattersCreateMatter>
             </div>
         </div>
     </div>

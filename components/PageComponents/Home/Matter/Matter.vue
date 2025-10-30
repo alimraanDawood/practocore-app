@@ -1,13 +1,12 @@
 <template>
     <button 
-        class="flex flex-col w-full text-left p-3 border gap-3"
-        :class="accentClasses"
+        class="flex flex-col w-full text-left p-3 border gap-3 bg-muted rounded-lg"
     >
         
         <span class="font-semibold truncate">{{ matter?.name }}</span>
         <span>{{ deadlineText }}</span>
 
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-2">
 
             <div class="flex flex-row items-center justify-between">
                 <span class="font-bold text-xs">Completion</span>
@@ -16,10 +15,8 @@
             </div>
     
             <Progress 
-                class="h-1" 
-                :class="progressClasses"
-                :indicator="indicatorClass" 
-                :model-value="deadlineCompletion" 
+                class="h-1"
+                :model-value="deadlineCompletion"
             />
         </div>
 

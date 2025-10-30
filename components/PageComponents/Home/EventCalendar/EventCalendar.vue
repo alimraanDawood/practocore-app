@@ -10,7 +10,7 @@
     </div>
     
     <Sheet v-model:open="isModalOpen">
-        <SheetContent :side="$viewport.isGreaterThan('tablet') ? 'right' : 'bottom'">
+        <SheetContent class="xs:pt-5 xs:pb-12" :side="$viewport.isGreaterOrEquals('customxs') ? 'right' : 'bottom'">
             <SheetHeader>
                 <SheetTitle>Events on {{ currentDate }}</SheetTitle>
             </SheetHeader>

@@ -8,7 +8,7 @@
         </div>
     </CreateTemplate>
 
-    <Dialog v-if="$viewport.isGreaterThan('tablet')" v-model:open="open">
+    <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
         <DialogTrigger>
             <slot />
         </DialogTrigger>

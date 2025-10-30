@@ -52,7 +52,7 @@
             <slot />
         </SheetTrigger>
 
-        <SheetContent :hide-block="true" class="w-screen">
+        <SheetContent :hide-block="true" class="w-screen xs:pt-5 xs:pb-12">
             <SheetHeader>
                 <SheetTitle>Deadline</SheetTitle>
             </SheetHeader>

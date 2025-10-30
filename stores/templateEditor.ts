@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Edge, Node } from '@vue-flow/core'
 import dayjs from 'dayjs'
+import dagre from '@dagrejs/dagre'
 
 // Types based on the provided schema
 export type FieldType = 'text' | 'select' | 'number' | 'date' | 'boolean'
@@ -75,6 +76,15 @@ export interface Deadline {
   reminders?: ReminderConfig[]
 }
 
+export interface ConditionalNode {
+  id: string
+  name: string
+  description?: string
+  conditions: TemplateCondition[]
+  truePathOffset?: DeadlineOffsetConfig
+  falsePathOffset?: DeadlineOffsetConfig
+}
+
 export interface TemplateSettings {
   id: string
   name: string
@@ -86,6 +96,7 @@ export interface TemplateSettings {
 export interface DeadlineTemplate extends TemplateSettings {
   fields: TemplateField[]
   deadlines: Deadline[]
+  conditionals: ConditionalNode[]
 }
 
 // Utility ids
@@ -93,6 +104,12 @@ const uid = (p = '') => `${p}${Math.random().toString(36).slice(2, 8)}`
 
 // Simple in-memory command stack for undo/redo
 interface Command<T = any> { do: () => void; undo: () => void; label?: string; payload?: T }
+
+// Dagre layout configuration
+const NODE_WIDTH = 200
+const NODE_HEIGHT = 80
+const RANK_SEP = 120 // Vertical spacing between ranks
+const NODE_SEP = 80 // Horizontal spacing between nodes
 
 export const useTemplateEditorStore = defineStore('templateEditor', () => {
   // Core state
@@ -103,6 +120,7 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     description: '',
     date_rules: { allowWeekends: true, allowHolidays: true },
     fields: [],
+    conditionals: [],
     deadlines: [
       {
         id: '_date_',
@@ -168,39 +186,120 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     saveLocal()
   }
 
-  // Graph <-> JSON conversion (simplified)
+  // Dagre layout function
+  function applyDagreLayout(nodesList: Node[], edgesList: Edge[]): Node[] {
+    const g = new dagre.graphlib.Graph()
+    g.setDefaultEdgeLabel(() => ({}))
+
+    // Configure graph for top-to-bottom layout
+    g.setGraph({
+      rankdir: 'TB', // Top to Bottom
+      ranksep: RANK_SEP,
+      nodesep: NODE_SEP,
+      edgesep: 50,
+      marginx: 50,
+      marginy: 50
+    })
+
+    // Add nodes to dagre graph
+    nodesList.forEach((node) => {
+      g.setNode(node.id, {
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT
+      })
+    })
+
+    // Add edges to dagre graph
+    edgesList.forEach((edge) => {
+      g.setEdge(edge.source, edge.target)
+    })
+
+    // Calculate layout
+    dagre.layout(g)
+
+    // Apply calculated positions to nodes
+    return nodesList.map((node) => {
+      const nodeWithPosition = g.node(node.id)
+      return {
+        ...node,
+        position: {
+          x: nodeWithPosition.x - NODE_WIDTH / 2,
+          y: nodeWithPosition.y - NODE_HEIGHT / 2,
+        },
+      }
+    })
+  }
+
+  // Graph <-> JSON conversion with Dagre layout
   function rebuildGraphFromTemplate() {
     const ns: Node[] = []
     const es: Edge[] = []
 
     // Start node
-    ns.push({ id: '_date_', type: 'start-node', position: { x: 0, y: 0 }, data: { label: 'Start Date' } })
+    ns.push({
+      id: '_date_',
+      type: 'start-node',
+      position: { x: 0, y: 0 },
+      data: { label: 'Start Date' }
+    })
+
+    // Create nodes for conditionals
+    template.value.conditionals.forEach((c) => {
+      ns.push({
+        id: c.id,
+        type: 'conditional-node',
+        position: { x: 0, y: 0 }, // Will be set by dagre
+        data: { conditional: c }
+      })
+
+      // Edge from parent (either _date_ or another node based on truePathOffset/falsePathOffset)
+      if (c.truePathOffset?.offsetId) {
+        const parent = c.truePathOffset.offsetId
+        if (parent && parent !== '_root_') {
+          es.push({
+            id: `${parent}_${c.id}`,
+            source: parent,
+            target: c.id,
+            label: `+${c.truePathOffset?.days ?? 0}d`,
+            type: 'smoothstep',
+          })
+        }
+      }
+    })
 
     // Create nodes for non-start deadlines
-    template.value.deadlines.filter(d => d.id !== '_date_').forEach((d, i) => {
+    template.value.deadlines.filter(d => d.id !== '_date_').forEach((d) => {
       ns.push({
         id: d.id,
         type: 'deadline-node',
-        position: { x: 250 + (i % 3) * 250, y: Math.floor(i / 3) * 160 },
+        position: { x: 0, y: 0 }, // Will be set by dagre
         data: { deadline: d }
       })
 
       // Edge from offsetId -> this
       const parent = d.offset?.offsetId || '_date_'
       if (parent && parent !== '_root_') {
+        const sourceNode = ns.find(n => n.id === parent)
+        const isConditional = sourceNode?.type === 'conditional-node'
+
         es.push({
           id: `${parent}_${d.id}`,
           source: parent,
           target: d.id,
-          label: `+${d.offset?.days ?? 0}d`,
-          data: { conditional: !!d.offset?.conditional },
+          label: isConditional ? undefined : `+${d.offset?.days ?? 0}d`,
+          data: {
+            conditional: !!d.offset?.conditional,
+            conditionalBranch: isConditional ? (d.offset?.days ?? 0) > 0 ? 'true' : 'false' : undefined
+          },
           type: 'smoothstep',
-          style: d.offset?.conditional ? { strokeDasharray: '6 4',  } : undefined
+          style: d.offset?.conditional ? { strokeDasharray: '6 4' } : undefined,
+          animated: isConditional
         })
       }
     })
 
-    nodes.value = ns
+    // Apply Dagre layout
+    nodes.value = applyDagreLayout(ns, es)
     edges.value = es
   }
 
@@ -231,6 +330,85 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     return { ...template.value, deadlines }
   }
 
+  // Re-layout function that can be called manually
+  function relayoutGraph() {
+    nodes.value = applyDagreLayout(nodes.value, edges.value)
+  }
+
+  // Conditional ops
+  function addConditional(parentId = '_date_') {
+    const c: ConditionalNode = {
+      id: uid('c_'),
+      name: 'New Condition',
+      description: '',
+      conditions: [],
+      truePathOffset: { offsetId: parentId, days: 0, allowHolidays: false, allowWeekends: false },
+      falsePathOffset: { offsetId: parentId, days: 0, allowHolidays: false, allowWeekends: false }
+    }
+
+    pushCommand({
+      label: 'Add Conditional',
+      do: () => {
+        template.value.conditionals.push(c)
+        const newNode = {
+          id: c.id,
+          type: 'conditional-node',
+          position: { x: 0, y: 0 },
+          data: { conditional: c }
+        }
+        const newEdge = {
+          id: `${parentId}_${c.id}`,
+          source: parentId,
+          target: c.id,
+          type: 'smoothstep'
+        }
+
+        nodes.value.push(newNode)
+        edges.value.push(newEdge)
+
+        // Re-apply layout after adding
+        nodes.value = applyDagreLayout(nodes.value, edges.value)
+      },
+      undo: () => {
+        template.value.conditionals = template.value.conditionals.filter(x => x.id !== c.id)
+        nodes.value = nodes.value.filter(n => n.id !== c.id)
+        edges.value = edges.value.filter(e => e.source !== c.id && e.target !== c.id)
+
+        // Re-apply layout after removal
+        nodes.value = applyDagreLayout(nodes.value, edges.value)
+      }
+    })
+  }
+
+  function deleteConditional(id: string) {
+    const idx = template.value.conditionals.findIndex(c => c.id === id)
+    if (idx === -1) return
+
+    // Check if any deadlines depend on this conditional
+    const hasChildren = template.value.deadlines.some(d => d.offset?.offsetId === id)
+    if (hasChildren) throw new Error('Cannot delete conditional that has dependent deadlines')
+
+    const snapshot = JSON.parse(JSON.stringify(template.value.conditionals[idx]))
+    const nSnapshot = nodes.value.slice()
+    const eSnapshot = edges.value.slice()
+
+    pushCommand({
+      label: 'Delete Conditional',
+      do: () => {
+        template.value.conditionals.splice(idx, 1)
+        nodes.value = nodes.value.filter(n => n.id !== id)
+        edges.value = edges.value.filter(e => e.source !== id && e.target !== id)
+
+        // Re-apply layout after deletion
+        nodes.value = applyDagreLayout(nodes.value, edges.value)
+      },
+      undo: () => {
+        template.value.conditionals.splice(idx, 0, snapshot)
+        nodes.value = nSnapshot
+        edges.value = eSnapshot
+      }
+    })
+  }
   // Field ops
   function addField(ft: Partial<TemplateField> = {}) {
     const field: TemplateField = {
@@ -251,11 +429,17 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
 
   function deleteField(id: string) {
     // Prevent deletion if used in conditions
-    const used = template.value.deadlines.some(d =>
-      (d.conditions || []).some(c => c.fieldId === id) ||
-      (d.offset?.conditional?.rules || []).some(r => r.conditions.some(c => c.fieldId === id))
+    const usedInDeadlines = template.value.deadlines.some(d =>
+        (d.conditions || []).some(c => c.fieldId === id) ||
+        (d.offset?.conditional?.rules || []).some(r => r.conditions.some(c => c.fieldId === id))
     )
-    if (used) throw new Error('Field is used in conditions and cannot be deleted')
+    const usedInConditionals = template.value.conditionals.some(c =>
+        c.conditions.some(cond => cond.fieldId === id)
+    )
+
+    if (usedInDeadlines || usedInConditionals) {
+      throw new Error('Field is used in conditions and cannot be deleted')
+    }
 
     const idx = template.value.fields.findIndex(f => f.id === id)
     if (idx === -1) return
@@ -289,13 +473,33 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
       label: 'Add Deadline',
       do: () => {
         template.value.deadlines.push(d)
-        nodes.value.push({ id: d.id, type: 'deadline-node', position: { x: 300, y: 100 }, data: { deadline: d } })
-        edges.value.push({ id: `${parentId}_${d.id}` , source: parentId, target: d.id, label: '+1d', type: 'smoothstep' })
+        const newNode = {
+          id: d.id,
+          type: 'deadline-node',
+          position: { x: 0, y: 0 },
+          data: { deadline: d }
+        }
+        const newEdge = {
+          id: `${parentId}_${d.id}`,
+          source: parentId,
+          target: d.id,
+          label: '+1d',
+          type: 'smoothstep'
+        }
+
+        nodes.value.push(newNode)
+        edges.value.push(newEdge)
+
+        // Re-apply layout after adding
+        nodes.value = applyDagreLayout(nodes.value, edges.value)
       },
       undo: () => {
         template.value.deadlines = template.value.deadlines.filter(x => x.id !== d.id)
         nodes.value = nodes.value.filter(n => n.id !== d.id)
         edges.value = edges.value.filter(e => !(e.source === parentId && e.target === d.id))
+
+        // Re-apply layout after removal
+        nodes.value = applyDagreLayout(nodes.value, edges.value)
       }
     })
   }
@@ -313,6 +517,9 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
         template.value.deadlines.splice(idx, 1)
         nodes.value = nodes.value.filter(n => n.id !== id)
         edges.value = edges.value.filter(e => e.source !== id && e.target !== id)
+
+        // Re-apply layout after deletion
+        nodes.value = applyDagreLayout(nodes.value, edges.value)
       },
       undo: () => {
         template.value.deadlines.splice(idx, 0, snapshot)
@@ -330,31 +537,65 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     if (!template.value.name?.trim()) errors.push('Template must have a name')
 
     const ids = new Set<string>()
+
+    // Validate deadlines
     for (const d of template.value.deadlines) {
       if (ids.has(d.id)) errors.push(`Duplicate deadline id: ${d.id}`)
       ids.add(d.id)
       if (d.id !== '_date_') {
         if (!d.name?.trim()) errors.push(`Deadline ${d.id} must have a name`)
-        if (!d.offset?.days || d.offset.days <= 0) errors.push(`Deadline ${d.name || d.id} must have offset days > 0`)
+        if (!d.offset?.days || d.offset.days < 0) errors.push(`Deadline ${d.name || d.id} must have valid offset days`)
       }
+    }
+
+    // Validate conditionals
+    for (const c of template.value.conditionals) {
+      if (ids.has(c.id)) errors.push(`Duplicate conditional id: ${c.id}`)
+      ids.add(c.id)
+      if (!c.name?.trim()) errors.push(`Conditional ${c.id} must have a name`)
+      if (!c.conditions?.length) errors.push(`Conditional ${c.name || c.id} must have at least one condition`)
     }
 
     // Field references valid
     const fieldIds = new Set(template.value.fields.map(f => f.id))
+
+    // Check deadline conditions
     for (const d of template.value.deadlines) {
       const conds = [ ...(d.conditions || []), ...((d.offset?.conditional?.rules || []).flatMap(r => r.conditions)) ]
-      for (const c of conds) { if (c && !fieldIds.has(c.fieldId)) errors.push(`Condition references missing field: ${c.fieldId}`) }
+      for (const c of conds) {
+        if (c && !fieldIds.has(c.fieldId)) {
+          errors.push(`Deadline condition references missing field: ${c.fieldId}`)
+        }
+      }
     }
 
-    // Circular deps - simple DFS
+    // Check conditional node conditions
+    for (const c of template.value.conditionals) {
+      for (const cond of c.conditions) {
+        if (!fieldIds.has(cond.fieldId)) {
+          errors.push(`Conditional ${c.name} references missing field: ${cond.fieldId}`)
+        }
+      }
+    }
+
+    // Circular deps - simple DFS (including conditionals)
     const graph: Record<string, string[]> = {}
     for (const d of template.value.deadlines) graph[d.id] = []
+    for (const c of template.value.conditionals) graph[c.id] = []
+
     for (const d of template.value.deadlines) {
       if (d.id === '_date_') continue
       const p = d.offset?.offsetId || '_date_'
       if (!graph[p]) graph[p] = []
       graph[p].push(d.id)
     }
+
+    for (const c of template.value.conditionals) {
+      const p = c.truePathOffset?.offsetId || '_date_'
+      if (!graph[p]) graph[p] = []
+      if (!graph[p].includes(c.id)) graph[p].push(c.id)
+    }
+
     const seen: Record<string, number> = {}
     function dfs(n: string): boolean {
       seen[n] = 1
@@ -389,17 +630,44 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     setTemplate(parsed)
   }
 
-  // Preview calculation (very simplified; ignores holidays/weekends rules for now)
+  // Preview calculation (simplified; now handles conditionals)
   function calculatePreview(startDate: string, fieldValues: Record<string, any>) {
     const dateMap: Record<string, string> = { '_date_': dayjs(startDate).toISOString() }
     const activeMap: Record<string, boolean> = { '_date_': true }
+    const conditionalResults: Record<string, boolean> = {}
 
     // Topological order naive: iterate until no changes
-    const remaining = new Set(template.value.deadlines.map(d => d.id))
+    const remaining = new Set([
+      ...template.value.deadlines.map(d => d.id),
+      ...template.value.conditionals.map(c => c.id)
+    ])
     remaining.delete('_date_')
 
     for (let iter = 0; iter < 100; iter++) {
       let progressed = false
+
+      // Process conditionals
+      for (const c of template.value.conditionals) {
+        if (!remaining.has(c.id)) continue
+        const p = c.truePathOffset?.offsetId || '_date_'
+        if (!dateMap[p]) continue
+
+        // Evaluate conditions
+        const result = c.conditions.every(cond => evalCondition(cond, fieldValues))
+        conditionalResults[c.id] = result
+        activeMap[c.id] = true
+
+        // Set date based on parent
+        const offset = result ? c.truePathOffset : c.falsePathOffset
+        const days = offset?.days ?? 0
+        const parentDate = dayjs(dateMap[p])
+        dateMap[c.id] = parentDate.add(days, 'day').toISOString()
+
+        remaining.delete(c.id)
+        progressed = true
+      }
+
+      // Process deadlines
       for (const d of template.value.deadlines) {
         if (d.id === '_date_' || !remaining.has(d.id)) continue
         const p = d.offset?.offsetId || '_date_'
@@ -408,7 +676,12 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
         // Activation conditions
         const active = (d.conditions || []).every(c => evalCondition(c, fieldValues))
         activeMap[d.id] = active
-        if (!active) { dateMap[d.id] = '' ; remaining.delete(d.id); progressed = true; continue }
+        if (!active) {
+          dateMap[d.id] = ''
+          remaining.delete(d.id)
+          progressed = true
+          continue
+        }
 
         // conditional offset
         let days = d.offset?.days ?? 0
@@ -424,10 +697,11 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
         remaining.delete(d.id)
         progressed = true
       }
+
       if (!progressed) break
     }
 
-    return { dates: dateMap, active: activeMap }
+    return { dates: dateMap, active: activeMap, conditionalResults }
   }
 
   function evalCondition(c: TemplateCondition, values: Record<string, any>): boolean {
@@ -450,8 +724,10 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     // state
     template, nodes, edges, selectedNodeId, selectedDeadline, dirty,
     // actions
-    setTemplate, rebuildGraphFromTemplate, templateFromGraph,
-    addField, deleteField, addDeadline, deleteDeadline, selectNode,
+    setTemplate, rebuildGraphFromTemplate, templateFromGraph, relayoutGraph,
+    addField, deleteField,
+    addConditional, deleteConditional,
+    addDeadline, deleteDeadline, selectNode,
     validate, undo, redo, pushCommand,
     saveLocal, loadLocal, exportJSON, importJSON,
     calculatePreview,

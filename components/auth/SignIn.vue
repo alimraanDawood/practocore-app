@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-vue-next'
 import PasswordInput from './PasswordInput.vue'
 import { signInWithEmail, signUpWithGoogle } from "~/services/auth";
 import { toast } from 'vue-sonner';
+const emits = defineEmits(['success']);
 
 const email = ref('')
 const password = ref('')
@@ -19,11 +20,12 @@ async function onSubmit(event: Event) {
     const result = await signInWithEmail(email.value, password.value);
 
     if (result) {
-      navigateTo('/main/');
+      emits('success', result);
     }
 
   } catch (e) {
     console.error(e);
+    toast.error("We were unable to sign you in!");
   }
 
   isLoading.value = false;
@@ -34,7 +36,7 @@ async function continueWithGoogle() {
     const result = await signUpWithGoogle();
 
     if (result) {
-      useRouter().push('/main/');
+      emits('success', result);
     }
   } catch (e) {
     console.error(e);

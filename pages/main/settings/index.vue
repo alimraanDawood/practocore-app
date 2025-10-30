@@ -1,40 +1,64 @@
 <template>
-    <div class="flex flex-col w-full h-full overflow-hidden items-center">
-        <div class="flex flex-col h-full lg:w-[90vw] w-full">
-            <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full">
-                <!-- Tabs -->
-                <div class="flex flex-row items-center lg:items-start lg:flex-col max-w-sm w-full overflow-x-scroll lg:h-full gap-3">
-                    <Button
-                        class="lg:w-full flex flex-row justify-start"
-                        :variant="activeTab === 'profile' ? 'secondary' : 'ghost'"
-                        @click="activeTab = 'profile'"
-                    >Profile</Button>
-                    <!-- <Button
-                        class="lg:w-full flex flex-row justify-start"
-                        :variant="activeTab === 'appearance' ? 'secondary' : 'ghost'"
-                        @click="activeTab = 'appearance'"
-                    >Appearance</Button> -->
-                    <Button
-                        class="lg:w-full flex flex-row justify-start"
-                        :variant="activeTab === 'notifications' ? 'secondary' : 'ghost'"
-                        @click="activeTab = 'notifications'"
-                    >Notifications</Button>
-                </div>
+  <div class="flex flex-col w-full h-full overflow-hidden items-center">
+    <div class="flex flex-col h-full lg:w-[90vw] w-full">
+      <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
+        <Button @click="$router.go(-1)" size="icon" variant="ghost">
+          <ArrowLeft/>
+        </Button>
 
-                <!-- Tab Content -->
-                <div class="flex flex-col w-full h-full overflow-y-scroll">
-                    <PageComponentsSettingsProfile v-if="activeTab === 'profile'" />
-                    <!-- Replace with your appearance component if available -->
-                    <div v-if="activeTab === 'appearance'" class="p-4">Appearance settings go here.</div>
-                    <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'" />
-                </div>
-            </div>
+        <div class="flex flex-row relative w-full">
+          <marquee class="text-lg font-semibold ibm-plex-serif">{{ matter?.name }}</marquee>
+          <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
         </div>
+
+        <div class="flex flex-row gap-2 items-center">
+          <SharedDarkModeSwitch/>
+          <Button size="icon" variant="secondary">
+            <Bell/>
+          </Button>
+        </div>
+      </div>
+
+      <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full">
+        <!-- Tabs -->
+        <div
+            class="flex flex-row items-center lg:items-start lg:flex-col lg:max-w-[150px] w-full overflow-x-scroll overflow-y-visible py-1 lg:h-full gap-3">
+          <Button
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'profile' ? 'secondary' : 'ghost'"
+              @click="activeTab = 'profile'"
+          >Profile
+          </Button>
+          <!-- <Button
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'appearance' ? 'secondary' : 'ghost'"
+              @click="activeTab = 'appearance'"
+          >Appearance</Button> -->
+          <Button
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'notifications' ? 'secondary' : 'ghost'"
+              @click="activeTab = 'notifications'"
+          >Notifications
+          </Button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="flex flex-col w-full h-full overflow-y-scroll">
+          <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
+          <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
+        </div>
+      </div>
     </div>
+  </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import {ref} from 'vue'
+import {ArrowLeft, Bell} from "lucide-vue-next";
 
-const activeTab = ref('profile')
+definePageMeta({
+  layout: 'no-mobile-nav'
+})
+
+const activeTab = ref('profile');
 </script>

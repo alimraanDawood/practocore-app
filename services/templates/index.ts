@@ -14,6 +14,10 @@ export async function getAllTemplates() {
     return result;
 }
 
+export async function createTemplate(options : Object) {
+    return pocketbase.collection('DeadlineTemplates').create(options);
+}
+
 export async function getTemplates(page : number, numPerPage : number, options : Object) {
     pocketbase.autoCancellation(false);
     const result = await pocketbase.collection('DeadlineTemplates').getList(page, numPerPage, options);
@@ -22,5 +26,13 @@ export async function getTemplates(page : number, numPerPage : number, options :
 }
 
 export async function getTemplate(id : string) {
-    return pocketbase.collection('DeadlineTemplates').getOne(id);
+    return pocketbase.collection('DeadlineTemplates').getOne(id, { expand: 'author' });
+}
+
+export function subscribeToTemplates(callback : Function) {
+    return pocketbase.collection('DeadlineTemplates').subscribe('*', callback);
+}
+
+export function unsubscribeToTemplates() {
+    return pocketbase.collection('DeadlineTemplates').unsubscribe('*');
 }

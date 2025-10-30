@@ -1,6 +1,6 @@
 import Pocketbase from 'pocketbase';
 // const SERVER_URL = "https://www.practocore.com";
-const SERVER_URL = "http://192.168.5.1:8090";
+ const SERVER_URL = "http://192.168.5.1:8090";
 // const SERVER_URL = "http://127.0.0.1:8090"
 const pocketbase = new Pocketbase(SERVER_URL);
 
@@ -107,4 +107,43 @@ export async function requestInviteLink(organisationId : string) {
 
 export async function getOrganisations() {
     return pocketbase.collection('Organisations').getFullList();
+}
+
+export async function getOrganisationInviteReference(token : string) {
+    return fetch(`${SERVER_URL}/api/practocore/organisation-invite-ref/${token}`, { method: 'GET',
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`,
+        }
+    }).then(res => { return res.status === 200 ? res.json() : null; }).catch(console.error);
+}
+
+export async function acceptInvite(token :  string) {
+    return fetch(`${SERVER_URL}/api/practocore/auth/join-organisation/${token}`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        }
+    });
+}
+
+export async function getOrganisation(organisationId : string) {
+    return pocketbase.collection('Organisations').getOne(organisationId);
+}
+
+export async function updateOrganisation(organisationId : string, options : Object) {
+    return pocketbase.collection('Organisations').update(organisationId, options);
+}
+
+export function subscribeToUser(callback : Function) {
+    pocketbase.collection('Users').subscribe(getSignedInUser()?.id, callback);
+}
+
+export function unsubscribeFromUser() {
+    pocketbase.collection('Users').unsubscribe();
+}
+
+export function refreshUserData() {
+    pocketbase.collection('Users').authRefresh();
 }

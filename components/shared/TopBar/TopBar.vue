@@ -20,7 +20,7 @@
                 :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-templates') }">Templates</button>
         </NuxtLink>
 
-        <NuxtLink to="/main/organisation">
+        <NuxtLink v-if="getSignedInUser()?.organisation && authStore.isAdmin" to="/main/organisation">
             <button class="p-2 border-b-2 border-transparent"
                 :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-organisation') }">Organisation</button>
         </NuxtLink>
@@ -32,3 +32,12 @@
         </NuxtLink>
     </div>
 </template>
+<script setup lang="ts">
+import {getSignedInUser} from "~/services/auth/index.js";
+
+import { useAuthStore } from '@/stores/auth';
+
+const authStore = useAuthStore();
+authStore.init();
+
+</script>

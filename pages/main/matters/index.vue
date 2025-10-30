@@ -66,7 +66,7 @@
             <div class="flex flex-col w-full h-full p-3 gap-2">
 
                 <div class="flex flex-row items-center justify-between">
-                    <span class="font-semibold text-xl">Your Matters</span>
+                    <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
 
                     <div class="flex flex-row gap-3 items-center">
                         <ReuseSearchFilterTemplate class="hidden lg:flex" />
@@ -81,7 +81,7 @@
 
                 <ReuseSearchFilterTemplate class="lg:hidden" />
 
-                <div class="flex flex-row border-b p-3 pb-0 gap-3" role="tablist" aria-label="Templates tabs">
+                <div v-if="getSignedInUser()?.organisation" class="flex flex-row border-b p-3 pb-0 gap-3" role="tablist" aria-label="Templates tabs">
                     <button
                         role="tab"
                         :aria-selected="activeTab === 'all'"
@@ -116,12 +116,12 @@
 
                     <template v-else-if="matters !== null && matters?.items?.length > 0 ">
                         <div class="flex flex-col w-full h-full">
-                            <div class="hidden lg:flex flex-col w-full h-full">
+                            <div class="hidden flex-col w-full h-full">
                                 <MatterTable :columns="columns" :data="matters?.items" />
                             </div>
     
                             <div
-                                class="lg:hidden grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                class="grid grid-cols-1 lg:grid-cols-3 gap-3">
                                 <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
@@ -144,9 +144,11 @@
                         <CircleX class="size-24 mb-2 opacity-50" />
                         <span>You have no matters</span>
                         <span>Click
-                            <SharedMattersCreateMatter>
+                          <div class="w-fit inline-block">
+                            <SharedMattersCreateMatter class="w-fit">
                                 <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
                             </SharedMattersCreateMatter>
+                          </div>
 
                             to add a deadline matter
                         </span>
@@ -211,6 +213,7 @@ import { storeToRefs } from 'pinia';
 import { useMattersStore } from '@/stores/matters';
 import MatterTable from '~/components/shared/Matters/MatterTable/MatterTable.vue';
 import { columns } from '@/components/shared/Matters/MatterTable/columns';
+import {getSignedInUser} from "~/services/auth";
 
 const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();
 

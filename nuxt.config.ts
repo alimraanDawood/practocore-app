@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineNuxtConfig({
     compatibilityDate: '2025-05-15',
     devtools: {enabled: true},
-    css: ['~/assets/css/tailwind.css'],
+    css: ['~/assets/css/fonts.css', '~/assets/css/tailwind.css'],
 
     ssr: false,
 
@@ -63,7 +63,8 @@ export default defineNuxtConfig({
             mobileMedium: 375,
             mobileWide: 425,
 
-            tablet: 768,
+            tablet: 800,
+            customxs: 480
         },
 
         cookie: {
@@ -84,7 +85,14 @@ export default defineNuxtConfig({
 
         feature: 'minWidth',
     },
+    runtimeConfig: {
+        public: {
+            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'
+        }
+    },
     plugins: [
         '~/plugins/animxyz',
+        '~/plugins/pocketbase.client',
+        '~/plugins/notifications.client'
     ]
 })

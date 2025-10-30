@@ -40,7 +40,7 @@ async function setClipboard(text) {
   <div v-else class="flex flex-col gap-3">
     <div class="border rounded-lg p-2 flex items-center flex-row gap-2">
       <div class="overflow-hidden w-full px-2">
-        <span class="text-primary whitespace-nowrap font-semibold underline">{{ data.link }}</span>
+        <span class="text-muted-foreground text-xs whitespace-nowrap font-semibold underline">{{ data.link }}</span>
       </div>
 
       <Button @click="setClipboard(data.link)" class="bg-tertiary hover:bg-tertiary/90">

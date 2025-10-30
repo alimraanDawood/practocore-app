@@ -4,18 +4,15 @@ const config: CapacitorConfig = {
   appId: 'com.practocore.app',
   appName: 'PractoCore',
   webDir: '.output/public',
-  splashScreen: {
-    launchAutoHide: true,
-    launchShowDuration: 0
+  server: {
+    url: 'http://192.168.5.1:3000',
+    cleartext: true,
   },
-  cordova: {
-    preferences: {
-      lottieFullScreen: "true",
-      lottieHideAfterAnimationEnd: "true",
-      lottieAnimationLocation: "public/assets/splash.json"
-    }
+  plugins: {
+    LocalNotifications: {
+      smallIcon: "ic_stat_practo_core_logo",
+    },
   }
-
 };
 
 export default config;

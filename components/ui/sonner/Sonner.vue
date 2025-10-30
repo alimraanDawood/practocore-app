@@ -6,7 +6,7 @@ const props = defineProps<ToasterProps>()
 
 <template>
   <Sonner
-    class="toaster group"
+    class="toaster group ibm-plex-serif"
     v-bind="props"
     :rich-colors="true"
     :style="{
@@ -15,15 +15,15 @@ const props = defineProps<ToasterProps>()
       '--normal-border': 'var(--border)',
 
       '--success-bg': 'var(--popover)',
-      '--success-text': 'var(--color-accent-success)',
+      '--success-text': 'var(--popover-foreground)',
       '--success-border': 'var(--border)',
 
       '--warning-bg': 'var(--popover)',
-      '--warning-text': 'var(--color-accent-warning)',
+      '--warning-text': 'var(--popover-foreground)',
       '--warning-border': 'var(--border)',
 
       '--error-bg': 'var(--popover)',
-      '--error-text': 'var(--color-accent-error)',
+      '--error-text': 'var(--popover-foreground)',
       '--error-border': 'var(--border)',
 
     }"

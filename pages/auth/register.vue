@@ -1,5 +1,55 @@
 <template>
-  <div class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+  <div v-if="joiningAndIsSignedIn && organisationRef && inviteSent === false" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
+    <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
+      <div class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
+        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
+
+        <span class="font-semibold text-2xl ibm-plex-serif text-center">You are being invited to join an organisation</span>
+        <span class="text-center"><b>{{ organisationRef?.reference?.inviter }}</b> is inviting you to join <b>{{ organisationRef?.reference?.organisation }}</b> on PractoCore.</span>
+
+
+        <Button @click="acceptInvitation(query?.ref)" class="w-full">Accept Invitation</Button>
+        <NuxtLink to="/main/" class="w-full">
+          <Button class="w-full" variant="secondary">Skip</Button>
+        </NuxtLink>
+      </div>
+    </div>
+  </div>
+
+  <div v-else-if="joiningAndIsSignedIn && organisationRef === null && inviteSent === false" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
+    <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
+      <div class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
+        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
+
+        <span class="font-semibold text-2xl ibm-plex-serif text-center">Invalid Invite Reference</span>
+        <span class="text-center">The invite reference you have provided is invalid. Please request for a valid invite reference to join an organisation.</span>
+        <NuxtLink to="/auth/register" class="w-full">
+          <Button class="w-full">Register a Personal Account</Button>
+        </NuxtLink>
+
+        <NuxtLink to="/main/" class="w-full">
+          <Button class="w-full" variant="secondary">Skip</Button>
+        </NuxtLink>
+      </div>
+    </div>
+  </div>
+
+  <div v-else-if="joiningAndIsSignedIn && organisationRef && inviteSent === true" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
+    <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
+      <div class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
+        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
+
+        <span class="font-semibold text-2xl ibm-plex-serif text-center">Invitation Accepted</span>
+        <span class="text-center">Your invitation has been acknowledged. You will be admitted into the organisation soon. Keep an eye on your inbox for any notifications.</span>
+
+        <NuxtLink to="/main/" class="w-full">
+          <Button class="w-full" variant="secondary">Complete</Button>
+        </NuxtLink>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div class="flex flex-row justify-center w-full items-center p-3 border-b">
       <div class="flex flex-row gap-2">
         <Button size="icon" variant="secondary" :disabled="!canGoBack" @click="goBack">
@@ -28,7 +78,7 @@
     <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
         <span>
           Already have an account?
-          <NuxtLink to="/auth/login" class="text-primary font-semibold underline">Login Instead</NuxtLink>.
+          <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'" class="text-primary font-semibold underline">Login Instead</NuxtLink>.
         </span>
     </div>
   </div>
@@ -46,9 +96,14 @@ import CreatingAccount from "~/components/auth/RegisterScreens/CreatingAccount.v
 import OTP from '~/components/auth/RegisterScreens/OTP.vue';
 import Subscription from "~/components/auth/RegisterScreens/Subscription.vue";
 
-import {signInWithEmail, submitAccountDetails} from "~/services/auth";
+import {
+  acceptInvite,
+  getOrganisationInviteReference,
+  getSignedInUser,
+  signInWithEmail,
+  submitAccountDetails
+} from "~/services/auth";
 import {toast} from "vue-sonner";
-
 // query allows us to tell whether the registration is from a link
 const query = useRoute().query;
 
@@ -63,6 +118,10 @@ enum RegistrationSteps {
   OTP = 7,
   SUBSCRIPTION = 8
 }
+
+const joiningAndIsSignedIn = computed(() => {
+  return query?.ref !== undefined && query.ref !== null && getSignedInUser();
+});
 
 // --- Doubly Linked List for History ---
 
@@ -154,10 +213,30 @@ class RegistrationHistory {
 // --- Reactive State ---
 // Using ref for currentStep as it's a primitive.
 const currentStep = ref<RegistrationSteps>(RegistrationSteps.ACC_TYPE);
+const organisationRef = ref(null);
+const inviteSent = ref(false);
 
-onMounted(() => {
+const acceptInvitation = async (token : string) => {
+  try {
+    const response = await acceptInvite(token);
+
+    if(response) {
+      inviteSent.value = true;
+    }
+
+  } catch(e) {
+    console.error(e);
+
+  }
+}
+onMounted(async () => {
   if(query?.ref) {
     currentStep.value = RegistrationSteps.ADMIN_REGIST;
+    organisationRef.value = await getOrganisationInviteReference(query?.ref);
+    console.log(organisationRef.value);
+  }
+
+  if(joiningAndIsSignedIn.value) {
   }
 })
 
@@ -276,7 +355,7 @@ const OTPEntryComplete = async (val: any) => {
       }
 
       if(orgId.value !== null) {
-        useRouter().push(`/auth/invite/${orgId.value}`);
+        useRouter().push(`/auth/invite`);
       } else {
         useRouter().push('/main/');
       }

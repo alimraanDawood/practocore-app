@@ -47,7 +47,7 @@ export async function createAdjournment(options: Object) {
 }
 
 
-export async function createMatter(options: { name: string, caseNumber: string, personal: boolean, templateId: string, date: string, fieldValues: any[] }) {
+export async function createMatter(options: { name: string, caseNumber: string, personal: boolean, members?: string[], templateId: string, date: string, fieldValues: any[] }) {
     return fetch(`${SERVER_URL}/api/practocore/deadline`, {
         method: 'POST',
         body: JSON.stringify(options),

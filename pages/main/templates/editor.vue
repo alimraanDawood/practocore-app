@@ -43,6 +43,7 @@
         <div class="flex flex-row p-3 absolute bottom-0 left-[50%] translate-x-[-50%]">
           <div class="bg-background border p-3 rounded">
             <Button size="sm" @click="addFromSelected"><PlusIcon /> Add Reminder</Button>
+            <Button size="sm" @click="addConditionalFromSelected"><PlusIcon /> Add Conditional</Button>
           </div>
         </div>
       </div>
@@ -164,6 +165,7 @@ function onSaveCopy() {
 }
 
 function addFromSelected() { store.addDeadline(store.selectedNodeId || '_date_') }
+function addConditionalFromSelected() { store.addConditional(store.selectedNodeId || '_date_') }
 </script>
 
 <style scoped>

@@ -1,6 +1,6 @@
 <template>
     <div class="flex flex-col w-full h-full lg:hidden">
-        <div class="flex flex-row lg:hidden w-full items-center justify-between p-3 border-b">
+        <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
             <Button @click="$router.go(-1)" size="icon" variant="ghost">
                 <ArrowLeft />
             </Button>

@@ -23,7 +23,7 @@
         <div v-for="(cell, idx) in cells" :key="idx"
           class="flex flex-col items-center justify-center aspect-square shrink-0 gap-[5px] bg-background relative"
           :class="[
-            cell.inCurrentMonth ? '' : 'bg-muted/40 text-muted-foreground',
+            cell.inCurrentMonth ? '' : 'bg-muted opacity-80 text-muted-foreground',
             isToday(cell.date) ? '' : ''
           ]" @click="dateClicked(cell.date)">
           <div class="absolute top-0 left-0 ring-3 ring-tertiary rounded-lg w-full h-full z-30 pointer-events-none" v-if="currentDate === cell.date"></div>
