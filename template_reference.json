@@ -1,15 +1,25 @@
 {
-  "id": "t_001",
+  "id": "t_004",
   "name": "Appeal",
+  "version": "1.0",
+  "description": "Template for managing deadlines related to the appeals process, including filing notice of appeal, service, requesting proceedings, and filing memorandum and record of appeal",
   "date_rules": {
     "allowWeekends": true,
     "allowHolidays": true
   },
+  "fields": [],
+  "triggerPrompt": "When was the appeal filed?",
   "deadlines": [
     {
       "id": "d_001",
       "name": "File Notice of Appeal",
+      "description": "The appellant must file a Notice of Appeal within 14 days from the date of the judgment or order being appealed. This formally initiates the appeals process.",
       "action_label": "Notice of Appeal Filed!",
+      "prompts": {
+        "input": "When was the Notice of Appeal filed?",
+        "pending": "Notice of Appeal must be filed by <<date>> (<<from_now>>)",
+        "fulfilled": "Notice of Appeal filed on <<date>>"
+      },
       "type": "offset",
       "dynamic": true,
       "offset": {
@@ -24,80 +34,111 @@
       "reminders": [
         {
           "id": "r_001",
-          "title": "15 days left to deliver summons",
-          "body": "Hi <<first_name>>, you have 15 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Please ensure timely service.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>15 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please ensure timely service.",
-          "priority": "moderate",
-          "escalate": false,
-          "offset": -15,
-          "channels": ["MAIL"]
-        },
-        {
-          "id": "r_002",
-          "title": "10 days left to deliver summons",
-          "body": "Hi <<first_name>>, you have 10 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Please ensure timely service.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>10 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please ensure timely service.",
+          "title": "10 days left to file Notice of Appeal",
+          "body": "Hi <<first_name>>, you have 10 days remaining to file the Notice of Appeal (due <<deadline_date>>). Please begin preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>10 days</strong> remaining to file the Notice of Appeal (due <strong><<deadline_date>></strong>). Please begin preparation.",
           "priority": "moderate",
           "escalate": false,
           "offset": -10,
-          "channels": ["MAIL", "APP"]
+          "channels": [
+            "MAIL"
+          ]
+        },
+        {
+          "id": "r_002",
+          "title": "7 days left to file Notice of Appeal",
+          "body": "Hi <<first_name>>, you have 7 days remaining to file the Notice of Appeal (due <<deadline_date>>). Please ensure timely filing.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>7 days</strong> remaining to file the Notice of Appeal (due <strong><<deadline_date>></strong>). Please ensure timely filing.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -7,
+          "channels": [
+            "MAIL",
+            "APP"
+          ]
         },
         {
           "id": "r_003",
-          "title": "5 days left to deliver summons",
-          "body": "Hi <<first_name>>, you have 5 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Please take action soon.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please take action soon.",
+          "title": "5 days left to file Notice of Appeal",
+          "body": "Hi <<first_name>>, you have 5 days remaining to file the Notice of Appeal (due <<deadline_date>>). Please take action soon.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to file the Notice of Appeal (due <strong><<deadline_date>></strong>). Please take action soon.",
           "priority": "urgent",
           "escalate": false,
           "offset": -5,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_004",
-          "title": "URGENT: 3 days left to deliver summons",
-          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Immediate action required.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "title": "URGENT: 3 days left to file Notice of Appeal",
+          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to file the Notice of Appeal (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to file the Notice of Appeal (due <strong><<deadline_date>></strong>). Immediate action required.",
           "priority": "urgent",
           "escalate": false,
           "offset": -3,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_005",
-          "title": "URGENT: 2 days left to deliver summons",
-          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to deliver the summons to the defendant (due <<deadline_date>>). Immediate action required.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "title": "URGENT: 2 days left to file Notice of Appeal",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to file the Notice of Appeal (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to file the Notice of Appeal (due <strong><<deadline_date>></strong>). Immediate action required.",
           "priority": "urgent",
           "escalate": true,
           "offset": -2,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_006",
-          "title": "URGENT: Tomorrow is the deadline to deliver summons",
-          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to deliver the summons to the defendant (due <<deadline_date>>). Please act immediately.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to deliver the summons to the defendant (due <strong><<deadline_date>></strong>). Please act immediately.",
+          "title": "URGENT: Tomorrow is the deadline to file Notice of Appeal",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to file the Notice of Appeal (due <<deadline_date>>). Please act immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to file the Notice of Appeal (due <strong><<deadline_date>></strong>). Please act immediately.",
           "priority": "urgent",
           "escalate": true,
           "offset": -1,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_007",
-          "title": "CRITICAL: Summons delivery deadline is TODAY",
-          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to deliver the summons to the defendant (<<deadline_date>>). Please complete this immediately.",
-          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to deliver the summons to the defendant (<strong><<deadline_date>></strong>). Please complete this immediately.",
-          "priority": "urgent",
+          "title": "CRITICAL: Notice of Appeal filing deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to file the Notice of Appeal (<<deadline_date>>). Please complete this immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to file the Notice of Appeal (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "priority": "critical",
           "escalate": true,
           "offset": 0,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         }
       ]
     },
     {
       "id": "d_002",
       "name": "Serve Notice of Appeal to opposite parties",
-      "action_label": "Defence Filed",
+      "description": "The appellant must serve the Notice of Appeal to all opposite parties within 7 days of filing it. This ensures all parties are properly notified of the appeal.",
+      "action_label": "Notice Served",
+      "prompts": {
+        "input": "When was the Notice of Appeal served to opposite parties?",
+        "pending": "Notice of Appeal must be served to opposite parties by <<date>> (<<from_now>>)",
+        "fulfilled": "Notice of Appeal served to opposite parties on <<date>>"
+      },
       "type": "offset",
       "dynamic": true,
       "offset": {
@@ -112,60 +153,83 @@
       "reminders": [
         {
           "id": "r_008",
-          "title": "10 days left for defendant to file defence",
-          "body": "Hi <<first_name>>, the defendant has 10 days remaining to file their defence (due <<deadline_date>>). Monitor for filing.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, the defendant has <strong>10 days</strong> remaining to file their defence (due <strong><<deadline_date>></strong>). Monitor for filing.",
-          "priority": "moderate",
-          "escalate": false,
-          "offset": -10,
-          "channels": ["MAIL"]
-        },
-        {
-          "id": "r_009",
-          "title": "5 days left for defendant to file defence",
-          "body": "Hi <<first_name>>, the defendant has 5 days remaining to file their defence (due <<deadline_date>>). Prepare for next steps.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, the defendant has <strong>5 days</strong> remaining to file their defence (due <strong><<deadline_date>></strong>). Prepare for next steps.",
+          "title": "5 days left to serve Notice of Appeal",
+          "body": "Hi <<first_name>>, you have 5 days remaining to serve the Notice of Appeal to opposite parties (due <<deadline_date>>). Please arrange for service.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to serve the Notice of Appeal to opposite parties (due <strong><<deadline_date>></strong>). Please arrange for service.",
           "priority": "moderate",
           "escalate": false,
           "offset": -5,
-          "channels": ["MAIL", "APP"]
+          "channels": [
+            "MAIL"
+          ]
+        },
+        {
+          "id": "r_009",
+          "title": "3 days left to serve Notice of Appeal",
+          "body": "Hi <<first_name>>, you have 3 days remaining to serve the Notice of Appeal to opposite parties (due <<deadline_date>>). Please complete service soon.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>3 days</strong> remaining to serve the Notice of Appeal to opposite parties (due <strong><<deadline_date>></strong>). Please complete service soon.",
+          "priority": "moderate",
+          "escalate": false,
+          "offset": -3,
+          "channels": [
+            "MAIL",
+            "APP"
+          ]
         },
         {
           "id": "r_010",
-          "title": "3 days left for defendant to file defence",
-          "body": "Hi <<first_name>>, the defendant has 3 days remaining to file their defence (due <<deadline_date>>). Be ready to proceed.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, the defendant has <strong>3 days</strong> remaining to file their defence (due <strong><<deadline_date>></strong>). Be ready to proceed.",
+          "title": "URGENT: 2 days left to serve Notice of Appeal",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to serve the Notice of Appeal to opposite parties (due <<deadline_date>>). Take action now.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to serve the Notice of Appeal to opposite parties (due <strong><<deadline_date>></strong>). Take action now.",
           "priority": "urgent",
           "escalate": false,
-          "offset": -3,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "offset": -2,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_011",
-          "title": "Tomorrow is the defendant's defence filing deadline",
-          "body": "Hi <<first_name>>, tomorrow is the deadline for the defendant to file their defence (due <<deadline_date>>). Monitor closely.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline for the defendant to file their defence (due <strong><<deadline_date>></strong>). Monitor closely.",
+          "title": "URGENT: Tomorrow is the deadline to serve Notice of Appeal",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to serve the Notice of Appeal to opposite parties (due <<deadline_date>>). Complete service immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to serve the Notice of Appeal to opposite parties (due <strong><<deadline_date>></strong>). Complete service immediately.",
           "priority": "urgent",
-          "escalate": false,
+          "escalate": true,
           "offset": -1,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_012",
-          "title": "Defendant's defence filing deadline is TODAY",
-          "body": "Hi <<first_name>>, today is the deadline for the defendant to file their defence (<<deadline_date>>). Check for filing or prepare default motion.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline for the defendant to file their defence (<strong><<deadline_date>></strong>). Check for filing or prepare default motion.",
-          "priority": "urgent",
-          "escalate": false,
+          "title": "CRITICAL: Notice of Appeal service deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to serve the Notice of Appeal to opposite parties (<<deadline_date>>). Complete and mark as served immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to serve the Notice of Appeal to opposite parties (<strong><<deadline_date>></strong>). Complete and mark as served immediately.",
+          "priority": "critical",
+          "escalate": true,
           "offset": 0,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         }
       ]
     },
     {
       "id": "d_003",
       "name": "File and Serve Letter asking for Proceedings",
+      "description": "The appellant must file and serve a letter requesting the lower court proceedings within 15 days of serving the Notice of Appeal. This letter requests the certified record of the lower court proceedings.",
       "action_label": "Letter Filed and Served!",
+      "prompts": {
+        "input": "When was the letter requesting proceedings filed and served?",
+        "pending": "Letter requesting proceedings must be filed and served by <<date>> (<<from_now>>)",
+        "fulfilled": "Letter requesting proceedings filed and served on <<date>>"
+      },
       "type": "offset",
       "dynamic": true,
       "offset": {
@@ -180,70 +244,97 @@
       "reminders": [
         {
           "id": "r_013",
-          "title": "10 days left to file reply to defence",
-          "body": "Hi <<first_name>>, you have 10 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Begin preparation.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>10 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Begin preparation.",
+          "title": "10 days left to file letter requesting proceedings",
+          "body": "Hi <<first_name>>, you have 10 days remaining to file and serve the letter requesting proceedings (due <<deadline_date>>). Begin preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>10 days</strong> remaining to file and serve the letter requesting proceedings (due <strong><<deadline_date>></strong>). Begin preparation.",
           "priority": "moderate",
           "escalate": false,
           "offset": -10,
-          "channels": ["MAIL"]
+          "channels": [
+            "MAIL"
+          ]
         },
         {
           "id": "r_014",
-          "title": "5 days left to file reply to defence",
-          "body": "Hi <<first_name>>, you have 5 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Please proceed with filing.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Please proceed with filing.",
+          "title": "5 days left to file letter requesting proceedings",
+          "body": "Hi <<first_name>>, you have 5 days remaining to file and serve the letter requesting proceedings (due <<deadline_date>>). Please proceed with filing.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>5 days</strong> remaining to file and serve the letter requesting proceedings (due <strong><<deadline_date>></strong>). Please proceed with filing.",
           "priority": "urgent",
           "escalate": false,
           "offset": -5,
-          "channels": ["MAIL", "APP"]
+          "channels": [
+            "MAIL",
+            "APP"
+          ]
         },
         {
           "id": "r_015",
-          "title": "URGENT: 3 days left to file reply to defence",
-          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Take action now.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Take action now.",
+          "title": "URGENT: 3 days left to file letter requesting proceedings",
+          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to file and serve the letter requesting proceedings (due <<deadline_date>>). Take action now.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to file and serve the letter requesting proceedings (due <strong><<deadline_date>></strong>). Take action now.",
           "priority": "urgent",
           "escalate": false,
           "offset": -3,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_016",
-          "title": "URGENT: 2 days left to file reply to defence",
-          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to file your reply to the defendant's defence (due <<deadline_date>>). Immediate action required.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "title": "URGENT: 2 days left to file letter requesting proceedings",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to file and serve the letter requesting proceedings (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to file and serve the letter requesting proceedings (due <strong><<deadline_date>></strong>). Immediate action required.",
           "priority": "urgent",
           "escalate": true,
           "offset": -2,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_017",
-          "title": "URGENT: Tomorrow is the deadline to file reply to defence",
-          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to file your reply to the defendant's defence (due <<deadline_date>>). Please act immediately.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to file your reply to the defendant's defence (due <strong><<deadline_date>></strong>). Please act immediately.",
+          "title": "URGENT: Tomorrow is the deadline to file letter requesting proceedings",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to file and serve the letter requesting proceedings (due <<deadline_date>>). Please act immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to file and serve the letter requesting proceedings (due <strong><<deadline_date>></strong>). Please act immediately.",
           "priority": "urgent",
           "escalate": true,
           "offset": -1,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_018",
-          "title": "CRITICAL: Reply to defence filing deadline is TODAY",
-          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to file your reply to the defendant's defence (<<deadline_date>>). Please complete this immediately.",
-          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to file your reply to the defendant's defence (<strong><<deadline_date>></strong>). Please complete this immediately.",
-          "priority": "urgent",
+          "title": "CRITICAL: Letter requesting proceedings deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to file and serve the letter requesting proceedings (<<deadline_date>>). Please complete this immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to file and serve the letter requesting proceedings (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "priority": "critical",
           "escalate": true,
           "offset": 0,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         }
       ]
     },
     {
       "id": "d_004",
       "name": "File Memorandum and Record of Appeal",
-      "action_label": "Summons for Directions",
+      "description": "The appellant must file the Memorandum of Appeal and Record of Appeal within 60 days of filing the letter requesting proceedings. The memorandum contains the grounds of appeal and the record contains all relevant court documents.",
+      "action_label": "Memorandum and Record Filed",
+      "prompts": {
+        "input": "When were the Memorandum and Record of Appeal filed?",
+        "pending": "Memorandum and Record of Appeal must be filed by <<date>> (<<from_now>>)",
+        "fulfilled": "Memorandum and Record of Appeal filed on <<date>>"
+      },
       "type": "offset",
       "dynamic": true,
       "offset": {
@@ -258,83 +349,126 @@
       "reminders": [
         {
           "id": "r_019",
-          "title": "21 days left to take out summons for directions",
-          "body": "Hi <<first_name>>, you have 21 days remaining to take out a summons for directions (due <<deadline_date>>). Begin preparation.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>21 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Begin preparation.",
+          "title": "45 days left to file Memorandum and Record of Appeal",
+          "body": "Hi <<first_name>>, you have 45 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Begin preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>45 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Begin preparation.",
           "priority": "moderate",
           "escalate": false,
-          "offset": -21,
-          "channels": ["MAIL"]
+          "offset": -45,
+          "channels": [
+            "MAIL"
+          ]
         },
         {
           "id": "r_020",
-          "title": "14 days left to take out summons for directions",
-          "body": "Hi <<first_name>>, you have 14 days remaining to take out a summons for directions (due <<deadline_date>>). Please proceed with preparation.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>14 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Please proceed with preparation.",
+          "title": "30 days left to file Memorandum and Record of Appeal",
+          "body": "Hi <<first_name>>, you have 30 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Please proceed with preparation.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>30 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Please proceed with preparation.",
           "priority": "moderate",
           "escalate": false,
-          "offset": -14,
-          "channels": ["MAIL", "APP"]
+          "offset": -30,
+          "channels": [
+            "MAIL",
+            "APP"
+          ]
         },
         {
           "id": "r_021",
-          "title": "7 days left to take out summons for directions",
-          "body": "Hi <<first_name>>, you have 7 days remaining to take out a summons for directions (due <<deadline_date>>). Please take action soon.",
-          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>7 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Please take action soon.",
-          "priority": "urgent",
+          "title": "14 days left to file Memorandum and Record of Appeal",
+          "body": "Hi <<first_name>>, you have 14 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Please take action soon.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>14 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Please take action soon.",
+          "priority": "moderate",
           "escalate": false,
-          "offset": -7,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "offset": -14,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_022",
-          "title": "URGENT: 5 days left to take out summons for directions",
-          "body": "URGENT: Hi <<first_name>>, you have only 5 days remaining to take out a summons for directions (due <<deadline_date>>). Take action now.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>5 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Take action now.",
+          "title": "7 days left to file Memorandum and Record of Appeal",
+          "body": "Hi <<first_name>>, you have 7 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Take action now.",
+          "bodyHTML": "Hi <strong><<first_name>></strong>, you have <strong>7 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Take action now.",
           "priority": "urgent",
           "escalate": false,
-          "offset": -5,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "offset": -7,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_023",
-          "title": "URGENT: 3 days left to take out summons for directions",
-          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to take out a summons for directions (due <<deadline_date>>). Immediate action required.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "title": "URGENT: 5 days left to file Memorandum and Record of Appeal",
+          "body": "URGENT: Hi <<first_name>>, you have only 5 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>5 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Immediate action required.",
           "priority": "urgent",
-          "escalate": true,
-          "offset": -3,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "escalate": false,
+          "offset": -5,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_024",
-          "title": "URGENT: 2 days left to take out summons for directions",
-          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to take out a summons for directions (due <<deadline_date>>). Immediate action required.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to take out a summons for directions (due <strong><<deadline_date>></strong>). Immediate action required.",
+          "title": "URGENT: 3 days left to file Memorandum and Record of Appeal",
+          "body": "URGENT: Hi <<first_name>>, you have only 3 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>3 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Immediate action required.",
           "priority": "urgent",
           "escalate": true,
-          "offset": -2,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "offset": -3,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_025",
-          "title": "URGENT: Tomorrow is the deadline to take out summons for directions",
-          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to take out a summons for directions (due <<deadline_date>>). Please act immediately.",
-          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to take out a summons for directions (due <strong><<deadline_date>></strong>). Please act immediately.",
+          "title": "URGENT: 2 days left to file Memorandum and Record of Appeal",
+          "body": "URGENT: Hi <<first_name>>, you have only 2 days remaining to file the Memorandum and Record of Appeal (due <<deadline_date>>). Immediate action required.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, you have only <strong>2 days</strong> remaining to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Immediate action required.",
           "priority": "urgent",
           "escalate": true,
-          "offset": -1,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "offset": -2,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         },
         {
           "id": "r_026",
-          "title": "CRITICAL: Summons for directions deadline is TODAY",
-          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to take out a summons for directions (<<deadline_date>>). Please complete this immediately.",
-          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to take out a summons for directions (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "title": "URGENT: Tomorrow is the deadline to file Memorandum and Record of Appeal",
+          "body": "URGENT: Hi <<first_name>>, tomorrow is the deadline to file the Memorandum and Record of Appeal (due <<deadline_date>>). Please act immediately.",
+          "bodyHTML": "<strong>URGENT:</strong> Hi <strong><<first_name>></strong>, <strong>tomorrow</strong> is the deadline to file the Memorandum and Record of Appeal (due <strong><<deadline_date>></strong>). Please act immediately.",
           "priority": "urgent",
           "escalate": true,
+          "offset": -1,
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
+        },
+        {
+          "id": "r_027",
+          "title": "CRITICAL: Memorandum and Record of Appeal deadline is TODAY",
+          "body": "CRITICAL: Hi <<first_name>>, today is the deadline to file the Memorandum and Record of Appeal (<<deadline_date>>). Please complete this immediately.",
+          "bodyHTML": "<strong>CRITICAL:</strong> Hi <strong><<first_name>></strong>, <strong>today</strong> is the deadline to file the Memorandum and Record of Appeal (<strong><<deadline_date>></strong>). Please complete this immediately.",
+          "priority": "critical",
+          "escalate": true,
           "offset": 0,
-          "channels": ["MAIL", "APP", "ALARM"]
+          "channels": [
+            "MAIL",
+            "APP",
+            "ALARM"
+          ]
         }
       ]
     }

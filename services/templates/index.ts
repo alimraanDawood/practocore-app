@@ -29,6 +29,10 @@ export async function getTemplate(id : string) {
     return pocketbase.collection('DeadlineTemplates').getOne(id, { expand: 'author' });
 }
 
+export async function updateTemplate(id : string, data : Object) {
+    return pocketbase.collection('DeadlineTemplates').update(id, data);
+}
+
 export function subscribeToTemplates(callback : Function) {
     return pocketbase.collection('DeadlineTemplates').subscribe('*', callback);
 }

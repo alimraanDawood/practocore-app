@@ -1,24 +1,109 @@
 <template>
   <div class="flex flex-col w-full items-center overflow-hidden h-full relative">
-    <div class="flex flex-col w-full relative lg:w-fit h-full">
+    <!-- Loading Placeholder -->
+    <div v-if="loading" class="flex flex-col w-full relative lg:w-fit h-full">
+      <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b animate-pulse">
+        <div class="size-10 bg-muted rounded"></div>
+        <div class="h-6 w-48 bg-muted rounded"></div>
+        <div class="flex flex-row gap-2">
+          <div class="size-10 bg-muted rounded"></div>
+          <div class="size-10 bg-muted rounded"></div>
+          <div class="size-10 bg-muted rounded"></div>
+        </div>
+      </div>
+
+      <div class="flex flex-col w-full h-full p-3 overflow-y-scroll">
+        <div v-for="i in 5" :key="i" class="flex flex-row text-left group animate-pulse">
+          <div class="flex flex-col px-2 items-center">
+            <div class="w-1 h-5 bg-muted group-first:opacity-0"></div>
+            <div class="size-8 bg-muted shrink-0 rounded-full grid place-items-center"></div>
+            <div class="w-1 h-full bg-muted group-last:opacity-0"></div>
+          </div>
+          <div class="flex flex-col gap-2 w-full py-5">
+            <div class="bg-muted w-full h-5 rounded"></div>
+            <div class="bg-muted w-3/4 h-4 rounded"></div>
+            <div class="bg-muted w-1/2 h-4 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actual Content -->
+    <div v-else class="flex flex-col w-full relative lg:w-fit h-full">
       <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
         <Button @click="$router.go(-1)" size="icon" variant="ghost">
           <ArrowLeft/>
         </Button>
 
         <div class="flex flex-row relative w-full">
-          <marquee class="text-lg font-semibold ibm-plex-serif">{{ template?.name }}</marquee>
+          <marquee class="text-lg font-semibold ibm-plex-serif">{{ editorStore.template.name }}</marquee>
           <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
         </div>
 
         <div class="flex flex-row gap-2 items-center">
-          <SharedDarkModeSwitch/>
-          <Button size="icon" variant="outline">
-            <Settings/>
-          </Button>
+          <!-- Auto-save indicator -->
+          <div v-if="autoSaved" class="text-xs text-muted-foreground flex items-center gap-1 px-2 animate-pulse">
+            <Check class="size-3 text-green-500" />
+            Saved
+          </div>
 
-          <Button size="icon" variant="secondary">
-            <Save/>
+          <SharedDarkModeSwitch/>
+
+          <Sheet>
+            <SheetTrigger as-child>
+              <Button size="icon" variant="outline">
+                <Settings/>
+              </Button>
+            </SheetTrigger>
+            <SheetContent class="w-full">
+              <SheetHeader>
+                <SheetTitle>Template Settings</SheetTitle>
+                <SheetDescription>Configure your template settings</SheetDescription>
+              </SheetHeader>
+              <div class="flex flex-col gap-4 mt-4 p-3">
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-semibold">Template Name</label>
+                  <Input v-model="editorStore.template.name" placeholder="Template Name" />
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-semibold">Description</label>
+                  <Textarea v-model="editorStore.template.description" placeholder="Template description" />
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-semibold">Version</label>
+                  <Input v-model="editorStore.template.version" placeholder="1.0" />
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-semibold">Trigger Prompt</label>
+                  <Input v-model="editorStore.template.triggerPrompt" placeholder="When did the event occur?" />
+                  <span class="text-xs text-muted-foreground">This prompt is shown when creating a new matter from this template.</span>
+                </div>
+
+                <div class="flex flex-row items-center justify-between p-3 border rounded-lg">
+                  <div class="flex flex-col">
+                    <span class="text-sm font-semibold">Allow Weekends</span>
+                    <span class="text-xs text-muted-foreground">Default for new deadlines</span>
+                  </div>
+                  <Switch v-model="editorStore.template.date_rules.allowWeekends" />
+                </div>
+
+                <div class="flex flex-row items-center justify-between p-3 border rounded-lg">
+                  <div class="flex flex-col">
+                    <span class="text-sm font-semibold">Allow Holidays</span>
+                    <span class="text-xs text-muted-foreground">Default for new deadlines</span>
+                  </div>
+                  <Switch v-model="editorStore.template.date_rules.allowHolidays" />
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <Button @click="handleSave" size="icon" variant="secondary" :disabled="saving">
+            <Loader2 v-if="saving" class="animate-spin" />
+            <Save v-else />
           </Button>
         </div>
       </div>
@@ -43,7 +128,7 @@
           </div>
         </div>
 
-        <div v-for="deadline in deadlines" :key="deadline.id"
+        <div v-for="deadline in editorStore.template.deadlines.filter(d => d.id !== '_date_')" :key="deadline.id"
              class="flex flex-row w-full group relative"
              :class="{ 'bg-primary/10': selection.selected.find(d => d.id === deadline.id) }"
              v-on-long-press="[(e) => { onLongPressCallback(e, deadline) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onDeadlineTap(deadline) } }, modifiers: { stop: true } }]">
@@ -108,7 +193,7 @@
           <div class="flex flex-col w-full justify-center relative z-20">
             <XyzTransitionGroup xyz="fade left stagger"
                                 class="flex flex-col absolute top-[50%] -translate-y-[50%] left-0 z-30">
-              <Button @click="() => { addDeadline(deadlines.at(-1)?.id || '_date_'); addDialogOpen = false }"
+              <Button @click="() => { handleAddDeadline(); addDialogOpen = false }"
                       v-if="addDialogOpen" variant="secondary" size="sm">Add Deadline
               </Button>
             </XyzTransitionGroup>
@@ -131,7 +216,7 @@
                 class="grid place-items-center size-6 text-xs text-primary-foreground rounded-full bg-primary">
               {{ selection.selected.length }}
             </div>
-            of {{ deadlines.length }} selected
+            of {{ editorStore.template.deadlines.filter(d => d.id !== '_date_').length }} selected
           </div>
 
           <div class="flex flex-row gap-2 items-center">
@@ -182,21 +267,29 @@ import {
   Check,
   Trash,
   X,
+  Loader2,
 } from 'lucide-vue-next';
-import { getTemplate } from '~/services/templates';
-import { v4 as uuidv4 } from 'uuid';
+import { getTemplate, createTemplate, updateTemplate } from '~/services/templates';
+import { useTemplateEditorStore } from '~/stores/templateEditor';
+import { toast } from 'vue-sonner';
 
 const longPressedDirective = shallowRef(false)
+const route = useRoute();
+const router = useRouter();
 
 definePageMeta({
   layout: 'no-mobile-nav'
 });
 
-const template = ref(null);
+// Store
+const editorStore = useTemplateEditorStore();
+
+// State
+const loading = ref(true);
+const saving = ref(false);
 const addDialogOpen = ref(false);
-const deadlines = ref([]);
-const startDayOptions = ref({});
 const delete_open = ref(false);
+const autoSaved = ref(false);
 
 // Selection state
 const selection = ref({
@@ -204,36 +297,102 @@ const selection = ref({
   selected: []
 });
 
-const prepareOptions = (template) => {
-  deadlines.value = template?.template?.deadlines || [];
-  startDayOptions.value = {
-    allowWeekends: template?.template?.date_rules?.allowWeekends || true,
-    allowHolidays: template?.template?.date_rules?.allowHolidays || true,
-    triggerPrompt: template?.template?.triggerPrompt
+// Load template on mount
+onMounted(async () => {
+  try {
+    loading.value = true;
+    const templateId = route.params.templateId;
+
+    if (templateId === 'new') {
+      // Create new template
+      editorStore.template.name = 'New Template';
+      editorStore.template.description = '';
+      editorStore.template.version = '1.0';
+      editorStore.template.date_rules = { allowWeekends: true, allowHolidays: true };
+      editorStore.rebuildGraphFromTemplate();
+    } else {
+      // Try to load from local storage first
+      const localKey = `pc.template.${templateId}`;
+      const localData = localStorage.getItem(localKey);
+
+      if (localData) {
+        // Load from local storage
+        editorStore.setTemplate(JSON.parse(localData));
+      } else {
+        // Load from backend
+        const templateData = await getTemplate(templateId);
+
+        // Convert backend format to store format
+        const storeTemplate = {
+          id: templateData.id,
+          name: templateData.name,
+          version: templateData.version || '1.0',
+          description: templateData.description || '',
+          date_rules: templateData.template?.date_rules || { allowWeekends: true, allowHolidays: true },
+          fields: templateData.template?.fields || [],
+          conditionals: templateData.template?.conditionals || [],
+          deadlines: templateData.template?.deadlines || [
+            {
+              id: '_date_',
+              name: 'Start Date',
+              description: 'Project start/reference date',
+              type: 'offset',
+              dynamic: false,
+              prompts: { input: '', pending: '', fulfilled: '' },
+              offset: { offsetId: '_root_', days: 0, allowHolidays: true, allowWeekends: true },
+              reminders: []
+            }
+          ]
+        };
+
+        if (templateData.template?.triggerPrompt) {
+          storeTemplate.triggerPrompt = templateData.template.triggerPrompt;
+        }
+
+        editorStore.setTemplate(storeTemplate);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading template:', error);
+    toast.error('Failed to load template');
+  } finally {
+    loading.value = false;
   }
-}
+});
 
-const addDeadline = (parentId) => {
-  deadlines.value.push({
-    id: uuidv4(),
-    name: 'New Deadline',
-    description: '',
-    action_label: '',
-    prompts: {
-      input: '',
-      pending: '',
-      fulfilled: ''
-    },
-    type: 'offset',
-    dynamic: true,
-    offset: { offsetId: parentId, days: 1, allowHolidays: false, allowWeekends: false, includeFirst: false },
-    reminders: []
-  });
-}
+// Auto-save to local storage on changes
+let autoSaveTimeout;
+watch(() => editorStore.template, () => {
+  if (!loading.value) {
+    editorStore.saveLocal();
 
+    // Show auto-save indicator
+    autoSaved.value = true;
+
+    // Clear previous timeout
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+
+    // Hide indicator after 2 seconds
+    autoSaveTimeout = setTimeout(() => {
+      autoSaved.value = false;
+    }, 2000);
+  }
+}, { deep: true });
+
+// Add deadline
+const handleAddDeadline = () => {
+  const lastDeadline = editorStore.template.deadlines.filter(d => d.id !== '_date_').at(-1);
+  const parentId = lastDeadline?.id || '_date_';
+  editorStore.addDeadline(parentId);
+  toast.success('Deadline added');
+};
+
+// Get deadline by ID
 const getDeadline = (deadlineId) => {
-  return deadlines.value.find(d => d.id === deadlineId);
-}
+  return editorStore.template.deadlines.find(d => d.id === deadlineId);
+};
 
 // Selection functions
 function onLongPressCallback(e, deadline) {
@@ -261,9 +420,6 @@ const onDeadlineTap = (deadline) => {
     }
     return;
   }
-
-  // Normal tap behavior - you can add your deadline tap logic here
-  // For now, it does nothing when not in selection mode
 }
 
 const resetSelection = () => {
@@ -272,29 +428,90 @@ const resetSelection = () => {
 }
 
 const selectAllDeadlines = () => {
-  selection.value.selected = [...deadlines.value];
+  selection.value.selected = [...editorStore.template.deadlines.filter(d => d.id !== '_date_')];
 }
 
 const deleteSelectedDeadlines = async () => {
   if (selection.value.selected.length === 0) return;
 
-  // Remove selected deadlines from the array
-  const selectedIds = selection.value.selected.map(d => d.id);
-  deadlines.value = deadlines.value.filter(d => !selectedIds.includes(d.id));
+  try {
+    const selectedIds = selection.value.selected.map(d => d.id);
 
-  delete_open.value = false;
-  resetSelection();
+    for (const id of selectedIds) {
+      editorStore.deleteDeadline(id);
+    }
 
-  // You can add toast notification here
-  // toast.success('Selected deadlines deleted successfully.');
+    delete_open.value = false;
+    resetSelection();
+    toast.success(`Deleted ${selectedIds.length} deadline(s)`);
+  } catch (error) {
+    console.error('Error deleting deadlines:', error);
+    toast.error('Failed to delete deadlines');
+  }
 }
 
 const deleteSingleDeadline = (deadlineId) => {
-  deadlines.value = deadlines.value.filter(d => d.id !== deadlineId);
+  try {
+    editorStore.deleteDeadline(deadlineId);
+    toast.success('Deadline deleted');
+  } catch (error) {
+    console.error('Error deleting deadline:', error);
+    toast.error('Failed to delete deadline');
+  }
 }
 
-onMounted(async () => {
-  template.value = await getTemplate(useRoute().params.templateId);
-  prepareOptions(template.value);
-});
+// Save template
+const handleSave = async () => {
+  try {
+    saving.value = true;
+
+    // Validate template
+    const errors = editorStore.validate();
+    if (errors.length > 0) {
+      toast.error(`Validation failed: ${errors[0]}`);
+      return;
+    }
+
+    // Prepare template data for backend
+    const templateData = {
+      name: editorStore.template.name,
+      version: editorStore.template.version,
+      description: editorStore.template.description,
+      template: {
+        deadlines: editorStore.template.deadlines,
+        fields: editorStore.template.fields,
+        conditionals: editorStore.template.conditionals,
+        date_rules: editorStore.template.date_rules,
+        triggerPrompt: editorStore.template.triggerPrompt
+      }
+    };
+
+    if (route.params.templateId === 'new') {
+      // Create new template
+      const result = await createTemplate(templateData);
+      toast.success('Template created successfully');
+
+      // Update the store with the new ID
+      editorStore.template.id = result.id;
+      editorStore.saveLocal();
+
+      // Navigate to the editor with the new ID
+      router.replace(`/main/templates/template/${result.id}/editor`);
+    } else {
+      // Update existing template
+      await updateTemplate(route.params.templateId, templateData);
+      toast.success('Template saved successfully');
+
+      // Clear local storage after successful save
+      localStorage.removeItem(`pc.template.${route.params.templateId}`);
+    }
+
+    editorStore.dirty = false;
+  } catch (error) {
+    console.error('Error saving template:', error);
+    toast.error('Failed to save template');
+  } finally {
+    saving.value = false;
+  }
+};
 </script>

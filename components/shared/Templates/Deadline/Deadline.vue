@@ -90,12 +90,24 @@
           <Switch v-model="_deadline.offset.includeFirst" />
         </div>
 
-        <button class="flex text-left flex-col border rounded-lg bg-muted p-3">
-          <span class="font-semibold text-sm ibm-plex-serif">Reminders</span>
-          <span class="text-xs text-muted-foreground">Click here to customize the reminders to send.</span>
+        <SharedTemplatesReminderManager :reminders="_deadline.reminders">
+          <button class="flex text-left flex-col border rounded-lg bg-muted hover:bg-muted/80 p-3 transition-colors w-full">
+            <div class="flex flex-row items-center justify-between w-full">
+              <div class="flex flex-col">
+                <span class="font-semibold text-sm ibm-plex-serif">Reminders</span>
+                <span class="text-xs text-muted-foreground">Click here to customize the reminders to send.</span>
+              </div>
+              <Bell class="size-5 text-muted-foreground" />
+            </div>
 
-          <span class="text-xs text-muted-foreground"><b>{{ _deadline.reminders?.length }}</b> reminders have been set</span>
-        </button>
+            <div class="flex flex-row items-center gap-2 mt-2">
+              <div class="size-6 bg-primary text-primary-foreground rounded-full grid place-items-center text-xs font-semibold">
+                {{ _deadline.reminders?.length || 0 }}
+              </div>
+              <span class="text-xs text-muted-foreground">reminder(s) configured</span>
+            </div>
+          </button>
+        </SharedTemplatesReminderManager>
       </div>
     </SheetContent>
   </Sheet>
@@ -104,6 +116,7 @@
 <script setup>
 import { reminderGenerator } from '@/services/intelligence';
 import { toast } from "vue-sonner";
+import { Bell } from 'lucide-vue-next';
 
 const props = defineProps(['deadline']);
 const emits = defineEmits(['update:deadline']);
@@ -111,6 +124,13 @@ const emits = defineEmits(['update:deadline']);
 const _deadline = computed({
   get: () => props.deadline,
   set: (v) => emits('update:deadline', v)
-})
+});
+
+// Watch for deep changes in deadline and emit updates
+watch(() => props.deadline, (newVal) => {
+  if (newVal) {
+    emits('update:deadline', newVal);
+  }
+}, { deep: true });
 
 </script>
