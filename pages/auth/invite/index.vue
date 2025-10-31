@@ -33,7 +33,7 @@
         <div class="flex flex-col gap-2 border-b">
           <div class="flex flex-row p-3 justify-between items-center">
             <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-8 dark:hidden"/>
-            <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20dark.svg" class="h-8 dark:block hidden"/>
+            <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20Dark.svg" class="h-8 dark:block hidden"/>
 
 
             <div class="flex flex-row gap-2">
