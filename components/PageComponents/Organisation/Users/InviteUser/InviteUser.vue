@@ -1,5 +1,9 @@
 <script setup lang="ts">
+const emit = defineEmits(['invited']);
 
+const handleInvited = () => {
+  emit('invited');
+};
 </script>
 
 <template>
@@ -17,7 +21,7 @@
       </DialogHeader>
 
       <div class="flex flex-col w-full h-full overflow-y-scroll">
-        <AuthInviteForm/>
+        <AuthInviteForm @invited="handleInvited" />
       </div>
     </DialogContent>
   </Dialog>
@@ -27,7 +31,7 @@
       <slot/>
     </SheetTrigger>
 
-    <SheetContent class="w-full">
+    <SheetContent class="w-full overflow-y-scroll">
       <SheetHeader>
         <SheetTitle>
           Invite Members to your organisation
@@ -35,12 +39,8 @@
         <SheetDescription>Invite your team to collaborate on future matters and cases.</SheetDescription>
       </SheetHeader>
 
-      <AuthInviteForm/>
+      <AuthInviteForm @invited="handleInvited" />
     </SheetContent>
 
   </Sheet>
 </template>
-
-<style scoped>
-
-</style>

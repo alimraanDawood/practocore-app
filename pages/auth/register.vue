@@ -350,14 +350,14 @@ const OTPEntryComplete = async (val: any) => {
       const signInResult = await signInWithEmail(registrationData.user.emailAddress, registrationData.user.password);
 
       if(query?.ref) {
-        useRouter().push(`/main/`)
+        useRouter().push(`/onboarding`)
         return;
       }
 
       if(orgId.value !== null) {
-        useRouter().push(`/auth/invite`);
+        useRouter().push(`/onboarding`);
       } else {
-        useRouter().push('/main/');
+        useRouter().push('/onboarding');
       }
     }
   } catch(e) {

@@ -19,7 +19,7 @@
         </div>
       </div>
 
-      <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full">
+      <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full overflow-hidden">
         <!-- Tabs -->
         <div
             class="flex flex-row items-center lg:items-start lg:flex-col lg:max-w-[150px] w-full overflow-x-scroll overflow-y-visible py-1 lg:h-full gap-3">

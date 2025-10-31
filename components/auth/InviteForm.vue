@@ -1,141 +1,253 @@
 <script setup lang="ts">
-import { Copy, Link, ChevronDown, X, Share2 } from "lucide-vue-next";
-import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
-import * as z from 'zod'
-import { toast } from "vue-sonner";
-import {getSignedInUser, inviteUsers} from "~/services/auth";
-import OrganisationInviteLink from "~/components/auth/RegisterScreens/OrganisationInviteLink.vue";
+import { Mail, User as UserIcon, Shield, Send, CheckCircle, Clock, Crown } from 'lucide-vue-next';
+import { sendDirectInvite } from '~/services/admin/index.js';
+import { toast } from 'vue-sonner';
+import { getSignedInUser } from '~/services/auth';
 
+const emit = defineEmits(['invited']);
 
-const useJoinLink = ref(false);
-const invites = ref([]); // { email, permissions: member }
-
-const organisation = ref(null);
-
-const formSchema = toTypedSchema(z.object({
-  email: z.string().email(),
-}));
-
-const form = useForm({
-  validationSchema: formSchema,
+const user = getSignedInUser();
+const formData = ref({
+  email: '',
+  name: '',
+  role: 'member'
 });
 
-const onSubmit = form.handleSubmit((values) => {
-  const exists = invites.value.find(_inv => _inv.email === values.email);
-  if(exists) {
-    toast.error("This email was already added.!", { position: "top-center" });
-  } else {
-    invites.value.push({ email: values.email, permissions: 'member' });
+const sending = ref(false);
+const recentInvites = ref<Array<{ email: string; name: string; role: string; timestamp: Date }>>([]);
+
+// Email validation
+const isValidEmail = computed(() => {
+  if (!formData.value.email) return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(formData.value.email);
+});
+
+const roleOptions = [
+  {
+    value: 'member',
+    label: 'Member',
+    icon: UserIcon,
+    description: 'Can view and manage matters they are assigned to'
+  },
+  {
+    value: 'moderator',
+    label: 'Moderator',
+    icon: Shield,
+    description: 'Can manage all matters and view reports'
+  },
+  {
+    value: 'admin',
+    label: 'Admin',
+    icon: Crown,
+    description: 'Full access including user management and settings'
   }
-  form.resetForm();
+];
+
+const selectedRoleInfo = computed(() => {
+  return roleOptions.find(option => option.value === formData.value.role);
 });
 
-const _inviteUsers = async () => {
-  if(invites.value.length === 0) {
-    toast.error("Please add an email to invite.");
+const handleSendInvite = async () => {
+  if (!isValidEmail.value) {
+    toast.error('Please enter a valid email address');
     return;
   }
 
-  try {
-    const response = await inviteUsers(invites.value);
-
-    if(!response.ok) {
-      toast.error('Something went wrong! Please try again later.');
-      return;
-    }
-
-    toast.success("Invites Sent Successfully!");
-    useRouter().push('/main/');
-  } catch(e) {
-    console.error(e);
-    toast.error('Something went wrong! Please try again later.');
+  if (!user?.organisation) {
+    toast.error('No organisation found');
+    return;
   }
-}
+
+  sending.value = true;
+
+  try {
+    const result = await sendDirectInvite(
+      formData.value.email,
+      user.organisation,
+      formData.value.role,
+      formData.value.name || undefined
+    );
+
+    if (result.message) {
+      toast.success(result.message);
+
+      // Add to recent invites
+      recentInvites.value.unshift({
+        email: formData.value.email,
+        name: formData.value.name,
+        role: formData.value.role,
+        timestamp: new Date()
+      });
+
+      // Keep only last 5 invites
+      if (recentInvites.value.length > 5) {
+        recentInvites.value = recentInvites.value.slice(0, 5);
+      }
+
+      // Reset form
+      formData.value = {
+        email: '',
+        name: '',
+        role: 'member'
+      };
+
+      // Emit event to parent
+      emit('invited');
+    } else {
+      toast.error(result.error || 'Failed to send invitation');
+    }
+  } catch (error) {
+    console.error('Failed to send invite:', error);
+    toast.error('Failed to send invitation. Please try again.');
+  } finally {
+    sending.value = false;
+  }
+};
+
+const getRoleIcon = (role: string) => {
+  const option = roleOptions.find(opt => opt.value === role);
+  return option?.icon || UserIcon;
+};
+
+const getRoleLabel = (role: string) => {
+  const option = roleOptions.find(opt => opt.value === role);
+  return option?.label || role;
+};
+
+const formatTimeAgo = (timestamp: Date) => {
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - timestamp.getTime()) / 1000);
+
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ago`;
+  }
+  if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(seconds / 86400);
+  return `${days}d ago`;
+};
 </script>
 
 <template>
-<div class="flex flex-col w-full h-full">
-  <div class="flex flex-col w-full p-3 h-full gap-8 overflow-y-scroll">
-
+  <div class="flex flex-col gap-4 w-full p-3">
+    <!-- Invitation Form -->
     <div class="flex flex-col gap-3">
-      <div class=" flex flex-col gap-3">
-        <div class="flex flex-row justify-between items-center">
-          <span class="font-semibold ibm-plex-serif">Join Organisation Using Link</span>
-
-          <div class="flex flex-row gap-3 items-center">
-            <XyzTransition xyz="fade">
-              <Button v-if="useJoinLink" class="rounded-full" size="icon" variant="secondary">
-                <Share2 />
-              </Button>
-            </XyzTransition>
-
-            <Switch v-model="useJoinLink" />
-          </div>
+      <!-- Email Input -->
+      <div class="flex flex-col gap-1.5">
+        <Label for="email">Email Address <span class="text-destructive">*</span></Label>
+        <div class="relative">
+          <Mail class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            id="email"
+            v-model="formData.email"
+            type="email"
+            placeholder="colleague@example.com"
+            class="pl-10"
+            :class="{ 'border-green-500': isValidEmail && formData.email }"
+          />
+          <CheckCircle
+            v-if="isValidEmail"
+            class="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-green-600"
+          />
         </div>
-
-        <XyzTransition xyz="fade left">
-          <OrganisationInviteLink :organisation="getSignedInUser()?.organisation" v-if="useJoinLink" />
-        </XyzTransition>
+        <p class="text-xs text-muted-foreground">
+          An invitation will be sent to this address
+        </p>
       </div>
 
-    </div>
-    <div class="flex flex-col gap-2">
-      <div class="flex flex-col">
-        <span class="font-semibold ibm-plex-sans">Invite Directly</span>
-        <span class="text-sm">We shall send an invite email to the emails listed.</span>
-      </div>
-      <XyzTransitionGroup xyz="fade left" mode="out-in" class="flex flex-col divide-y">
-        <div :key="invite.email" v-for="invite in invites" class="flex flex-row items-center w-full justify-between p-2">
-          <div class="w-full overflow-hidden">
-            <span class="whitespace-nowrap">{{ invite.email }}</span>
-          </div>
-
-          <div class="flex flex-row gap-2">
-            <Select v-model="invite.member" default-value="member">
-              <SelectTrigger>
-                <SelectValue placeholder="Choose Permission" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Permissions</SelectLabel>
-                  <SelectItem value="admin">
-                    Admin
-                  </SelectItem>
-                  <SelectItem value="member">
-                    Member
-                  </SelectItem>
-                  <SelectItem value="guest">
-                    Guest
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            <Button @click="invites = invites.filter(_invite => invite !== _invite)" variant="ghost" size="icon">
-              <X />
-            </Button>
-          </div>
+      <!-- Name Input (Optional) -->
+      <div class="flex flex-col gap-1.5">
+        <Label for="name">Full Name (Optional)</Label>
+        <div class="relative">
+          <UserIcon class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            id="name"
+            v-model="formData.name"
+            type="text"
+            placeholder="John Doe"
+            class="pl-10"
+          />
         </div>
-      </XyzTransitionGroup>
+        <p class="text-xs text-muted-foreground">
+          Personalize the invitation with their name
+        </p>
+      </div>
+
+      <!-- Role Selection -->
+      <div class="flex flex-col gap-1.5">
+        <Label for="role">Role <span class="text-destructive">*</span></Label>
+        <Select v-model="formData.role">
+          <SelectTrigger id="role">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              v-for="option in roleOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              <div class="flex flex-row items-center gap-2">
+                <component :is="option.icon" class="size-4" />
+                <span class="font-medium">{{ option.label }}</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <div v-if="selectedRoleInfo" class="flex flex-row items-start gap-2 p-2 bg-muted/50 rounded-md">
+          <component :is="selectedRoleInfo.icon" class="size-4 mt-0.5 text-muted-foreground" />
+          <p class="text-xs text-muted-foreground">
+            {{ selectedRoleInfo.description }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Send Button -->
+      <Button
+        @click="handleSendInvite"
+        :disabled="!isValidEmail || sending"
+        class="w-full"
+      >
+        <Send v-if="!sending" class="size-4 mr-2" />
+        <div v-else class="size-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        {{ sending ? 'Sending...' : 'Send Invitation' }}
+      </Button>
+    </div>
+
+    <!-- Recently Invited List -->
+    <div v-if="recentInvites.length > 0" class="flex flex-col gap-2">
+      <div class="flex flex-row items-center gap-2 pt-2 border-t">
+        <Clock class="size-4 text-muted-foreground" />
+        <span class="text-sm font-medium text-muted-foreground">Recently Invited</span>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div
+          v-for="(invite, index) in recentInvites"
+          :key="index"
+          class="flex flex-row items-center gap-3 p-3 border rounded-lg bg-background"
+        >
+          <div class="flex flex-col flex-1 min-w-0">
+            <div class="flex flex-row items-center gap-2">
+              <span class="font-medium truncate">{{ invite.name || invite.email }}</span>
+              <Badge variant="secondary" class="text-xs">
+                <component :is="getRoleIcon(invite.role)" class="size-3 mr-1" />
+                {{ getRoleLabel(invite.role) }}
+              </Badge>
+            </div>
+            <div class="flex flex-row items-center gap-2 text-xs text-muted-foreground">
+              <Mail class="size-3" />
+              <span class="truncate">{{ invite.email }}</span>
+              <span class="shrink-0">{{ formatTimeAgo(invite.timestamp) }}</span>
+            </div>
+          </div>
+          <CheckCircle class="size-5 text-green-600 shrink-0" />
+        </div>
+      </div>
     </div>
   </div>
-
-  <div class="flex flex-row gap-2 p-3 border-t bg-background">
-    <form  class="flex flex-row gap-2 w-full" @submit="onSubmit">
-      <FormField class="w-full" v-slot="{ componentField }" name="email">
-        <FormItem class="w-full">
-          <FormControl class="w-full">
-            <Input type="email" class="w-full" placeholder="Invitee's Email Address" v-bind="componentField" />
-          </FormControl>
-        </FormItem>
-      </FormField>
-      <Button type="submit" class="bg-tertiary hover:bg-tertiary/90">Add Member</Button>
-    </form>
-  </div>
-</div>
 </template>
-
-<style scoped>
-
-</style>

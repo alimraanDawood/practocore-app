@@ -70,7 +70,7 @@
 
                     <div class="flex flex-row gap-3 items-center">
                         <ReuseSearchFilterTemplate class="hidden lg:flex" />
-                        <SharedMattersCreateMatter>
+                        <SharedMattersCreateMatter @created="mattersStore.fetchMatters(true)">
                             <Button>
                                 <Plus /> Add Matter
                             </Button>
@@ -122,7 +122,7 @@
     
                             <div
                                 class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                                <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit"
+                                <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
                                         v-on-long-press="[(e) => { onLongPressCallbackDirective(e, matter) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onMatterTap(matter) } }, modifiers: { stop: true } }]"
@@ -135,8 +135,6 @@
                                 </div>
                             </div>
                         </div>
-    
-                        
                     </template>
 
                     <div v-else-if="matters?.items?.length === 0"
@@ -145,7 +143,7 @@
                         <span>You have no matters</span>
                         <span>Click
                           <div class="w-fit inline-block">
-                            <SharedMattersCreateMatter class="w-fit">
+                            <SharedMattersCreateMatter @created="mattersStore.fetchMatters(true)" class="w-fit">
                                 <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
                             </SharedMattersCreateMatter>
                           </div>
@@ -214,6 +212,10 @@ import { useMattersStore } from '@/stores/matters';
 import MatterTable from '~/components/shared/Matters/MatterTable/MatterTable.vue';
 import { columns } from '@/components/shared/Matters/MatterTable/columns';
 import {getSignedInUser} from "~/services/auth";
+
+definePageMeta({
+  layout: 'no-mobile-top-bar'
+})
 
 const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();
 

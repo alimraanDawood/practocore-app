@@ -6,7 +6,7 @@
   <div v-else>
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')">
       <DialogTrigger as-child>
-        <Avatar>
+        <Avatar class="size-10">
           <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue"/>
           <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
         </Avatar>

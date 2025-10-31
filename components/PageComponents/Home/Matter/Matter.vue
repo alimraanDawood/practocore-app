@@ -1,6 +1,6 @@
 <template>
     <button 
-        class="flex flex-col w-full text-left p-3 border gap-3 bg-muted rounded-lg"
+        class="flex flex-col w-full text-left p-3 gap-3 bg-muted rounded-lg"
     >
         
         <span class="font-semibold truncate">{{ matter?.name }}</span>
