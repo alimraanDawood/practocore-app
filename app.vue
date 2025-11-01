@@ -23,9 +23,7 @@ onMounted(async () => {
   setupBackButton();
 });
 
-App.addListener('appUrlOpen', function (event: URLOpenListenerEvent) {
-  // Example url: https://beerswift.app/tabs/tabs2
-  // slug = /tabs/tabs2
+App.addListener('appUrlOpen', function (event) {
   const slug = event.url.split('practocore.com').pop();
 
   // We only push to the route if there is a slug present
