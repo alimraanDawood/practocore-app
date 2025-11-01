@@ -14,13 +14,25 @@
           <div class="flex flex-row ml-auto items-center gap-2">
             <SharedDarkModeSwitch />
 
-            <Button variant="secondary" size="icon">
-              <MessageSquareText />
-            </Button>
-
-            <Button variant="secondary" size="icon">
-              <Bell />
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button variant="destructive" size="icon">
+                  <LogOut />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Sign Out</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to sign out?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <Button variant="destructive" @click="signOutUser">Sign Out</Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             <div class="flex flex-row items-center gap-1">
               <SharedProfile />
@@ -39,8 +51,8 @@
 </template>
 
 <script setup>
-import { Search, Bell, MessageSquareText, ChevronDown } from 'lucide-vue-next';
-import { getSignedInUser } from '~/services/auth';
+import {Search, Bell, MessageSquareText, ChevronDown, LogOut} from 'lucide-vue-next';
+import {getSignedInUser, signOut} from '~/services/auth';
 
 const hours = new Date().getHours();
 
@@ -49,4 +61,9 @@ const welcomeMessage = computed(() => {
   if (hours < 18) return 'Good Afternoon';
   return 'Good Evening';
 });
+
+const signOutUser = () => {
+  signOut();
+  window.location.reload();
+}
 </script>

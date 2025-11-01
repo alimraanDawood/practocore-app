@@ -12,9 +12,25 @@
 
             <div class="flex flex-row gap-2 items-center">
                 <SharedDarkModeSwitch />
-                <Button size="icon" variant="secondary">
-                    <Bell />
-                </Button>
+              <AlertDialog>
+                <AlertDialogTrigger as-child>
+                  <Button variant="destructive" size="icon">
+                    <LogOut />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Sign Out</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to sign out?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <Button variant="destructive" @click="signOutUser">Sign Out</Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
             
         </div>
@@ -82,7 +98,7 @@
 </template>
 
 <script setup>
-import { Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions } from 'lucide-vue-next';
+import {Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions, LogOut} from 'lucide-vue-next';
 import { getMatter, subscribeToDeadline, subscribeToMatter, unsubscribeToAllDeadlines, unsubscribeToMatter } from '~/services/matters';
 import dayjs from 'dayjs';
 import { Calendar } from '@/components/ui/calendar_enhanced';
@@ -90,12 +106,18 @@ import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
 import { toast } from 'vue-sonner';
 import AdjournDeadline from '~/components/shared/Deadline/AdjournDeadline/AdjournDeadline.vue';
+import {signOut} from "~/services/auth/index.js";
 
 const viewDeadlineOpen = ref(false);
 const deadline = ref(null);
 const d_index = ref(0);
 
 const actionExpanded = ref(false);
+
+const signOutUser = () => {
+  signOut();
+  window.location.reload();
+}
 
 dayjs.extend(utc);
 dayjs.extend(timezone);

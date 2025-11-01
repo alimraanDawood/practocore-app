@@ -1,6 +1,6 @@
 import Pocketbase from 'pocketbase';
-// const SERVER_URL = "https://www.practocore.com";
- const SERVER_URL = "https://www.practocore.com";
+// const SERVER_URL = "http://192.168.5.1:8090";
+ const SERVER_URL = "http://192.168.5.1:8090";
 // const SERVER_URL = "http://127.0.0.1:8090"
 const pocketbase = new Pocketbase(SERVER_URL);
 
@@ -118,7 +118,7 @@ export async function getOrganisations() {
 }
 
 export async function getOrganisationInviteReference(token : string) {
-    return fetch(`${SERVER_URL}/api/practocore/organisation-invite-ref/${token}`, { method: 'GET',
+    return fetch(`${SERVER_URL}/api/invitations/verify/${token}`, { method: 'GET',
         headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": `Bearer ${pocketbase.authStore.token}`,
@@ -127,7 +127,17 @@ export async function getOrganisationInviteReference(token : string) {
 }
 
 export async function acceptInvite(token :  string) {
-    return fetch(`${SERVER_URL}/api/practocore/auth/join-organisation/${token}`, {
+    return fetch(`${SERVER_URL}/api/invitations/accept/${token}`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        }
+    });
+}
+
+export async function rejectInvite(token :  string) {
+    return fetch(`${SERVER_URL}/api/invitations/reject/${token}`, {
         method: "GET",
         headers: {
             "Content-Type": "application/json; charset=utf-8",

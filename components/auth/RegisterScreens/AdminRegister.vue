@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { signUpWithGoogle } from "~/services/auth"
 
-const props = defineProps(['adminData'])
+const props = defineProps(['adminData', 'inviteRef']);
 const emits = defineEmits(['complete', 'google'])
 
 const schema = z.object({
@@ -60,7 +60,8 @@ async function continueWithGoogle() {
   <div class="flex flex-col gap-5 h-full w-full justify-center">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Create your personal account</span>
-      <span class="text-sm">Let's set up your firm's PractoCore workspace</span>
+      <span v-if="inviteRef" class="text-sm">Your account will be added to <b>{{ inviteRef.invite.organisation.name }}</b></span>
+      <span v-else class="text-sm">Let's set up your firm's PractoCore workspace</span>
     </div>
 
     <div class="flex flex-col w-full gap-3">

@@ -5,13 +5,14 @@
         <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
 
         <span class="font-semibold text-2xl ibm-plex-serif text-center">You are being invited to join an organisation</span>
-        <span class="text-center"><b>{{ organisationRef?.reference?.inviter }}</b> is inviting you to join <b>{{ organisationRef?.reference?.organisation }}</b> on PractoCore.</span>
+        <span class="text-center"><b>{{ organisationRef?.invite?.invitedBy?.name }}</b> is inviting you to join <b>{{ organisationRef?.invite?.organisation?.name }}</b> on PractoCore.</span>
 
 
         <Button @click="acceptInvitation(query?.ref)" class="w-full">Accept Invitation</Button>
         <NuxtLink to="/main/" class="w-full">
           <Button class="w-full" variant="secondary">Skip</Button>
         </NuxtLink>
+        <Button variant="destructive" class="w-full">Reject Invitation</Button>
       </div>
     </div>
   </div>
@@ -68,7 +69,7 @@
         <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
         <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
         <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
-        <AdminRegister class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
+        <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
         <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
         <OTP class="max-w-sm p-3" :otp-id="otpId" @complete="OTPEntryComplete" :user-id="userId" v-else-if="currentStep === RegistrationSteps.OTP" />
         <Subscription @complete="subscriptionRegistComplete" v-else-if="currentStep === RegistrationSteps.SUBSCRIPTION" />
@@ -234,6 +235,7 @@ onMounted(async () => {
     currentStep.value = RegistrationSteps.ADMIN_REGIST;
     organisationRef.value = await getOrganisationInviteReference(query?.ref);
     console.log(organisationRef.value);
+    console.log(organisationRef.value);
   }
 
   if(joiningAndIsSignedIn.value) {
@@ -388,7 +390,7 @@ const submitData = async () => {
     if(otpId.value !== null) {
       currentStep.value = RegistrationSteps.OTP;
     } else {
-      useRouter().push('/main/')
+      useRouter().push('/onboarding')
     }
 
     historyManager.reset()

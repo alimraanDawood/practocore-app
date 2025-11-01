@@ -1,6 +1,6 @@
 <template>
-    <div class="flex flex-col w-full items-center overflow-hidden h-full">
-        <div class="flex flex-col w-full relative lg:w-fit h-full">
+    <div class="flex flex-col w-full items-center  overflow-hidden h-full">
+        <div class="flex flex-col w-full relative lg:w-[90vw] h-full">
             <!-- Loading State -->
             <template v-if="loading">
                 <!-- Mobile Header Skeleton -->
@@ -62,13 +62,29 @@
 
                     <div class="flex flex-row gap-2 items-center">
                         <SharedDarkModeSwitch />
-                        <Button size="icon" variant="secondary">
-                            <Bell />
-                        </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger as-child>
+                          <Button variant="destructive" size="icon">
+                            <LogOut />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Sign Out</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to sign out?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <Button variant="destructive" @click="signOutUser">Sign Out</Button>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                 </div>
 
-                <div class="flex flex-col w-full h-full overflow-y-scroll p-3">
+                <div class="flex flex-col w-full  h-full overflow-y-scroll p-3">
                     <div class="flex flex-col gap-2">
                         <span class="text-xl ibm-plex-serif">{{ template?.name }}</span>
 
@@ -94,7 +110,7 @@
                     </div>
 
 
-                    <div class="prose prose-pink dark:prose-invert mt-5 prose-code:bg-muted prose-code:p-3 prose-code:flex prose-code:flex-col prose-code:text-muted-foreground prose-code:border prose-code:rounded-lg" v-html="template?.description"></div>
+                    <div class="prose prose-pink max-w-[95vw] dark:prose-invert mt-5 prose-code:bg-muted prose-code:p-3 prose-code:flex prose-code:flex-col prose-code:text-muted-foreground prose-code:border prose-code:rounded-lg" v-html="template?.description"></div>
                 </div>
             </template>
         </div>
@@ -102,8 +118,9 @@
 </template>
 
 <script setup>
-import { ArrowLeft, Bell, CalendarIcon } from 'lucide-vue-next';
+import {ArrowLeft, Bell, CalendarIcon, LogOut} from 'lucide-vue-next';
 import { getTemplate } from '~/services/templates';
+import {signOut} from "~/services/auth/index.js";
 
 definePageMeta({
     layout: 'no-mobile-nav'
@@ -121,5 +138,10 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
-})
+});
+
+const signOutUser = () => {
+  signOut();
+  window.location.reload();
+}
 </script>

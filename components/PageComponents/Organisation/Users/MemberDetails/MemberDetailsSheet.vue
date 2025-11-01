@@ -33,7 +33,7 @@ const emit = defineEmits(['updated', 'removed']);
 
 const isOpen = defineModel<boolean>('isOpen');
 const memberDetails = ref<any>(null);
-const loading = ref(true);
+const loading = ref(false);
 const updating = ref(false);
 
 const currentUser = getSignedInUser();
@@ -41,7 +41,11 @@ const isCurrentUser = computed(() => props.userId === currentUser?.id);
 
 // Load member details
 const loadMemberDetails = async () => {
+  if (!props.userId) return;
+
   loading.value = true;
+  memberDetails.value = null; // Reset previous data
+
   try {
     const response = await getMemberDetails(props.userId);
     memberDetails.value = response;
@@ -53,18 +57,16 @@ const loadMemberDetails = async () => {
   }
 };
 
-// Watch for sheet open
-watch(isOpen, async (newValue) => {
-  if (newValue) {
-    await loadMemberDetails();
-  }
-});
-
-watch(props.userId, async (newValue) => {
-  if(newValue) {
-    await loadMemberDetails();
-  }
-});
+// Watch for sheet open and userId changes together
+watch(
+  [isOpen, () => props.userId],
+  async ([isOpenValue, userIdValue]) => {
+    if (isOpenValue && userIdValue) {
+      await loadMemberDetails();
+    }
+  },
+  { immediate: true }
+);
 
 // Role management
 const availableRoles = [
@@ -74,7 +76,7 @@ const availableRoles = [
 ];
 
 const handleRoleChange = async (newRole: string) => {
-  if (!memberDetails.value) return;
+  if (!memberDetails?.value) return;
 
   updating.value = true;
   try {
@@ -176,23 +178,23 @@ const getRoleInfo = (role: string) => {
         <!-- Profile Section -->
         <div class="flex flex-col items-center gap-3 pb-6 border-b">
           <Avatar class="size-20">
-            <AvatarImage :src="memberDetails.user.avatar" />
+            <AvatarImage :src="memberDetails?.user?.avatar" />
             <AvatarFallback class="text-2xl">
-              {{ memberDetails.user.name?.substring(0, 2).toUpperCase() }}
+              {{ memberDetails?.user?.name?.substring(0, 2).toUpperCase() }}
             </AvatarFallback>
           </Avatar>
 
           <div class="flex flex-col items-center gap-1">
-            <h3 class="text-xl font-semibold">{{ memberDetails.user.name }}</h3>
+            <h3 class="text-xl font-semibold">{{ memberDetails?.user?.name }}</h3>
             <div class="flex flex-row items-center gap-2">
               <Mail class="size-3 text-muted-foreground" />
-              <span class="text-sm text-muted-foreground">{{ memberDetails.user.email }}</span>
+              <span class="text-sm text-muted-foreground">{{ memberDetails?.user?.email }}</span>
             </div>
           </div>
 
-          <Badge :class="memberDetails.user.role === 'admin' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'">
-            <component :is="getRoleInfo(memberDetails.user.role).icon" class="size-3 mr-1" />
-            {{ getRoleInfo(memberDetails.user.role).label }}
+          <Badge :class="memberDetails?.user?.role === 'admin' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'">
+            <component :is="getRoleInfo(memberDetails?.user?.role).icon" class="size-3 mr-1" />
+            {{ getRoleInfo(memberDetails?.user?.role).label }}
           </Badge>
         </div>
 
@@ -206,7 +208,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Matters</span>
                 <Briefcase class="size-4 text-blue-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails.statistics.totalMatters }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics.totalMatters }}</span>
             </div>
 
             <div class="flex flex-col p-3 border rounded-lg bg-background">
@@ -214,7 +216,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Deadlines</span>
                 <FileText class="size-4 text-purple-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails.statistics.totalDeadlines }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics.totalDeadlines }}</span>
             </div>
 
             <div class="flex flex-col p-3 border rounded-lg bg-background">
@@ -222,7 +224,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Completed</span>
                 <CheckCircle class="size-4 text-green-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails.statistics.completedDeadlines }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics.completedDeadlines }}</span>
             </div>
 
             <div class="flex flex-col p-3 border rounded-lg bg-background">
@@ -230,7 +232,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Overdue</span>
                 <AlertCircle class="size-4 text-red-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails.statistics.overdueDeadlines }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics.overdueDeadlines }}</span>
             </div>
           </div>
         </div>
@@ -243,33 +245,33 @@ const getRoleInfo = (role: string) => {
             <div class="flex flex-row items-center gap-2 text-sm">
               <Calendar class="size-4 text-muted-foreground" />
               <span class="text-muted-foreground">Joined</span>
-              <span class="font-medium">{{ dayjs(memberDetails.user.created).format('MMM D, YYYY') }}</span>
-              <span class="text-xs text-muted-foreground">({{ dayjs(memberDetails.user.created).fromNow() }})</span>
+              <span class="font-medium">{{ dayjs(memberDetails?.user?.created).format('MMM D, YYYY') }}</span>
+              <span class="text-xs text-muted-foreground">({{ dayjs(memberDetails?.user?.created).fromNow() }})</span>
             </div>
 
             <div class="flex flex-row items-center gap-2 text-sm">
               <Clock class="size-4 text-muted-foreground" />
               <span class="text-muted-foreground">Timezone</span>
-              <span class="font-medium">{{ memberDetails.user.timezone || 'Not set' }}</span>
+              <span class="font-medium">{{ memberDetails?.user?.timezone || 'Not set' }}</span>
             </div>
 
             <div class="flex flex-row items-center gap-2 text-sm">
               <CheckCircle class="size-4 text-muted-foreground" />
               <span class="text-muted-foreground">Verified</span>
-              <Badge :variant="memberDetails.user.verified ? 'default' : 'secondary'" class="text-xs">
-                {{ memberDetails.user.verified ? 'Yes' : 'No' }}
+              <Badge :variant="memberDetails?.user?.verified ? 'default' : 'secondary'" class="text-xs">
+                {{ memberDetails?.user?.verified ? 'Yes' : 'No' }}
               </Badge>
             </div>
           </div>
         </div>
 
         <!-- Recent Activity -->
-        <div v-if="memberDetails.recentMatters?.length > 0" class="flex flex-col gap-3">
+        <div v-if="memberDetails?.recentMatters?.length > 0" class="flex flex-col gap-3">
           <h4 class="text-sm font-semibold text-muted-foreground uppercase">Recent Matters</h4>
 
           <div class="flex flex-col gap-2">
             <div
-              v-for="matter in memberDetails.recentMatters"
+              v-for="matter in memberDetails?.recentMatters"
               :key="matter.id"
               class="flex flex-row items-center gap-2 p-2 border rounded-lg bg-background text-sm"
             >
@@ -288,7 +290,7 @@ const getRoleInfo = (role: string) => {
           <div class="flex flex-col gap-1.5">
             <Label for="role">Change Role</Label>
             <Select
-              :model-value="memberDetails.user.role"
+              :model-value="memberDetails?.user?.role"
               @update:model-value="handleRoleChange"
               :disabled="updating || isCurrentUser"
             >
@@ -313,7 +315,7 @@ const getRoleInfo = (role: string) => {
           <div class="flex flex-col gap-2">
             <!-- Transfer Ownership -->
             <Button
-              v-if="memberDetails.user.role !== 'admin'"
+              v-if="memberDetails?.user?.role !== 'admin'"
               @click="showTransferDialog = true"
               variant="outline"
               class="w-full"
@@ -346,7 +348,7 @@ const getRoleInfo = (role: string) => {
       <AlertDialogHeader>
         <AlertDialogTitle>Remove Member?</AlertDialogTitle>
         <AlertDialogDescription>
-          Are you sure you want to remove <strong>{{ memberDetails?.user.name }}</strong> from the organisation?
+          Are you sure you want to remove <strong>{{ memberDetails?.user?.name }}</strong> from the organisation?
           This action cannot be undone. They will lose access to all matters and deadlines.
         </AlertDialogDescription>
       </AlertDialogHeader>
@@ -369,7 +371,7 @@ const getRoleInfo = (role: string) => {
       <AlertDialogHeader>
         <AlertDialogTitle>Make Primary Admin?</AlertDialogTitle>
         <AlertDialogDescription>
-          Are you sure you want to promote <strong>{{ memberDetails?.user.name }}</strong> to admin?
+          Are you sure you want to promote <strong>{{ memberDetails?.user?.name }}</strong> to admin?
           This will give them full access to manage the organisation, including removing other members.
         </AlertDialogDescription>
       </AlertDialogHeader>

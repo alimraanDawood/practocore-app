@@ -90,7 +90,7 @@
 
     <AlertDialog>
       <AlertDialogTrigger as-child>
-        <Button type="button" variant="destructive">Sign Out</Button>
+        <Button class="lg:w-fit" type="button" variant="destructive">Sign Out</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

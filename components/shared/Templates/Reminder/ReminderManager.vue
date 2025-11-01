@@ -4,13 +4,13 @@
       <slot />
     </SheetTrigger>
 
-    <SheetContent class="w-full overflow-y-scroll">
+    <SheetContent class="w-full overflow-y-hidden h-full">
       <SheetHeader>
         <SheetTitle>Reminders</SheetTitle>
         <SheetDescription>Configure reminders for this deadline</SheetDescription>
       </SheetHeader>
 
-      <div class="flex flex-col gap-4 mt-4 p-3">
+      <div class="flex flex-col h-full gap-4 p-3 overflow-y-scroll">
         <!-- Add New Reminder Button -->
         <Button @click="addReminder" variant="outline" class="w-full">
           <Plus class="size-4 mr-2" />
@@ -173,12 +173,12 @@
         </div>
 
         <!-- Save Button -->
-        <div class="flex flex-row gap-2 mt-4">
-          <Button @click="saveReminders" class="w-full">
-            <Check class="size-4 mr-2" />
-            Save Reminders
-          </Button>
-        </div>
+      </div>
+      <div class="flex flex-row gap-2 p-2">
+        <Button @click="saveReminders" class="w-full">
+          <Check class="size-4 mr-2" />
+          Save Reminders
+        </Button>
       </div>
     </SheetContent>
   </Sheet>
