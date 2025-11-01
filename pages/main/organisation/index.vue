@@ -56,9 +56,11 @@
 import { ref } from 'vue'
 import {ArrowLeft, Bell} from "lucide-vue-next";
 
+const query =  useRoute().query;
+
 definePageMeta({
   layout: 'no-mobile-nav'
 })
 
-const activeTab = ref('profile')
+const activeTab = ref(query?.tab || 'profile');
 </script>

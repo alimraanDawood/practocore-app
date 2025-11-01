@@ -113,6 +113,7 @@ const deadline = ref(null);
 const d_index = ref(0);
 
 const actionExpanded = ref(false);
+const query = useRoute().query;
 
 const signOutUser = () => {
   signOut();
@@ -221,6 +222,10 @@ onMounted(async () => {
 
     for(let deadline of matter.value?.deadlines) {
         subscribeToDeadline(deadline, useDebounceFn(reloadMatter));
+    }
+
+    if(query?.deadline) {
+      selectedDeadline.value = matter.value?.expand?.deadlines?.find(d => d.id === query.deadline);
     }
 });
 

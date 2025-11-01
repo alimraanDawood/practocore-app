@@ -204,8 +204,9 @@
                         :disabled="isNextDisabled" size="sm" @click="meta.valid && nextStep()">
                   Next
                 </Button>
-                <Button v-if="stepIndex === steps?.length" size="sm" type="submit">
-                  Create Project
+                <Button v-if="stepIndex === steps?.length" :disabled="loading" size="sm" type="submit">
+                  <span v-if="!loading">Create Project</span>
+                  <Loader class="animate-spin" v-else />
                 </Button>
               </div>
             </div>
@@ -254,7 +255,7 @@ import {computed, onMounted, ref, watch} from "vue"
 import {createMatter} from "~/services/matters"
 import {getTemplates} from "~/services/templates"
 import {cn} from "~/lib/utils"
-import {CalendarIcon, Check, Circle, Dot} from "lucide-vue-next"
+import {CalendarIcon, Check, Circle, Dot, Loader} from "lucide-vue-next"
 import {toast} from "vue-sonner"
 import {toDate} from "reka-ui/date"
 import {

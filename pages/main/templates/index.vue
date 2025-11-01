@@ -240,7 +240,7 @@ onMounted(async () => {
 });
 
 const activeTab = ref('community');
-const categories = ['Litigation', 'Corporate', 'Employment', 'IP', 'Real Estate'];
+const categories = [];
 
 watch(activeTab, () => {
   loadTemplates();

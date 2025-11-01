@@ -33,7 +33,7 @@ export const useMattersStore = defineStore('matters', {
     activeTab: 'all' as string,
     // pagination (basic; current UI uses 1,10)
     page: 1 as number,
-    perPage: 10 as number,
+    perPage: 40 as number,
     // selection for bulk actions
     selection: {
       active: false,
