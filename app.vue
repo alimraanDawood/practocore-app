@@ -7,6 +7,7 @@
 </template>
 
 <script setup>
+import { App, URLOpenListenerEvent } from '@capacitor/app';
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
@@ -20,6 +21,19 @@ onMounted(async () => {
   // Initialize notification system
   await notificationStore.initialize();
   setupBackButton();
+});
+
+App.addListener('appUrlOpen', function (event: URLOpenListenerEvent) {
+  // Example url: https://beerswift.app/tabs/tabs2
+  // slug = /tabs/tabs2
+  const slug = event.url.split('practocore.com').pop();
+
+  // We only push to the route if there is a slug present
+  if (slug) {
+    useRouter().push({
+      path: slug,
+    });
+  }
 });
 
 onUnmounted(() => {
