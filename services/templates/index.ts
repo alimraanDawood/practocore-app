@@ -2,7 +2,7 @@ import Pocketbase, { type RecordModel, type RecordSubscription } from 'pocketbas
 
 // const SERVER_URL = "https://www.practocore.com";
 const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "http://127.0.0.1:8090";
+// const SERVER_URL = "https://www.practocore.com";
 
 const pocketbase = new Pocketbase(SERVER_URL);
 

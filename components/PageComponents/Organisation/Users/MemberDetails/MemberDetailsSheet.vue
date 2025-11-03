@@ -208,7 +208,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Matters</span>
                 <Briefcase class="size-4 text-blue-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails?.statistics.totalMatters }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics?.totalMatters }}</span>
             </div>
 
             <div class="flex flex-col p-3 border rounded-lg bg-background">
@@ -216,7 +216,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Deadlines</span>
                 <FileText class="size-4 text-purple-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails?.statistics.totalDeadlines }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics?.totalDeadlines }}</span>
             </div>
 
             <div class="flex flex-col p-3 border rounded-lg bg-background">
@@ -224,7 +224,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Completed</span>
                 <CheckCircle class="size-4 text-green-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails?.statistics.completedDeadlines }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics?.completedDeadlines }}</span>
             </div>
 
             <div class="flex flex-col p-3 border rounded-lg bg-background">
@@ -232,7 +232,7 @@ const getRoleInfo = (role: string) => {
                 <span class="text-xs text-muted-foreground">Overdue</span>
                 <AlertCircle class="size-4 text-red-600" />
               </div>
-              <span class="text-2xl font-bold">{{ memberDetails?.statistics.overdueDeadlines }}</span>
+              <span class="text-2xl font-bold">{{ memberDetails?.statistics?.overdueDeadlines }}</span>
             </div>
           </div>
         </div>

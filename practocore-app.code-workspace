@@ -2,9 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "../practocore-backend/pb_hooks"
 		}
 	],
 	"settings": {}
