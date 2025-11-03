@@ -7,7 +7,7 @@
 </template>
 
 <script setup>
-import { App, URLOpenListenerEvent } from '@capacitor/app';
+import { App } from '@capacitor/app';
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
@@ -17,7 +17,7 @@ const { setupBackButton } = useBackButton();
 
 const notificationStore = useNotificationStore();
 
-onMounted(async () => {
+onMounted(async () => {1
   // Initialize notification system
   await notificationStore.initialize();
   setupBackButton();

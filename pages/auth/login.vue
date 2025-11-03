@@ -10,6 +10,11 @@ const redirect = () => {
     useRouter().push('/auth/register?ref=' + query.ref);
     return;
   }
+
+  if(query?.next) {
+    return useRouter().push(query?.next);
+  }
+
   useRouter().push('/main/');
 }
 
