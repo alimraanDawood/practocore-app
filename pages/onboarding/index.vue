@@ -712,7 +712,7 @@ const skipStep = () => {
 }
 
 const finishOnboarding = async () => {
-  if(isTauri) {
+  if(isTauri.value) {
     // close current window and load the main window
     console.log('Login successful, transitioning to main window');
     await invoke('login_complete');
