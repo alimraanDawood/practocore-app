@@ -1,11 +1,44 @@
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+import {X} from "lucide-vue-next";
+import AccountType from "~/components/auth/RegisterScreens/AccountType.vue";
+import OrganisationRegister from "~/components/auth/RegisterScreens/OrganisationRegister.vue";
+import FirmDetailsRegister from "~/components/auth/RegisterScreens/FirmDetailsRegister.vue";
+import Subscription from "~/components/auth/RegisterScreens/Subscription.vue";
+import PrimaryContactRegister from "~/components/auth/RegisterScreens/PrimaryContactRegister.vue";
+import CreatingAccount from "~/components/auth/RegisterScreens/CreatingAccount.vue";
+import AdminRegister from "~/components/auth/RegisterScreens/AdminRegister.vue";
+import OTP from "~/components/auth/RegisterScreens/OTP.vue";
+import {computed} from "vue";
+
 definePageMeta({
   layout: 'blank',
 });
 
 const query = useRoute().query;
 
-const redirect = () => {
+const isTauri = computed(() => {
+  return '__TAURI_INTERNALS__' in window;
+});
+
+const isMainWindow = computed(() => {
+  const currentWindow = getCurrentWindow();
+
+  return currentWindow?.label === 'main';
+});
+
+const redirect = async () => {
+  // Check if we're running in Tauri desktop app
+  if (isTauri.value) {
+    // In Tauri: close login window and show main window
+    console.log('Login successful, transitioning to main window');
+    await invoke('login_complete');
+    return;
+  }
+
+  // In web/mobile: use normal routing
   if(query?.ref) {
     useRouter().push('/auth/register?ref=' + query.ref);
     return;
@@ -16,6 +49,11 @@ const redirect = () => {
   }
 
   useRouter().push('/main/');
+}
+
+const closeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.close();
 }
 
 </script>
@@ -30,8 +68,32 @@ const redirect = () => {
 <!--    </div>-->
 <!--  </LayoutAuth>-->
 
-    <div class="flex flex-col w-full h-[100dvh]">
-      <div class="flex flex-row p-3 border-b"></div>
+  <div v-if="isTauri && !isMainWindow" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+    <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
+      <div class="flex flex-row w-full">
+        <NuxtLink :to="query?.ref ? `/auth/register?ref=${query?.ref}` : '/auth/register'">
+          <Button size="sm" variant="outline">Sign Up Instead</Button>
+        </NuxtLink>
+      </div>
+      <div class="flex flex-row w-full text-center  items-center justify-center">
+        <span class="ibm-plex-serif">Sign In to PractoCore</span>
+      </div>
+      <div class="flex flex-row w-full justify-end">
+        <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full"><X class="size-4" /></button>
+      </div>
+    </div>
+    <div class="flex flex-col items-center w-full divide-x h-full">
+      <div class="flex flex-col h-full w-full max-w-sm items-center justify-center border-x overflow-hidden p-3">
+        <AuthSignIn @success="redirect" class="w-full" />
+      </div>
+    </div>
+
+    <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
+    </div>
+  </div>
+
+    <div v-else class="flex flex-col w-full h-[100dvh]">
+      <div class="flex flex-row p-3 border-b" data-tauri-drag-region></div>
       <div class="flex flex-col w-full h-full gap-5 items-center justify-center">
         <div class="flex flex-col w-[95vw] items-center justify-center lg:w-[35vw] items-center p-3 border-x h-full">
           <div class="flex flex-col w-full lg:max-w-sm gap-5">

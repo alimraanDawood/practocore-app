@@ -43,20 +43,32 @@ async function setup() {
     console.log('Frontend setup task complete!')
 
     await dashboardStore.init();
-    
+
     matterStore.ensureSubscribed();
     await matterStore.fetchMatters(false);
 
     calendarStore.ensureSubscribed();
     await calendarStore.fetchDeadlines(false);
-    
+
+
     // Set the frontend task as being completed
     invoke('set_complete', {task: 'frontend'});
     // useRouter().push('/');
 }
 
 onMounted(async () => {
-    setup();
+    const { $pb } = useNuxtApp();
+
+    await sleep(10)
+    // Check if user is authenticated
+    if ($pb.authStore.isValid) {
+        // User is logged in, proceed with normal setup
+        await setup();
+    } else {
+        // User is not logged in, show login window
+        console.log('User not authenticated, showing login window');
+        await invoke('show_login_window');
+    }
 });
 </script>
 

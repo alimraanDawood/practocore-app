@@ -28,6 +28,17 @@
         "height": 400,
         "center": true,
         "resizable": false
+      },
+      {
+        "label": "login",
+        "url": "/auth/login",
+        "decorations": false,
+        "width": 1024,
+        "height": 768,
+        "center": true,
+        "resizable": false,
+        "visible": false,
+        "transparent": true
       }
     ],
     "security": {

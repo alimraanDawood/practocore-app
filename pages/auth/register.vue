@@ -50,6 +50,44 @@
     </div>
   </div>
 
+  <div v-else-if="isTauri && !isMainWindow" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+    <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
+      <div class="flex flex-row w-full">
+        <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
+          <Button size="sm" variant="outline">Login Instead</Button>
+        </NuxtLink>
+      </div>
+      <div class="flex flex-row w-full text-center  items-center justify-center">
+        <span class="ibm-plex-serif">Getting Started With PractoCore</span>
+      </div>
+      <div class="flex flex-row w-full justify-end">
+        <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full"><X class="size-4" /></button>
+      </div>
+    </div>
+    <div class="flex flex-col w-full items-center h-full">
+      <div class="flex flex-col h-full w-full max-w-sm items-center lg:justify-center border-x p-3 overflow-hidden">
+        <XyzTransition mode="out-in" xyz="fade in-right out-left">
+          <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" @complete="accountTypeRegistComplete" />
+          <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
+          <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
+          <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
+          <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
+          <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
+          <OTP class="max-w-sm p-3" :otp-id="otpId" @complete="OTPEntryComplete" :user-id="userId" v-else-if="currentStep === RegistrationSteps.OTP" />
+          <Subscription @complete="subscriptionRegistComplete" v-else-if="currentStep === RegistrationSteps.SUBSCRIPTION" />
+        </XyzTransition>
+      </div>
+    </div>
+
+    <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
+      <Button @click="goBack" :disabled="!canGoBack" size="sm" variant="secondary">Previous</Button>
+      <div class="flex flex-row w-full items-center justify-center gap-1">
+        <div class="size-2 bg-muted rounded-full" v-for="i in 5"></div>
+      </div>
+      <Button @click="goForward" :disabled="!canGoForward" size="sm">Next</Button>
+    </div>
+  </div>
+
   <div v-else class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div class="flex flex-row justify-center w-full items-center p-3 border-b">
       <div class="flex flex-row gap-2">
@@ -87,7 +125,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'; // Import ref, reactive, computed from 'vue'
-import { ArrowLeft, ArrowRight } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, X } from 'lucide-vue-next'
 import AccountType from "~/components/auth/RegisterScreens/AccountType.vue";
 import OrganisationRegister from "~/components/auth/RegisterScreens/OrganisationRegister.vue";
 import PrimaryContactRegister from "~/components/auth/RegisterScreens/PrimaryContactRegister.vue";
@@ -105,6 +143,7 @@ import {
   submitAccountDetails
 } from "~/services/auth";
 import {toast} from "vue-sonner";
+import {getCurrentWindow} from "@tauri-apps/api/window";
 // query allows us to tell whether the registration is from a link
 const query = useRoute().query;
 
@@ -403,6 +442,21 @@ const submitData = async () => {
 definePageMeta({
   layout: 'blank',
 });
+
+const isTauri = computed(() => {
+  return '__TAURI_INTERNALS__' in window;
+});
+
+const isMainWindow = computed(() => {
+  const currentWindow = getCurrentWindow();
+
+  return currentWindow?.label === 'main';
+});
+
+const closeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.close();
+}
 </script>
 
 <style scoped>

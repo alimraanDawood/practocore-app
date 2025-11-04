@@ -9,7 +9,7 @@ pub fn run() {
             frontend_task: false,
             backend_task: false,
         }))
-    .invoke_handler(tauri::generate_handler![set_complete])  
+    .invoke_handler(tauri::generate_handler![set_complete, show_login_window, login_complete])  
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -52,5 +52,26 @@ async fn set_complete(
         splash_window.close().unwrap();
         main_window.show().unwrap();
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn show_login_window(app: AppHandle) -> Result<(), ()> {
+    // Close splashscreen and show login window
+    let splash_window = app.get_webview_window("splashscreen").unwrap();
+    let login_window = app.get_webview_window("login").unwrap();
+    splash_window.close().unwrap();
+    login_window.show().unwrap();
+    Ok(())
+}
+
+#[tauri::command]
+async fn login_complete(app: AppHandle) -> Result<(), ()> {
+    // Close login window and show main window
+    let login_window = app.get_webview_window("login").unwrap();
+    let main_window = app.get_webview_window("main").unwrap();
+    login_window.close().unwrap();
+    main_window.eval("window.location.replace('/')");
+    main_window.show().unwrap();
     Ok(())
 }
