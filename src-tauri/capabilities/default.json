@@ -9,6 +9,9 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "notification:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen"
   ]
 }

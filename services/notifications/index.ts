@@ -1,5 +1,5 @@
 // services/notificationService.ts
-import { LocalNotifications } from '@capacitor/local-notifications';
+import { LocalNotifications } from './adapter';
 import PocketBase, { type RecordModel } from 'pocketbase';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';

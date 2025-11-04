@@ -59,8 +59,8 @@ async function setup() {
 onMounted(async () => {
     const { $pb } = useNuxtApp();
 
-    await sleep(10)
-    // Check if user is authenticated
+    await sleep(5)
+    ==// Check if user is authenticated
     if ($pb.authStore.isValid) {
         // User is logged in, proceed with normal setup
         await setup();
