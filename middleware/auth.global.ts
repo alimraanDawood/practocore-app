@@ -1,14 +1,9 @@
-import Pocketbase from "pocketbase";
-
-const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "https://www.practocore.com";
-
+import { pb } from "~/lib/pocketbase";
 
 export default defineNuxtRouteMiddleware((to, from) => {
-    const pb = new Pocketbase(SERVER_URL);
 
 
-    if (pb.authStore.isValid) {
+    if (pb.authStore.isValid && pb.authStore.record?.collectionName === 'Users') {
         return;
     }
 

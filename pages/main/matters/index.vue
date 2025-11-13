@@ -1,8 +1,8 @@
 <template>
-    <div class="flex flex-col gap-5 lg:p-5 lg:w-[95vw] w-full h-full overflow-y-scroll">
+    <div class="flex flex-col gap-5 lg:p-5 lg:w-[95vw] w-full h-full overflow-y-hidden">
         <div class="flex flex-col h-full w-full">
             <DefineSearchFilterTemplate>
-                <div class="flex flex-row items-center gap-2 w-full">
+                <div class="flex flex-row items-center gap-2 w-full px-3">
                     <InputGroup class="bg-background lg:w-fit">
                         <InputGroupInput v-model="query" placeholder="Search..." />
                         <InputGroupAddon>
@@ -63,9 +63,8 @@
                 </div>
             </DefineSearchFilterTemplate>
 
-            <div class="flex flex-col w-full h-full p-3 gap-2">
-
-                <div class="flex flex-row items-center justify-between">
+            <div class="flex flex-col w-full h-full gap-2">
+                <div class="flex flex-row items-center p-3 justify-between">
                     <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
 
                     <div class="flex flex-row gap-3 items-center">
@@ -115,11 +114,7 @@
                     </div>
 
                     <template v-else-if="matters !== null && matters?.items?.length > 0 ">
-                        <div class="flex flex-col w-full h-full">
-                            <div class="hidden flex-col w-full h-full">
-                                <MatterTable :columns="columns" :data="matters?.items" />
-                            </div>
-    
+                        <div class="flex flex-col w-full h-full overflow-y-scroll px-3 pb-3">
                             <div
                                 class="grid grid-cols-1 lg:grid-cols-3 gap-3">
                                 <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"

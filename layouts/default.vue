@@ -9,6 +9,12 @@
       <div class="flex flex-row items-center gap-2">
         <SharedDarkModeSwitch />
 
+        <SharedNotifications>
+          <Button size="icon" variant="secondary">
+            <Bell />
+          </Button>
+        </SharedNotifications>
+
         <AlertDialog>
           <AlertDialogTrigger as-child>
             <Button variant="destructive" size="icon">

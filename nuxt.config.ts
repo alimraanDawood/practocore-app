@@ -87,12 +87,11 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
-            pocketbaseUrl: process.env.POCKETBASE_URL || 'https://www.practocore.com'
+            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://10.34.0.250:8090'
         }
     },
     plugins: [
         '~/plugins/animxyz',
         '~/plugins/pocketbase.client',
-        '~/plugins/notifications.client'
     ]
 })

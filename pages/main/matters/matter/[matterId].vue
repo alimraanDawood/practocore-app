@@ -82,9 +82,6 @@
         <div class="flex flex-row w-[90vw] h-full border-x divide-x">
             <div class="flex flex-col w-full overflow-y-scroll p-3">
                 <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })" :matter="matter" />
-                <!-- <FeaturesCalendarMonthView
-                    :events="mockEvents"
-                    @event-click="onEventClick" /> -->
             </div>
 
             <div class="flex flex-col max-w-sm w-full h-full">
@@ -99,7 +96,8 @@
 
 <script setup>
 import {Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions, LogOut} from 'lucide-vue-next';
-import { getMatter, subscribeToDeadline, subscribeToMatter, unsubscribeToAllDeadlines, unsubscribeToMatter } from '~/services/matters';
+import { subscribeToDeadline, subscribeToMatter, unsubscribeToAllDeadlines, unsubscribeToMatter } from '~/services/matters';
+import { useMattersStore } from '~/stores/matters';
 import dayjs from 'dayjs';
 import { Calendar } from '@/components/ui/calendar_enhanced';
 import timezone from 'dayjs/plugin/timezone';
@@ -107,6 +105,8 @@ import utc from 'dayjs/plugin/timezone';
 import { toast } from 'vue-sonner';
 import AdjournDeadline from '~/components/shared/Deadline/AdjournDeadline/AdjournDeadline.vue';
 import {signOut} from "~/services/auth/index.js";
+
+const mattersStore = useMattersStore();
 
 const viewDeadlineOpen = ref(false);
 const deadline = ref(null);
@@ -180,6 +180,7 @@ definePageMeta({
 
 
 const matter = ref(null);
+const isInitialLoad = ref(true);
 
 const accentClasses = (accentIndex) => {
     const accentMap = {
@@ -216,8 +217,16 @@ const mockEvents = computed(() => {
 })
 
 onMounted(async () => {
-    matter.value = await getMatter(useRoute().params.matterId, {  });
+    const matterId = useRoute().params.matterId;
 
+    // Use store's cached fetch - will show cached data instantly if available
+    matter.value = await mattersStore.fetchMatter(matterId, {
+        showLoading: isInitialLoad.value
+    });
+
+    isInitialLoad.value = false;
+
+    // Subscribe to real-time updates
     subscribeToMatter(matter?.value?.id, reloadMatter);
 
     for(let deadline of matter.value?.deadlines) {
@@ -231,7 +240,12 @@ onMounted(async () => {
 
 const reloadMatter = async () => {
     try {
-        matter.value = await getMatter(useRoute().params.matterId, {  });
+        const matterId = useRoute().params.matterId;
+        // Refresh in background without showing loading state
+        matter.value = await mattersStore.fetchMatter(matterId, {
+            forceRefresh: true,
+            showLoading: false
+        });
         console.log("Updated!")
     } catch(e) {
         console.error(e);

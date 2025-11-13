@@ -1,31 +1,17 @@
-import Pocketbase, { type RecordModel, type RecordSubscription } from 'pocketbase';
+import { type RecordModel, type RecordSubscription } from 'pocketbase';
+import { pb as pocketbase } from '~/lib/pocketbase';
 
-// const SERVER_URL = "https://www.practocore.com";
-const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "https://www.practocore.com";
-
-const pocketbase = new Pocketbase(SERVER_URL);
+const SERVER_URL = "http://10.34.0.250:8090";
 
 export async function getMatters(page: number, perPage: number, options: Object) {
-    const matters = await pocketbase.collection('Matters').getList(page, perPage, { ...options });
-    
-    let matterList = matters.items;
-    let deadlines = [];
-
-    for (let matter of matters.items) {
-
-        let deadlines = await pocketbase.collection('Deadlines').getFullList({ filter: `matter = '${matter.id}'` });
-
-        for (let deadline of deadlines) {
-            const adjournments = await pocketbase.collection('DeadlineAdjournments').getFullList({ filter: `deadline = '${deadline.id}'` });
-
-            deadlines = [...deadlines.filter(d => d.id !== deadline.id), { ...deadline, adjournments: [...adjournments.map(a => a.id)], expand: { ...deadline?.expand, adjournments } }];
+    // Use optimized backend route that fetches everything in one request
+    return fetch(`${SERVER_URL}/api/practocore/matters?page=${page}&perPage=${perPage}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
         }
-
-        matterList = [...matterList.filter(p => p.id !== matter.id), { ...matter, deadlines: [...deadlines.map(d => d.id)], expand: { ...matter?.expand, deadlines: deadlines } }];
-    }
-
-    return { ...matters, items: matterList };
+    }).then((e) => e.json());
 }
 
 export async function getAllDeadlines(options: Object) {
@@ -79,16 +65,14 @@ export function unsubscribeToMatter(matterId: string) {
 }
 
 export async function getMatter(matterId: string, options: Object) {
-    const matter = await pocketbase.collection('Matters').getOne(matterId, { ...options });
-    let deadlines = await pocketbase.collection('Deadlines').getFullList({ filter: `matter = '${matter.id}'` });
-
-    for (let deadline of deadlines) {
-        const adjournments = await pocketbase.collection('DeadlineAdjournments').getFullList({ filter: `deadline = '${deadline.id}'` });
-
-        deadlines = [...deadlines.filter(d => d.id !== deadline.id), { ...deadline, adjournments: [...adjournments.map(a => a.id)], expand: { ...deadline?.expand, adjournments } }];
-    }
-
-    return { ...matter, deadlines: [...deadlines.map(d => d.id)], expand: { ...matter?.expand, deadlines: deadlines } };
+    // Use optimized backend route that fetches everything in one request
+    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
 }
 
 export async function updateDeadline(deadlineId: string, options: Object) {

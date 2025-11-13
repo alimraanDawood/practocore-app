@@ -67,7 +67,7 @@
     <div class="flex flex-col w-full items-center h-full">
       <div class="flex flex-col h-full w-full max-w-sm items-center lg:justify-center border-x p-3 overflow-hidden">
         <XyzTransition mode="out-in" xyz="fade in-right out-left">
-          <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" @complete="accountTypeRegistComplete" />
+          <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" :organisation-data="registrationData.organisation" @complete="accountTypeRegistComplete" />
           <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
           <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
           <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />

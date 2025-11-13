@@ -11,15 +11,12 @@ import { App } from '@capacitor/app';
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
-import { useNotificationStore } from '~/stores/notifications';
 
 const { setupBackButton } = useBackButton();
 
-const notificationStore = useNotificationStore();
 
 onMounted(async () => {1
   // Initialize notification system
-  await notificationStore.initialize();
   setupBackButton();
 });
 
@@ -38,6 +35,5 @@ App.addListener('appUrlOpen', (event) => {
 
 onUnmounted(() => {
   // Cleanup when app closes
-  notificationStore.unsubscribeFromRealtimeUpdates();
 });
 </script>

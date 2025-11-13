@@ -71,6 +71,13 @@ export const useMattersStore = defineStore('matters', {
       }
 
       return cached.data
+    },
+
+    // Check if matter cache is stale
+    isMatterStale: (state) => (id: string) => {
+      const cached = state.matterCache[id]
+      if (!cached) return true
+      return Date.now() - cached.timestamp > CACHE_TTL
     }
   },
   actions: {
@@ -143,6 +150,68 @@ export const useMattersStore = defineStore('matters', {
     // Fetch in background without blocking UI
     async fetchMattersInBackground() {
       return this.fetchMatters(true, true)
+    },
+
+    // Fetch single matter with stale-while-revalidate pattern
+    async fetchMatter(id: string, options: { forceRefresh?: boolean, showLoading?: boolean } = {}) {
+      const { forceRefresh = false, showLoading = true } = options
+
+      // Check cache first
+      const cached = this.getMatterById(id)
+
+      // If we have fresh cache and not forcing refresh, return immediately
+      if (cached && !forceRefresh && !this.isMatterStale(id)) {
+        return cached
+      }
+
+      // If we have stale cache, return it immediately but refresh in background
+      if (cached && !forceRefresh) {
+        // Return stale data immediately for instant UI
+        // But refresh in background
+        this.fetchMatterInBackground(id)
+        return cached
+      }
+
+      // No cache or forced refresh - show loading and fetch
+      if (showLoading) {
+        this.loading = true
+      }
+
+      try {
+        const matter = await getMatter(id, {})
+
+        // Update cache
+        this.matterCache[id] = {
+          data: matter,
+          timestamp: Date.now()
+        }
+
+        // Also update in the list if present
+        if (this.result?.items) {
+          const index = this.result.items.findIndex((m: any) => m.id === id)
+          if (index !== -1) {
+            this.result.items[index] = matter
+          }
+        }
+
+        return matter
+      } catch (error) {
+        console.error('Error fetching matter:', error)
+        // If fetch fails but we have cached data, return it
+        if (cached) {
+          return cached
+        }
+        throw error
+      } finally {
+        if (showLoading) {
+          this.loading = false
+        }
+      }
+    },
+
+    // Fetch matter in background without showing loading state
+    async fetchMatterInBackground(id: string) {
+      return this.fetchMatter(id, { showLoading: false, forceRefresh: true })
     },
 
     // Update matter optimistically

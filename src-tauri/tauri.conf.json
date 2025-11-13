@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "bun run dev --host",
+    "beforeDevCommand": "bun run dev --host='0.0.0.0'",
     "beforeBuildCommand": "bun run generate"
   },
   "app": {
@@ -33,12 +33,13 @@
         "label": "login",
         "url": "/auth/login",
         "decorations": false,
-        "width": 819,
-        "height": 614,
+        "width": 1024,
+        "height": 768,
         "center": true,
-        "resizable": false,
+        "resizable": true,
         "visible": false,
-        "transparent": true
+        "transparent": true,
+        "maximized": true
       }
     ],
     "security": {

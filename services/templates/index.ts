@@ -1,10 +1,7 @@
-import Pocketbase, { type RecordModel, type RecordSubscription } from 'pocketbase';
+import { type RecordModel, type RecordSubscription } from 'pocketbase';
+import { pb as pocketbase } from '~/lib/pocketbase';
 
-// const SERVER_URL = "https://www.practocore.com";
-const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "https://www.practocore.com";
-
-const pocketbase = new Pocketbase(SERVER_URL);
+const SERVER_URL = "http://10.34.0.250:8090";
 
 
 export async function getAllTemplates() {

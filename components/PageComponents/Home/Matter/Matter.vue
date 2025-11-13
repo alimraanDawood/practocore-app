@@ -1,6 +1,9 @@
 <template>
-    <button 
+    <button
         class="flex flex-col w-full text-left p-3 gap-3 bg-muted rounded-lg"
+        @mouseenter="prefetchMatter(matter.id)"
+        @touchstart="prefetchMatter(matter.id)"
+        @focus="prefetchMatter(matter.id)"
     >
         
         <span class="font-semibold truncate">{{ matter?.name }}</span>
@@ -36,8 +39,11 @@
 import { Clock, CheckCircle, CheckCircle2 } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { usePrefetch } from '~/composables/usePrefetch';
 
 dayjs.extend(relativeTime);
+
+const { prefetchMatter } = usePrefetch();
 
 const props = defineProps({
     matter: {

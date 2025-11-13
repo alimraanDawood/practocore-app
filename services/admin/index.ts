@@ -1,8 +1,6 @@
-import Pocketbase from 'pocketbase';
-// const SERVER_URL = "https://www.practocore.com";
-const SERVER_URL = "https://www.practocore.com";
-// const SERVER_URL = "https://www.practocore.com"
-const pocketbase = new Pocketbase(SERVER_URL);
+import { pb as pocketbase } from '~/lib/pocketbase';
+
+const SERVER_URL = "http://10.34.0.250:8090";
 
 
 export async function getOrganisationUsers(page : number, perPage: number, options : Object) {
