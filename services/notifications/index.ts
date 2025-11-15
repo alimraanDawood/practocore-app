@@ -1,7 +1,7 @@
 import PocketBase from "pocketbase";
 import type { PushNotificationPayload, OrganizationPushPayload, PushNotificationResponse } from '~/types/push-notifications';
 
-const SERVER_URL = "https://www.practocore.com";
+const SERVER_URL = "http://127.0.0.1:8090";
 const pocketbase = new PocketBase(SERVER_URL);
 
 export async function getNotifications(page, perPage, options = {}) {
