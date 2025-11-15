@@ -2,7 +2,7 @@ import PocketBase from 'pocketbase';
 
 // Shared PocketBase instance used across the entire app
 // This ensures the authStore is consistent in plugins, middleware, and services
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "https://www.practocore.com";
 
 export const pb = new PocketBase(SERVER_URL);
 

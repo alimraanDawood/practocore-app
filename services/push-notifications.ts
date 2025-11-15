@@ -9,7 +9,7 @@ import PocketBase from 'pocketbase';
 import type { DeviceTokenRecord, NotificationData } from '~/types/push-notifications';
 import {toast} from "vue-sonner";
 
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "https://www.practocore.com";
 const pocketbase = new PocketBase(SERVER_URL);
 
 /**

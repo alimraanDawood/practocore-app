@@ -1,7 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "https://www.practocore.com";
 
 export async function getMatters(page: number, perPage: number, options: Object) {
     // Use optimized backend route that fetches everything in one request
