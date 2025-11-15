@@ -12,7 +12,7 @@ const firebaseConfig = {
   projectId: "practocore-72f49",
   storageBucket: "practocore-72f49.firebasestorage.app",
   messagingSenderId: "488964126042",
-  appId: "1:488964126042:web:YOUR_WEB_APP_ID" // TODO: Replace with your actual web app ID
+  appId: "1:488964126042:web:fce9b12cbfb30f8c6d6f63" // TODO: Replace with your actual web app ID
 };
 
 // Initialize Firebase in service worker
@@ -26,14 +26,34 @@ messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
   const notificationTitle = payload.notification?.title || payload.data?.title || 'PractoCore Notification';
+
+  // Parse actions from data if present
+  let actions = [];
+  if (payload.data?.actions) {
+    try {
+      const parsedActions = JSON.parse(payload.data.actions);
+      // Convert to service worker action format (max 2 actions on most platforms)
+      actions = parsedActions.slice(0, 2).map((action, index) => ({
+        action: `action_${index}`,
+        title: action.label,
+        icon: action.icon || undefined,
+        url: action.url || '',
+        variant: action.variant || 'default',
+        external: action.external || false
+      }));
+    } catch (e) {
+      console.error('[firebase-messaging-sw.js] Failed to parse actions:', e);
+    }
+  }
+
   const notificationOptions = {
     body: payload.notification?.body || payload.data?.body || '',
     icon: '/icon.png', // Make sure you have an icon in your public folder
     badge: '/badge.png',
-    tag: payload.data?.tag || 'practocore-notification',
-    data: payload.data,
+    tag: payload.data?.tag || payload.data?.notification_id || 'practocore-notification',
+    data: payload.data, // Store all data for click handling
     requireInteraction: false,
-    actions: payload.data?.actions ? JSON.parse(payload.data.actions) : []
+    actions: actions
   };
 
   // Show notification
@@ -46,14 +66,41 @@ self.addEventListener('notificationclick', (event) => {
 
   event.notification.close();
 
+  let targetUrl = '/';
+
   // Handle action button clicks
   if (event.action) {
     console.log('[firebase-messaging-sw.js] Action clicked:', event.action);
-    // Handle different actions based on event.action
+
+    // Find the action from stored data
+    const actionIndex = parseInt(event.action.replace('action_', ''));
+    const storedActions = event.notification.actions || [];
+
+    if (storedActions[actionIndex]) {
+      const clickedAction = storedActions[actionIndex];
+      targetUrl = clickedAction.url || '/';
+
+      // Handle external links
+      if (clickedAction.external) {
+        event.waitUntil(
+          clients.openWindow(targetUrl)
+        );
+        return;
+      }
+    }
+  } else {
+    // No action button clicked, use the default click_action
+    targetUrl = event.notification.data?.click_action || '/';
   }
 
-  // Get the click action URL from notification data
-  const clickAction = event.notification.data?.click_action || '/';
+  // Ensure URL is absolute for internal navigation
+  if (!targetUrl.startsWith('http')) {
+    // Get the origin from the service worker scope
+    const origin = self.location.origin;
+    targetUrl = origin + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
+  }
+
+  console.log('[firebase-messaging-sw.js] Navigating to:', targetUrl);
 
   // Open or focus the app
   event.waitUntil(
@@ -62,16 +109,21 @@ self.addEventListener('notificationclick', (event) => {
         // Check if there's already a window open
         for (const client of clientList) {
           if (client.url.includes(self.registration.scope) && 'focus' in client) {
+            // Send message to the app to navigate
             client.postMessage({
               type: 'NOTIFICATION_CLICKED',
-              data: event.notification.data
+              data: event.notification.data,
+              url: targetUrl
             });
-            return client.focus();
+            return client.focus().then(() => {
+              // Navigate the focused window
+              return client.navigate(targetUrl);
+            });
           }
         }
         // If no window is open, open a new one
         if (clients.openWindow) {
-          return clients.openWindow(clickAction);
+          return clients.openWindow(targetUrl);
         }
       })
   );

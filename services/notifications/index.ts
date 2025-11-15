@@ -1,11 +1,102 @@
 import PocketBase from "pocketbase";
 import type { PushNotificationPayload, OrganizationPushPayload, PushNotificationResponse } from '~/types/push-notifications';
+import type { Notification, NotificationListResponse, CreateNotificationPayload } from '~/types/notifications';
 
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "http://127.0.0.1:8090";
 const pocketbase = new PocketBase(SERVER_URL);
 
-export async function getNotifications(page, perPage, options = {}) {
-    return pocketbase.collection('Notifications').getList(page, perPage, options);
+/**
+ * Get notifications list with filtering and pagination
+ */
+export async function getNotifications(page = 1, perPage = 20, filter: 'all' | 'read' | 'unread' = 'all'): Promise<NotificationListResponse> {
+    const options: any = {
+        sort: '-created',
+    };
+
+    // Apply filter based on read status
+    if (filter === 'read') {
+        options.filter = 'read = true';
+    } else if (filter === 'unread') {
+        options.filter = 'read = false';
+    }
+    // 'all' = no filter
+
+    return pocketbase.collection('Notifications').getList(page, perPage, options) as Promise<NotificationListResponse>;
+}
+
+/**
+ * Mark a notification as read
+ */
+export async function markNotificationAsRead(notificationId: string) {
+    return pocketbase.collection('Notifications').update(notificationId, {
+        read: true
+    });
+}
+
+/**
+ * Mark all notifications as read for current user
+ */
+export async function markAllNotificationsAsRead() {
+    try {
+        // Get all unread notifications
+        const unreadNotifications = await pocketbase.collection('Notifications').getFullList({
+            filter: 'read = false'
+        });
+
+        // Mark each as read
+        const promises = unreadNotifications.map(notification =>
+            pocketbase.collection('Notifications').update(notification.id, { read: true })
+        );
+
+        await Promise.all(promises);
+        return { success: true };
+    } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get unread notification count
+ */
+export async function getUnreadCount() {
+    try {
+        const result = await pocketbase.collection('Notifications').getList(1, 1, {
+            filter: 'read = false'
+        });
+        return result.totalItems;
+    } catch (error) {
+        console.error('Error getting unread count:', error);
+        return 0;
+    }
+}
+
+/**
+ * Subscribe to real-time notification updates
+ */
+export function subscribeToNotifications(callback: (data: any) => void) {
+    return pocketbase.collection('Notifications').subscribe('*', callback);
+}
+
+/**
+ * Unsubscribe from notifications
+ */
+export async function unsubscribeFromNotifications() {
+    return pocketbase.collection('Notifications').unsubscribe('*');
+}
+
+/**
+ * Delete a notification
+ */
+export async function deleteNotification(notificationId: string): Promise<boolean> {
+    return pocketbase.collection('Notifications').delete(notificationId);
+}
+
+/**
+ * Create a new notification
+ */
+export async function createNotification(data: CreateNotificationPayload): Promise<Notification> {
+    return pocketbase.collection('Notifications').create(data);
 }
 
 /**

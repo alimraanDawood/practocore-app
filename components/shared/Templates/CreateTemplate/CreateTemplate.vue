@@ -161,7 +161,10 @@ function createEmptyTemplateData(options: { name: string, description?: string, 
             <span v-if="!loading">Create Template</span>
             <Loader v-else class="animate-spin" />
           </Button>
-          <Button variant="secondary">Cancel</Button>
+
+          <SheetClose class="w-full">
+            <Button variant="secondary" class="w-full">Cancel</Button>
+          </SheetClose>
         </SheetFooter>
       </div>
     </SheetContent>

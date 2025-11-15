@@ -17,7 +17,7 @@ export const firebaseConfig = {
   projectId: "practocore-72f49",
   storageBucket: "practocore-72f49.firebasestorage.app",
   messagingSenderId: "488964126042",
-  appId: "1:488964126042:web:YOUR_WEB_APP_ID" // TODO: Replace with your actual web app ID
+  appId: "1:488964126042:web:fce9b12cbfb30f8c6d6f63" // TODO: Replace with your actual web app ID
 };
 
 /**
@@ -31,4 +31,4 @@ export const firebaseConfig = {
  * 5. Copy the "Key pair" value
  * 6. Replace the placeholder below
  */
-export const vapidKey = "YOUR_VAPID_KEY_HERE"; // TODO: Replace with your actual VAPID key
+export const vapidKey = "BGzB248hhvoUjphp00DRMy1Ou0QcCjWsvBYszqny7PPjUgPI2EVejp6Aev8ArbFIbuESOnCNxRIPbMFylPphE5c"; // TODO: Replace with your actual VAPID key

@@ -14,7 +14,7 @@ import type { DeviceTokenRecord, NotificationData } from '~/types/push-notificat
 import { toast } from "vue-sonner";
 import { firebaseConfig, vapidKey } from '~/config/firebase.config';
 
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "http://127.0.0.1:8090";
 const pocketbase = new PocketBase(SERVER_URL);
 
 // Store Firebase messaging instance for web
@@ -62,6 +62,43 @@ export async function initializePushNotifications() {
 }
 
 /**
+ * Request push notification permission for web platform
+ * MUST be called from a user-generated event (e.g., button click)
+ * @returns The permission status after requesting
+ */
+export async function requestWebPushPermission(): Promise<NotificationPermission | null> {
+  const platform = getPlatform();
+
+  if (platform !== 'web') {
+    console.log('This function is only for web platform');
+    return null;
+  }
+
+  if (!('Notification' in window)) {
+    console.log('This browser does not support notifications');
+    return null;
+  }
+
+  try {
+    // Request permission - this MUST be called from a user interaction
+    const permission = await Notification.requestPermission();
+
+    if (permission === 'granted') {
+      console.log('Notification permission granted, initializing...');
+      // Now initialize the push notifications
+      await initializeWebPushNotifications();
+    } else {
+      console.log('Notification permission denied');
+    }
+
+    return permission;
+  } catch (error) {
+    console.error('Error requesting notification permission:', error);
+    return null;
+  }
+}
+
+/**
  * Initialize push notifications for web platform using Firebase
  */
 async function initializeWebPushNotifications() {
@@ -72,10 +109,10 @@ async function initializeWebPushNotifications() {
       return;
     }
 
-    // Request notification permission
-    const permission = await Notification.requestPermission();
+    // Check current permission status (don't request it automatically)
+    const permission = Notification.permission;
     if (permission !== 'granted') {
-      console.log('Notification permission denied');
+      console.log('Notification permission not granted. Call requestWebPushPermission() from a user interaction.');
       return;
     }
 

@@ -32,6 +32,11 @@
             <CheckCircle class="size-4" />
             <span>All Deadlines Met</span>
         </div>
+
+        <div v-if="matter?.expand?.members && matter.expand.members.length > 0" class="flex flex-row items-center justify-between pt-2 border-t border-border/50">
+            <span class="text-xs text-muted-foreground">Members</span>
+            <SharedAvatarStack :members="matter.expand.members" :max-visible="3" />
+        </div>
     </button>
 </template>
 

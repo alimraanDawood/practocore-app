@@ -1,7 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 
 export async function getAllTemplates() {

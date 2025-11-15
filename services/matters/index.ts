@@ -1,7 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "http://10.34.0.250:8090";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 export async function getMatters(page: number, perPage: number, options: Object) {
     // Use optimized backend route that fetches everything in one request
@@ -42,6 +42,10 @@ export async function createMatter(options: { name: string, caseNumber: string, 
             'Content-Type': 'application/json'
         }
     }).then((e) => e.json());
+}
+
+export async function updateMatter(matterId: string, data: any) {
+    return pocketbase.collection('Matters').update(matterId, data);
 }
 
 export async function deleteMatter(matterId: string) {

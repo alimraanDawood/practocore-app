@@ -11,7 +11,12 @@
             </div>
 
             <div class="flex flex-row gap-2 items-center">
-                <SharedDarkModeSwitch />
+              <SharedDarkModeSwitch />
+
+              <SharedMattersMemberManagement @updated="reloadMatter" :matter="matter">
+                <SharedAvatarStack :members="matter?.expand?.members" :max-visible="3" />
+              </SharedMattersMemberManagement>
+
               <AlertDialog>
                 <AlertDialogTrigger as-child>
                   <Button variant="destructive" size="icon">
@@ -36,51 +41,25 @@
         </div>
 
         <div class="flex flex-col h-full w-full overflow-y-scroll">
-            <div class="flex flex-col w-full p-3">
+            <div class="flex flex-col w-full p-3 gap-3">
                 <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="toggleDeadlineView" :matter="matter" />
-
-                <!-- <Calendar @highlight-clicked="toggleDeadlineView" :highlights="matter?.expand?.deadlines?.map((d, index) => ({ id: d.id, date: d.date, class: badgeAccentClasses(index, d.completed), completed: d.completed, index: index }))" :weekday-format="'short'" class=" w-full" /> -->
             </div>
-
-            <!-- <div class="flex flex-col bg-background gap-3 border-t p-3 h-full">
-                <SharedDeadlineViewDeadline :deadline="deadline" :index="index" v-for="deadline, index in matter?.expand?.deadlines">
-                    <div class="flex text-left flex-row border p-3 gap-3" :class="accentClasses(index, deadline?.completed)">
-                        <CalendarIcon class="size-4" />
-    
-                        <div class="flex flex-col gap-1">
-                            <span class="font-semibold text-sm">{{ deadline.name }}</span>
-                            <span class="text-sm font-semibold">{{ dayjs(deadline.date).subtract(1, 'D').format("DD/MM/YYYY") }}</span>
-    
-                            <Badge v-if="deadline.completed === false && (new Date() < new Date(deadline.date))" :class="badgeAccentClasses(index)"><Clock /> PENDING</Badge>
-                            <Badge v-else-if="deadline.completed === false && (new Date() > new Date(deadline.date))" :class="badgeAccentClasses(index)"><XCircle /> MISSED</Badge>
-                            <Badge v-else-if="deadline.completed === true" :class="badgeAccentClasses(index)"><CheckCircle /> COMPLETED</Badge>
-                        </div>
-                    </div>
-                </SharedDeadlineViewDeadline>
-            </div> -->
         </div>
-
-<!--        <button v-if="actionExpanded" class="fixed left-0 top-0 w-screen h-[100dvh] bg-black/70 z-40" @click="actionExpanded = false"></button>-->
-<!--        <div class="p-5 fixed bottom-0 right-0 flex flex-col items-end gap-3 z-50">-->
-<!--            <XyzTransition mode="out-in">-->
-<!--                <div xyz="fade right" v-if="actionExpanded" class="flex flex-col">-->
-<!--                    <AdjournDeadline :matter="matter">-->
-<!--                        <Button size="sm" variant="secondary">Add Adjournment</Button>-->
-<!--                    </AdjournDeadline>-->
-<!--                </div>-->
-<!--            </XyzTransition>-->
-
-<!--            <Button @click="actionExpanded = !actionExpanded" size="icon">-->
-<!--                <Plus class="transition-all duration-300 ease-in-out" :class="{ 'rotate-45': actionExpanded }" />-->
-<!--            </Button>-->
-<!--        </div>-->
-
         <SharedDeadlineViewDeadline v-model:open="viewDeadlineOpen" :index="d_index" :deadline="deadline"></SharedDeadlineViewDeadline>
     </div>
 
     <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
         <div class="flex flex-row w-[90vw] h-full border-x divide-x">
-            <div class="flex flex-col w-full overflow-y-scroll p-3">
+            <div class="flex flex-col w-full overflow-y-scroll p-3 gap-3">
+                <div class="flex flex-row items-center gap-2">
+                    <SharedMattersMemberManagement @updated="reloadMatter" :matter="matter">
+                        <Button variant="outline" size="sm" class="gap-2">
+                            <Users class="size-4" />
+                            Manage Members
+                            <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">{{ matter.expand.members.length }}</Badge>
+                        </Button>
+                    </SharedMattersMemberManagement>
+                </div>
                 <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })" :matter="matter" />
             </div>
 
@@ -95,7 +74,7 @@
 </template>
 
 <script setup>
-import {Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions, LogOut} from 'lucide-vue-next';
+import {Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions, LogOut, Users} from 'lucide-vue-next';
 import { subscribeToDeadline, subscribeToMatter, unsubscribeToAllDeadlines, unsubscribeToMatter } from '~/services/matters';
 import { useMattersStore } from '~/stores/matters';
 import dayjs from 'dayjs';
