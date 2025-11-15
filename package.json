@@ -42,6 +42,7 @@
     "cordova-plugin-lottie-splashscreen": "^0.10.0",
     "dayjs": "^1.11.18",
     "embla-carousel-vue": "^8.6.0",
+    "firebase": "^12.6.0",
     "lucide-vue-next": "^0.522.0",
     "nuxt": "^4.0.1",
     "nuxt-tiptap-editor": "^2.3.1",
