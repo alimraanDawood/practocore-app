@@ -98,6 +98,15 @@
         </div>
       </div>
     </SheetContent>
+
+    <!-- Permission Prompt Dialog -->
+    <SharedNotificationsPermissionPrompt
+      v-model:open="shouldShowPrompt"
+      :is-processing="isProcessing"
+      @enable="handleEnableNotifications"
+      @not-now="handleNotNow"
+      @never="handleNever"
+    />
   </Sheet>
 </template>
 
@@ -270,13 +279,36 @@ function handleRealtimeUpdate(data: any) {
   }
 }
 
+// Notification permission prompt
+const {
+  shouldShowPrompt,
+  isProcessing,
+  handleGrant,
+  handleNotNow,
+  handleNever,
+  triggerPromptCheck
+} = useNotificationPermission();
+
 // Initialize when sheet opens
 watch(isOpen, async (opened) => {
   if (opened) {
     await fetchNotifications(1, false);
     await updateCounts();
+
+    // Check if we should show permission prompt
+    await triggerPromptCheck();
   }
 });
+
+// Handle permission grant
+const handleEnableNotifications = async () => {
+  const granted = await handleGrant();
+  if (granted) {
+    toast.success('Notifications enabled successfully!');
+  } else {
+    toast.error('Failed to enable notifications. Please check your browser settings.');
+  }
+};
 
 // Setup on mount
 onMounted(async () => {
