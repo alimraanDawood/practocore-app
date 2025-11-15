@@ -114,9 +114,9 @@
                     </div>
 
                     <template v-else-if="matters !== null && matters?.items?.length > 0 ">
-                        <div class="flex flex-col w-full h-full overflow-y-scroll px-3 pb-3">
+                        <div class="flex flex-col w-full h-full overflow-y-scroll">
                             <div
-                                class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                class="grid grid-cols-1 lg:grid-cols-3 gap-3 p-3">
                                 <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
@@ -151,7 +151,7 @@
 
             <XyzTransition xyz="fade down">
                 <div v-if="selection.active"
-                    class="fixed p-3 w-full bottom-[4rem] lg:bottom-0 flex flex-col  items-center justify-center">
+                    class="fixed p-3 w-full bottom-[4rem] lg:bottom-0 flex flex-col  items-center justify-center z-30">
                     <div
                         class="bg-background p-3 rounded border shadow-sm space-x-2 justify-between flex flex-row w-full lg:max-w-md">
                         <div class="flex flex-row items-center text-xs gap-2">
