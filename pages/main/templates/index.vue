@@ -1,274 +1,297 @@
-<template>
-  <div class="flex flex-col w-full items-center h-full overflow-hidden">
-    <div class="flex flex-col w-full lg:w-[90vw] h-full">
-      <div class="flex flex-col">
-        <div class="flex flex-row w-full justify-between p-3">
-          <span class="ibm-plex-serif text-lg font-semibold">Templates</span>
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { toast } from 'vue-sonner';
+import type { EnhancedTemplate, TemplateCategoryFilter } from '~/lib/types/template';
+import { getAllTemplates, getTemplates } from '~/services/templates';
+import TemplateFilters from '~/components/shared/Templates/TemplateFilters.vue';
+import TemplateCard from '~/components/shared/Templates/TemplateCard.vue';
+import CreateTemplate from '~/components/shared/Templates/CreateTemplate/CreateTemplate.vue';
+import { Plus, Grid3x3, List, Loader2 } from 'lucide-vue-next';
 
-          <SharedTemplatesCreateTemplate>
-            <Button size="sm">
-              <Plus/>
-              Create Template
-            </Button>
-          </SharedTemplatesCreateTemplate>
+// Page metadata
+definePageMeta({
+  title: 'Template Marketplace',
+  description: 'Browse and discover deadline templates',
+  layout: 'no-mobile-top-bar',
+});
+
+// State
+const templates = ref<EnhancedTemplate[]>([]);
+const loading = ref(true);
+const filters = ref<TemplateCategoryFilter>({});
+const viewMode = ref<'grid' | 'list'>('grid');
+const sortBy = ref<string>('-created');
+
+// Pagination
+const currentPage = ref(1);
+const perPage = ref(12);
+const totalPages = ref(1);
+const totalItems = ref(0);
+
+// Sort options
+const sortOptions = [
+  { value: '-created', label: 'Newest First' },
+  { value: 'created', label: 'Oldest First' },
+  { value: '-updated', label: 'Recently Updated' },
+  { value: 'name', label: 'Name (A-Z)' },
+  { value: '-name', label: 'Name (Z-A)' },
+  { value: '-usageCount', label: 'Most Popular' },
+];
+
+// Computed
+const hasFilters = computed(() => {
+  return (
+    filters.value.country?.length ||
+    filters.value.practiceArea?.length ||
+    filters.value.courtLevel?.length ||
+    filters.value.complexity?.length ||
+    filters.value.searchQuery
+  );
+});
+
+const isEmpty = computed(() => {
+  return !loading.value && templates.value.length === 0;
+});
+
+// Load templates
+async function loadTemplates() {
+  loading.value = true;
+  try {
+    const result = await getTemplates(
+      currentPage.value,
+      perPage.value,
+      filters.value,
+      sortBy.value
+    );
+
+    templates.value = result.items;
+    totalPages.value = result.totalPages;
+    totalItems.value = result.totalItems;
+    currentPage.value = result.page;
+  } catch (error) {
+    console.error('Failed to load templates:', error);
+    toast.error('Failed to load templates');
+  } finally {
+    loading.value = false;
+  }
+}
+
+// Handle filter changes
+function onFilterApply(newFilters: TemplateCategoryFilter) {
+  filters.value = newFilters;
+  currentPage.value = 1; // Reset to first page
+  loadTemplates();
+}
+
+// Handle sort change
+function onSortChange(value: string) {
+  sortBy.value = value;
+  loadTemplates();
+}
+
+// Navigate to template details
+function viewTemplate(template: EnhancedTemplate) {
+  navigateTo(`/main/templates/${template.id}`);
+}
+
+// Use template
+function useTemplate(template: EnhancedTemplate) {
+  navigateTo(`/main/matters/create?template=${template.id}`);
+}
+
+// Pagination
+function goToPage(page: number) {
+  currentPage.value = page;
+  loadTemplates();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Initialize
+onMounted(() => {
+  loadTemplates();
+});
+</script>
+
+<template>
+  <div class="flex flex-col h-full w-full overflow-y-scroll p-3 gap-6">
+    <!-- Header -->
+    <div class="flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-lg lg:text-2xl ibm-plex-serif font-bold">Template</h1>
+          <p class="text-muted-foreground mt-1 hidden lg:block">
+            Browse and discover deadline templates for your practice
+          </p>
         </div>
 
-        <div class="flex flex-row border-b p-3 pb-0 gap-3" role="tablist" aria-label="Templates tabs">
-          <button
-              role="tab"
-              :aria-selected="activeTab === 'community'"
-              :class="['text-sm pb-1 border-b-4', activeTab === 'community' ? 'font-semibold border-primary' : 'border-transparent']"
-              @click="setTab('community')"
-          >
-            Community
-          </button>
-          <button
-              v-if="getSignedInUser()?.organisation"
-              role="tab"
-              :aria-selected="activeTab === 'organisation'"
-              :class="['text-sm pb-1 border-b-4', activeTab === 'organisation' ? 'font-semibold border-primary' : 'border-transparent']"
-              @click="setTab('organisation')"
-          >
-            Organisation
-          </button>
-          <button
-              role="tab"
-              :aria-selected="activeTab === 'your-templates'"
-              :class="['text-sm pb-1 border-b-4', activeTab === 'your-templates' ? 'font-semibold border-primary' : 'border-transparent']"
-              @click="setTab('your-templates')"
-          >
-            Your Templates
-          </button>
+        <!-- Create Template Button -->
+        <CreateTemplate>
+          <Button size="sm">
+            <Plus class="h-4 w-4 mr-2" />
+            Create Template
+          </Button>
+        </CreateTemplate>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex flex-col gap-3 lg:flex-row justify-between w-full">
+        <div class="">
+          <TemplateFilters v-model="filters" @apply="onFilterApply" />
+        </div>
+
+        <div class="flex flex-col-reverse gap-2 lg:flex-row lg:items-center justify-between">
+          <div class="flex items-center gap-2">
+            <!-- Results Count -->
+            <p class="text-sm text-muted-foreground lg:hidden">
+              <span v-if="!loading">
+                {{ totalItems }} template{{ totalItems !== 1 ? 's' : '' }} found
+              </span>
+              <span v-else>Loading...</span>
+            </p>
+
+            <!-- Clear Filters -->
+            <Button
+              v-if="hasFilters"
+              variant="ghost"
+              size="sm"
+              @click="onFilterApply({})"
+            >
+              Clear Filters
+            </Button>
+          </div>
+
+          <div class="flex w-full lg:w-fit items-center gap-4">
+            <!-- Sort -->
+            <Select class="w-full" v-model="sortBy" @update:model-value="onSortChange">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem
+                    v-for="option in sortOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      <XyzTransition mode="out-in" class="flex flex-col w-full h-full overflow-hidden">
-        <!-- Community -->
-        <div :xyz="$viewport.isGreaterOrEquals('customxs') ? 'fade' : 'fade left'" v-if="activeTab === 'community'"
-             class="flex flex-col w-full">
-          <div class="flex flex-row shrink-0 w-full no-scrollbar overflow-x-scroll p-3 gap-3">
-            <Button size="sm" variant="secondary">All</Button>
+      <p class="text-sm text-muted-foreground hidden lg:block">
+            <span v-if="!loading">
+              {{ totalItems }} template{{ totalItems !== 1 ? 's' : '' }} found
+            </span>
+        <span v-else>Loading...</span>
+      </p>
 
-            <Button
-                v-for="category in categories"
-                :key="category"
-                size="sm"
-                variant="ghost"
-            >
-              {{ category }}
-            </Button>
-          </div>
+      <!-- Toolbar -->
+    </div>
 
-          <!-- community content placeholder -->
-          <div class="flex flex-col w-full h-full overflow-y-scroll">
-            <div v-if="loading" class="p-3 grid grid-cols-1 lg:grid-cols-3 gap-3 h-full">
-              <div class="border aspect-video w-full rounded-lg bg-muted animate-pulse" v-for="i in 9"></div>
-            </div>
+    <!-- Loading State -->
+    <div v-if="loading" class="flex items-center justify-center py-12">
+      <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
 
-            <div v-else-if="templates?.items?.length > 0" class="p-3 flex flex-col lg:grid lg:grid-cols-3 gap-3 shrink-0 h-full">
-              <NuxtLink :to="`/main/templates/template/${template.id}`" v-for="template in templates?.items">
-                <button
-                    class="flex text-left flex-col p-3 gap-3 overflow-hidden aspect-video border shrink-0 w-full rounded-lg bg-muted">
-                  <span class="text-lg font-semibold ibm-plex-serif">{{ template.name }}</span>
-                  <div class="flex flex-col w-full h-full overflow-hidden relative">
-                    <div
-                        class="text-sm w-full prose text-foreground prose-headings:text-foreground prose-h1:text-foreground prose-h1:ibm-plex-serif prose-headings:ibm-plex-serif"
-                        v-html="template.description">
+    <!-- Empty State -->
+    <div
+      v-else-if="isEmpty"
+      class="flex flex-col items-center justify-center py-12 gap-4"
+    >
+      <div class="text-center">
+        <h3 class="text-lg font-semibold">No templates found</h3>
+        <p class="text-sm text-muted-foreground mt-1">
+          {{ hasFilters
+            ? 'Try adjusting your filters or search query'
+            : 'Create your first template to get started'
+          }}
+        </p>
+      </div>
+      <CreateTemplate v-if="!hasFilters">
+        <Button>
+          <Plus class="h-4 w-4 mr-2" />
+          Create Your First Template
+        </Button>
+      </CreateTemplate>
+    </div>
 
-                    </div>
+    <!-- Templates Grid/List -->
+    <div v-else>
+      <!-- Grid View -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      >
+        <NuxtLink v-for="template in templates" :to="`/main/templates/template/${template.id}`">
+          <TemplateCard
+            :key="template.id"
+            :template="template"
+            @click="viewTemplate"
+            @use="useTemplate"
+          />
+        </NuxtLink>
+      </div>
+    </div>
 
-                    <div class="absolute h-5 bottom-0 left-0 w-full bg-gradient-to-t from-muted to-transparent"></div>
-                  </div>
-                  <div class="flex flex-row items-center justify-between gap-3">
-                    <div class="flex flex-row gap-2">
-                      <div class="flex flex-row text-sm font-semibold items-center gap-1">
-                        <CalendarIcon class="size-4"/>
+    <!-- Pagination -->
+    <div
+      v-if="!loading && !isEmpty && totalPages > 1"
+      class="flex items-center justify-center gap-2 mt-6"
+    >
+      <Button
+        variant="outline"
+        size="sm"
+        :disabled="currentPage === 1"
+        @click="goToPage(currentPage - 1)"
+      >
+        Previous
+      </Button>
 
-                        {{
-                          (() => {
-                            const d = new Date(template.created);
-                            return `${String(d.getFullYear()).slice(-2)}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                          })()
-                        }}
-                      </div>
+      <div class="flex items-center gap-1">
+        <Button
+          v-for="page in totalPages"
+          :key="page"
+          variant="outline"
+          size="sm"
+          :class="{ 'bg-primary text-primary-foreground': page === currentPage }"
+          @click="goToPage(page)"
+        >
+          {{ page }}
+        </Button>
+      </div>
 
-                    </div>
-
-                    <Button class="" size="sm" variant="outline">Use Template</Button>
-                  </div>
-                </button>
-              </NuxtLink>
-            </div>
-
-            <div v-else class="flex flex-col w-full gap-1 h-full items-center justify-center p-3">
-              <CircleX class="size-10 mb-3" />
-              <span class="text-xl font-semibold ibm-plex-serif">No Templates Found</span>
-              <span class="text-muted-foreground">We were unable to find any templates.</span>
-              <SharedTemplatesCreateTemplate>
-                <Button size="sm">Create Template</Button>
-              </SharedTemplatesCreateTemplate>
-            </div>
-          </div>
-        </div>
-
-        <!-- Your Templates -->
-        <div :xyz="$viewport.isGreaterOrEquals('customxs') ? 'fade' : 'fade right'" v-else-if="activeTab === 'your-templates'"
-             class="flex flex-col w-full p-3 overflow-y-scroll">
-          <!-- replace with actual user templates list -->
-          <div v-if="loading" class="p-3 grid grid-cols-1 lg:grid-cols-3 gap-3 h-full">
-            <div class="border aspect-video w-full rounded-lg bg-muted animate-pulse" v-for="i in 9"></div>
-          </div>
-
-          <div v-else-if="templates?.items?.length > 0" class="flex flex-col lg:grid lg:grid-cols-3 gap-3 shrink-0 h-full">
-            <NuxtLink :to="`/main/templates/template/${template.id}`" v-for="template in templates?.items">
-              <button
-                  class="flex text-left flex-col p-3 gap-3 overflow-hidden aspect-video border shrink-0 w-full rounded-lg bg-muted">
-                <span class="text-lg font-semibold ibm-plex-serif">{{ template.name }}</span>
-                <div class="flex flex-col w-full h-full overflow-hidden relative">
-                  <div
-                      class="text-sm w-full prose text-foreground prose-headings:text-foreground prose-h1:text-foreground prose-h1:ibm-plex-serif prose-headings:ibm-plex-serif"
-                      v-html="template.description">
-
-                  </div>
-
-                  <div class="absolute h-5 bottom-0 left-0 w-full bg-gradient-to-t from-muted to-transparent"></div>
-                </div>
-                <div class="flex flex-row items-center justify-between gap-3">
-                  <div class="flex flex-row gap-2">
-                    <div class="flex flex-row text-sm font-semibold items-center gap-1">
-                      <CalendarIcon class="size-4"/>
-
-                      {{
-                        (() => {
-                          const d = new Date(template.created);
-                          return `${String(d.getFullYear()).slice(-2)}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                        })()
-                      }}
-                    </div>
-
-                  </div>
-
-                  <Button class="" size="sm" variant="outline">Use Template</Button>
-                </div>
-              </button>
-            </NuxtLink>
-          </div>
-
-          <div v-else class="flex flex-col w-full gap-1 h-full items-center justify-center p-3">
-            <CircleX class="size-10 mb-3" />
-            <span class="text-xl font-semibold ibm-plex-serif">No Templates Found</span>
-            <span class="text-muted-foreground">We were unable to find any templates.</span>
-            <SharedTemplatesCreateTemplate>
-              <Button size="sm">Create Template</Button>
-            </SharedTemplatesCreateTemplate>
-          </div>
-        </div>
-
-        <div :xyz="$viewport.isGreaterOrEquals('customxs') ? 'fade' : 'fade'" v-else-if="activeTab === 'organisation'"
-             class="flex flex-col w-full p-3 overflow-y-scroll">
-          <!-- replace with actual user templates list -->
-          <div v-if="loading" class="p-3 grid grid-cols-1 lg:grid-cols-3 gap-3 h-full">
-            <div class="border aspect-video w-full rounded-lg bg-muted animate-pulse" v-for="i in 9"></div>
-          </div>
-
-          <div v-else-if="templates?.items?.length > 0" class="flex flex-col lg:grid lg:grid-cols-3 gap-3 shrink-0 h-full">
-            <NuxtLink :to="`/main/templates/template/${template.id}`" v-for="template in templates?.items">
-              <button
-                  class="flex text-left flex-col p-3 gap-3 overflow-hidden aspect-video border shrink-0 w-full rounded-lg bg-muted">
-                <span class="text-lg font-semibold ibm-plex-serif">{{ template.name }}</span>
-                <div class="flex flex-col w-full h-full overflow-hidden relative">
-                  <div
-                      class="text-sm w-full prose text-foreground prose-headings:text-foreground prose-h1:text-foreground prose-h1:ibm-plex-serif prose-headings:ibm-plex-serif"
-                      v-html="template.description">
-
-                  </div>
-
-                  <div class="absolute h-5 bottom-0 left-0 w-full bg-gradient-to-t from-muted to-transparent"></div>
-                </div>
-                <div class="flex flex-row items-center justify-between gap-3">
-                  <div class="flex flex-row gap-2">
-                    <div class="flex flex-row text-sm font-semibold items-center gap-1">
-                      <CalendarIcon class="size-4"/>
-
-                      {{
-                        (() => {
-                          const d = new Date(template.created);
-                          return `${String(d.getFullYear()).slice(-2)}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                        })()
-                      }}
-                    </div>
-
-                  </div>
-
-                  <Button class="" size="sm" variant="outline">Use Template</Button>
-                </div>
-              </button>
-            </NuxtLink>
-          </div>
-
-          <div v-else class="flex flex-col w-full gap-1 h-full items-center justify-center p-3">
-            <CircleX class="size-10 mb-3" />
-            <span class="text-xl font-semibold ibm-plex-serif">No Templates Found</span>
-            <span class="text-muted-foreground">We were unable to find any templates.</span>
-            <SharedTemplatesCreateTemplate>
-              <Button size="sm">Create Template</Button>
-            </SharedTemplatesCreateTemplate>
-          </div>
-        </div>
-      </XyzTransition>
+      <Button
+        variant="outline"
+        size="sm"
+        :disabled="currentPage === totalPages"
+        @click="goToPage(currentPage + 1)"
+      >
+        Next
+      </Button>
     </div>
   </div>
 </template>
 
-<script setup>
-import {ref} from 'vue';
-import {CalendarCheck, CircleX, CalendarIcon, Plus} from 'lucide-vue-next';
-import {getTemplates, subscribeToTemplates} from '~/services/templates';
-import {getSignedInUser} from "~/services/auth/index.js";
-
-definePageMeta({
-  layout: 'no-mobile-top-bar'
-});
-
-const templates = ref(null);
-const loading = ref(false);
-
-onMounted(async () => {
-  await loadTemplates();
-
-  subscribeToTemplates(loadTemplates);
-});
-
-const activeTab = ref('community');
-const categories = [];
-
-watch(activeTab, () => {
-  loadTemplates();
-});
-
-
-const loadTemplates = async () => {
-  loading.value = true;
-  let filter = ''
-  switch(activeTab.value) {
-    case 'community':
-      filter = 'isPublic = true';
-      break;
-    case 'your-templates':
-      filter = `author = '${getSignedInUser()?.id}'`;
-      break;
-    case 'organisation':
-      filter = `organisation = '${getSignedInUser()?.organisation}'`;
-      break;
-    default:
-      filter = '';
-      break;
-  }
-  templates.value = await getTemplates(1, 10, { filter: filter, expand: 'author'  });
-  loading.value = false;
+<style scoped>
+/* Custom scrollbar for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-function setTab(tab) {
-  activeTab.value = tab;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-</script>
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+</style>

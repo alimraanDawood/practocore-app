@@ -6,6 +6,7 @@ import {toast} from "vue-sonner";
 import { Loader } from 'lucide-vue-next';
 import {getOrganisation, getSignedInUser} from "~/services/auth";
 import {createTemplate} from "~/services/templates";
+import { serializeTags } from '~/lib/types/template';
 
 
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
@@ -13,10 +14,20 @@ const loading = ref(false);
 const open = ref(false);
 
 const formSchema = toTypedSchema(z.object({
-  name: z.string(),
+  name: z.string().min(3, 'Name must be at least 3 characters'),
   description: z.string().optional(),
   organisation: z.boolean().optional(),
-  public: z.boolean().optional()
+  public: z.boolean().optional(),
+
+  // Phase 1A: Categorization fields
+  country: z.string().min(1, 'Country is required'),
+  stateProvince: z.string().optional(),
+  practiceArea: z.string().min(1, 'Practice area is required'),
+  courtLevel: z.string().optional(),
+  matterType: z.string().optional(),
+  complexity: z.string().optional(),
+  language: z.string(),
+  tags: z.array(z.string()).max(10, 'Maximum 10 tags allowed').optional(),
 }));
 
 const form = useForm({
@@ -41,7 +52,18 @@ const onSubmit = form.handleSubmit(async (values) => {
         description: values.description,
         fields: [],
         triggerPrompt: ''
-      })
+      }),
+
+      // Phase 1A: Categorization fields
+      country: values.country,
+      stateProvince: values.stateProvince,
+      practiceArea: values.practiceArea,
+      courtLevel: values.courtLevel,
+      matterType: values.matterType,
+      complexity: values.complexity,
+      language: values.language || 'en',
+      tags: values.tags ? serializeTags(values.tags) : '[]',
+      status: 'draft', // New templates start as drafts
     });
 
     open.value = false;
@@ -136,6 +158,10 @@ function createEmptyTemplateData(options: { name: string, description?: string, 
             <FormMessage/>
           </FormItem>
         </FormField>
+
+        <!-- Phase 1A: Categorization Fields -->
+        <Separator class="my-4" />
+        <SharedTemplatesTemplateCategoryFields :show-advanced="true" />
       </form>
     </div>
   </DefineTemplate>
@@ -156,13 +182,13 @@ function createEmptyTemplateData(options: { name: string, description?: string, 
           <ReuseTemplate/>
         </div>
 
-        <SheetFooter class="border-t">
+        <SheetFooter class="border-t flex-col lg:flex-row-reverse">
           <Button :disabled="loading" type="submit" form="template_form_create">
             <span v-if="!loading">Create Template</span>
             <Loader v-else class="animate-spin" />
           </Button>
 
-          <SheetClose class="w-full">
+          <SheetClose class="w-full lg:w-fit">
             <Button variant="secondary" class="w-full">Cancel</Button>
           </SheetClose>
         </SheetFooter>
