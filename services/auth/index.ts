@@ -1,6 +1,6 @@
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "https://www.practocore.com";
+const SERVER_URL = "http://10.15.128.175:8090";
 
 export { pocketbase, SERVER_URL };
 

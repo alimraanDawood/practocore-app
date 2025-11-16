@@ -388,7 +388,7 @@ onRecordAfterCreateRequest((e) => {
 
 ```bash
 # Using curl (replace with your actual values):
-curl -X POST https://www.practocore.com/api/push-notifications/send \
+curl -X POST http://10.15.128.175:8090/api/push-notifications/send \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_USER_TOKEN" \
   -d '{

@@ -85,7 +85,7 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
-            pocketbaseUrl: process.env.POCKETBASE_URL || 'https://www.practocore.com'
+            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://10.15.128.175:8090'
         }
     },
     plugins: [

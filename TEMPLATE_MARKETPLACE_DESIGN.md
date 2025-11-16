@@ -54,9 +54,9 @@ This document outlines the design for a **global template marketplace** that wil
 
 ### Existing Capabilities
 The current template system provides:
-- **Sophisticated workflow modeling**: Conditional branching, field-driven customization
+- **Sophisticated workflow modeling**: Conditional branching (unimpemented in the ui), field-driven customization
 - **Reminder management**: Multi-channel notifications with escalation
-- **Visual editor**: Graph-based template building with undo/redo
+- **Visual editor**: timeline-based template building with undo/redo
 - **Real-time sync**: PocketBase subscriptions for collaborative updates
 - **Basic scoping**: Public, organization-scoped, and private templates
 

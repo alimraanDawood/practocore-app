@@ -48,9 +48,42 @@
             </button>
           </div>
 
-          <Button size="icon-sm" variant="ghost">
+          <Button size="icon-sm" variant="ghost" @click="settingsSheetOpen = true">
             <Settings />
           </Button>
+        </div>
+
+        <!-- Permission Alert Banner -->
+        <div
+          v-if="showPermissionBanner"
+          class="flex items-center justify-between gap-3 p-4 border-b bg-orange-500/10 border-orange-500/20"
+        >
+          <div class="flex items-start gap-3 flex-1">
+            <Bell class="size-5 text-orange-500 flex-shrink-0 mt-0.5" />
+            <div class="flex-1">
+              <p class="text-sm font-medium">Push Notifications Disabled</p>
+              <p class="text-xs text-muted-foreground mt-0.5">
+                Enable push notifications to receive updates even when the app is closed.
+              </p>
+            </div>
+          </div>
+          <div class="flex gap-2 flex-shrink-0">
+            <Button
+              size="sm"
+              @click="handleEnableFromBanner"
+              :disabled="isEnablingPermissionsFromBanner"
+            >
+              <Loader2 v-if="isEnablingPermissionsFromBanner" class="size-4 mr-2 animate-spin" />
+              Enable
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              @click="dismissBanner"
+            >
+              Dismiss
+            </Button>
+          </div>
         </div>
 
         <div
@@ -107,6 +140,11 @@
       @not-now="handleNotNow"
       @never="handleNever"
     />
+
+    <!-- Notification Settings Sheet -->
+    <SharedNotificationsNotificationSettings
+      v-model:open="settingsSheetOpen"
+    />
   </Sheet>
 </template>
 
@@ -120,9 +158,13 @@ import {
   subscribeToNotifications,
   unsubscribeFromNotifications
 } from "~/services/notifications/index.ts";
+import { checkPushPermissions, requestWebPushPermission } from '~/services/push-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
+import { Capacitor } from '@capacitor/core';
 import { toast } from 'vue-sonner';
 
 const isOpen = ref(false);
+const settingsSheetOpen = ref(false);
 const notifications = ref<any[]>([]);
 const loading = ref(false);
 const loadingMore = ref(false);
@@ -134,6 +176,10 @@ const hasMore = ref(true);
 const allCount = ref(0);
 const unreadCount = ref(0);
 const scrollContainer = ref<HTMLElement | null>(null);
+const showPermissionBanner = ref(false);
+const bannerDismissed = ref(false);
+const isEnablingPermissionsFromBanner = ref(false);
+const permissionStatus = ref<any>(null);
 
 // Fetch notifications
 async function fetchNotifications(page = 1, append = false) {
@@ -289,13 +335,77 @@ const {
   triggerPromptCheck
 } = useNotificationPermission();
 
+// Check and update permission banner
+async function checkPermissionBanner() {
+  try {
+    const status = await checkPushPermissions();
+    permissionStatus.value = status;
+
+    // Show banner if permissions not granted and user hasn't dismissed it
+    showPermissionBanner.value =
+      !bannerDismissed.value &&
+      status &&
+      status.receive !== 'granted';
+  } catch (error) {
+    console.error('Error checking permission status:', error);
+  }
+}
+
+// Dismiss banner
+function dismissBanner() {
+  bannerDismissed.value = true;
+  showPermissionBanner.value = false;
+  toast.info('You can enable notifications later from settings');
+}
+
+// Handle enable from banner
+async function handleEnableFromBanner() {
+  isEnablingPermissionsFromBanner.value = true;
+
+  try {
+    const platform = Capacitor.getPlatform();
+
+    if (platform === 'web') {
+      const permission = await requestWebPushPermission();
+
+      if (permission === 'granted') {
+        toast.success('Push notifications enabled successfully!');
+        showPermissionBanner.value = false;
+        await checkPermissionBanner();
+      } else if (permission === 'denied') {
+        toast.error('Permission denied. Please enable notifications in your browser settings.');
+      }
+    } else {
+      // Native platform
+      const permResult = await PushNotifications.requestPermissions();
+
+      if (permResult.receive === 'granted') {
+        await PushNotifications.register();
+        toast.success('Push notifications enabled successfully!');
+        showPermissionBanner.value = false;
+        await checkPermissionBanner();
+      } else {
+        toast.error('Permission denied. Please enable notifications in your device settings.');
+      }
+    }
+  } catch (error) {
+    console.error('Error enabling permissions:', error);
+    toast.error('Failed to enable push notifications');
+  } finally {
+    isEnablingPermissionsFromBanner.value = false;
+  }
+}
+
 // Initialize when sheet opens
 watch(isOpen, async (opened) => {
   if (opened) {
     await fetchNotifications(1, false);
     await updateCounts();
 
-    // Check if we should show permission prompt
+    // Check permission status and show banner if needed
+    await checkPermissionBanner();
+
+    // Check if we should show permission prompt (full dialog)
     await triggerPromptCheck();
   }
 });
