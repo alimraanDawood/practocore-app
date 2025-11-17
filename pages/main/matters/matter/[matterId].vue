@@ -42,10 +42,23 @@
 
         <div class="flex flex-col h-full w-full overflow-y-scroll">
             <div class="flex flex-col w-full p-3 gap-3">
+                <div v-if="showChat && matter.members.length > 1 && matter.members.includes(getSignedInUser()?.id)" class="flex flex-row gap-2 w-full">
+                    <Button @click="mobileChatOpen = true" variant="outline" size="sm" class="gap-2 flex-1">
+                        <MessageSquare class="size-4" />
+                        Open Chat
+                    </Button>
+                </div>
                 <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="toggleDeadlineView" :matter="matter" />
             </div>
         </div>
         <SharedDeadlineViewDeadline v-model:open="viewDeadlineOpen" :index="d_index" :deadline="deadline"></SharedDeadlineViewDeadline>
+
+        <!-- Mobile Chat Sheet -->
+        <Sheet v-if="showChat && matter.members.length > 1 && matter.members.includes(getSignedInUser()?.id)" v-model:open="mobileChatOpen">
+            <SheetContent side="bottom" class="h-[100vh] p-0">
+                <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id" :show-close="true" @close="mobileChatOpen = false" />
+            </SheetContent>
+        </Sheet>
     </div>
 
     <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
@@ -59,6 +72,11 @@
                             <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">{{ matter.expand.members.length }}</Badge>
                         </Button>
                     </SharedMattersMemberManagement>
+
+                    <Button v-if="showChat && matter.members.length > 1 && matter.members.includes(getSignedInUser()?.id)" @click="showChat = !showChat" variant="outline" size="sm" class="gap-2">
+                        <MessageSquare class="size-4" />
+                        {{ showChat ? 'Hide Chat' : 'Show Chat' }}
+                    </Button>
                 </div>
                 <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })" :matter="matter" />
             </div>
@@ -69,12 +87,16 @@
                 </div>
                 <SharedDeadlineViewDeadline :index="matter?.expand?.deadlines.indexOf(selectedDeadline)" v-else :deadline="selectedDeadline" :no-sheet="true"></SharedDeadlineViewDeadline>
             </div>
+
+            <div v-if="showChat && matter.members.length > 1 && matter.members.includes(getSignedInUser()?.id)" class="flex flex-col max-w-md w-full h-full">
+                <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id" />
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import {Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions, LogOut, Users} from 'lucide-vue-next';
+import {Plus, CalendarIcon, XCircle, CheckCircle, Clock, Bell, ArrowLeft, Proportions, LogOut, Users, MessageSquare} from 'lucide-vue-next';
 import { subscribeToDeadline, subscribeToMatter, unsubscribeToAllDeadlines, unsubscribeToMatter } from '~/services/matters';
 import { useMattersStore } from '~/stores/matters';
 import dayjs from 'dayjs';
@@ -83,7 +105,7 @@ import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
 import { toast } from 'vue-sonner';
 import AdjournDeadline from '~/components/shared/Deadline/AdjournDeadline/AdjournDeadline.vue';
-import {signOut} from "~/services/auth/index.js";
+import {getSignedInUser, signOut} from "~/services/auth/index.js";
 
 const mattersStore = useMattersStore();
 
@@ -93,6 +115,8 @@ const d_index = ref(0);
 
 const actionExpanded = ref(false);
 const query = useRoute().query;
+const showChat = ref(false);
+const mobileChatOpen = ref(false);
 
 const signOutUser = () => {
   signOut();
