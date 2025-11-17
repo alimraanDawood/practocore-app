@@ -113,7 +113,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full overflow-y-scroll p-3 gap-6">
+  <div class="flex flex-col h-full lg:w-[95vw] w-full overflow-y-scroll p-3 gap-6">
     <!-- Header -->
     <div class="flex flex-col gap-4">
       <div class="flex items-center justify-between">

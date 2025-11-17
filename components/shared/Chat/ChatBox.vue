@@ -207,7 +207,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-muted/30 xs:pb-12 text-foreground">
+  <div class="flex flex-col h-full bg-muted/30 xs:pb-12 lg:pb-0 text-foreground">
     <!-- Header -->
     <div class="flex items-center justify-between p-4 border-b bg-background">
       <h3 class="font-semibold">Chat</h3>
@@ -221,7 +221,7 @@ watch(
     </div>
 
     <!-- Messages -->
-    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div ref="messagesContainer" class="flex flex-col h-full overflow-y-scroll p-4 space-y-4">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center h-full">
         <Loader2 class="h-6 w-6 animate-spin " />

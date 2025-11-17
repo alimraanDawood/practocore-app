@@ -204,6 +204,7 @@ import { toast } from 'vue-sonner';
 import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
 import { useMattersStore } from '@/stores/matters';
+import { useDashboardStore } from '~/stores/dashboard';
 import MatterTable from '~/components/shared/Matters/MatterTable/MatterTable.vue';
 import { columns } from '@/components/shared/Matters/MatterTable/columns';
 import {getSignedInUser} from "~/services/auth";
@@ -217,6 +218,7 @@ const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTe
 const longPressedDirective = shallowRef(false)
 
 const mattersStore = useMattersStore();
+const dashboardStore = useDashboardStore();
 const { result: matters, loading, sort, query, selection, activeTab } = storeToRefs(mattersStore);
 
 const setTab = (newVal : string) => {
@@ -307,9 +309,12 @@ const deleteSelectedMatters = async () => {
     delete_open.value = false;
     loading.value = false;
 
-    // TODO: Fix the issue and restart this section
+    // Refresh both matters list and dashboard statistics
     resetSelection();
-    await mattersStore.fetchMatters(true);
+    await Promise.all([
+        mattersStore.fetchMatters(true),
+        dashboardStore.fetchStatistics(true)
+    ]);
 }
 
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col lg:flex-row w-full h-full overflow-hidden">
+  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-hidden">
     <!-- Main Calendar Area -->
     <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-scroll">
       <!-- Header with filters -->
