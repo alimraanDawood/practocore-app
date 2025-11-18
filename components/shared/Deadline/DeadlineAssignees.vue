@@ -30,7 +30,7 @@
       class="h-8 w-8"
       @click="openSheet"
     >
-      <Icon name="lucide:user-plus" class="h-4 w-4" />
+      <UserPlus class="h-4 w-4" />
     </Button>
   </div>
 
@@ -69,7 +69,7 @@
                 size="icon"
                 @click="removeAssignee(assignee.id)"
               >
-                <Icon name="lucide:x" class="h-4 w-4" />
+                <X class="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -99,7 +99,7 @@
                 size="icon"
                 @click="addAssignee(member.id)"
               >
-                <Icon name="lucide:plus" class="h-4 w-4" />
+                <Plus class="size-4" />
               </Button>
             </div>
           </div>
@@ -113,7 +113,7 @@
       <SheetFooter>
         <Button variant="outline" @click="sheetOpen = false">Cancel</Button>
         <Button @click="saveAssignees" :disabled="saving">
-          <Icon v-if="saving" name="lucide:loader-2" class="h-4 w-4 mr-2 animate-spin" />
+          <Loader2 class="h-4 w-4 mr-2 animate-spin" />
           Save Changes
         </Button>
       </SheetFooter>
@@ -122,6 +122,7 @@
 </template>
 
 <script setup lang="ts">
+import { Loader2, Plus, X, UserPlus } from 'lucide-vue-next';
 import { ref, computed, watch } from 'vue';
 import { updateDeadlineAssignees } from '~/services/matters';
 import { toast } from 'vue-sonner';
