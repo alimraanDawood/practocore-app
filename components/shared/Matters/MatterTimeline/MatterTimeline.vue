@@ -1,6 +1,6 @@
 <template>
     <div v-if="matter !== null" class="flex flex-col">
-        <button @click="$emit('deadlineSelected', deadline.id)"
+        <div
             v-for="deadline, index in matter?.expand?.deadlines?.sort((d1, d2) => { return new Date(d1.date) - new Date(d2.date); })"
             :key="deadline.id" class="flex flex-row text-left hover:bg-muted/30 group">
             <div class="flex flex-col px-2 items-center">
@@ -15,7 +15,10 @@
             </div>
 
             <div class="flex flex-col text-left  w-full p-2 pb-8 gap-2">
-                <span class="font-semibold ibm-plex-serif">{{ deadline.name }}</span>
+                <div class="flex flex-row items-center justify-between gap-2">
+                    <button @click="$emit('deadlineSelected', deadline.id)" class="text-left w-fit font-semibold ibm-plex-serif underline hover:text-primary">{{ deadline.name }}</button>
+                </div>
+
                 <template v-if="!deadline.completed">
                     <div class="flex flex-col lg:flex-row gap-2 lg:items-center">
                         <span class="text-sm text-muted-foreground">{{ deadline.input_prompt }}</span>
@@ -72,8 +75,18 @@
                         <span class="text-muted-foreground">{{ adjournment.reason }}</span>
                     </div>
                 </div>
+
+              <SharedDeadlineAssignees
+                  @click="e => e.stopPropagation()"
+                  v-if="matterMembers.length > 0"
+                  :deadline-id="deadline.id"
+                  :current-assignees="deadline.assignees || []"
+                  :matter-members="matterMembers"
+                  :is-supervisor="isSupervisor"
+                  @updated="handleAssigneesUpdated"
+              />
             </div>
-        </button>
+        </div>
     </div>
     <div v-else class="flex flex-col w-full">
         <div v-for="i in 5" class="flex flex-row text-left hover:bg-muted/30 group animate-pulse">
@@ -103,14 +116,54 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { Check, Circle, Dot, CalendarIcon, CalendarClock, CalendarCheck, ArrowRight, CalendarSync } from "lucide-vue-next"
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime"
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
 import { getSignedInUser } from "~/services/auth";
+import { pb } from '~/lib/pocketbase';
 
 dayjs.extend(relativeTime);
 
 const props = defineProps(['matter']);
 const emits = defineEmits(['updated', 'deadlineSelected']);
+
+// Get all matter members (owner + members array)
+const matterMembers = computed(() => {
+    if (!props.matter) return [];
+
+    const members = [];
+    const memberIds = new Set();
+
+    // Add owner
+    if (props.matter.expand?.owner) {
+        members.push(props.matter.expand.owner);
+        memberIds.add(props.matter.expand.owner.id);
+    }
+
+    // Add explicit members
+    if (props.matter.expand?.members) {
+        props.matter.expand.members.forEach(member => {
+            if (!memberIds.has(member.id)) {
+                members.push(member);
+                memberIds.add(member.id);
+            }
+        });
+    }
+
+    return members;
+});
+
+// Check if current user is a supervisor
+const isSupervisor = computed(() => {
+    const userId = pb.authStore.record?.id;
+    if (!userId || !props.matter) return false;
+    return props.matter.supervisors?.includes(userId) || false;
+});
+
+// Handle assignee updates
+function handleAssigneesUpdated() {
+    emits('updated');
+}
 </script>

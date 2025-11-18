@@ -4,7 +4,7 @@
       <slot />
     </SheetTrigger>
 
-    <SheetContent :side="$viewport.isGreaterOrEquals('tablet') ? 'right' : 'bottom'" class="flex flex-col">
+    <SheetContent :side="$viewport.isGreaterOrEquals('tablet') ? 'right' : 'bottom'" class="flex flex-col max-h-[100dvh]">
       <SheetHeader>
         <SheetTitle>Manage Members</SheetTitle>
         <SheetDescription>
@@ -129,15 +129,135 @@
             <span class="text-xs text-muted-foreground mt-1">Click "Add" to assign members to this matter</span>
           </div>
         </div>
+
+        <!-- Supervisors Section -->
+        <div v-if="isSupervisor" class="flex flex-col gap-3 pt-4 border-t">
+          <div class="flex flex-row items-center justify-between">
+            <div class="flex flex-col gap-1">
+              <span class="text-sm font-semibold">Supervisors ({{ supervisors.length }})</span>
+              <span class="text-xs text-muted-foreground">Supervisors can assign deadlines and manage members</span>
+            </div>
+          </div>
+
+          <!-- Supervisors List -->
+          <div v-if="supervisors.length > 0" class="flex flex-col gap-2">
+            <div
+              v-for="supervisor in supervisors"
+              :key="supervisor.id"
+              class="flex flex-col gap-2 justify-between p-3 rounded-lg border transition-colors"
+            >
+              <div class="flex flex-row items-center gap-3">
+                <Avatar class="size-10 ring-2 ring-primary/20">
+                  <AvatarImage :src="supervisor?.avatar" :alt="supervisor?.name" />
+                  <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+                    {{ getInitials(supervisor?.name) }}
+                  </AvatarFallback>
+                </Avatar>
+                <div class="flex flex-col">
+                  <div class="flex flex-row items-center gap-2">
+                    <span class="text-sm font-semibold">{{ supervisor.name }}</span>
+                    <Badge variant="secondary" class="text-xs">Supervisor</Badge>
+                  </div>
+                  <span class="text-xs text-muted-foreground">{{ supervisor.email }}</span>
+                </div>
+              </div>
+
+              <AlertDialog>
+                <AlertDialogTrigger as-child>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="supervisors.length === 1"
+                  >
+                    <ShieldOff class="size-4 mr-2" />
+                    Demote
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Demote Supervisor</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to remove supervisor status from <strong>{{ supervisor.name }}</strong>? They will no longer be able to assign deadlines or manage members.
+                      <span v-if="supervisors.length === 1" class="block mt-2 text-destructive font-medium">
+                        ⚠️ You cannot demote the last supervisor. At least one supervisor must remain.
+                      </span>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <Button
+                      variant="destructive"
+                      @click="demoteSupervisor(supervisor.id)"
+                      :disabled="loading || supervisors.length === 1"
+                    >
+                      <Loader2 v-if="loading" class="size-4 animate-spin" />
+                      <template v-else>Demote</template>
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+
+          <!-- Non-Supervisor Members (can be promoted) -->
+          <div v-if="nonSupervisorMembers.length > 0" class="flex flex-col gap-2 mt-2">
+            <span class="text-xs font-medium text-muted-foreground">Members (can be promoted)</span>
+            <div
+              v-for="member in nonSupervisorMembers"
+              :key="member.id"
+              class="flex flex-col gap-2 justify-between p-3 rounded-lg border"
+            >
+              <div class="flex flex-row items-center gap-3">
+                <Avatar class="size-10">
+                  <AvatarImage :src="member?.avatar" :alt="member?.name" />
+                  <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+                    {{ getInitials(member?.name) }}
+                  </AvatarFallback>
+                </Avatar>
+                <div class="flex flex-col">
+                  <span class="text-sm font-semibold">{{ member.name }}</span>
+                  <span class="text-xs text-muted-foreground">{{ member.email }}</span>
+                </div>
+              </div>
+
+              <AlertDialog>
+                <AlertDialogTrigger as-child>
+                  <Button size="sm" variant="outline">
+                    <Shield class="size-4 mr-2" />
+                    Promote
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Promote to Supervisor</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to promote <strong>{{ member.name }}</strong> to supervisor? They will be able to assign deadlines and manage members.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <Button
+                      @click="promoteMember(member.id)"
+                      :disabled="loading"
+                    >
+                      <Loader2 v-if="loading" class="size-4 animate-spin" />
+                      <template v-else>Promote</template>
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+        </div>
       </div>
     </SheetContent>
   </Sheet>
 </template>
 
 <script setup lang="ts">
-import { UserPlus, X, Check, Loader2, Users } from 'lucide-vue-next'
+import { UserPlus, X, Check, Loader2, Users, Shield, ShieldOff } from 'lucide-vue-next'
 import { getOrganisationMembers } from '~/services/admin'
-import { addMemberToMatter, removeMemberFromMatter } from '~/services/matters'
+import { addMemberToMatter, removeMemberFromMatter, promoteMemberToSupervisor, demoteSupervisorToMember } from '~/services/matters'
 import { getSignedInUser } from '~/services/auth'
 import { toast } from 'vue-sonner'
 
@@ -165,6 +285,26 @@ const currentMemberIds = computed(() => {
 
 const availableMembers = computed(() => {
   return orgMembers.value.filter(m => !currentMemberIds.value.includes(m.id))
+})
+
+const supervisors = computed(() => {
+  const supervisorIds = props.matter?.supervisors || []
+  const allMembers = [
+    // props.matter?.expand?.owner,
+    ...(props.matter?.expand?.members || [])
+  ].filter(Boolean)
+
+  return allMembers.filter(m => supervisorIds.includes(m.id))
+});
+
+// Check if current user is a supervisor
+const isSupervisor = computed(() => {
+  return supervisors.value.find(s => s.id === getSignedInUser()?.id);
+});
+
+const nonSupervisorMembers = computed(() => {
+  const supervisorIds = props.matter?.supervisors || []
+  return currentMembers.value.filter(m => !supervisorIds.includes(m.id))
 })
 
 const getInitials = (name: string) => {
@@ -221,6 +361,36 @@ const removeMember = async (memberId: string) => {
   } catch (error) {
     console.error('Error removing member:', error)
     toast.error('Failed to remove member')
+  } finally {
+    loading.value = false
+  }
+}
+
+const promoteMember = async (memberId: string) => {
+  loading.value = true
+  try {
+    await promoteMemberToSupervisor(props.matter.id, memberId)
+
+    toast.success('Member promoted to supervisor successfully')
+    emit('updated')
+  } catch (error) {
+    console.error('Error promoting member:', error)
+    toast.error('Failed to promote member')
+  } finally {
+    loading.value = false
+  }
+}
+
+const demoteSupervisor = async (supervisorId: string) => {
+  loading.value = true
+  try {
+    await demoteSupervisorToMember(props.matter.id, supervisorId)
+
+    toast.success('Supervisor demoted successfully')
+    emit('updated')
+  } catch (error) {
+    console.error('Error demoting supervisor:', error)
+    toast.error('Failed to demote supervisor')
   } finally {
     loading.value = false
   }

@@ -78,7 +78,7 @@
                     <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
 
                     <div class="flex flex-row gap-3 items-center">
-                        <ReuseSearchFilterTemplate class="hidden lg:flex" />
+<!--                        <ReuseSearchFilterTemplate class="hidden lg:flex" />-->
                         <SharedMattersCreateMatter @created="mattersStore.fetchMatters(true)">
                             <Button>
                                 <Plus /> Add Matter
@@ -88,7 +88,7 @@
                 </div>
 
 
-                <ReuseSearchFilterTemplate class="lg:hidden" />
+<!--                <ReuseSearchFilterTemplate class="lg:hidden" />-->
 
                 <div v-if="getSignedInUser()?.organisation" class="flex flex-row border-b p-3 pb-0 gap-3" role="tablist" aria-label="Templates tabs">
                     <button

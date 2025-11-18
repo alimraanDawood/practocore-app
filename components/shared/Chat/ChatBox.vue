@@ -248,7 +248,7 @@ watch(
 
           <div
             :class="[
-              'max-w-[80%] rounded-lg p-2',
+              'max-w-[80%] rounded-lg p-1 px-3',
               isMyMessage(message)
                 ? 'ml-auto bg-muted text-muted-foreground border'
                 : 'mr-auto bg-background border text-foreground'
@@ -287,6 +287,7 @@ watch(
           v-model="newMessage"
           type="text"
           placeholder="Type a message..."
+          @keyup.enter="handleSendMessage"
           :disabled="sending"
         />
         <div class="flex flex-row w-full justify-between items-center">
@@ -297,7 +298,7 @@ watch(
           </div>
 
           <div class="flex flex-row items-center gap-1">
-            <Button size="icon" variant="outline">
+            <Button v-if="false" size="icon" variant="outline">
               <Mic />
             </Button>
 

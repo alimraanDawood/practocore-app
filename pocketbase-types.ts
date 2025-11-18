@@ -80,6 +80,10 @@ export type DeadlineRemindersRecord<Trules = unknown> = {
 	rules?: null | Trules
 	title?: string
 	updated?: IsoDateString
+	acknowledgedBy?: RecordIdString
+	acknowledgedAt?: IsoDateString
+	escalated?: boolean
+	escalationSentAt?: IsoDateString
 }
 
 export type DeadlineTemplateVersionsRecord<TtemplateData = unknown> = {
@@ -131,6 +135,8 @@ export type DeadlinesRecord<Trules = unknown> = {
 	pending_prompt?: string
 	rules?: null | Trules
 	updated?: IsoDateString
+	assignees?: RecordIdString[]
+	fulfilled?: boolean
 }
 
 export type MattersRecord<TfieldValues = unknown> = {
@@ -142,6 +148,13 @@ export type MattersRecord<TfieldValues = unknown> = {
 	owner?: RecordIdString
 	template?: RecordIdString
 	updated?: IsoDateString
+	personal?: boolean
+	organisation?: RecordIdString
+	members?: RecordIdString[]
+	supervisors?: RecordIdString[]
+	mattermostChannelId?: string
+	mattermostWebhookId?: string
+	mattermostLastChecked?: IsoDateString
 }
 
 export type OTPsRecord = {

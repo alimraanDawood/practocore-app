@@ -12,7 +12,7 @@ PractoCore is a litigation deadline management application built as a multi-plat
 - **Frontend**: Vue 3 with TypeScript
 - **UI**: Shadcn-nuxt, Reka UI, TailwindCSS 4
 - **State Management**: Pinia
-- **Backend Integration**: PocketBase (https://www.practocore.com)
+- **Backend Integration**: PocketBase (https://api.practocore.com)
 - **Desktop Platform**: Tauri 2.x
 - **Mobile Platform**: Capacitor 7.x (Android)
 - **Animations**: GSAP, AnimXYZ, anime.js
@@ -56,7 +56,7 @@ Platform detection should use `@tauri-apps/api` for desktop features and `@capac
 
 ### Backend Communication
 
-All backend communication goes through PocketBase (https://www.practocore.com):
+All backend communication goes through PocketBase (https://api.practocore.com):
 - Authentication state managed via `pocketbase.authStore`
 - Real-time updates via PocketBase subscriptions
 - Custom API endpoints at `/api/practocore/*` and `/api/invitations/*`

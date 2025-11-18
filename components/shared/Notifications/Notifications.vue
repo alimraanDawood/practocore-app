@@ -27,7 +27,7 @@
               @click="changeFilter('all')"
             >
               All
-              <Badge variant="secondary" class="text-xs p-1 py-0">{{ allCount }}</Badge>
+<!--              <Badge variant="secondary" class="text-xs p-1 py-0">{{ allCount }}</Badge>-->
             </button>
 
             <button
@@ -36,7 +36,7 @@
               @click="changeFilter('unread')"
             >
               Unread
-              <Badge v-if="unreadCount > 0" variant="destructive" class="text-xs p-1 py-0">{{ unreadCount }}</Badge>
+<!--              <Badge v-if="unreadCount > 0" variant="destructive" class="text-xs p-1 py-0">{{ unreadCount }}</Badge>-->
             </button>
 
             <button

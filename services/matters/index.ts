@@ -1,7 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "https://www.practocore.com";
+const SERVER_URL = "https://api.practocore.com";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
@@ -25,6 +25,15 @@ export async function getMatters(page: number, perPage: number, options: { filte
 export async function getAllDeadlines(options: Object) {
     return pocketbase.collection('Deadlines').getFullList({ ...options });
 }
+
+export async function getDeadline(deadlineId : string, options = {}) {
+    return pocketbase.collection('Deadlines').getOne(deadlineId, options);
+}
+
+export async function getDeadlineReminder(deadlineReminderId : string, options = {}) {
+    return pocketbase.collection('DeadlineReminders').getOne(deadlineReminderId, options);
+}
+
 
 export async function getStatistics() {
     return fetch(`${SERVER_URL}/api/practocore/statistics`, {
@@ -126,6 +135,100 @@ export async function removeMemberFromMatter(matterId: string, userId: string) {
     return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/members/remove`, {
         method: 'POST',
         body: JSON.stringify({ userId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Promote a member to supervisor status
+ * @param matterId - Matter ID
+ * @param userId - User ID to promote
+ */
+export async function promoteMemberToSupervisor(matterId: string, userId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/supervisors/promote`, {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Demote a supervisor back to regular member status
+ * @param matterId - Matter ID
+ * @param userId - User ID to demote
+ */
+export async function demoteSupervisorToMember(matterId: string, userId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/supervisors/demote`, {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+// ============================================================================
+// Deadline Assignment & Supervisor Functions
+// ============================================================================
+
+/**
+ * Update assignees for a deadline
+ * @param deadlineId - Deadline ID
+ * @param assignees - Array of user IDs to assign
+ */
+export async function updateDeadlineAssignees(deadlineId: string, assignees: string[]) {
+    return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/assignees`, {
+        method: 'PUT',
+        body: JSON.stringify({ assignees }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Get assignees for a deadline with user details
+ * @param deadlineId - Deadline ID
+ */
+export async function getDeadlineAssignees(deadlineId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/assignees`, {
+        method: 'GET',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Acknowledge a reminder (mark as handled)
+ * @param reminderId - Reminder ID
+ */
+export async function acknowledgeReminder(reminderId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/reminders/${reminderId}/acknowledge`, {
+        method: 'POST',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Mark a deadline as fulfilled (completes the deadline and deactivates all reminders)
+ * @param deadlineId - Deadline ID
+ */
+export async function fulfillDeadline(deadlineId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/fulfill`, {
+        method: 'POST',
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
