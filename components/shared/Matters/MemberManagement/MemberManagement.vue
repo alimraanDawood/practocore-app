@@ -137,7 +137,7 @@
 <script setup lang="ts">
 import { UserPlus, X, Check, Loader2, Users } from 'lucide-vue-next'
 import { getOrganisationMembers } from '~/services/admin'
-import { updateMatter } from '~/services/matters'
+import { addMemberToMatter, removeMemberFromMatter } from '~/services/matters'
 import { getSignedInUser } from '~/services/auth'
 import { toast } from 'vue-sonner'
 
@@ -191,10 +191,15 @@ const addSelectedMembers = async () => {
 
   loading.value = true
   try {
-    const updatedMemberIds = [...currentMemberIds.value, ...selectedNewMembers.value]
-    await updateMatter(props.matter.id, { members: updatedMemberIds })
+    // Add members one by one to trigger notifications and event messages for each
+    const addPromises = selectedNewMembers.value.map(userId =>
+      addMemberToMatter(props.matter.id, userId)
+    )
 
-    toast.success('Members added successfully')
+    await Promise.all(addPromises)
+
+    const count = selectedNewMembers.value.length
+    toast.success(`${count} member${count > 1 ? 's' : ''} added successfully`)
     selectedNewMembers.value = []
     addMemberSheetOpen.value = false
     emit('updated')
@@ -209,8 +214,7 @@ const addSelectedMembers = async () => {
 const removeMember = async (memberId: string) => {
   loading.value = true
   try {
-    const updatedMemberIds = currentMemberIds.value.filter((id: string) => id !== memberId)
-    await updateMatter(props.matter.id, { members: updatedMemberIds })
+    await removeMemberFromMatter(props.matter.id, memberId)
 
     toast.success('Member removed successfully')
     emit('updated')

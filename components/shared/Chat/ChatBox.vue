@@ -237,35 +237,45 @@ watch(
 
       <!-- Message list -->
       <div v-else v-for="message in messages" :key="message.id" class="flex flex-col">
-        <!-- Sender name (for other users' messages) -->
-        <div
-            v-if="!isMyMessage(message)"
-            class="text-xs font-semibold mb-1"
-        >
-          {{ getSenderName(message) }}
+        <div v-if="message?.type === 'text'" class="flex flex-col">
+          <!-- Sender name (for other users' messages) -->
+          <div
+              v-if="!isMyMessage(message)"
+              class="text-xs font-semibold mb-1"
+          >
+            {{ getSenderName(message) }}
+          </div>
+
+          <div
+            :class="[
+              'max-w-[80%] rounded-lg p-2',
+              isMyMessage(message)
+                ? 'ml-auto bg-muted text-muted-foreground border'
+                : 'mr-auto bg-background border text-foreground'
+            ]"
+          >
+
+            <!-- Message text -->
+            <div class="whitespace-pre-wrap break-words">{{ message.message }}</div>
+          </div>
+
+          <!-- Timestamp -->
+          <div
+            :class="[
+              'text-xs mt-1',
+              isMyMessage(message) ? 'text-right' : ''
+            ]"
+          >
+            {{ formatTime(message.created) }}
+          </div>
         </div>
 
-        <div
-          :class="[
-            'max-w-[80%] rounded-lg p-2',
-            isMyMessage(message)
-              ? 'ml-auto bg-muted text-muted-foreground border'
-              : 'mr-auto bg-background border text-foreground'
-          ]"
-        >
-
-          <!-- Message text -->
-          <div class="whitespace-pre-wrap break-words">{{ message.message }}</div>
-        </div>
-
-        <!-- Timestamp -->
-        <div
-          :class="[
-            'text-xs mt-1',
-            isMyMessage(message) ? 'text-right' : ''
-          ]"
-        >
-          {{ formatTime(message.created) }}
+        <div v-else-if="message?.type === 'event'" class="flex flex-row gap-1 items-center">
+          <div class="h-[2px] bg-border min-w-5 w-full"></div>
+          <div class="ibm-plex-serif text-muted-foreground shrink-0 w-full max-w-[75%] text-center text-xs">
+            {{ message?.message }}
+          </div>
+          <div class="h-[2px] bg-border min-w-5 w-full"></div>
         </div>
       </div>
     </div>

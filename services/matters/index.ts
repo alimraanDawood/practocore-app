@@ -3,9 +3,17 @@ import { pb as pocketbase } from '~/lib/pocketbase';
 
 const SERVER_URL = "https://www.practocore.com";
 
-export async function getMatters(page: number, perPage: number, options: Object) {
+export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
-    return fetch(`${SERVER_URL}/api/practocore/matters?page=${page}&perPage=${perPage}`, {
+    const params = new URLSearchParams({
+        page: page.toString(),
+        perPage: perPage.toString(),
+    });
+
+    if (options.filter) params.set('filter', options.filter);
+    if (options.sort) params.set('sort', options.sort);
+
+    return fetch(`${SERVER_URL}/api/practocore/matters?${params.toString()}`, {
         method: 'GET',
         headers: {
             'Authorization': pocketbase.authStore.token,
@@ -101,4 +109,26 @@ export function unsubscribeToDeadline(deadlineId: string) {
 
 export function unsubscribeToAllDeadlines() {
     return pocketbase.collection('Deadlines').unsubscribe();
+}
+
+export async function addMemberToMatter(matterId: string, userId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/members/add`, {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+export async function removeMemberFromMatter(matterId: string, userId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/members/remove`, {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
 }

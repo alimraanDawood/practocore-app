@@ -39,22 +39,32 @@
                                     <div class="flex items-center space-x-2">
                                         <RadioGroupItem id="created" value="created" />
                                         <SortAsc class="size-4" />
-                                        <Label for="option-one">Date Created Ascending</Label>
+                                        <Label for="created">Date Created (Oldest First)</Label>
                                     </div>
                                     <div class="flex items-center space-x-2">
                                         <RadioGroupItem id="-created" value="-created" />
                                         <SortDesc class="size-4" />
-                                        <Label for="option-two">Date Created Descending</Label>
+                                        <Label for="-created">Date Created (Newest First)</Label>
                                     </div>
                                     <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="deadlines.date" value="deadlines.date" />
+                                        <RadioGroupItem id="updated" value="updated" />
                                         <SortAsc class="size-4" />
-                                        <Label for="option-two">Nearest Deadline</Label>
+                                        <Label for="updated">Last Updated (Oldest First)</Label>
                                     </div>
                                     <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="-deadlines.date" value="-deadlines.date" />
+                                        <RadioGroupItem id="-updated" value="-updated" />
                                         <SortDesc class="size-4" />
-                                        <Label for="option-two">Farthest Deadline</Label>
+                                        <Label for="-updated">Last Updated (Newest First)</Label>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <RadioGroupItem id="name" value="name" />
+                                        <SortAsc class="size-4" />
+                                        <Label for="name">Name (A-Z)</Label>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <RadioGroupItem id="-name" value="-name" />
+                                        <SortDesc class="size-4" />
+                                        <Label for="-name">Name (Z-A)</Label>
                                     </div>
                                 </RadioGroup>
                             </div>
@@ -108,8 +118,8 @@
                 </div>
 
                 <XyzTransition mode="out-in" xyz="fade">
-                    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <div v-for="i in 9" class="rounded w-full aspect-video bg-muted-foreground/20 animate-pulse">
+                    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 gap-3 p-3">
+                        <div v-for="i in 12" class="rounded w-full aspect-video bg-muted-foreground/20 animate-pulse">
                         </div>
                     </div>
 
@@ -122,11 +132,55 @@
                                     <PageComponentsHomeMatter
                                         v-on-long-press="[(e) => { onLongPressCallbackDirective(e, matter) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onMatterTap(matter) } }, modifiers: { stop: true } }]"
                                         :matter="matter" :accent-index="index" />
-        
+
                                     <div v-if="selection.selected.find(p => p.id === matter.id)"
                                         class="size-5 bg-tertiary grid place-items-center text-white absolute top-0 translate-y-[-50%] right-0 translate-x-[50%] rounded-full">
                                         <Check class="size-3 stroke-3" />
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Pagination -->
+                            <div v-if="matters.totalPages > 1" class="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t">
+                                <div class="text-sm text-muted-foreground">
+                                    Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
+                                </div>
+
+                                <div class="flex flex-row items-center gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        @click="mattersStore.previousPage()"
+                                        :disabled="mattersStore.page <= 1"
+                                    >
+                                        <ChevronLeft class="size-4" />
+                                        Previous
+                                    </Button>
+
+                                    <div class="flex flex-row items-center gap-1">
+                                        <template v-for="(pageNum, index) in visiblePages" :key="index">
+                                            <span v-if="pageNum === -1" class="px-2 text-muted-foreground">...</span>
+                                            <Button
+                                                v-else
+                                                size="sm"
+                                                :variant="pageNum === mattersStore.page ? 'default' : 'ghost'"
+                                                @click="mattersStore.goToPage(pageNum)"
+                                                class="min-w-[2.5rem]"
+                                            >
+                                                {{ pageNum }}
+                                            </Button>
+                                        </template>
+                                    </div>
+
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        @click="mattersStore.nextPage()"
+                                        :disabled="mattersStore.page >= matters.totalPages"
+                                    >
+                                        Next
+                                        <ChevronRight class="size-4" />
+                                    </Button>
                                 </div>
                             </div>
                         </div>
@@ -199,7 +253,7 @@
 
 <script setup lang="ts">
 import { vOnLongPress } from '@vueuse/components'
-import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search } from 'lucide-vue-next';
+import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
@@ -248,26 +302,74 @@ onMounted(async () => {
 const sortLabel = computed(() => {
     switch (sort.value) {
         case 'created':
-            return { label: 'Date Created', asc: true };
+            return { label: 'Created (Oldest)', asc: true };
         case '-created':
-            return { label: 'Date Created', asc: false };
-        case 'Deadlines_via_matter.date':
-            return { label: 'Nearest Deadline', asc: true };
+            return { label: 'Created (Newest)', asc: false };
+        case 'updated':
+            return { label: 'Updated (Oldest)', asc: true };
+        case '-updated':
+            return { label: 'Updated (Newest)', asc: false };
+        case 'name':
+            return { label: 'Name (A-Z)', asc: true };
         case '-name':
-            return { label: 'Nearest Deadline', asc: false };
+            return { label: 'Name (Z-A)', asc: false };
+        default:
+            return { label: 'Created (Newest)', asc: false };
     }
 })
 
+// Calculate visible page numbers for pagination
+const visiblePages = computed(() => {
+    if (!matters.value || !matters.value.totalPages) return [];
+
+    const totalPages = matters.value.totalPages;
+    const currentPage = mattersStore.page;
+    const delta = 2; // Number of pages to show on each side of current page
+    const pages: number[] = [];
+
+    // Always show first page
+    pages.push(1);
+
+    // Calculate range around current page
+    const rangeStart = Math.max(2, currentPage - delta);
+    const rangeEnd = Math.min(totalPages - 1, currentPage + delta);
+
+    // Add ellipsis after first page if needed
+    if (rangeStart > 2) {
+        pages.push(-1); // -1 represents ellipsis
+    }
+
+    // Add pages in range
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+        pages.push(i);
+    }
+
+    // Add ellipsis before last page if needed
+    if (rangeEnd < totalPages - 1) {
+        pages.push(-1);
+    }
+
+    // Always show last page if there's more than 1 page
+    if (totalPages > 1) {
+        pages.push(totalPages);
+    }
+
+    return pages;
+})
+
 watch(sort, () => {
+    mattersStore.page = 1; // Reset to first page when changing sort
     mattersStore.fetchMatters();
 });
 
 watch(activeTab, () => {
+    mattersStore.page = 1; // Reset to first page when changing tab
     mattersStore.fetchMatters();
     console.log(activeTab.value);
 })
 
 watch(query, () => {
+    mattersStore.page = 1; // Reset to first page when searching
     mattersStore.fetchMatters();
 });
 

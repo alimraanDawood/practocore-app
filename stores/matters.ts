@@ -29,11 +29,11 @@ export const useMattersStore = defineStore('matters', {
 
     // filters
     query: '' as string,
-    sort: 'Deadlines_via_matter.date' as string,
+    sort: '-created' as string,
     activeTab: 'all' as string,
-    // pagination (basic; current UI uses 1,10)
+    // pagination
     page: 1 as number,
-    perPage: 40 as number,
+    perPage: 12 as number,
     // selection for bulk actions
     selection: {
       active: false,
@@ -100,24 +100,37 @@ export const useMattersStore = defineStore('matters', {
       }
 
       try {
-        // Note: original page didn't apply sort server-side; we keep API shape but pass sort for future use.
-        let secondaryFilter  = '';
+        // Build filter based on active tab
+        let tabFilter = '';
         switch(this.activeTab) {
           case 'all':
-            secondaryFilter = '';
+            tabFilter = '';
             break;
           case 'organisation':
-            secondaryFilter = `personal = false`;
+            tabFilter = `personal = false`;
             break;
           case 'private':
-            secondaryFilter = `personal = true`;
+            tabFilter = `personal = true`;
             break;
+        }
+
+        // Build search filter if query exists
+        const searchFilter = this.query.trim() ? `name ~ '${this.query}'` : '';
+
+        // Combine filters
+        let combinedFilter = '';
+        if (searchFilter && tabFilter) {
+          combinedFilter = `${searchFilter} && ${tabFilter}`;
+        } else if (searchFilter) {
+          combinedFilter = searchFilter;
+        } else if (tabFilter) {
+          combinedFilter = tabFilter;
         }
 
         const res = await getMatters(this.page, this.perPage, {
           expand: '',
           sort: this.sort || '',
-          filter: secondaryFilter.length === 0 ? `name ~ '${this.query}'` : `name ~ '${this.query}' && ${secondaryFilter}`,
+          filter: combinedFilter,
         });
 
         this.result = res;
@@ -302,6 +315,33 @@ export const useMattersStore = defineStore('matters', {
         this.selection.active = true;
         this.selection.selected.push(matter);
       }
+    },
+
+    // Pagination methods
+    goToPage(page: number) {
+      if (page < 1 || (this.result && page > this.result.totalPages)) return;
+      this.page = page;
+      this.fetchMatters(true);
+    },
+
+    nextPage() {
+      if (this.result && this.page < this.result.totalPages) {
+        this.page++;
+        this.fetchMatters(true);
+      }
+    },
+
+    previousPage() {
+      if (this.page > 1) {
+        this.page--;
+        this.fetchMatters(true);
+      }
+    },
+
+    setPerPage(perPage: number) {
+      this.perPage = perPage;
+      this.page = 1; // Reset to first page when changing items per page
+      this.fetchMatters(true);
     },
   },
 });
