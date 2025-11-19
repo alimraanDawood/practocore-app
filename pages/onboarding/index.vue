@@ -405,7 +405,10 @@ import {
 } from 'lucide-vue-next';
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
-import { getSignedInUser, updateUser, getUserPreferences, updateUserPreferences, refreshUserData, pocketbase, SERVER_URL } from '~/services/auth'
+import {
+  getSignedInUser, updateUser, getUserPreferences, updateUserPreferencesById, refreshUserData, pocketbase, SERVER_URL,
+  getOrganisation
+} from '~/services/auth'
 import { sendDirectInvite } from '~/services/admin'
 import { toast } from 'vue-sonner'
 import { App as CapacitorApp } from '@capacitor/app'
@@ -431,8 +434,10 @@ const userInitials = computed(() => {
     return (parts[0][0] || '').toUpperCase() + (parts[1][0] || '').toUpperCase()
   }
   return (parts[0]?.[0] || 'U').toUpperCase()
-})
-const isOrganizationUser = computed(() => !!user.value?.organisation)
+});
+
+const isOrganizationUser = computed(() => !!user.value?.organisation);
+const isOrganizationAdmin = ref(false);
 
 // Step management
 const currentStep = ref(0)
@@ -444,7 +449,7 @@ const steps = computed(() => {
     { id: 'matter', title: 'First Matter', required: false },
   ]
 
-  if (isOrganizationUser.value) {
+  if (isOrganizationAdmin.value) {
     baseSteps.push({ id: 'invite', title: 'Invite Team', required: false })
   }
 
@@ -567,14 +572,15 @@ const clearAvatar = async () => {
 }
 
 // Preferences
+const prefId = ref('');
 const reminderTime = ref('09:00');
 const emailNotifications = ref(true);
 const appNotifications = ref(true);
-const pushNotifications = ref(false);
+const pushNotifications = ref(true);
 
 const savePreferences = async () => {
   try {
-    await updateUserPreferences({
+    await updateUserPreferencesById(prefId.value, {
       reminder_time: reminderTime.value,
       use_email_notifications: emailNotifications.value,
       use_app_notifications: appNotifications.value,
@@ -742,13 +748,27 @@ const handleBackButton = () => {
 // Load existing preferences and setup back button listener
 onMounted(async () => {
   try {
-    const prefs = await getUserPreferences()
+    await refreshUserData();
+    console.log("User Data refreshed!");
+    const prefs = await getUserPreferences();
+
     if (prefs) {
-      reminderTime.value = prefs.reminderTime || '09:00'
-      emailNotifications.value = prefs.emailNotifications ?? true
-      appNotifications.value = prefs.appNotifications ?? true
-      pushNotifications.value = prefs.pushNotifications ?? false
+      prefId.value = prefs.id;
+      reminderTime.value = prefs.reminder_time || '09:00'
+      emailNotifications.value = prefs.use_email_notifications ?? true
+      appNotifications.value = prefs.use_app_notifications ?? true
+      pushNotifications.value = prefs.use_push_notifications ?? false
     }
+
+
+    console.log(user?.value);
+    if(user?.value?.organisation) {
+      const organisation = await getOrganisation(user?.value?.organisation);
+      if(organisation) {
+        isOrganizationAdmin.value = organisation?.admins?.includes(user?.value?.id);
+      }
+    }
+
   } catch (error) {
     console.error('Failed to load preferences:', error)
   }

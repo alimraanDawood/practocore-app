@@ -1,4 +1,4 @@
-import { pb as pocketbase } from '~/lib/pocketbase';
+import {pb as pocketbase} from '~/lib/pocketbase';
 
 const SERVER_URL = "https://api.practocore.com";
 
@@ -10,7 +10,7 @@ export async function signUpWithGoogle() {
 
 export async function getUserPreferences() {
     if(pocketbase.authStore.record) {
-        return await pocketbase.collection('UserPreferences').getOne(pocketbase.authStore.record.preferences);
+        return await pocketbase.collection('UserPreferences').getFirstListItem( `Users_via_preferences.id = '${pocketbase.authStore.record?.id}'`);
     }
 }
 
@@ -58,9 +58,15 @@ export async function signOut() {
 
 export async function updateUserPreferences(options : Object) {
     if(pocketbase.authStore.record) {
-        const result = await pocketbase.collection('UserPreferences').update(pocketbase.authStore.record.preferences, options);
+        return await pocketbase.collection('UserPreferences').update(pocketbase.authStore.record.preferences, options);
+    }
 
-        return result;
+    throw(new Error('User not signed in!'));
+}
+
+export async function updateUserPreferencesById(preferenceId : string, options : Object) {
+    if(pocketbase.authStore.record) {
+        return await pocketbase.collection('UserPreferences').update(preferenceId, options);
     }
 
     throw(new Error('User not signed in!'));
