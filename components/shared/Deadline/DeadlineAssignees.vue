@@ -113,7 +113,7 @@
       <SheetFooter>
         <Button variant="outline" @click="sheetOpen = false">Cancel</Button>
         <Button @click="saveAssignees" :disabled="saving">
-          <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+          <Loader2 v-if="saving" class="h-4 w-4 mr-2 animate-spin" />
           Save Changes
         </Button>
       </SheetFooter>

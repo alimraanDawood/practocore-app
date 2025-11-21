@@ -72,7 +72,7 @@
           <SharedMattersMemberManagement v-if="isSupervisor" @updated="reloadMatter" :matter="matter">
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
-              Manage Members
+              Assigned Lawyers
               <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">{{
                   matter.expand.members.length
                 }}
@@ -294,6 +294,7 @@ onMounted(async () => {
 
 const reloadMatter = async () => {
   try {
+    console.log("Matter updating! Forcing reload!");
     const matterId = useRoute().params.matterId;
     // Refresh in background without showing loading state
     matter.value = await mattersStore.fetchMatter(matterId, {

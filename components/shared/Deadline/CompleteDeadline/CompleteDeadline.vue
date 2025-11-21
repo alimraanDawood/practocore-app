@@ -39,7 +39,8 @@
                     <span v-if="!loading">Use Date</span>
                     <Loader v-else class="animate-spin" />
                 </Button>
-                <DialogClose class="w-full">
+                <Button variant="destructive" @click="resetDeadline"><TriangleAlert /> Reset Deadline</Button>
+                <DialogClose class="w-full lg:w-fit">
                     <Button class="w-full" variant="secondary">Cancel</Button>
                 </DialogClose>
             </DialogFooter>
@@ -98,8 +99,8 @@
 import type { DateValue } from '@internationalized/date';
 import { DateFormatter, getLocalTimeZone, today, parseDate } from "@internationalized/date";
 import { toast } from 'vue-sonner';
-import { updateDeadline } from '~/services/matters';
-import { Loader, CalendarIcon } from 'lucide-vue-next';
+import { updateDeadline, resetDeadline as resetDeadlineService } from '~/services/matters';
+import { Loader, CalendarIcon, TriangleAlert } from 'lucide-vue-next';
 import { Calendar } from '~/components/ui/calendar';
 import { cn } from '~/lib/utils';
 import { getSignedInUser } from '~/services/auth';
@@ -131,11 +132,27 @@ const fulfillDeadline = async () => {
 
         open.value = false;
         toast.success("Successfully updated deadline!");
-        emits('updated');
+        emits("updated");
     } catch (e) {
         toast.error('We were unable to update your deadline!');
         console.error(e);
     }
     loading.value = false;
+}
+
+const resetDeadline = async () => {
+  loading.value = true;
+  try {
+    // Use the dedicated reset endpoint
+    await resetDeadlineService(props.deadline?.id);
+
+    open.value = false;
+    toast.success("Successfully reset deadline!");
+    emits("updated");
+  } catch (e) {
+    toast.error('We were unable to reset your deadline!');
+    console.error(e);
+  }
+  loading.value = false;
 }
 </script>

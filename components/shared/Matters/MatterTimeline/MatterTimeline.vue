@@ -1,5 +1,43 @@
 <template>
     <div v-if="matter !== null" class="flex flex-col">
+        <!-- Trigger Date Node at the start -->
+        <div class="flex flex-row text-left mb-4 group">
+            <div class="flex flex-col px-2 items-center">
+                <div class="size-8 bg-primary/20 shrink-0 rounded-full grid place-items-center border-2 border-primary">
+                    <CalendarIcon class="size-4 text-primary" />
+                </div>
+                <div class="w-1 h-full bg-muted"></div>
+            </div>
+
+            <div class="flex flex-col w-full p-2 pb-8 gap-2">
+                <div class="flex flex-row items-center justify-between gap-2">
+                    <div class="flex flex-row items-center gap-2">
+                        <span class="font-semibold ibm-plex-serif">Trigger Date</span>
+                        <span class="text-sm text-muted-foreground">
+                            {{ dayjs(matter.triggerDate, { timezone: getSignedInUser()?.timezone }).format('D MMM YYYY') }}
+                        </span>
+                    </div>
+
+                    <SharedMattersChangeTriggerDate
+                        v-if="isSupervisor"
+                        :matter="matter"
+                        @updated="emits('updated')"
+                    >
+                        <button
+                            class="rounded bg-primary/10 text-primary px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-primary/20 transition-colors"
+                        >
+                            <CalendarIcon class="size-3" />
+                            Change Date
+                        </button>
+                    </SharedMattersChangeTriggerDate>
+                </div>
+
+                <span class="text-xs text-muted-foreground italic">
+                    All deadlines are calculated from this date
+                </span>
+            </div>
+        </div>
+
         <div
             v-for="deadline, index in matter?.expand?.deadlines?.sort((d1, d2) => { return new Date(d1.date) - new Date(d2.date); })"
             :key="deadline.id" class="flex flex-row text-left hover:bg-muted/30 group">
@@ -23,12 +61,10 @@
                     <div class="flex flex-col lg:flex-row gap-2 lg:items-center">
                         <span class="text-sm text-muted-foreground">{{ deadline.input_prompt }}</span>
 
-                        <div @click="e => e.stopPropagation()" class="flex flex-row items-center gap-2">
+                        <div class="flex flex-row items-center gap-2 flex-wrap">
                             <SharedDeadlineCompleteDeadline @updated="emits('updated')" :deadline="deadline">
-                                <button @click="e => e.stopPropagation()"
-                                    class="border bg-muted px-2 p-1 flex flex-row items-center gap-1 text-xs w-fit">
+                                <button class="border bg-muted px-2 p-1 flex flex-row items-center gap-1 text-xs w-fit">
                                     <CalendarIcon class="size-3" />
-
                                     Set Date
                                 </button>
                             </SharedDeadlineCompleteDeadline>
@@ -39,6 +75,15 @@
                                     Adjourn Deadline
                                 </button>
                             </AdjournDeadline>
+
+                            <button
+                                v-if="isSupervisor"
+                                @click="handleResetDeadline(deadline)"
+                                class="rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-amber-500/20 transition-colors"
+                            >
+                                <RotateCcw class="size-3" />
+                                Reset
+                            </button>
                         </div>
                     </div>
 
@@ -51,7 +96,7 @@
                     <span class="text-sm italic text-muted-foreground ibm-plex-serif"
                         v-html="deadline.fulfilled_prompt.replace('<<date>>', ``)"></span>
 
-                    <SharedDeadlineCompleteDeadline :deadline="deadline">
+                    <SharedDeadlineCompleteDeadline @updated="emits('updated')" :deadline="deadline">
                         <button @click="e => e.stopPropagation()"
                             class="border bg-muted px-2 py-1 inline-flex items-center gap-1 text-xs align-baseline">
                             <CalendarIcon class="size-3" />
@@ -117,12 +162,14 @@
 
 <script setup>
 import { computed } from 'vue';
-import { Check, Circle, Dot, CalendarIcon, CalendarClock, CalendarCheck, ArrowRight, CalendarSync } from "lucide-vue-next"
+import { Check, Circle, Dot, CalendarIcon, CalendarClock, CalendarCheck, ArrowRight, CalendarSync, RotateCcw } from "lucide-vue-next"
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime"
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
 import { getSignedInUser } from "~/services/auth";
 import { pb } from '~/lib/pocketbase';
+import { resetDeadline } from '~/services/matters';
+import { toast } from 'vue-sonner';
 
 dayjs.extend(relativeTime);
 
@@ -165,5 +212,33 @@ const isSupervisor = computed(() => {
 // Handle assignee updates
 function handleAssigneesUpdated() {
     emits('updated');
+}
+
+// Handle deadline reset
+async function handleResetDeadline(deadline) {
+    const confirmed = confirm(
+        `Are you sure you want to reset "${deadline.name}" to its template-calculated date? This will also recalculate any dependent deadlines.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const result = await resetDeadline(deadline.id);
+
+        if (result.error) {
+            toast.error(result.error);
+        } else {
+            const oldDate = new Date(result.oldDate).toLocaleDateString();
+            const newDate = new Date(result.newDate).toLocaleDateString();
+
+            toast.success("Deadline reset successfully!", {
+                description: `Changed from ${oldDate} to ${newDate}`
+            });
+            emits('updated');
+        }
+    } catch (error) {
+        console.error('Error resetting deadline:', error);
+        toast.error("Failed to reset deadline");
+    }
 }
 </script>

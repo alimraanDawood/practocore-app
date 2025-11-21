@@ -1,7 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
@@ -26,11 +26,11 @@ export async function getAllDeadlines(options: Object) {
     return pocketbase.collection('Deadlines').getFullList({ ...options });
 }
 
-export async function getDeadline(deadlineId : string, options = {}) {
+export async function getDeadline(deadlineId: string, options = {}) {
     return pocketbase.collection('Deadlines').getOne(deadlineId, options);
 }
 
-export async function getDeadlineReminder(deadlineReminderId : string, options = {}) {
+export async function getDeadlineReminder(deadlineReminderId: string, options = {}) {
     return pocketbase.collection('DeadlineReminders').getOne(deadlineReminderId, options);
 }
 
@@ -51,7 +51,7 @@ export async function createAdjournment(options: Object) {
 
 
 export async function createMatter(options: { name: string, caseNumber: string, personal: boolean, members?: string[], templateId: string, date: string, fieldValues: any[] }) {
-    return fetch(`${SERVER_URL}/api/practocore/deadline`, {
+    return fetch(`${SERVER_URL}/api/practocore/create-matter`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {
@@ -229,6 +229,39 @@ export async function acknowledgeReminder(reminderId: string) {
 export async function fulfillDeadline(deadlineId: string) {
     return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/fulfill`, {
         method: 'POST',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Reset a deadline to its template-calculated value
+ * @param deadlineId - Deadline ID
+ */
+export async function resetDeadline(deadlineId: string) {
+    return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/reset`, {
+        method: 'POST',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+/**
+ * Change the trigger date for a matter and recalculate all deadlines
+ * @param matterId - Matter ID
+ * @param date - New trigger date (ISO string or Date)
+ */
+export async function changeMatterTriggerDate(matterId: string, date: string | Date, resetCompleted: boolean = false) {
+    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/trigger-date`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            date: typeof date === 'string' ? date : date.toISOString(),
+            reset_completed: resetCompleted
+        }),
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'

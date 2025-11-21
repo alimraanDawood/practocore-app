@@ -64,7 +64,7 @@
                   <FormItem class="flex flex-col">
                     <FormLabel>Case Number</FormLabel>
                     <FormControl>
-                      <Input v-bind="componentField" type="number"
+                      <Input v-bind="componentField" type="text"
                              placeholder="Enter Case Number"/>
                     </FormControl>
                   </FormItem>
@@ -205,7 +205,7 @@
                   Next
                 </Button>
                 <Button v-if="stepIndex === steps?.length" :disabled="loading" size="sm" type="submit">
-                  <span v-if="!loading">Create Project</span>
+                  <span v-if="!loading">Create Matter</span>
                   <Loader class="animate-spin" v-else />
                 </Button>
               </div>
@@ -280,12 +280,12 @@ const templates = ref<RecordModel[]>([]);
 const stepIndex = ref(1)
 const steps = getSignedInUser()?.organisation ? [
   {step: 1, title: "Project Details"},
-  {step: 2, title: "Choose Template"},
+  {step: 2, title: "Choose Matter Type"},
   {step: 3, title: "Choose Members"},
   {step: 4, title: "Complete"},
 ] : [
   {step: 1, title: "Project Details"},
-  {step: 2, title: "Choose Template"},
+  {step: 2, title: "Choose Matter Type"},
   {step: 3, title: "Complete"},
 ]
 
@@ -347,7 +347,7 @@ const formSchema = computed(() => {
     return [
       z.object({
         name: z.string().min(3, "You need at least 3 characters for a valid name!"),
-        caseNumber: z.number().optional(),
+        caseNumber: z.string().optional(),
         personal: z.boolean().optional()
         // date: z.string().refine(v => v, { message: "A date is required." }),
       }),

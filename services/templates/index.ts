@@ -8,7 +8,7 @@ import type {
 } from '~/lib/types/template';
 import { enhanceTemplate } from '~/lib/types/template';
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 /**
  * Build PocketBase filter from category filter object

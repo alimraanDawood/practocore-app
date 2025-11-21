@@ -4,14 +4,15 @@
       <!-- Progress Bar -->
       <div class="w-full h-1 bg-muted">
         <div
-          class="h-full bg-primary transition-all duration-500 ease-out"
-          :style="{ width: `${progress}%` }"
+            class="h-full bg-primary transition-all duration-500 ease-out"
+            :style="{ width: `${progress}%` }"
         />
       </div>
 
 
       <!-- Header -->
-      <div v-if="isTauri && !isMainWindow" data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
+      <div v-if="isTauri && !isMainWindow" data-tauri-drag-region
+           class="flex flex-row w-full px-3 py-2 items-center border-b">
         <div class="flex flex-row w-full">
           <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
             <Button size="sm" variant="outline">Login Instead</Button>
@@ -21,20 +22,23 @@
           <span class="ibm-plex-serif">Getting Started With PractoCore</span>
         </div>
         <div class="flex flex-row w-full justify-end">
-          <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full"><X class="size-4" /></button>
+          <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full">
+            <X class="size-4"/>
+          </button>
         </div>
       </div>
 
       <div v-else class="flex w-full  flex-row items-center justify-between p-5 border-b">
         <div class="flex items-center gap-2">
-          <img src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-8 w-auto dark:hidden" />
-          <img src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20Dark.svg" class="h-8 w-auto dark:block hidden" />
+          <img src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-8 w-auto dark:hidden"/>
+          <img src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20Dark.svg"
+               class="h-8 w-auto dark:block hidden"/>
         </div>
         <Button
-          v-if="currentStep > 0 && currentStep < steps.length - 1"
-          variant="ghost"
-          size="sm"
-          @click="skipStep"
+            v-if="currentStep > 0 && currentStep < steps.length - 1"
+            variant="ghost"
+            size="sm"
+            @click="skipStep"
         >
           Skip
         </Button>
@@ -55,10 +59,10 @@
             </div>
 
             <div class="flex flex-col">
-              <span class="text-sm text-muted-foreground">PractoCore is <b>intelligent deadline management software</b> built specifically for <b>litigation attorneys</b>. We
-  automatically calculate <b>jurisdiction-specific court deadlines</b>, send <b>failsafe reminders with escalation</b>, and ensure
-  your team <b>never misses a critical filing date</b>. It's like having a dedicated deadline specialist who never sleeps,
-  never forgets, and never makes mistakes.</span>
+              <span
+                  class="text-sm text-muted-foreground">PractoCore is an <b>intelligent deadline management software</b> built specifically for <b>litigation lawyers</b> in Uganda. It
+  automatically calculates and schedules <b>filing deadlines</b>, sends <b>appropriates reminders</b>, and ensures
+                that you and your team <b>never misses a critical deadline</b>.</span>
             </div>
           </div>
 
@@ -79,34 +83,35 @@
                     {{ userInitials }}
                   </AvatarFallback>
                 </Avatar>
-                <div class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera class="size-8 text-white" />
+                <div
+                    class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera class="size-8 text-white"/>
                 </div>
               </div>
 
               <!-- Upload Controls -->
               <div class="flex flex-col gap-3 w-full max-w-sm">
                 <input
-                  ref="fileInput"
-                  type="file"
-                  accept="image/*"
-                  class="hidden"
-                  @change="handleFileSelect"
+                    ref="fileInput"
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handleFileSelect"
                 />
 
                 <Button @click="triggerFileInput" :disabled="isUploadingPhoto" class="w-full">
-                  <Upload class="size-4 mr-2" />
+                  <Upload class="size-4 mr-2"/>
                   {{ currentAvatarUrl ? 'Change Photo' : 'Upload Photo' }}
                 </Button>
 
                 <Button
-                  v-if="currentAvatarUrl"
-                  variant="outline"
-                  @click="clearAvatar"
-                  :disabled="isUploadingPhoto"
-                  class="w-full"
+                    v-if="currentAvatarUrl"
+                    variant="outline"
+                    @click="clearAvatar"
+                    :disabled="isUploadingPhoto"
+                    class="w-full"
                 >
-                  <X class="size-4 mr-2" />
+                  <X class="size-4 mr-2"/>
                   Remove Photo
                 </Button>
               </div>
@@ -121,10 +126,10 @@
 
                   <div class="w-full h-[400px] bg-muted rounded-lg overflow-hidden">
                     <Cropper
-                      ref="cropper"
-                      :src="selectedImage"
-                      :stencil-props="{ aspectRatio: 1 }"
-                      class="h-full w-full"
+                        ref="cropper"
+                        :src="selectedImage"
+                        :stencil-props="{ aspectRatio: 1 }"
+                        class="h-full w-full"
                     />
                   </div>
 
@@ -152,23 +157,23 @@
               <!-- Reminder Time -->
               <div class="flex flex-col gap-3 p-5 rounded-lg border bg-card">
                 <div class="flex items-center gap-2">
-                  <Clock class="size-5 text-primary" />
+                  <Clock class="size-5 text-primary"/>
                   <h3 class="font-semibold">Daily Reminder Time</h3>
                 </div>
                 <p class="text-sm text-muted-foreground">
                   Choose when you'd like to receive your daily deadline reminders
                 </p>
                 <Input
-                  v-model="reminderTime"
-                  type="time"
-                  class="max-w-xs"
+                    v-model="reminderTime"
+                    type="time"
+                    class="max-w-xs"
                 />
               </div>
 
               <!-- Notification Channels -->
               <div class="flex flex-col gap-3 p-5 rounded-lg border bg-card">
                 <div class="flex items-center gap-2">
-                  <Bell class="size-5 text-primary" />
+                  <Bell class="size-5 text-primary"/>
                   <h3 class="font-semibold">Notification Channels</h3>
                 </div>
                 <p class="text-sm text-muted-foreground mb-2">
@@ -178,35 +183,35 @@
                 <div class="flex flex-col gap-3">
                   <div class="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors">
                     <div class="flex items-center gap-3">
-                      <Mail class="size-5 text-muted-foreground" />
+                      <Mail class="size-5 text-muted-foreground"/>
                       <div>
                         <p class="font-medium">Email Notifications</p>
                         <p class="text-xs text-muted-foreground">Receive reminders via email</p>
                       </div>
                     </div>
-                    <Switch :model-value="emailNotifications" @update:model-value="v => emailNotifications = v" />
+                    <Switch :model-value="emailNotifications" @update:model-value="v => emailNotifications = v"/>
                   </div>
 
                   <div class="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors">
                     <div class="flex items-center gap-3">
-                      <Smartphone class="size-5 text-muted-foreground" />
+                      <Smartphone class="size-5 text-muted-foreground"/>
                       <div>
                         <p class="font-medium">App Notifications</p>
                         <p class="text-xs text-muted-foreground">Get in-app alerts</p>
                       </div>
                     </div>
-                    <Switch :model-value="appNotifications" @update:model-value="v => appNotifications = v" />
+                    <Switch :model-value="appNotifications" @update:model-value="v => appNotifications = v"/>
                   </div>
 
                   <div class="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors">
                     <div class="flex items-center gap-3">
-                      <BellRing class="size-5 text-muted-foreground" />
+                      <BellRing class="size-5 text-muted-foreground"/>
                       <div>
                         <p class="font-medium">Push Notifications</p>
                         <p class="text-xs text-muted-foreground">Receive push alerts on mobile</p>
                       </div>
                     </div>
-                    <Switch :model-value="pushNotifications" @update:model-value="v => pushNotifications = v" />
+                    <Switch :model-value="pushNotifications" @update:model-value="v => pushNotifications = v"/>
                   </div>
                 </div>
               </div>
@@ -221,12 +226,13 @@
             </div>
 
             <div class="mt-4">
-              <SharedMattersCreateMatter :no-stepper="true" :no-modal="true" @created="handleMatterCreated" />
+              <SharedMattersCreateMatter :no-stepper="true" :no-modal="true" @created="handleMatterCreated"/>
             </div>
           </div>
 
           <!-- Invite Members Step (for organization users) -->
-          <div v-if="currentStep === 4 && isOrganizationUser" class="flex flex-col gap-6 p-5 animate-in fade-in duration-500">
+          <div v-if="currentStep === 4 && isOrganizationUser"
+               class="flex flex-col gap-6 p-5 animate-in fade-in duration-500">
             <div class="flex flex-col gap-2 text-center">
               <h2 class="text-2xl font-bold ibm-plex-serif">Invite Your Team</h2>
               <p class="text-muted-foreground">Collaborate with your colleagues</p>
@@ -235,7 +241,7 @@
             <div class="flex flex-col gap-6 mt-4 max-w-xl mx-auto w-full">
               <div class="flex flex-col gap-3 p-5 rounded-lg border bg-card">
                 <div class="flex items-center gap-2">
-                  <UserPlus class="size-5 text-primary" />
+                  <UserPlus class="size-5 text-primary"/>
                   <h3 class="font-semibold">Invite Team Members</h3>
                 </div>
                 <p class="text-sm text-muted-foreground">
@@ -248,20 +254,20 @@
                 <div v-for="(invite, index) in inviteList" :key="index" class="flex gap-2 items-start">
                   <div class="flex-1 flex flex-col sm:flex-row gap-2">
                     <Input
-                      v-model="invite.email"
-                      type="email"
-                      placeholder="colleague@lawfirm.com"
-                      class="flex-1"
+                        v-model="invite.email"
+                        type="email"
+                        placeholder="colleague@lawfirm.com"
+                        class="flex-1"
                     />
                     <Input
-                      v-model="invite.name"
-                      type="text"
-                      placeholder="Full Name (optional)"
-                      class="flex-1"
+                        v-model="invite.name"
+                        type="text"
+                        placeholder="Full Name (optional)"
+                        class="flex-1"
                     />
                     <Select v-model="invite.role">
                       <SelectTrigger class="w-full sm:w-32">
-                        <SelectValue placeholder="Role" />
+                        <SelectValue placeholder="Role"/>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="member">Member</SelectItem>
@@ -271,26 +277,27 @@
                     </Select>
                   </div>
                   <Button
-                    v-if="inviteList.length > 1"
-                    variant="ghost"
-                    size="icon"
-                    @click="removeInvite(index)"
+                      v-if="inviteList.length > 1"
+                      variant="ghost"
+                      size="icon"
+                      @click="removeInvite(index)"
                   >
-                    <X class="size-4" />
+                    <X class="size-4"/>
                   </Button>
                 </div>
 
                 <Button variant="outline" @click="addInviteField" class="w-full">
-                  <Plus class="size-4 mr-2" />
+                  <Plus class="size-4 mr-2"/>
                   Add Another
                 </Button>
 
-                <div v-if="invitationStatus" class="p-3 rounded-md" :class="invitationStatus.success ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'">
+                <div v-if="invitationStatus" class="p-3 rounded-md"
+                     :class="invitationStatus.success ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'">
                   <p class="text-sm">{{ invitationStatus.message }}</p>
                 </div>
 
                 <Button @click="sendInvitations" :disabled="isSendingInvites || !hasValidInvites" class="w-full">
-                  <Send class="size-4 mr-2" />
+                  <Send class="size-4 mr-2"/>
                   {{ isSendingInvites ? 'Sending Invitations...' : 'Send Invitations' }}
                 </Button>
               </div>
@@ -299,8 +306,9 @@
               <div v-if="sentInvites.length > 0" class="flex flex-col gap-2">
                 <h4 class="text-sm font-semibold text-muted-foreground">Invitations Sent</h4>
                 <div class="flex flex-col gap-2">
-                  <div v-for="invite in sentInvites" :key="invite.email" class="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                    <CheckCircle2 class="size-4 text-green-600" />
+                  <div v-for="invite in sentInvites" :key="invite.email"
+                       class="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                    <CheckCircle2 class="size-4 text-green-600"/>
                     <span class="text-sm">{{ invite.email }}</span>
                     <Badge variant="secondary" class="ml-auto">{{ invite.role }}</Badge>
                   </div>
@@ -310,9 +318,10 @@
           </div>
 
           <!-- Completion Step -->
-          <div v-if="currentStep === finalStep" class="flex flex-col gap-6 p-5 items-center text-center animate-in fade-in duration-500">
+          <div v-if="currentStep === finalStep"
+               class="flex flex-col gap-6 p-5 items-center text-center animate-in fade-in duration-500">
             <div class="flex items-center justify-center size-24 rounded-full bg-primary/10">
-              <CheckCircle2 class="size-12 text-primary" />
+              <CheckCircle2 class="size-12 text-primary"/>
             </div>
 
             <div class="flex flex-col gap-2">
@@ -327,15 +336,15 @@
                 <h3 class="font-semibold mb-2">What's Next?</h3>
                 <ul class="space-y-2 text-sm text-muted-foreground">
                   <li class="flex items-start gap-2">
-                    <div class="size-1.5 rounded-full bg-primary mt-1.5" />
+                    <div class="size-1.5 rounded-full bg-primary mt-1.5"/>
                     <span>Explore deadline templates for your jurisdiction</span>
                   </li>
                   <li class="flex items-start gap-2">
-                    <div class="size-1.5 rounded-full bg-primary mt-1.5" />
+                    <div class="size-1.5 rounded-full bg-primary mt-1.5"/>
                     <span>Import existing matters to stay organized</span>
                   </li>
                   <li class="flex items-start gap-2">
-                    <div class="size-1.5 rounded-full bg-primary mt-1.5" />
+                    <div class="size-1.5 rounded-full bg-primary mt-1.5"/>
                     <span>Customize templates to match your workflow</span>
                   </li>
                 </ul>
@@ -349,69 +358,70 @@
       <div class="flex flex-row w-full gap-3 p-5 border-t bg-background">
         <div class="flex flex-row w-full gap-3">
           <Button
-            variant="outline"
-            @click="previousStep"
-            :disabled="currentStep === 0"
-            class="flex-1"
+              variant="outline"
+              @click="previousStep"
+              :disabled="currentStep === 0"
+              class="flex-1"
           >
-            <ArrowLeft class="size-4 mr-2" />
+            <ArrowLeft class="size-4 mr-2"/>
             Back
           </Button>
 
           <div class="hidden md:flex flex-row gap-1 items-center justify-center md:w-full">
-            <div class="size-2 bg-muted rounded-full" v-for="i in (steps.length - 1)" :class="{ 'bg-primary': (currentStep + 1) > i }"></div>
+            <div class="size-2 bg-muted rounded-full" v-for="i in (steps.length - 1)"
+                 :class="{ 'bg-primary': (currentStep + 1) > i }"></div>
           </div>
 
           <Button
-            @click="nextStep"
-            :disabled="!canProceed"
-            class="flex-1 md:w-fit"
+              @click="nextStep"
+              :disabled="!canProceed"
+              class="flex-1 md:w-fit"
           >
             {{ currentStep < finalStep ? "Next" : "Complete" }}
-            <ArrowRight class="size-4 ml-2" />
+            <ArrowRight class="size-4 ml-2"/>
           </Button>
         </div>
 
-<!--        <Button-->
-<!--            v-else-if="currentStep === 0"-->
-<!--            @click="nextStep"-->
-<!--            :disabled="!canProceed"-->
-<!--            class="flex-1 md:w-fit"-->
-<!--        >-->
-<!--          Let's Get Started-->
-<!--          <ArrowRight class="size-4 ml-2" />-->
-<!--        </Button>-->
+        <!--        <Button-->
+        <!--            v-else-if="currentStep === 0"-->
+        <!--            @click="nextStep"-->
+        <!--            :disabled="!canProceed"-->
+        <!--            class="flex-1 md:w-fit"-->
+        <!--        >-->
+        <!--          Let's Get Started-->
+        <!--          <ArrowRight class="size-4 ml-2" />-->
+        <!--        </Button>-->
 
-<!--        <Button-->
-<!--            v-else-->
-<!--          @click="finishOnboarding"-->
-<!--          class="flex-1 lg:w-fit"-->
-<!--        >-->
-<!--          Go to Dashboard-->
-<!--          <Sparkles class="size-4 ml-2" />-->
-<!--        </Button>-->
+        <!--        <Button-->
+        <!--            v-else-->
+        <!--          @click="finishOnboarding"-->
+        <!--          class="flex-1 lg:w-fit"-->
+        <!--        >-->
+        <!--          Go to Dashboard-->
+        <!--          <Sparkles class="size-4 ml-2" />-->
+        <!--        </Button>-->
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import {ref, computed, watch, onMounted, onUnmounted} from 'vue'
+import {useRouter} from 'vue-router'
 import {
   ArrowLeft, ArrowRight, Bell, BellRing, Camera, CalendarCheck,
   CheckCircle2, Clock, Mail, Plus, Send, Smartphone, Sparkles,
   Upload, UserPlus, Users, X
 } from 'lucide-vue-next';
-import { Cropper } from 'vue-advanced-cropper'
+import {Cropper} from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import {
   getSignedInUser, updateUser, getUserPreferences, updateUserPreferencesById, refreshUserData, pocketbase, SERVER_URL,
   getOrganisation
 } from '~/services/auth'
-import { sendDirectInvite } from '~/services/admin'
-import { toast } from 'vue-sonner'
-import { App as CapacitorApp } from '@capacitor/app'
+import {sendDirectInvite} from '~/services/admin'
+import {toast} from 'vue-sonner'
+import {App as CapacitorApp} from '@capacitor/app'
 import {invoke} from "@tauri-apps/api/core";
 import {getCurrentWindow} from "@tauri-apps/api/window";
 
@@ -443,17 +453,17 @@ const isOrganizationAdmin = ref(false);
 const currentStep = ref(0)
 const steps = computed(() => {
   const baseSteps = [
-    { id: 'welcome', title: 'Welcome', required: false },
-    { id: 'photo', title: 'Profile Photo', required: false },
-    { id: 'preferences', title: 'Preferences', required: false },
-    { id: 'matter', title: 'First Matter', required: false },
+    {id: 'welcome', title: 'Welcome', required: false},
+    {id: 'photo', title: 'Profile Photo', required: false},
+    {id: 'preferences', title: 'Preferences', required: false},
+    {id: 'matter', title: 'First Matter', required: false},
   ]
 
   if (isOrganizationAdmin.value) {
-    baseSteps.push({ id: 'invite', title: 'Invite Team', required: false })
+    baseSteps.push({id: 'invite', title: 'Invite Team', required: false})
   }
 
-  baseSteps.push({ id: 'complete', title: 'Complete', required: false })
+  baseSteps.push({id: 'complete', title: 'Complete', required: false})
 
   return baseSteps
 })
@@ -474,7 +484,7 @@ watch(() => user.value?.avatar, (newAvatar) => {
   if (newAvatar !== undefined) {
     currentAvatarUrl.value = newAvatar
   }
-}, { immediate: true })
+}, {immediate: true})
 
 const triggerFileInput = () => {
   fileInput.value?.click()
@@ -513,7 +523,7 @@ const uploadAvatar = async () => {
   isUploadingPhoto.value = true
 
   try {
-    const { canvas } = cropper.value.getResult()
+    const {canvas} = cropper.value.getResult()
 
     if (!canvas) {
       throw new Error('Failed to get cropped image')
@@ -532,7 +542,7 @@ const uploadAvatar = async () => {
     const fileUrl = `${SERVER_URL}/api/files/Avatars/${avatarRecord.id}/${avatarRecord.field}`
 
     // Update user in database
-    await updateUser({ avatar: fileUrl })
+    await updateUser({avatar: fileUrl})
 
     // Optimistically update local avatar URL immediately
     currentAvatarUrl.value = fileUrl
@@ -554,7 +564,7 @@ const clearAvatar = async () => {
   isUploadingPhoto.value = true
 
   try {
-    await updateUser({ avatar: '' })
+    await updateUser({avatar: ''})
 
     // Optimistically clear local avatar URL immediately
     currentAvatarUrl.value = ''
@@ -609,7 +619,7 @@ interface Invite {
 }
 
 const inviteList = ref<Invite[]>([
-  { email: '', name: '', role: 'member' }
+  {email: '', name: '', role: 'member'}
 ])
 const sentInvites = ref<Invite[]>([])
 const isSendingInvites = ref(false)
@@ -620,7 +630,7 @@ const hasValidInvites = computed(() => {
 })
 
 const addInviteField = () => {
-  inviteList.value.push({ email: '', name: '', role: 'member' })
+  inviteList.value.push({email: '', name: '', role: 'member'})
 }
 
 const removeInvite = (index: number) => {
@@ -643,13 +653,13 @@ const sendInvitations = async () => {
     }
 
     const promises = validInvites.map(invite =>
-      sendDirectInvite(invite.email, orgId, invite.role, invite.name || undefined)
+        sendDirectInvite(invite.email, orgId, invite.role, invite.name || undefined)
     )
 
     await Promise.all(promises)
 
     sentInvites.value.push(...validInvites)
-    inviteList.value = [{ email: '', name: '', role: 'member' }]
+    inviteList.value = [{email: '', name: '', role: 'member'}]
 
     invitationStatus.value = {
       success: true,
@@ -695,7 +705,7 @@ const nextStep = async () => {
     currentStep.value++
   }
 
-  if(currentStep.value >= finalStep.value) {
+  if (currentStep.value >= finalStep.value) {
     await finishOnboarding();
   }
 }
@@ -718,7 +728,7 @@ const skipStep = () => {
 }
 
 const finishOnboarding = async () => {
-  if(isTauri.value) {
+  if (isTauri.value) {
     // close current window and load the main window
     console.log('Login successful, transitioning to main window');
     await invoke('login_complete');
@@ -762,9 +772,9 @@ onMounted(async () => {
 
 
     console.log(user?.value);
-    if(user?.value?.organisation) {
+    if (user?.value?.organisation) {
       const organisation = await getOrganisation(user?.value?.organisation);
-      if(organisation) {
+      if (organisation) {
         isOrganizationAdmin.value = organisation?.admins?.includes(user?.value?.id);
       }
     }
@@ -775,7 +785,7 @@ onMounted(async () => {
 
   // Setup Capacitor back button listener for Android
   try {
-    backButtonListener = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+    backButtonListener = await CapacitorApp.addListener('backButton', ({canGoBack}) => {
       // If we're at the first step of onboarding, allow default behavior
       if (currentStep.value === 0) {
         // Show exit confirmation
