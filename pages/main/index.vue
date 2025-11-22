@@ -46,7 +46,7 @@ onUnmounted(() => {
     <div class="flex flex-col gap-3.5 lg:flex-row justify-between">
       <div class="xs:flex flex-col hidden">
         <span class=" text-xl lg:text-2xl font-semibold ibm-plex-serif">{{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0) }}</span>
-        <span>Welcome to PractoCore, Your litigation deadline expert</span>
+        <span>Welcome to PractoCore, Your Litigation Deadline Management Expert</span>
       </div>
 
       <div class="flex flex-col xs:grid xs:grid-cols-2 lg:flex lg:flex-row gap-3">
@@ -101,9 +101,17 @@ onUnmounted(() => {
               Create Matter
             </Button>
           </SharedMattersCreateMatter>
-          <NuxtLink v-else to="/main/matters">
-            <Button class="" size="sm" variant=secondary>View All</Button>
-          </NuxtLink>
+          <div class="flex flex-row items-center gap-2" v-else>
+            <NuxtLink to="/main/matters">
+              <Button class="" size="sm" variant=secondary>View All</Button>
+            </NuxtLink>
+
+            <SharedMattersCreateMatter @created="reloadStatistics">
+              <Button size="icon-sm">
+                <Plus />
+              </Button>
+            </SharedMattersCreateMatter>
+          </div>
         </div>
 
         <XyzTransition xyz="fade" mode="out-in">

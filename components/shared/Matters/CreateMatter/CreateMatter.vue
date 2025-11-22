@@ -357,7 +357,7 @@
 
   <div v-else>
     <!-- DIALOG -->
-    <Dialog v-if="true" v-model:open="open">
+    <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
       <DialogTrigger>
         <slot />
       </DialogTrigger>
