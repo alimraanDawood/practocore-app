@@ -27,21 +27,16 @@
       </button>
     </NuxtLink>
 
-    <NuxtLink to="/main/templates/">
+    <NuxtLink v-if="authStore.isAdmin" to="/main/organisation/">
       <button
           class="flex flex-col items-center disabled:opacity-50 text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main-templates' }">
-        <ScrollText class="size-5"/>
-        <span>Templates</span>
+          :class="{ 'font-semibold text-primary': $route.name === 'main-organisation' }">
+        <Users class="size-5"/>
+        <span>Organisation</span>
       </button>
     </NuxtLink>
 
-    <!-- <button class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]" :class="{ 'font-semibold text-primary': $route.name === 'main-team' }">
-        <Users class="size-5" />
-        <span>Team</span>
-    </button> -->
-
-    <Sheet v-if="authStore.isAdmin">
+    <Sheet v-if="false">
       <SheetTrigger>
         <button
             class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
@@ -80,7 +75,7 @@
       </SheetContent>
     </Sheet>
 
-    <NuxtLink v-else to="/main/settings">
+    <NuxtLink to="/main/settings">
       <button
           class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
           :class="{ 'font-semibold text-primary': $route.name === 'main-settings' }">

@@ -40,7 +40,7 @@ import {getTemplates} from '~/services/templates';
 import {Loader} from "lucide-vue-next";
 
 const props = defineProps(['modelValue']);
-const emits = defineEmits(['update:modelValue']);
+const emits = defineEmits(['update:modelValue', 'templateSelected']);
 
 const templates = ref([] as RecordModel[]);
 const query = ref('');
@@ -66,6 +66,8 @@ const selectTemplate = (template: RecordModel) => {
       fields: template?.template?.fields,
       triggerPrompt: template?.template?.triggerPrompt
     });
+
+    emits('templateSelected', template);
     return;
   }
 

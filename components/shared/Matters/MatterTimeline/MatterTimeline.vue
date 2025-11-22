@@ -1,5 +1,10 @@
 <template>
   <div v-if="matter !== null" class="flex flex-col">
+    <!-- Party Information (if available) -->
+    <div v-if="matter?.parties" class="mb-4">
+      <SharedMattersMatterParties :matter="matter" />
+    </div>
+
     <!-- Trigger Date Node at the start -->
     <div class="flex flex-row text-left group">
       <div class="flex flex-col px-2 items-center">
@@ -73,12 +78,24 @@
 
       <div class="flex flex-col text-left w-full p-2 pb-8 gap-2">
         <div class="flex flex-row items-center justify-between gap-2">
-          <button
-            @click="$emit('deadlineSelected', deadline.id)"
-            class="text-left w-fit font-semibold ibm-plex-serif underline hover:text-primary"
-          >
-            {{ deadline.name }}
-          </button>
+          <div class="flex flex-col gap-1 flex-1">
+            <button
+              @click="$emit('deadlineSelected', deadline.id)"
+              class="text-left w-fit font-semibold ibm-plex-serif underline hover:text-primary"
+            >
+              {{ deadline.name }}
+            </button>
+            <!-- Party Context Badge (if party-specific deadline) -->
+            <div v-if="deadline.party_context" class="flex items-center gap-1">
+              <Badge variant="outline" class="text-xs gap-1">
+                <User class="size-3" />
+                {{ deadline.party_context.party_name }}
+              </Badge>
+              <Badge variant="secondary" class="text-xs">
+                {{ formatPartyType(deadline.party_context.party_type) }}
+              </Badge>
+            </div>
+          </div>
         </div>
 
         <template v-if="!deadline.completed">
@@ -250,7 +267,9 @@ import {
   ArrowRight,
   CalendarSync,
   RotateCcw,
+  User,
 } from "lucide-vue-next";
+import { Badge } from "@/components/ui/badge";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
@@ -263,6 +282,17 @@ dayjs.extend(relativeTime);
 
 const props = defineProps(["matter"]);
 const emits = defineEmits(["updated", "deadlineSelected"]);
+
+// Format party type for display
+const formatPartyType = (type) => {
+  const typeMap = {
+    individual: "Individual",
+    corporate: "Corporate",
+    government: "Government",
+    other: "Other",
+  };
+  return typeMap[type] || type;
+};
 
 // Get all matter members (owner + members array)
 const matterMembers = computed(() => {

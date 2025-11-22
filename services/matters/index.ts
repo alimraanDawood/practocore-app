@@ -1,7 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "http://127.0.0.1:8090";
+const SERVER_URL = "https://api.practocore.com";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
@@ -50,7 +50,17 @@ export async function createAdjournment(options: Object) {
 }
 
 
-export async function createMatter(options: { name: string, caseNumber: string, personal: boolean, members?: string[], templateId: string, date: string, fieldValues: any[] }) {
+export async function createMatter(options: {
+    name: string,
+    caseNumber: string,
+    personal: boolean,
+    members?: string[],
+    templateId: string,
+    date: string,
+    fieldValues: any[],
+    parties?: Record<string, any[]>,  // Party data organized by role ID
+    representing?: { role_id: string, party_member_ids: string[] }  // Representation data
+}) {
     return fetch(`${SERVER_URL}/api/practocore/create-matter`, {
         method: 'POST',
         body: JSON.stringify(options),

@@ -79,7 +79,7 @@
 
                     <div class="flex flex-row gap-3 items-center">
 <!--                        <ReuseSearchFilterTemplate class="hidden lg:flex" />-->
-                        <SharedMattersCreateMatter @created="mattersStore.fetchMatters(true)">
+                        <SharedMattersCreateMatter :no-stepper="true" @created="mattersStore.fetchMatters(true)">
                             <Button>
                                 <Plus /> Add Matter
                             </Button>
