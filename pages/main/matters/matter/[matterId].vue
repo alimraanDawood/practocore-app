@@ -13,7 +13,7 @@
       <div class="flex flex-row gap-2 items-center">
         <SharedDarkModeSwitch/>
 
-        <SharedMattersMemberManagement v-if="isSupervisor" @updated="reloadMatter" :matter="matter">
+        <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
           <SharedAvatarStack :members="matter?.expand?.members" :max-visible="3"/>
         </SharedMattersMemberManagement>
 
@@ -69,7 +69,7 @@
     <div class="flex flex-row w-[90vw] h-full border-x divide-x">
       <div class="flex flex-col w-full overflow-y-scroll p-3 gap-3">
         <div class="flex flex-row items-center gap-2">
-          <SharedMattersMemberManagement v-if="isSupervisor" @updated="reloadMatter" :matter="matter">
+          <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
               Assigned Lawyers

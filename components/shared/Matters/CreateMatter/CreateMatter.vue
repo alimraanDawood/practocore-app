@@ -1,6 +1,6 @@
 <template>
   <DefineTemplate>
-    <div class="p-3 h-full flex flex-col w-full overflow-hidden">
+    <div class="p-3 h-full flex flex-col w-full ">
       <Form
         ref="formRef"
         v-slot="{ meta, values, setFieldValue, validate }"
@@ -13,7 +13,7 @@
         }"
       >
         <Stepper
-          class="flex flex-col w-full h-full overflow-hidden"
+          class="flex flex-col w-full h-full "
           v-slot="{ isNextDisabled, isPrevDisabled, nextStep, prevStep }"
           v-model="stepIndex"
         >
@@ -30,7 +30,7 @@
               }
             "
             id="matter_create"
-            class="flex flex-col w-full h-full overflow-hidden"
+            class="flex flex-col w-full h-full "
           >
             <!-- Stepper Navigation -->
             <div
@@ -151,8 +151,6 @@
                   <FormItem>
                     <FormLabel>Matter Type</FormLabel>
                     <FormDescription>
-                      Use prebuilt templates to generate deadlines for your
-                      legal matters.
                     </FormDescription>
                     <SharedMattersCreateMatterTemplateSelector
                       v-bind="componentField"
@@ -192,7 +190,7 @@
                 "
               >
                 <div class="space-y-2">
-                  <h3 class="font-semibold text-sm">Define Parties</h3>
+                  <h3 class="font-semibold text-sm">Add Parties</h3>
                   <p class="text-xs text-muted-foreground">
                     Add the parties involved in this matter and specify who
                     you're representing.
@@ -383,8 +381,8 @@
           <SheetTitle>Adding a new matter</SheetTitle>
         </SheetHeader>
 
-        <div class="flex flex-col items-center w-full h-full overflow-hidden">
-          <div class="flex flex-col w-full h-full overflow-hidden lg:max-w-lg">
+        <div class="flex flex-col items-center w-full h-full ">
+          <div class="flex flex-col w-full h-full  lg:max-w-lg">
             <ReuseTemplate />
           </div>
         </div>
@@ -455,7 +453,7 @@ const steps = computed(() => {
     if (hasPartyConfig) {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Define Parties", id: "parties" },
+        { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
         { step: 4, title: "Choose Members", id: "members" },
         { step: 5, title: "Complete", id: "complete" },
@@ -473,7 +471,7 @@ const steps = computed(() => {
     if (hasPartyConfig) {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Define Parties", id: "parties" },
+        { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
         { step: 4, title: "Complete", id: "complete" },
       ];

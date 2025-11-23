@@ -165,8 +165,8 @@
           >
             <Checkbox
               :id="`rep-${member.id}`"
-              :checked="representing.party_member_ids.includes(member.id)"
-              @update:checked="(checked) => togglePartyMember(member.id, checked)"
+              :model-value="representing.party_member_ids.includes(member.id)"
+              @update:model-value="(checked) => togglePartyMember(member.id, checked)"
             />
             <Label
               :for="`rep-${member.id}`"
@@ -300,6 +300,7 @@ const updateRepresentingRole = (roleId: string) => {
 
 const togglePartyMember = (memberId: string, checked: boolean) => {
   if (!props.representing) return;
+
 
   const currentIds = props.representing.party_member_ids;
   const newIds = checked

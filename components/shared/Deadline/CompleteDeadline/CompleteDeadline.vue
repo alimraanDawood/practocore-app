@@ -39,7 +39,6 @@
                     <span v-if="!loading">Use Date</span>
                     <Loader v-else class="animate-spin" />
                 </Button>
-                <Button variant="destructive" @click="resetDeadline"><TriangleAlert /> Reset Deadline</Button>
                 <DialogClose class="w-full lg:w-fit">
                     <Button class="w-full" variant="secondary">Cancel</Button>
                 </DialogClose>

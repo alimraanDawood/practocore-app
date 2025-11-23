@@ -17,9 +17,9 @@
       </div>
 
       <div class="flex flex-col w-full p-2 pb-8 gap-2">
-        <div class="flex flex-row items-center justify-between gap-2">
-          <div class="flex flex-row items-center gap-2">
-            <span class="font-semibold ibm-plex-serif">Trigger Date</span>
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+          <div class="flex flex-col lg:flex-row lg:items-center gap-2">
+            <span class="font-semibold ibm-plex-serif">{{ matter?.triggerDateMessage || 'Trigger Date' }}</span>
             <span class="text-sm text-muted-foreground">
               {{
                 dayjs(matter.triggerDate, {
@@ -42,10 +42,6 @@
             </button>
           </SharedMattersChangeTriggerDate>
         </div>
-
-        <span class="text-xs text-muted-foreground italic">
-          All deadlines are calculated from this date
-        </span>
       </div>
     </div>
 

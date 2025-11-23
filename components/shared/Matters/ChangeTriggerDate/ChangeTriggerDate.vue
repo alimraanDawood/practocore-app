@@ -19,7 +19,7 @@
 
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>Change Trigger Date</DialogTitle>
+                <DialogTitle>{{ matter?.triggerPrompt }}</DialogTitle>
                 <DialogDescription>
                     This will recalculate all active deadlines for this matter based on the new trigger date.
                 </DialogDescription>
@@ -36,7 +36,7 @@
 
         <SheetContent side="bottom">
             <SheetHeader>
-                <SheetTitle>Change Trigger Date</SheetTitle>
+                <SheetTitle>{{ matter?.triggerPrompt }}</SheetTitle>
                 <SheetDescription>
                     This will recalculate all active deadlines for this matter based on the new trigger date.
                 </SheetDescription>
