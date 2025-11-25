@@ -67,38 +67,45 @@
 
   <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
     <div class="flex flex-row w-[90vw] h-full border-x divide-x">
-      <div class="flex flex-col w-full overflow-y-scroll p-3 gap-3">
-        <div class="flex flex-row items-center gap-2">
-          <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
-            <Button variant="outline" size="sm" class="gap-2">
-              <Users class="size-4"/>
-              Assigned Lawyers
-              <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">{{
-                  matter.expand.members.length
-                }}
-              </Badge>
-            </Button>
-          </SharedMattersMemberManagement>
+      <div class="flex flex-col w-full overflow-y-scroll gap-3">
+        <div class="flex flex-row w-full p-3 border-b items-center gap-3">
+          <span class="ibm-plex-serif text-2xl">{{ matter?.name }}</span>
+          <div class="bg-border size-2 rounded-full"></div>
+          <span class="ibm-plex-sans">{{ matter?.caseNumber }}</span>
 
-          <Sheet>
-            <SheetTrigger>
-              <Button v-if="matter?.members?.length > 1 && matter.members.includes(getSignedInUser()?.id)"
-                      @click="showChat = !showChat" variant="outline" size="sm" class="gap-2">
-                <MessageSquare class="size-4"/>
-                {{ showChat ? 'Hide Chat' : 'Show Chat' }}
+          <div class="flex flex-row items-center gap-2 ml-auto">
+            <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
+              <Button variant="outline" size="sm" class="gap-2">
+                <Users class="size-4"/>
+                Assigned Lawyers
+                <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">{{
+                    matter.expand.members.length
+                  }}
+                </Badge>
               </Button>
-            </SheetTrigger>
+            </SharedMattersMemberManagement>
 
-            <SheetContent>
-              <div class="flex flex-col w-full h-full ">
-                <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id"/>
-              </div>
-            </SheetContent>
-          </Sheet>
+            <Sheet>
+              <SheetTrigger>
+                <Button v-if="matter?.members?.length > 1 && matter.members.includes(getSignedInUser()?.id)"
+                        @click="showChat = !showChat" variant="outline" size="sm" class="gap-2">
+                  <MessageSquare class="size-4"/>
+                  {{ showChat ? 'Hide Chat' : 'Show Chat' }}
+                </Button>
+              </SheetTrigger>
 
+              <SheetContent>
+                <div class="flex flex-col w-full h-full ">
+                  <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id"/>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
-        <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"
-                                     :matter="matter"/>
+        <div class="flex flex-col p-3">
+          <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"
+                                       :matter="matter"/>
+        </div>
       </div>
 
       <div class="flex flex-col max-w-sm w-full h-full">
