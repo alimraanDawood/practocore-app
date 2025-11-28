@@ -164,7 +164,7 @@ export async function migrateTemplate(
     }
 
     // Actually update the template
-    await updateTemplate(template.id, updateData);
+    // await updateTemplate(template.id, updateData);
 
     return {
       success: true,

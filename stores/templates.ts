@@ -303,7 +303,7 @@ export const useTemplatesStore = defineStore('templates', {
       )
 
       try {
-        const result = await updateTemplate(id, templateData)
+        // const result = await updateTemplate(id, templateData)
 
         // Update with real data
         this.templateCache[id] = {

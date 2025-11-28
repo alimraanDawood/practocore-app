@@ -2,24 +2,24 @@
   <DefineTemplate>
     <div class="p-3 h-full flex flex-col w-full ">
       <Form
-        ref="formRef"
-        v-slot="{ meta, values, setFieldValue, validate }"
-        as=""
-        keep-values
-        :validation-schema="toTypedSchema(__formSchema[steps[stepIndex - 1]?.id])"
-        :initial-values="{
+          ref="formRef"
+          v-slot="{ meta, values, setFieldValue, validate }"
+          as=""
+          keep-values
+          :validation-schema="toTypedSchema(__formSchema[steps[stepIndex - 1]?.id])"
+          :initial-values="{
           template: { id: template?.id, fields: template?.template?.fields },
           members: [],
         }"
       >
         <Stepper
-          class="flex flex-col w-full h-full "
-          v-slot="{ isNextDisabled, isPrevDisabled, nextStep, prevStep }"
-          v-model="stepIndex"
+            class="flex flex-col w-full h-full "
+            v-slot="{ isNextDisabled, isPrevDisabled, nextStep, prevStep }"
+            v-model="stepIndex"
         >
           <!-- FORM -->
           <form
-            @submit="
+              @submit="
               (e) => {
                 e.preventDefault();
                 validate();
@@ -29,51 +29,51 @@
                 }
               }
             "
-            id="matter_create"
-            class="flex flex-col w-full h-full "
+              id="matter_create"
+              class="flex flex-col w-full h-full "
           >
             <!-- Stepper Navigation -->
             <div
-              :class="{ hidden: noStepper }"
-              class="flex w-full flex-start gap-2"
+                :class="{ hidden: noStepper }"
+                class="flex w-full flex-start gap-2"
             >
               <StepperItem
-                v-for="step in steps"
-                :key="step.step"
-                v-slot="{ state }"
-                class="relative flex w-full flex-col items-center justify-center"
-                :step="step.step"
+                  v-for="step in steps"
+                  :key="step.step"
+                  v-slot="{ state }"
+                  class="relative flex w-full flex-col items-center justify-center"
+                  :step="step.step"
               >
                 <StepperSeparator
-                  v-if="step.step !== steps[steps.length - 1].step"
-                  class="absolute left-[calc(50%+20px)] right-[calc(-50%+10px)] top-5 block h-0.5 shrink-0 rounded-full bg-muted group-data-[state=completed]:bg-primary"
+                    v-if="step.step !== steps[steps.length - 1].step"
+                    class="absolute left-[calc(50%+20px)] right-[calc(-50%+10px)] top-5 block h-0.5 shrink-0 rounded-full bg-muted group-data-[state=completed]:bg-primary"
                 />
 
                 <StepperTrigger as-child>
                   <Button
-                    :variant="
+                      :variant="
                       state === 'completed' || state === 'active'
                         ? 'default'
                         : 'outline'
                     "
-                    size="icon"
-                    class="z-10 rounded-full shrink-0"
-                    :class="[
+                      size="icon"
+                      class="z-10 rounded-full shrink-0"
+                      :class="[
                       state === 'active' &&
                         'ring-2 ring-ring ring-offset-2 ring-offset-background',
                     ]"
-                    :disabled="state !== 'completed' && !meta.valid"
+                      :disabled="state !== 'completed' && !meta.valid"
                   >
-                    <Check v-if="state === 'completed'" class="size-5" />
-                    <Circle v-if="state === 'active'" />
-                    <Dot v-if="state === 'inactive'" />
+                    <Check v-if="state === 'completed'" class="size-5"/>
+                    <Circle v-if="state === 'active'"/>
+                    <Dot v-if="state === 'inactive'"/>
                   </Button>
                 </StepperTrigger>
 
                 <div class="flex flex-col items-center text-center">
                   <StepperTitle
-                    :class="[state === 'active' && 'text-primary']"
-                    class="text-xs font-medium transition"
+                      :class="[state === 'active' && 'text-primary']"
+                      class="text-xs font-medium transition"
                   >
                     {{ step.title }}
                   </StepperTitle>
@@ -82,7 +82,7 @@
             </div>
             <div v-show="noStepper" class="flex flex-col">
               <span class="font-semibold ibm-plex-serif"
-                >Step {{ stepIndex }} of {{ steps.length }}</span
+              >Step {{ stepIndex }} of {{ steps.length }}</span
               >
               <span class="text-sm">{{ steps[stepIndex - 1]?.title }}</span>
             </div>
@@ -96,12 +96,12 @@
                     <FormLabel>Case Name*</FormLabel>
                     <FormControl>
                       <Input
-                        type="text"
-                        placeholder="A vs B"
-                        v-bind="componentField"
+                          type="text"
+                          placeholder="A vs B"
+                          v-bind="componentField"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage/>
                   </FormItem>
                 </FormField>
 
@@ -110,26 +110,26 @@
                     <FormLabel>Case Number</FormLabel>
                     <FormControl>
                       <Input
-                        v-bind="componentField"
-                        type="text"
-                        placeholder="Enter Case Number"
+                          v-bind="componentField"
+                          type="text"
+                          placeholder="Enter Case Number"
                       />
                     </FormControl>
                   </FormItem>
                 </FormField>
 
                 <FormField
-                  v-if="getSignedInUser()?.organisation"
-                  v-slot="{ value, handleChange }"
-                  name="personal"
+                    v-if="getSignedInUser()?.organisation"
+                    v-slot="{ value, handleChange }"
+                    name="personal"
                 >
                   <FormItem
-                    class="flex flex-row items-start justify-between rounded-lg border p-4"
+                      class="flex flex-row items-start justify-between rounded-lg border p-4"
                   >
                     <FormControl>
                       <Switch
-                        :model-value="value"
-                        @update:model-value="handleChange"
+                          :model-value="value"
+                          @update:model-value="handleChange"
                       />
                     </FormControl>
                     <div class="space-y-0.5">
@@ -153,17 +153,17 @@
                     <FormDescription>
                     </FormDescription>
                     <SharedMattersCreateMatterTemplateSelector
-                      v-bind="componentField"
+                        v-bind="componentField"
 
-                      @template-selected="st => selectedTemplate = st"
+                        @template-selected="st => selectedTemplate = st"
                     />
-                    <FormMessage />
+                    <FormMessage/>
                   </FormItem>
                 </FormField>
               </template>
               <!-- Step 3 choose members -->
               <template
-                v-if="steps[stepIndex - 1]?.id === 'members' && getSignedInUser()?.organisation"
+                  v-if="steps[stepIndex - 1]?.id === 'members' && getSignedInUser()?.organisation"
               >
                 <FormField v-slot="{ setValue, value }" name="members">
                   <FormItem>
@@ -174,17 +174,17 @@
                     </FormDescription>
 
                     <SharedMattersCreateMatterMemberSelector
-                      :model-value="value"
-                      @update:model-value="(v) => setValue(v)"
+                        :model-value="value"
+                        @update:model-value="(v) => setValue(v)"
                     />
-                    <FormMessage />
+                    <FormMessage/>
                   </FormItem>
                 </FormField>
               </template>
 
               <!-- STEP: DEFINE PARTIES (if template has party_config) -->
               <template
-                v-if="
+                  v-if="
                   steps[stepIndex - 1]?.id === 'parties' &&
                   selectedTemplate?.template?.party_config?.enabled
                 "
@@ -198,10 +198,10 @@
                 </div>
 
                 <SharedMattersCreateMatterParties
-                  ref="partiesRef"
-                  v-model="parties"
-                  v-model:representing="representing"
-                  :party-roles="
+                    ref="partiesRef"
+                    v-model="parties"
+                    v-model:representing="representing"
+                    :party-roles="
                     selectedTemplate?.template?.party_config?.roles || []
                   "
                 />
@@ -211,10 +211,10 @@
               <template v-if="steps[stepIndex - 1]?.id === 'complete'">
                 <div class="space-y-4">
                   <FormField
-                    v-for="field in templateFields || []"
-                    :key="field.name"
-                    :name="`fields.${field.id}`"
-                    v-slot="{ componentField }"
+                      v-for="field in templateFields || []"
+                      :key="field.name"
+                      :name="`fields.${field.id}`"
+                      v-slot="{ componentField }"
                   >
                     <FormItem>
                       <FormLabel>{{ field.label }}</FormLabel>
@@ -222,9 +222,9 @@
                       <!-- string -->
                       <FormControl v-if="field.type === 'string'">
                         <Input
-                          v-bind="componentField"
-                          type="text"
-                          :placeholder="field.placeholder || ''"
+                            v-bind="componentField"
+                            type="text"
+                            :placeholder="field.placeholder || ''"
                         />
                       </FormControl>
 
@@ -233,7 +233,7 @@
                         <Select v-bind="componentField">
                           <SelectTrigger class="w-full">
                             <SelectValue
-                              :placeholder="`Select ${field.label}`"
+                                :placeholder="`Select ${field.label}`"
                             />
                           </SelectTrigger>
 
@@ -241,9 +241,9 @@
                             <SelectGroup>
                               <SelectLabel>{{ field.label }}</SelectLabel>
                               <SelectItem
-                                v-for="opt in field.options"
-                                :key="opt.value"
-                                :value="opt.value"
+                                  v-for="opt in field.options"
+                                  :key="opt.value"
+                                  :value="opt.value"
                               >
                                 {{ opt.label }}
                               </SelectItem>
@@ -255,59 +255,21 @@
                       <!-- boolean -->
                       <FormControl v-else-if="field.type === 'boolean'">
                         <Switch
-                          :model-value="componentField.value"
-                          @update:model-value="
+                            :model-value="componentField.value"
+                            @update:model-value="
                             (v) => setFieldValue(`fields.${field.id}`, v)
                           "
                         />
                       </FormControl>
 
                       <!-- date -->
-                      <Popover v-else-if="field.type === 'date'" :modal="true">
-                        <PopoverTrigger as-child>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              :class="
-                                cn(
-                                  'w-full ps-3 text-start font-normal',
-                                  !value && 'text-muted-foreground'
-                                )
-                              "
-                            >
-                              <span>{{
-                                value ? df.format(toDate(value)) : "Pick a date"
-                              }}</span>
-                              <CalendarIcon
-                                class="ms-auto h-4 w-4 opacity-50"
-                              />
-                            </Button>
-                            <input hidden />
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent class="w-auto p-0">
-                          <Calendar
-                            v-model:placeholder="placeholder"
-                            :model-value="value"
-                            calendar-label="Project Date"
-                            initial-focus
-                            :min-value="new CalendarDate(1900, 1, 1)"
-                            @update:model-value="
-                              (v) => {
-                                if (v)
-                                  setFieldValue('fields.date', v.toString());
-                                else setFieldValue('fields.date', undefined);
-                              }
-                            "
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <SharedCustomDateInput v-else-if="field.type === 'date'" v-bind="componentField" />
 
                       <!-- fallback -->
                       <span v-else class="italic text-muted-foreground">
                         Unsupported type: {{ field.type }}
                       </span>
-                      <FormMessage />
+                      <FormMessage/>
                     </FormItem>
                   </FormField>
                 </div>
@@ -317,31 +279,31 @@
             <!-- Navigation Buttons -->
             <div class="flex items-center justify-between mt-4">
               <Button
-                :disabled="isPrevDisabled"
-                variant="outline"
-                size="sm"
-                @click="prevStep()"
+                  :disabled="isPrevDisabled"
+                  variant="outline"
+                  size="sm"
+                  @click="prevStep()"
               >
                 Back
               </Button>
               <div class="flex items-center gap-3">
                 <Button
-                  v-if="stepIndex !== steps?.length"
-                  :type="meta.valid && isPartyStepValid ? 'button' : 'submit'"
-                  :disabled="isNextDisabled || !isPartyStepValid"
-                  size="sm"
-                  @click="meta.valid && isPartyStepValid && nextStep()"
+                    v-if="stepIndex !== steps?.length"
+                    :type="meta.valid && isPartyStepValid ? 'button' : 'submit'"
+                    :disabled="isNextDisabled || !isPartyStepValid"
+                    size="sm"
+                    @click="meta.valid && isPartyStepValid && nextStep()"
                 >
                   Next
                 </Button>
                 <Button
-                  v-if="stepIndex === steps?.length"
-                  :disabled="loading"
-                  size="sm"
-                  type="submit"
+                    v-if="stepIndex === steps?.length"
+                    :disabled="loading"
+                    size="sm"
+                    type="submit"
                 >
                   <span v-if="!loading">Create Matter</span>
-                  <Loader class="animate-spin" v-else />
+                  <Loader class="animate-spin" v-else/>
                 </Button>
               </div>
             </div>
@@ -351,21 +313,21 @@
     </div>
   </DefineTemplate>
 
-  <ReuseTemplate v-if="noModal" class="w-full h-full flex flex-col" />
+  <ReuseTemplate v-if="noModal" class="w-full h-full flex flex-col"/>
 
   <div v-else>
     <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
       <DialogTrigger>
-        <slot />
+        <slot/>
       </DialogTrigger>
-      <DialogContent >
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Adding a new matter</DialogTitle>
         </DialogHeader>
 
         <div class="flex flex-col w-full h-full overflow-y-auto max-h-[calc(100vh-10rem)]">
-          <ReuseTemplate />
+          <ReuseTemplate/>
         </div>
       </DialogContent>
     </Dialog>
@@ -373,7 +335,7 @@
     <!-- SHEET -->
     <Sheet v-else v-model:open="open">
       <SheetTrigger>
-        <slot />
+        <slot/>
       </SheetTrigger>
 
       <SheetContent class="h-[100dvh]" side="bottom">
@@ -383,7 +345,7 @@
 
         <div class="flex flex-col items-center w-full h-full ">
           <div class="flex flex-col w-full h-full  lg:max-w-lg">
-            <ReuseTemplate />
+            <ReuseTemplate/>
           </div>
         </div>
       </SheetContent>
@@ -393,22 +355,22 @@
 
 <script setup lang="ts">
 import * as z from "zod";
-import { toTypedSchema } from "@vee-validate/zod";
-import { useForm } from "vee-validate";
-import { computed, onMounted, ref, watch } from "vue";
-import { createMatter } from "~/services/matters";
-import { getTemplates } from "~/services/templates";
-import { cn } from "~/lib/utils";
-import { CalendarIcon, Check, Circle, Dot, Loader } from "lucide-vue-next";
-import { toast } from "vue-sonner";
-import { toDate } from "reka-ui/date";
+import {toTypedSchema} from "@vee-validate/zod";
+import {useForm} from "vee-validate";
+import {computed, onMounted, ref, watch} from "vue";
+import {createMatter} from "~/services/matters";
+import {getTemplates} from "~/services/templates";
+import {cn} from "~/lib/utils";
+import {CalendarIcon, Check, Circle, Dot, Loader} from "lucide-vue-next";
+import {toast} from "vue-sonner";
+import {toDate} from "reka-ui/date";
 import {
   CalendarDate,
   DateFormatter,
   parseDate,
 } from "@internationalized/date";
-import type { RecordModel } from "pocketbase";
-import { getSignedInUser } from "~/services/auth";
+import type {RecordModel} from "pocketbase";
+import {getSignedInUser} from "~/services/auth";
 
 import CreateMatterParties from "./CreateMatterParties.vue";
 
@@ -452,34 +414,34 @@ const steps = computed(() => {
   if (hasOrg) {
     if (hasPartyConfig) {
       return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Add Parties", id: "parties" },
-        { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Choose Members", id: "members" },
-        { step: 5, title: "Complete", id: "complete" },
+        {step: 1, title: "Choose Matter Type", id: 'matter_type'},
+        {step: 2, title: "Add Parties", id: "parties"},
+        {step: 3, title: "Matter Details", id: "matter_details"},
+        {step: 4, title: "Choose Members", id: "members"},
+        {step: 5, title: "Complete", id: "complete"},
       ];
     } else {
       return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Choose Members", id: "members" },
-        { step: 4, title: "Complete", id: "complete" },
+        {step: 1, title: "Choose Matter Type", id: 'matter_type'},
+        {step: 2, title: "Matter Details", id: "matter_details"},
+        {step: 3, title: "Choose Members", id: "members"},
+        {step: 4, title: "Complete", id: "complete"},
       ];
     }
   } else {
 
     if (hasPartyConfig) {
       return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Add Parties", id: "parties" },
-        { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Complete", id: "complete" },
+        {step: 1, title: "Choose Matter Type", id: 'matter_type'},
+        {step: 2, title: "Add Parties", id: "parties"},
+        {step: 3, title: "Matter Details", id: "matter_details"},
+        {step: 4, title: "Complete", id: "complete"},
       ];
     } else {
       return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Complete", id: "complete" },
+        {step: 1, title: "Choose Matter Type", id: 'matter_type'},
+        {step: 2, title: "Matter Details", id: "matter_details"},
+        {step: 3, title: "Complete", id: "complete"},
       ];
     }
   }
@@ -497,7 +459,8 @@ const completeStepIndex = computed(() => {
   return steps.value[steps.value.length - 1].step;
 });
 
-onMounted(async () => {});
+onMounted(async () => {
+});
 
 // 🔹 Dynamic schemas
 const buildStep3Schema = () => {
@@ -520,24 +483,24 @@ const buildStep3Schema = () => {
     switch (f.type) {
       case "string":
         fieldShape[f.id] = f.required
-          ? z.string().min(1, `${f.label} is required`)
-          : z.string().optional();
+            ? z.string().min(1, `${f.label} is required`)
+            : z.string().optional();
         break;
       case "select":
         fieldShape[f.id] = f.required
-          ? z.enum(f.options.map((o: any) => o.value))
-          : z.enum(f.options.map((o: any) => o.value)).optional();
+            ? z.enum(f.options.map((o: any) => o.value))
+            : z.enum(f.options.map((o: any) => o.value)).optional();
         break;
       case "boolean":
         fieldShape[f.id] = f.required ? z.boolean() : z.boolean().optional();
         break;
       case "date":
         fieldShape[f.id] = f.required
-          ? z.string().refine((v) => v, { message: "A date is required." })
-          : z
-              .string()
-              .refine((v) => v, { message: "A date is required." })
-              .optional();
+            ? z.string().refine((v) => v, {message: "A date is required."})
+            : z
+                .string()
+                .refine((v) => v, {message: "A date is required."})
+                .optional();
     }
   }
   return z.object({
@@ -558,8 +521,8 @@ const formSchema = computed(() => {
       }),
       z.object({
         name: z
-          .string()
-          .min(3, "You need at least 3 characters for a valid name!"),
+            .string()
+            .min(3, "You need at least 3 characters for a valid name!"),
         caseNumber: z.string().optional(),
         personal: z.boolean().optional(),
         // date: z.string().refine(v => v, { message: "A date is required." }),
@@ -580,9 +543,9 @@ const formSchema = computed(() => {
     }),
     z.object({
       name: z
-        .string()
-        .min(3, "You need at least 3 characters for a valid name!"),
-      date: z.string().refine((v) => v, { message: "A date is required." }),
+          .string()
+          .min(3, "You need at least 3 characters for a valid name!"),
+      date: z.string().refine((v) => v, {message: "A date is required."}),
     }),
     z.object({
       members: z.array(z.any()).optional(),
@@ -637,29 +600,29 @@ const __formSchema = computed(() => {
   };
 });
 
-const df = new DateFormatter("en-US", { dateStyle: "long" });
+const df = new DateFormatter("en-US", {dateStyle: "long"});
 const placeholder = ref();
 const loading = ref(false);
 const open = ref(false);
 
-const value = computed({
-  get: () =>
-    formRef.value?.values?.fields?.date
-      ? parseDate(formRef.value.values?.fields?.date)
-      : undefined,
-  set: (val) => val,
-});
+// const value = computed({
+//   get: () =>
+//       formRef.value?.values?.fields?.date
+//           ? parseDate(formRef.value.values?.fields?.date)
+//           : undefined,
+//   set: (val) => val,
+// });
 
 // 🔹 Reset dynamic fields and parties if template changes
 watch(
-  () => formRef.value?.values?.template?.id,
-  () => {
-    formRef.value?.setValues({});
+    () => formRef.value?.values?.template?.id,
+    () => {
+      formRef.value?.setValues({});
 
-    // Reset party state when template changes
-    parties.value = {};
-    representing.value = null;
-  }
+      // Reset party state when template changes
+      parties.value = {};
+      representing.value = null;
+    }
 );
 
 watch(open, () => {
@@ -757,16 +720,16 @@ const generateCaseNameFromParties = () => {
 
 // Watch parties to auto-fill case name based on "side" configuration
 watch(
-  parties,
-  () => {
-    if (!selectedTemplate?.value?.template?.party_config?.enabled) return;
+    parties,
+    () => {
+      if (!selectedTemplate?.value?.template?.party_config?.enabled) return;
 
-    const generatedName = generateCaseNameFromParties();
-    if (generatedName && formRef.value?.setFieldValue) {
-      formRef.value.setFieldValue('name', generatedName);
-    }
-  },
-  { deep: true }
+      const generatedName = generateCaseNameFromParties();
+      if (generatedName && formRef.value?.setFieldValue) {
+        formRef.value.setFieldValue('name', generatedName);
+      }
+    },
+    {deep: true}
 );
 
 // 🔹 Submission
@@ -788,7 +751,7 @@ const onSubmit = async (values: any) => {
 
     const result = await createMatter({
       name: values.name,
-      caseNumber: values.caseNumber.toString(),
+      caseNumber: values.caseNumber,
       personal: values.personal ? true : false,
       members: values.members ? values.members.map((m) => m?.id) : [],
       templateId: values.template?.id,

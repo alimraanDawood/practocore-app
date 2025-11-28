@@ -3,10 +3,26 @@ import { ref, computed } from 'vue'
 import type { Edge, Node } from '@vue-flow/core'
 import dayjs from 'dayjs'
 import dagre from '@dagrejs/dagre'
+import { deadlineTemplateSchema } from '~/lib/validation/template-schemas'
+import type { ZodError } from 'zod'
 
 // Types based on the provided schema
 export type FieldType = 'text' | 'select' | 'number' | 'date' | 'boolean'
-export type ConditionOperator = 'equals' | 'not_equals' | 'in' | 'not_in' | 'greater_than' | 'less_than'
+export type ConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'in'
+  | 'not_in'
+  | 'greater_than'
+  | 'less_than'
+  // Date-specific operators
+  | 'within_days'
+  | 'beyond_days'
+  | 'days_until'
+  | 'days_since'
+  | 'day_of_week'
+  | 'is_weekend'
+  | 'is_weekday'
 export type ReminderPriority = 'moderate' | 'urgent' | 'critical'
 export type ReminderChannel = 'MAIL' | 'APP' | 'ALARM'
 
@@ -30,6 +46,7 @@ export interface TemplateCondition {
 export interface ConditionalOffsetRule {
   conditions: TemplateCondition[]
   days: number
+  offsetId?: string // Optional: Override the base offsetId for this rule
 }
 
 export interface ConditionalOffsetConfig {
@@ -38,7 +55,7 @@ export interface ConditionalOffsetConfig {
 }
 
 export interface DeadlineOffsetConfig {
-  offsetId: string // parent deadline id or _date_
+  offsetId: string // Can be: '_date_' (start date), 'd_xxx' (deadline ID), or 'f_xxx' (date field ID)
   days: number
   ignoreWeekends?: boolean
   ignoreHolidays?: boolean
@@ -59,6 +76,31 @@ export interface ReminderConfig {
   channels: ReminderChannel[]
 }
 
+export interface PartyRole {
+  id: string
+  name: string
+  label_singular?: string
+  label_plural?: string
+  side: 'first' | 'second'
+  min_count: number
+  max_count: number | null
+  default_count: number
+}
+
+export interface PartyConfig {
+  enabled: boolean
+  roles: PartyRole[]
+  allow_multiple_per_role: boolean
+  representation_required: boolean
+}
+
+export interface MultiplicityConfig {
+  type: 'single' | 'per_party' | 'per_side'
+  role_id?: string
+  side?: string
+  apply_to_representing?: boolean
+}
+
 export interface Deadline {
   id: string
   name: string
@@ -74,6 +116,10 @@ export interface Deadline {
   conditions?: TemplateCondition[]
   offset: DeadlineOffsetConfig
   reminders?: ReminderConfig[]
+  multiplicity?: MultiplicityConfig
+  name_template?: string
+  description_template?: string
+  dependencies?: string[]
 }
 
 export interface ConditionalNode {
@@ -91,6 +137,7 @@ export interface TemplateSettings {
   version: string
   description?: string
   triggerPrompt?: string
+  triggerDateMessage?: string
   date_rules: { allowWeekends: boolean, allowHolidays: boolean }
 }
 
@@ -98,6 +145,21 @@ export interface DeadlineTemplate extends TemplateSettings {
   fields: TemplateField[]
   deadlines: Deadline[]
   conditionals: ConditionalNode[]
+  party_config?: PartyConfig
+}
+
+export interface ValidationError {
+  type: 'error' | 'warning'
+  category: 'schema' | 'dependency' | 'semantic' | 'type'
+  message: string
+  location?: string  // e.g., "deadline:d_001" or "field:f_002"
+  suggestion?: string
+}
+
+export interface ValidationResult {
+  valid: boolean
+  errors: ValidationError[]
+  warnings: ValidationError[]
 }
 
 // Utility ids
@@ -124,7 +186,7 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     conditionals: [],
     deadlines: [
       {
-        id: '_date_',
+        id: 'id001',
         name: 'Start Date',
         description: 'Project start/reference date',
         type: 'offset',
@@ -135,7 +197,7 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
           fulfilled: ''
         },
         offset: {
-          offsetId: '_root_',
+          offsetId: '_date_',
           days: 0,
           allowHolidays: true,
           allowWeekends: true,
@@ -182,6 +244,23 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
 
   function setTemplate(newT: DeadlineTemplate) {
     template.value = JSON.parse(JSON.stringify(newT))
+
+    // Migration: Ensure party_config has all required fields if it exists
+    if (template.value.party_config) {
+      if (template.value.party_config.enabled === undefined) {
+        template.value.party_config.enabled = false
+      }
+      if (!template.value.party_config.roles) {
+        template.value.party_config.roles = []
+      }
+      if (template.value.party_config.allow_multiple_per_role === undefined) {
+        template.value.party_config.allow_multiple_per_role = false
+      }
+      if (template.value.party_config.representation_required === undefined) {
+        template.value.party_config.representation_required = false
+      }
+    }
+
     rebuildGraphFromTemplate()
     dirty.value = true
     saveLocal()
@@ -530,31 +609,203 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     })
   }
 
+  // Party management ops
+  function initializePartyConfig() {
+    template.value.party_config = {
+      enabled: true,
+      roles: [],
+      allow_multiple_per_role: false,
+      representation_required: false
+    }
+  }
+
+  function addPartyRole(role?: Partial<PartyRole>) {
+    if (!template.value.party_config) initializePartyConfig()
+
+    const newRole: PartyRole = {
+      id: uid('role_'),
+      name: 'New Role',
+      side: 'neutral',
+      min_count: 1,
+      max_count: undefined,
+      ...role
+    }
+
+    pushCommand({
+      label: 'Add Party Role',
+      do: () => template.value.party_config!.roles.push(newRole),
+      undo: () => {
+        template.value.party_config!.roles = template.value.party_config!.roles.filter(r => r.id !== newRole.id)
+      }
+    })
+  }
+
+  function updatePartyRole(roleId: string, updates: Partial<PartyRole>) {
+    if (!template.value.party_config) return
+
+    const idx = template.value.party_config.roles.findIndex(r => r.id === roleId)
+    if (idx === -1) return
+
+    const oldRole = JSON.parse(JSON.stringify(template.value.party_config.roles[idx]))
+
+    pushCommand({
+      label: 'Update Party Role',
+      do: () => {
+        template.value.party_config!.roles[idx] = { ...template.value.party_config!.roles[idx], ...updates }
+      },
+      undo: () => {
+        template.value.party_config!.roles[idx] = oldRole
+      }
+    })
+  }
+
+  function deletePartyRole(roleId: string) {
+    if (!template.value.party_config) return
+
+    // Check if role is used in any deadline multiplicity
+    const usedInDeadlines = template.value.deadlines.some(
+      d => d.multiplicity?.role_id === roleId
+    )
+    if (usedInDeadlines) {
+      throw new Error('Role is used in deadlines and cannot be deleted')
+    }
+
+    const idx = template.value.party_config.roles.findIndex(r => r.id === roleId)
+    if (idx === -1) return
+
+    const roleSnapshot = JSON.parse(JSON.stringify(template.value.party_config.roles[idx]))
+
+    pushCommand({
+      label: 'Delete Party Role',
+      do: () => {
+        template.value.party_config!.roles.splice(idx, 1)
+      },
+      undo: () => {
+        template.value.party_config!.roles.splice(idx, 0, roleSnapshot)
+      }
+    })
+  }
+
+  function togglePartySystem(enabled: boolean) {
+    if (!template.value.party_config && enabled) {
+      initializePartyConfig()
+    } else if (template.value.party_config) {
+      const oldEnabled = template.value.party_config.enabled
+
+      pushCommand({
+        label: `${enabled ? 'Enable' : 'Disable'} Party System`,
+        do: () => {
+          template.value.party_config!.enabled = enabled
+        },
+        undo: () => {
+          template.value.party_config!.enabled = oldEnabled
+        }
+      })
+    }
+  }
+
   function selectNode(id: string | null) { selectedNodeId.value = id }
 
-  // Validation (basic)
-  function validate(): string[] {
-    const errors: string[] = []
-    if (!template.value.name?.trim()) errors.push('Template must have a name')
+  // Validation (4-layer system)
+  function validate(): ValidationResult {
+    const errors: ValidationError[] = []
+    const warnings: ValidationError[] = []
+
+    // Layer 1: Schema Validation (Zod)
+    try {
+      deadlineTemplateSchema.parse(template.value)
+    } catch (error) {
+      if (error && typeof error === 'object' && 'issues' in error) {
+        const zodError = error as ZodError
+        for (const issue of zodError.issues) {
+          errors.push({
+            type: 'error',
+            category: 'schema',
+            message: issue.message,
+            location: issue.path.join('.'),
+            suggestion: 'Fix the schema validation error'
+          })
+        }
+      }
+    }
+
+    // Layer 2 & 3: Dependency and Semantic Validation
+    if (!template.value.name?.trim()) {
+      errors.push({
+        type: 'error',
+        category: 'schema',
+        message: 'Template must have a name',
+        location: 'template',
+        suggestion: 'Provide a descriptive template name'
+      })
+    }
 
     const ids = new Set<string>()
 
     // Validate deadlines
     for (const d of template.value.deadlines) {
-      if (ids.has(d.id)) errors.push(`Duplicate deadline id: ${d.id}`)
+      if (ids.has(d.id)) {
+        errors.push({
+          type: 'error',
+          category: 'schema',
+          message: `Duplicate deadline id: ${d.id}`,
+          location: `deadline:${d.id}`,
+          suggestion: 'Ensure each deadline has a unique ID'
+        })
+      }
       ids.add(d.id)
       if (d.id !== '_date_') {
-        if (!d.name?.trim()) errors.push(`Deadline ${d.id} must have a name`)
-        if (!d.offset?.days || d.offset.days < 0) errors.push(`Deadline ${d.name || d.id} must have valid offset days`)
+        if (!d.name?.trim()) {
+          errors.push({
+            type: 'error',
+            category: 'schema',
+            message: `Deadline ${d.id} must have a name`,
+            location: `deadline:${d.id}`,
+            suggestion: 'Provide a descriptive name for this deadline'
+          })
+        }
+        if (d.offset?.days === undefined || !Number.isInteger(d.offset.days)) {
+          errors.push({
+            type: 'error',
+            category: 'schema',
+            message: `Deadline ${d.name || d.id} must have valid offset days`,
+            location: `deadline:${d.id}`,
+            suggestion: 'Set offset days to an integer value (positive for days after, negative for days before)'
+          })
+        }
       }
     }
 
     // Validate conditionals
     for (const c of template.value.conditionals) {
-      if (ids.has(c.id)) errors.push(`Duplicate conditional id: ${c.id}`)
+      if (ids.has(c.id)) {
+        errors.push({
+          type: 'error',
+          category: 'schema',
+          message: `Duplicate conditional id: ${c.id}`,
+          location: `conditional:${c.id}`,
+          suggestion: 'Ensure each conditional has a unique ID'
+        })
+      }
       ids.add(c.id)
-      if (!c.name?.trim()) errors.push(`Conditional ${c.id} must have a name`)
-      if (!c.conditions?.length) errors.push(`Conditional ${c.name || c.id} must have at least one condition`)
+      if (!c.name?.trim()) {
+        errors.push({
+          type: 'error',
+          category: 'schema',
+          message: `Conditional ${c.id} must have a name`,
+          location: `conditional:${c.id}`,
+          suggestion: 'Provide a name for this conditional'
+        })
+      }
+      if (!c.conditions?.length) {
+        errors.push({
+          type: 'error',
+          category: 'schema',
+          message: `Conditional ${c.name || c.id} must have at least one condition`,
+          location: `conditional:${c.id}`,
+          suggestion: 'Add at least one condition to this conditional'
+        })
+      }
     }
 
     // Field references valid
@@ -565,7 +816,13 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
       const conds = [ ...(d.conditions || []), ...((d.offset?.conditional?.rules || []).flatMap(r => r.conditions)) ]
       for (const c of conds) {
         if (c && !fieldIds.has(c.fieldId)) {
-          errors.push(`Deadline condition references missing field: ${c.fieldId}`)
+          errors.push({
+            type: 'error',
+            category: 'dependency',
+            message: `Deadline condition references missing field: ${c.fieldId}`,
+            location: `deadline:${d.id}`,
+            suggestion: 'Remove the condition or add the missing field to the template'
+          })
         }
       }
     }
@@ -574,7 +831,13 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     for (const c of template.value.conditionals) {
       for (const cond of c.conditions) {
         if (!fieldIds.has(cond.fieldId)) {
-          errors.push(`Conditional ${c.name} references missing field: ${cond.fieldId}`)
+          errors.push({
+            type: 'error',
+            category: 'dependency',
+            message: `Conditional ${c.name} references missing field: ${cond.fieldId}`,
+            location: `conditional:${c.id}`,
+            suggestion: 'Remove the condition or add the missing field to the template'
+          })
         }
       }
     }
@@ -607,9 +870,84 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
       seen[n] = 2
       return false
     }
-    if (dfs('_date_')) errors.push('Circular dependency detected')
+    if (dfs('_date_')) {
+      errors.push({
+        type: 'error',
+        category: 'dependency',
+        message: 'Circular dependency detected in deadline graph',
+        location: 'template',
+        suggestion: 'Review deadline dependencies and remove circular references'
+      })
+    }
 
-    return errors
+    // Layer 3: Semantic Validation (Warnings)
+
+    // Warn about deadlines with very long offsets (potential errors)
+    for (const d of template.value.deadlines) {
+      if (d.id !== '_date_' && d.offset?.days && d.offset.days > 365) {
+        warnings.push({
+          type: 'warning',
+          category: 'semantic',
+          message: `Deadline "${d.name}" has a very long offset of ${d.offset.days} days`,
+          location: `deadline:${d.id}`,
+          suggestion: 'Verify this offset is correct'
+        })
+      }
+    }
+
+    // Warn about deadlines without reminders
+    for (const d of template.value.deadlines) {
+      if (d.id !== '_date_' && (!d.reminders || d.reminders.length === 0)) {
+        warnings.push({
+          type: 'warning',
+          category: 'semantic',
+          message: `Deadline "${d.name}" has no reminders configured`,
+          location: `deadline:${d.id}`,
+          suggestion: 'Consider adding reminders to ensure this deadline is not missed'
+        })
+      }
+    }
+
+    // Warn about fields that are not used in any conditions
+    const usedFieldIds = new Set<string>()
+    for (const d of template.value.deadlines) {
+      const conds = [ ...(d.conditions || []), ...((d.offset?.conditional?.rules || []).flatMap(r => r.conditions)) ]
+      for (const c of conds) {
+        if (c) usedFieldIds.add(c.fieldId)
+      }
+    }
+    for (const c of template.value.conditionals) {
+      for (const cond of c.conditions) {
+        usedFieldIds.add(cond.fieldId)
+      }
+    }
+    for (const field of template.value.fields) {
+      if (!usedFieldIds.has(field.id)) {
+        warnings.push({
+          type: 'warning',
+          category: 'semantic',
+          message: `Field "${field.label}" is not used in any conditions`,
+          location: `field:${field.id}`,
+          suggestion: 'Remove this field or use it in a condition'
+        })
+      }
+    }
+
+    // Warn about party config enabled but no deadlines use multiplicity
+    if (template.value.party_config?.enabled) {
+      const hasMultiplicityDeadlines = template.value.deadlines.some(d => d.multiplicity && d.multiplicity.type !== 'single')
+      if (!hasMultiplicityDeadlines) {
+        warnings.push({
+          type: 'warning',
+          category: 'semantic',
+          message: 'Party system is enabled but no deadlines use party multiplicity',
+          location: 'party_config',
+          suggestion: 'Either disable the party system or configure deadlines to use per-party multiplicity'
+        })
+      }
+    }
+
+    return { valid: errors.length === 0, errors, warnings }
   }
 
   // Auto-save to localStorage
@@ -714,6 +1052,54 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
       case 'not_in': return Array.isArray(c.value) && !c.value.includes(v)
       case 'greater_than': return Number(v) > Number(c.value)
       case 'less_than': return Number(v) < Number(c.value)
+
+      // Date-specific operators
+      case 'within_days': {
+        if (!v) return false
+        const date = new Date(v)
+        const now = new Date()
+        const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        return diffDays >= 0 && diffDays <= Number(c.value)
+      }
+      case 'beyond_days': {
+        if (!v) return false
+        const date = new Date(v)
+        const now = new Date()
+        const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        return diffDays > Number(c.value)
+      }
+      case 'days_until': {
+        if (!v) return false
+        const date = new Date(v)
+        const now = new Date()
+        const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        return diffDays === Number(c.value)
+      }
+      case 'days_since': {
+        if (!v) return false
+        const date = new Date(v)
+        const now = new Date()
+        const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+        return diffDays === Number(c.value)
+      }
+      case 'day_of_week': {
+        if (!v) return false
+        const date = new Date(v)
+        return date.getDay() === Number(c.value)
+      }
+      case 'is_weekend': {
+        if (!v) return false
+        const date = new Date(v)
+        const day = date.getDay()
+        return day === 0 || day === 6
+      }
+      case 'is_weekday': {
+        if (!v) return false
+        const date = new Date(v)
+        const day = date.getDay()
+        return day >= 1 && day <= 5
+      }
+
       default: return false
     }
   }
@@ -729,6 +1115,7 @@ export const useTemplateEditorStore = defineStore('templateEditor', () => {
     addField, deleteField,
     addConditional, deleteConditional,
     addDeadline, deleteDeadline, selectNode,
+    initializePartyConfig, addPartyRole, updatePartyRole, deletePartyRole, togglePartySystem,
     validate, undo, redo, pushCommand,
     saveLocal, loadLocal, exportJSON, importJSON,
     calculatePreview,
