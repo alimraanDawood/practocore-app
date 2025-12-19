@@ -50,7 +50,7 @@
     </div>
   </div>
 
-  <div v-else-if="isTauri && !isMainWindow" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+  <div v-else-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
       <div class="flex flex-row w-full">
         <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
@@ -60,13 +60,20 @@
       <div class="flex flex-row w-full text-center  items-center justify-center">
         <span class="ibm-plex-serif">Getting Started With PractoCore</span>
       </div>
-      <div class="flex flex-row w-full justify-end">
-        <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full"><X class="size-4" /></button>
+      <div class="flex flex-row w-full justify-end gap-2 items-center">
+        <DarkModeSwitch class="mr-2" />
+
+        <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
+        <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
+          <Maximize2 class="size-3 stroke-3" />
+        </button>
+        <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
       </div>
     </div>
+
     <div class="flex flex-col w-full items-center h-full">
-      <div class="flex flex-col h-full w-full max-w-sm items-center lg:justify-center border-x p-3 overflow-hidden">
-        <XyzTransition mode="out-in" xyz="fade in-right out-left">
+      <div class="flex flex-col h-full w-full max-w-xl items-center lg:justify-center border-x p-3 overflow-hidden">
+        <XyzTransition mode="out-in" xyz="fade in-right out-left" class="max-w-sm">
           <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" :organisation-data="registrationData.organisation" @complete="accountTypeRegistComplete" />
           <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
           <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
@@ -79,9 +86,9 @@
       </div>
     </div>
 
-    <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
+    <div class="flex flex-row text-sm text-center w-full gap-5 justify-center text-muted-foreground border-t p-3">
       <Button @click="goBack" :disabled="!canGoBack" size="sm" variant="secondary">Previous</Button>
-      <div class="flex flex-row w-full items-center justify-center gap-1">
+      <div class="flex flex-row w-fit items-center justify-center gap-1">
         <div class="size-2 bg-muted rounded-full" v-for="i in 5"></div>
       </div>
       <Button @click="goForward" :disabled="!canGoForward" size="sm">Next</Button>
@@ -101,8 +108,8 @@
       </div>
     </div>
 
-    <div class="flex flex-col h-full w-[95vw] lg:w-[35vw] items-center border-x overflow-hidden">
-      <XyzTransition mode="out-in" xyz="fade in-right out-left">
+    <div class="flex flex-col h-full w-[95vw] max-w-xl items-center border-x overflow-hidden">
+      <XyzTransition mode="out-in" xyz="fade in-right out-left" class="max-w-sm">
         <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" @complete="accountTypeRegistComplete" />
         <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
         <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
@@ -125,7 +132,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'; // Import ref, reactive, computed from 'vue'
-import { ArrowLeft, ArrowRight, X } from 'lucide-vue-next'
+import {ArrowLeft, ArrowRight, Maximize2, Minus, X} from 'lucide-vue-next'
 import AccountType from "~/components/auth/RegisterScreens/AccountType.vue";
 import OrganisationRegister from "~/components/auth/RegisterScreens/OrganisationRegister.vue";
 import PrimaryContactRegister from "~/components/auth/RegisterScreens/PrimaryContactRegister.vue";
@@ -144,6 +151,7 @@ import {
 } from "~/services/auth";
 import {toast} from "vue-sonner";
 import {getCurrentWindow} from "@tauri-apps/api/window";
+import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
 // query allows us to tell whether the registration is from a link
 const query = useRoute().query;
 
@@ -456,6 +464,16 @@ const isMainWindow = computed(() => {
 const closeWindow = () => {
   const currentWindow = getCurrentWindow();
   currentWindow?.close();
+}
+
+const minimizeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.minimize();
+}
+
+const toggleMaximizeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.toggleMaximize();
 }
 </script>
 

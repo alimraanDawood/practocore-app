@@ -1,52 +1,79 @@
 <template>
-  <Avatar v-if="authStore.organisations.length === 0">
-    <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue"/>
-    <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
-  </Avatar>
-  <div v-else>
-    <Dialog v-if="$viewport.isGreaterOrEquals('customxs')">
-      <DialogTrigger as-child>
-        <Avatar class="size-10">
-          <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue"/>
-          <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
-        </Avatar>
-      </DialogTrigger>
-      <DialogContent side="bottom">
-        <DialogHeader>
-          <DialogTitle>Select an Organisation</DialogTitle>
-        </DialogHeader>
+  <div>
+    <Popover>
+      <PopoverTrigger>
+        <button>
+          <Avatar>
+            <AvatarImage  :src="getSignedInUser()?.avatar" alt="@unovue"/>
+            <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
+          </Avatar>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent class="p-0 flex flex-col divide-y w-fit">
+        <div class="flex flex-row gap-2 p-2">
+          <Avatar class="size-10 rounded-lg">
+            <AvatarImage  :src="getSignedInUser()?.avatar" alt="@unovue"/>
+            <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
+          </Avatar>
 
-        <OrganisationSelector/>
-
-      </DialogContent>
-    </Dialog>
-
-    <Sheet v-else>
-      <SheetTrigger as-child>
-        <Avatar>
-          <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue"/>
-          <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
-        </Avatar>
-      </SheetTrigger>
-      <SheetContent side="bottom">
-        <SheetHeader>
-          <SheetTitle>Select an Organisation</SheetTitle>
-        </SheetHeader>
-
-        <div class="p-5 flex flex-col">
-
-          <OrganisationSelector/>
+          <div class="flex flex-col">
+            <span class="font-semibold">{{ getSignedInUser()?.name }}</span>
+            <span class="text-sm text-muted-foreground">{{ getSignedInUser()?.email }}</span>
+          </div>
         </div>
 
-      </SheetContent>
-    </Sheet>
-  </div>
+        <div class="flex flex-col p-2">
+          <Button variant="ghost" class="justify-start w-full" size="sm">
+            <UserCircle />
+            Account
+          </Button>
 
+          <Button variant="ghost" class="justify-start w-full" size="sm">
+            <Settings />
+            Settings
+          </Button>
+
+          <Button variant="ghost" class="justify-start w-full" size="sm">
+            <CreditCard />
+            Billing
+          </Button>
+
+          <Button variant="ghost" class="justify-start w-full" size="sm">
+            <Building2 />
+            Change Organisation
+          </Button>
+        </div>
+
+        <div class="flex flex-col p-2">
+          <AlertDialog>
+            <AlertDialogTrigger as-child>
+              <Button variant="ghost" class="justify-start w-full" size="sm">
+                <LogOut />
+                Sign Out
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Sign Out</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to sign out?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button variant="destructive" @click="signOutUser">Sign Out</Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </PopoverContent>
+    </Popover>
+  </div>
 </template>
 
 <script setup>
-import {ChevronsUpDown} from 'lucide-vue-next';
-import {getSignedInUser} from '~/services/auth';
+import {ChevronsUpDown, Settings, UserCircle, Building2, CreditCard, LogOut} from 'lucide-vue-next';
+import {getSignedInUser, signOut} from '~/services/auth';
 import OrganisationSelector from './OrganisationSelector.vue';
 
 const authStore = useAuthStore();
@@ -54,4 +81,9 @@ const authStore = useAuthStore();
 onMounted(() => {
   authStore.init();
 })
+
+const signOutUser = () => {
+  signOut();
+  window.location.reload();
+}
 </script>

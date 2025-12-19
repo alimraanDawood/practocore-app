@@ -2,7 +2,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import {X} from "lucide-vue-next";
+import {X, Minus, Maximize2, Minimize2} from "lucide-vue-next";
 import AccountType from "~/components/auth/RegisterScreens/AccountType.vue";
 import OrganisationRegister from "~/components/auth/RegisterScreens/OrganisationRegister.vue";
 import FirmDetailsRegister from "~/components/auth/RegisterScreens/FirmDetailsRegister.vue";
@@ -12,6 +12,7 @@ import CreatingAccount from "~/components/auth/RegisterScreens/CreatingAccount.v
 import AdminRegister from "~/components/auth/RegisterScreens/AdminRegister.vue";
 import OTP from "~/components/auth/RegisterScreens/OTP.vue";
 import {computed} from "vue";
+import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
 
 definePageMeta({
   layout: 'blank',
@@ -56,6 +57,16 @@ const closeWindow = () => {
   currentWindow?.close();
 }
 
+const minimizeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.minimize();
+}
+
+const toggleMaximizeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.toggleMaximize();
+}
+
 </script>
 
 <template>
@@ -68,7 +79,7 @@ const closeWindow = () => {
 <!--    </div>-->
 <!--  </LayoutAuth>-->
 
-  <div v-if="isTauri && !isMainWindow" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+  <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
       <div class="flex flex-row w-full">
         <NuxtLink :to="query?.ref ? `/auth/register?ref=${query?.ref}` : '/auth/register'">
@@ -78,13 +89,20 @@ const closeWindow = () => {
       <div class="flex flex-row w-full text-center  items-center justify-center">
         <span class="ibm-plex-serif">Sign In to PractoCore</span>
       </div>
-      <div class="flex flex-row w-full justify-end">
-        <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full"><X class="size-4" /></button>
+      <div class="flex flex-row w-full justify-end gap-2 items-center">
+        <DarkModeSwitch class="mr-2" />
+        <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
+        <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
+          <Maximize2 class="size-3 stroke-3" />
+        </button>
+        <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
       </div>
     </div>
     <div class="flex flex-col items-center w-full divide-x h-full">
-      <div class="flex flex-col h-full w-full max-w-sm items-center justify-center border-x overflow-hidden p-3">
-        <AuthSignIn @success="redirect" class="w-full" />
+      <div class="flex flex-col h-full w-full max-w-xl items-center justify-center border-x overflow-hidden p-3">
+        <div class="flex flex-col max-w-sm w-full">
+          <AuthSignIn @success="redirect" class="w-full !max-w-sm" />
+        </div>
       </div>
     </div>
 
@@ -93,9 +111,9 @@ const closeWindow = () => {
   </div>
 
     <div v-else class="flex flex-col w-full h-[100dvh]">
-      <div class="flex flex-row p-3 border-b" data-tauri-drag-region></div>
+      <div class="flex flex-row p-3 border-b"></div>
       <div class="flex flex-col w-full h-full gap-5 items-center justify-center">
-        <div class="flex flex-col w-[95vw] items-center justify-center lg:w-[35vw] items-center p-3 border-x h-full">
+        <div class="flex flex-col w-[95vw] items-center justify-center  max-w-xl  p-3 border-x h-full">
           <div class="flex flex-col w-full lg:max-w-sm gap-5">
             <div class="grid gap-2 text-center">
               <div class="flex flex-row w-full items-center justify-center">
@@ -109,7 +127,7 @@ const closeWindow = () => {
               </p>
             </div>
 
-            <AuthSignIn @success="redirect" class="w-full" />
+            <AuthSignIn @success="redirect" class="w-full !max-w-sm" />
           </div>
         </div>
       </div>
