@@ -60,17 +60,18 @@ onMounted(async () => {
 });
 
 const selectTemplate = (template: RecordModel) => {
-  if (template?.template?.fields) {
+  if (template?.template?.data?.fields) {
     emits('update:modelValue', {
       id: template.id,
-      fields: template?.template?.fields,
-      triggerPrompt: template?.template?.triggerPrompt
+      fields: template?.template?.data?.fields,
+      triggerDatePrompt: template?.template?.data?.triggerDatePrompt
     });
 
     emits('templateSelected', template);
     return;
   }
 
-  emits('update:modelValue', {id: template.id, fields: [], triggerPrompt: template?.template?.triggerPrompt});
+  emits('templateSelected', template);
+  emits('update:modelValue', {id: template.id, fields: [], triggerDatePrompt: template?.template?.data?.triggerDatePrompt});
 }
 </script>

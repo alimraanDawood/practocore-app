@@ -207,7 +207,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-muted/30 xs:pb-12 lg:pb-0 text-foreground">
+  <div class="flex flex-col h-full bg-muted/30 xs:pb-12 lg:pb-0 text-foreground overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between p-4 border-b bg-background">
       <h3 class="font-semibold">Chat</h3>
@@ -281,7 +281,7 @@ watch(
     </div>
 
     <!-- Input -->
-    <div class="p-4 border-t bg-background">
+    <div class="p-4 border-t bg-background flex flex-col">
       <form @submit.prevent="handleSendMessage" class="flex flex-col gap-2">
         <Textarea
           v-model="newMessage"

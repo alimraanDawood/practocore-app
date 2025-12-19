@@ -13,7 +13,7 @@ export const COUNTRIES = [
   { value: 'NZ', label: 'New Zealand' },
   { value: 'SG', label: 'Singapore' },
   { value: 'OTHER', label: 'Other' },
-] as const;
+] ;
 
 export const PRACTICE_AREAS = [
   { value: 'civil_litigation', label: 'Civil Litigation', icon: '⚖️' },
@@ -29,7 +29,7 @@ export const PRACTICE_AREAS = [
   { value: 'bankruptcy_insolvency', label: 'Bankruptcy & Insolvency', icon: '💸' },
   { value: 'environmental_law', label: 'Environmental Law', icon: '🌍' },
   { value: 'other', label: 'Other', icon: '📁' },
-] as const;
+] ;
 
 export const COURT_LEVELS = [
   { value: 'supreme_apex', label: 'Supreme Court / Apex Court' },
@@ -40,7 +40,7 @@ export const COURT_LEVELS = [
   { value: 'arbitration_adr', label: 'Arbitration / ADR' },
   { value: 'small_claims', label: 'Small Claims' },
   { value: 'other', label: 'Other' },
-] as const;
+] ;
 
 export const COMPLEXITY_LEVELS = [
   {
@@ -67,7 +67,7 @@ export const COMPLEXITY_LEVELS = [
     description: 'Highly specialized workflows (31+ deadlines)',
     color: 'red'
   },
-] as const;
+] ;
 
 export const TEMPLATE_LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -78,7 +78,7 @@ export const TEMPLATE_LANGUAGES = [
   { value: 'hi', label: 'Hindi' },
   { value: 'zh', label: 'Mandarin' },
   { value: 'other', label: 'Other' },
-] as const;
+] ;
 
 // Type exports for TypeScript
 export type Country = typeof COUNTRIES[number]['value'];

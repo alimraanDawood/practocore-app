@@ -51,7 +51,7 @@ const onSubmit = form.handleSubmit(async (values) => {
         name: values.name,
         description: values.description,
         fields: [],
-        triggerPrompt: ''
+        triggerDatePrompt: ''
       }),
 
       // Phase 1A: Categorization fields
@@ -76,12 +76,12 @@ const onSubmit = form.handleSubmit(async (values) => {
   loading.value = false;
 });
 
-function createEmptyTemplateData(options: { name: string, description?: string, fields: Object[], triggerPrompt: string }) {
+function createEmptyTemplateData(options: { name: string, description?: string, fields: Object[], triggerDatePrompt: string }) {
   return {
     name: options.name,
     description: options.description,
     fields: options.fields,
-    triggerPrompt: options.triggerPrompt,
+    triggerDatePrompt: options.triggerDatePrompt,
     deadlines: [],
     data_rules: {
       allowWeekends: true,

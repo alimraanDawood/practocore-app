@@ -41,7 +41,7 @@
 <script setup>
 import { toast } from 'vue-sonner';
 import AdjournmentForm from './AdjournmentForm.vue';
-import { createAdjournment } from '~/services/matters';
+import { createAdjournment, adjournDeadline } from '~/services/matters';
 import { LoaderIcon } from 'lucide-vue-next';
 
 const [CreateTemplate, ReuseTemplate] = createReusableTemplate();
@@ -84,7 +84,7 @@ const steps = computed(() => {
 const createDeadlineAdjournment = async (values) => {
     loading.value = true;
     try {
-        const result = await createAdjournment({ deadline: props?.deadline?.id, from: props?.deadline?.date, to: values?.to, reason: values?.reason });
+        const result = await adjournDeadline(props.deadline, values.to, false, values.reason);
 
         toast.success("Adjournment created successfully!");
         emits('updated');

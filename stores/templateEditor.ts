@@ -90,7 +90,7 @@ export interface TemplateSettings {
   name: string
   version: string
   description?: string
-  triggerPrompt?: string
+  triggerDatePrompt?: string
   date_rules: { allowWeekends: boolean, allowHolidays: boolean }
 }
 

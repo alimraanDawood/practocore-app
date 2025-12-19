@@ -9,17 +9,17 @@
       <div class="flex flex-row items-center justify-between">
         <div>
           <h3 class="font-semibold text-sm">
-            {{ role.label_plural || role.name }}
-            <span v-if="role.min_count" class="text-muted-foreground text-xs font-normal">
-              (Min: {{ role.min_count }})
+            {{ role.labels.plural || role.name }}
+            <span v-if="role.memberCount.minimum" class="text-muted-foreground text-xs font-normal">
+              (Min: {{ role.memberCount.minimum }})
             </span>
           </h3>
-          <p v-if="role.min_count" class="text-xs text-muted-foreground">
-            At least {{ role.min_count }} {{ role.label_singular || role.name }} required
+          <p v-if="role.memberCount.minimum" class="text-xs text-muted-foreground">
+            At least {{ role.memberCount.minimum }} {{ role.labels.singular || role.name }} required
           </p>
         </div>
         <Button variant="secondary" size="sm" @click="addPartyMember(role.id, role.name)">
-          <Plus class="size-3 mr-1" /> Add {{ role.label_singular || role.name }}
+          <Plus class="size-3 mr-1" /> Add {{ role.labels.singular || role.name }}
         </Button>
       </div>
 
@@ -114,9 +114,9 @@
           v-if="!modelValue[role.id]?.length"
           class="text-xs text-muted-foreground italic p-3 border border-dashed rounded-lg text-center"
         >
-          No {{ role.label_plural || role.name }} added yet.
-          <span v-if="role.min_count" class="text-destructive block mt-1">
-            Please add at least {{ role.min_count }}.
+          No {{ role.labels.plural || role.name }} added yet.
+          <span v-if="role.memberCount.minimum" class="text-destructive block mt-1">
+            Please add at least {{ role.memberCount.minimum }}.
           </span>
         </div>
       </div>
@@ -144,7 +144,7 @@
             :value="role.id"
             :disabled="!modelValue[role.id]?.length"
           >
-            {{ role.label_plural || role.name }}
+            {{ role.labels.plural || role.name }}
             <span v-if="!modelValue[role.id]?.length" class="text-xs text-muted-foreground">
               (No members added)
             </span>
@@ -215,11 +215,15 @@ import { computed } from "vue";
 interface PartyRole {
   id: string;
   name: string;
-  label_singular: string;
-  label_plural: string;
-  side: 'first' | 'second';
-  min_count: number;
-  max_count: number | null;
+  labels: {
+    singular: string;
+    plural: string;
+  };
+  memberCount: {
+    minimum: number;
+    maximum: number | null;
+    default: number;
+  }
 }
 
 interface PartyMember {
@@ -320,9 +324,9 @@ const validationErrors = computed(() => {
   // Check min_count for each role
   for (const role of props.partyRoles) {
     const members = props.modelValue[role.id] || [];
-    if (members.length < role.min_count) {
+    if (members.length < role.memberCount.minimum) {
       errors.push(
-        `${role.name} requires at least ${role.min_count} member(s), but only ${members.length} provided`
+        `${role.name} requires at least ${role.memberCount.minimum} member(s), but only ${members.length} provided`
       );
     }
 

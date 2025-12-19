@@ -1,6 +1,6 @@
 <template>
   <DefineTemplate>
-    <div class="p-3 h-full flex flex-col w-full ">
+    <div class="p-3 h-full flex flex-col w-full">
       <Form
         ref="formRef"
         v-slot="{ meta, values, setFieldValue, validate }"
@@ -8,7 +8,7 @@
         keep-values
         :validation-schema="toTypedSchema(__formSchema[steps[stepIndex - 1]?.id])"
         :initial-values="{
-          template: { id: template?.id, fields: template?.template?.fields },
+          template: { id: template?.id, fields: template?.template?.fields, triggerDatePrompt: '' },
           members: [],
         }"
       >
@@ -182,11 +182,11 @@
                 </FormField>
               </template>
 
-              <!-- STEP: DEFINE PARTIES (if template has party_config) -->
+              <!-- STEP: DEFINE PARTIES (if template has data.parties) -->
               <template
                 v-if="
                   steps[stepIndex - 1]?.id === 'parties' &&
-                  selectedTemplate?.template?.party_config?.enabled
+                  selectedTemplate?.template?.data?.parties?.enabled
                 "
               >
                 <div class="space-y-2">
@@ -202,7 +202,7 @@
                   v-model="parties"
                   v-model:representing="representing"
                   :party-roles="
-                    selectedTemplate?.template?.party_config?.roles || []
+                    selectedTemplate?.template?.data?.parties?.roles || []
                   "
                 />
               </template>
@@ -263,45 +263,46 @@
                       </FormControl>
 
                       <!-- date -->
-                      <Popover v-else-if="field.type === 'date'" :modal="true">
-                        <PopoverTrigger as-child>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              :class="
-                                cn(
-                                  'w-full ps-3 text-start font-normal',
-                                  !value && 'text-muted-foreground'
-                                )
-                              "
-                            >
-                              <span>{{
-                                value ? df.format(toDate(value)) : "Pick a date"
-                              }}</span>
-                              <CalendarIcon
-                                class="ms-auto h-4 w-4 opacity-50"
-                              />
-                            </Button>
-                            <input hidden />
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent class="w-auto p-0">
-                          <Calendar
-                            v-model:placeholder="placeholder"
-                            :model-value="value"
-                            calendar-label="Project Date"
-                            initial-focus
-                            :min-value="new CalendarDate(1900, 1, 1)"
-                            @update:model-value="
-                              (v) => {
-                                if (v)
-                                  setFieldValue('fields.date', v.toString());
-                                else setFieldValue('fields.date', undefined);
-                              }
-                            "
-                          />
-                        </PopoverContent>
-                      </Popover>
+<!--                      <Popover v-else-if="field.type === 'date'" :modal="true">-->
+<!--                        <PopoverTrigger as-child>-->
+<!--                          <FormControl>-->
+<!--                            <Button-->
+<!--                              variant="outline"-->
+<!--                              :class="-->
+<!--                                cn(-->
+<!--                                  'w-full ps-3 text-start font-normal',-->
+<!--                                  !value && 'text-muted-foreground'-->
+<!--                                )-->
+<!--                              "-->
+<!--                            >-->
+<!--                              <span>{{-->
+<!--                                value ? df.format(toDate(value)) : "Pick a date"-->
+<!--                              }}</span>-->
+<!--                              <CalendarIcon-->
+<!--                                class="ms-auto h-4 w-4 opacity-50"-->
+<!--                              />-->
+<!--                            </Button>-->
+<!--                            <input hidden />-->
+<!--                          </FormControl>-->
+<!--                        </PopoverTrigger>-->
+<!--                        <PopoverContent class="w-auto p-0">-->
+<!--                          <Calendar-->
+<!--                            v-model:placeholder="placeholder"-->
+<!--                            :model-value="value"-->
+<!--                            calendar-label="Project Date"-->
+<!--                            initial-focus-->
+<!--                            :min-value="new CalendarDate(1900, 1, 1)"-->
+<!--                            @update:model-value="-->
+<!--                              (v) => {-->
+<!--                                if (v)-->
+<!--                                  setFieldValue('fields.date', v.toString());-->
+<!--                                else setFieldValue('fields.date', undefined);-->
+<!--                              }-->
+<!--                            "-->
+<!--                          />-->
+<!--                        </PopoverContent>-->
+<!--                      </Popover>-->
+                      <DateInput v-else-if="field.type === 'date'" v-bind="componentField" />
 
                       <!-- fallback -->
                       <span v-else class="italic text-muted-foreground">
@@ -381,8 +382,8 @@
           <SheetTitle>Adding a new matter</SheetTitle>
         </SheetHeader>
 
-        <div class="flex flex-col items-center w-full h-full ">
-          <div class="flex flex-col w-full h-full  lg:max-w-lg">
+        <div class="flex flex-col items-center overflow-hidden w-full h-full ">
+          <div class="flex flex-col w-full h-full lg:max-w-lg">
             <ReuseTemplate />
           </div>
         </div>
@@ -444,9 +445,10 @@ const representing = ref<{
 
 const selectedTemplate = ref(null);
 
-// Computed steps - dynamically include party step if template has party_config
+// Computed steps - dynamically include party step if template has data.parties
 const steps = computed(() => {
-  const hasPartyConfig = selectedTemplate?.value?.template?.party_config?.enabled === true;
+  console.log(selectedTemplate);
+  const hasPartyConfig = selectedTemplate?.value?.template?.data.parties?.enabled === true;
   const hasOrg = !!getSignedInUser()?.organisation;
 
   if (hasOrg) {
@@ -504,10 +506,12 @@ const buildStep3Schema = () => {
   const template = formRef.value?.values?.template;
   const _templateFields = template?.fields || [];
 
+  console.log(template);
+
   templateFields.value = [
     {
       id: "date",
-      label: template?.triggerPrompt,
+      label: template?.triggerDatePrompt || "Enter Date",
       required: true,
       type: "date",
     },
@@ -518,7 +522,7 @@ const buildStep3Schema = () => {
 
   for (const f of templateFields.value) {
     switch (f.type) {
-      case "string":
+      case "text":
         fieldShape[f.id] = f.required
           ? z.string().min(1, `${f.label} is required`)
           : z.string().optional();
@@ -576,6 +580,7 @@ const formSchema = computed(() => {
       template: z.object({
         id: z.string(),
         fields: z.array(z.any()),
+        triggerDatePrompt: z.string(),
       }),
     }),
     z.object({
@@ -599,6 +604,7 @@ const __formSchema = computed(() => {
         template: z.object({
           id: z.string(),
           fields: z.array(z.any()),
+          triggerDatePrompt: z.string(),
         }),
       }),
       "matter_details": z.object({
@@ -621,6 +627,7 @@ const __formSchema = computed(() => {
       template: z.object({
         id: z.string(),
         fields: z.array(z.any()),
+        triggerDatePrompt: z.string(),
       }),
     }),
     "matter_details": z.object({
@@ -674,7 +681,7 @@ watch(open, () => {
 // Helper to check if party step is valid
 const isPartyStepValid = computed(() => {
   if (stepIndex.value !== partyStepIndex.value) return true;
-  if (!selectedTemplate?.value?.template?.party_config?.enabled) return true;
+  if (!selectedTemplate?.value?.template?.data.parties?.enabled) return true;
 
   return partiesRef.value?.isValid ?? false;
 });
@@ -683,10 +690,10 @@ const isPartyStepValid = computed(() => {
 // Uses the "side" field from party roles to determine order (first side v. second side)
 // Truncates with "and others" when there are too many parties
 const generateCaseNameFromParties = () => {
-  if (!selectedTemplate?.value?.template?.party_config?.enabled) return '';
+  if (!selectedTemplate?.value?.template?.data.parties?.enabled) return '';
 
   const allParties = parties.value;
-  const partyRoles = selectedTemplate?.value?.template?.party_config?.roles || [];
+  const partyRoles = selectedTemplate?.value?.template?.data.parties?.roles || [];
 
   // Configuration for truncation
   const MAX_PARTIES_PER_SIDE = 2; // Show max 2 parties, then "and others"
@@ -759,7 +766,7 @@ const generateCaseNameFromParties = () => {
 watch(
   parties,
   () => {
-    if (!selectedTemplate?.value?.template?.party_config?.enabled) return;
+    if (!selectedTemplate?.value?.template?.data?.parties?.enabled) return;
 
     const generatedName = generateCaseNameFromParties();
     if (generatedName && formRef.value?.setFieldValue) {
@@ -794,8 +801,8 @@ const onSubmit = async (values: any) => {
       templateId: values.template?.id,
       date: values.fields.date,
       fieldValues: values.fields,
-      // Include parties and representing if template has party_config
-      ...(selectedTemplate?.value?.template?.party_config?.enabled && {
+      // Include parties and representing if template has data.parties
+      ...(selectedTemplate?.value?.template?.data.parties?.enabled && {
         parties: cleanedParties,
         representing: representing.value,
       }),

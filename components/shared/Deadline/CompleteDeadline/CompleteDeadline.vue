@@ -33,7 +33,7 @@
 
             <DialogFooter>
                 <Button 
-                    @click="fulfillDeadline" 
+                    @click="_fulfillDeadline"
                     class="disabled:opacity-50 "
                     :disabled="loading">
                     <span v-if="!loading">Use Date</span>
@@ -98,18 +98,19 @@
 import type { DateValue } from '@internationalized/date';
 import { DateFormatter, getLocalTimeZone, today, parseDate } from "@internationalized/date";
 import { toast } from 'vue-sonner';
-import { updateDeadline, resetDeadline as resetDeadlineService } from '~/services/matters';
+import { updateDeadline, fulfillDeadline, resetDeadline as resetDeadlineService } from '~/services/matters';
 import { Loader, CalendarIcon, TriangleAlert } from 'lucide-vue-next';
 import { Calendar } from '~/components/ui/calendar';
 import { cn } from '~/lib/utils';
 import { getSignedInUser } from '~/services/auth';
+import {toDate} from "reka-ui/date";
 
 const props = defineProps(['deadline', 'index']);
 const emits = defineEmits(['updated']);
 
 
 const dateValue = ref(
-    props.deadline?.date && props.deadline?.completed ? parseDate(props.deadline.date.slice(0, 10)) : today(getLocalTimeZone())
+    props.deadline?.date && props.deadline?.status === "fulfilled" ? parseDate(props.deadline.date.slice(0, 10)) : today('utc')
 ) as Ref<DateValue>;
 const loading = ref(false);
 const open = ref(false);
@@ -118,16 +119,10 @@ const df = new DateFormatter("en-US", {
     dateStyle: "long",
 });
 
-const fulfillDeadline = async () => {
+const _fulfillDeadline = async () => {
     loading.value = true;
     try {
-        const result = await updateDeadline(
-            props.deadline?.id, 
-            { 
-                completed: true, 
-                date: dateValue.value.toDate(getLocalTimeZone()) 
-            }
-        );
+        const result = await fulfillDeadline(props.deadline,  toDate(dateValue.value, 'utc').toISOString().split('T')[0]);
 
         open.value = false;
         toast.success("Successfully updated deadline!");

@@ -341,7 +341,7 @@ function handleWebForegroundNotification(payload: any) {
   toast.message(title, {
     description: body,
     position: 'top-right',
-    duration: 5000
+    duration: 1000
   });
 
   // You can also show a browser notification if you want

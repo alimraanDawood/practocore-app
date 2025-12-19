@@ -79,7 +79,7 @@
 
                   <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold">Trigger Prompt</label>
-                    <Input v-model="editorStore.template.triggerPrompt" placeholder="When did the event occur?" />
+                    <Input v-model="editorStore.template.triggerDatePrompt" placeholder="When did the event occur?" />
                     <span class="text-xs text-muted-foreground">This prompt is shown when creating a new matter from this template.</span>
                   </div>
 
@@ -363,8 +363,8 @@ onMounted(async () => {
           ]
         };
 
-        if (templateData.template?.triggerPrompt) {
-          storeTemplate.triggerPrompt = templateData.template.triggerPrompt;
+        if (templateData.template?.triggerDatePrompt) {
+          storeTemplate.triggerDatePrompt = templateData.template.triggerDatePrompt;
         }
 
         editorStore.setTemplate(storeTemplate);
@@ -500,7 +500,7 @@ const handleSave = async () => {
         fields: editorStore.template.fields,
         conditionals: editorStore.template.conditionals,
         date_rules: editorStore.template.date_rules,
-        triggerPrompt: editorStore.template.triggerPrompt
+        triggerDatePrompt: editorStore.template.triggerDatePrompt
       }
     };
 

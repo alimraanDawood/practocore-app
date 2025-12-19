@@ -58,7 +58,7 @@
     <!-- Mobile Chat Sheet -->
     <Sheet v-if="matter?.members?.length > 1 && matter?.members?.includes(getSignedInUser()?.id)"
            v-model:open="mobileChatOpen">
-      <SheetContent side="bottom" class="h-[100vh] p-0">
+      <SheetContent side="bottom" class="flex flex-col h-full max-h-[100vh] overflow-hidden p-0">
         <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id" :show-close="true"
                        @close="mobileChatOpen = false"/>
       </SheetContent>

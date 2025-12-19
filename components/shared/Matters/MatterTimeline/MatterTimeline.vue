@@ -19,7 +19,7 @@
       <div class="flex flex-col w-full p-2 pb-8 gap-2">
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
           <div class="flex flex-col lg:flex-row lg:items-center gap-2">
-            <span class="font-semibold ibm-plex-serif">{{ matter?.triggerDateMessage || 'Trigger Date' }}</span>
+            <span class="font-semibold ibm-plex-serif">{{ matter?.triggerDateName || 'Trigger Date' }}</span>
             <span class="text-sm text-muted-foreground">
               {{
                 dayjs(matter.triggerDate, {
@@ -55,20 +55,20 @@
       <div class="flex flex-col px-2 items-center">
         <div
           class="w-1 h-5 bg-muted group-first:opacity-0"
-          :class="{ 'bg-primary': deadline.completed }"
+          :class="{ 'bg-primary': deadline.status === 'fulfilled' }"
         ></div>
         <div
           class="size-8 bg-muted shrink-0 rounded-full grid place-items-center"
           :class="{
-            'bg-primary text-primary-foreground border-0': deadline.completed,
+            'bg-primary text-primary-foreground border-0': deadline.status === 'fulfilled',
           }"
         >
-          <CalendarCheck v-if="deadline.completed" class="size-4" />
+          <CalendarCheck v-if="deadline.status === 'fulfilled'" class="size-4" />
           <CalendarClock v-else class="size-4" />
         </div>
         <div
           class="w-1 h-full bg-muted group-last:opacity-0"
-          :class="{ 'bg-primary': deadline.completed }"
+          :class="{ 'bg-primary': deadline.status === 'fulfilled' }"
         ></div>
       </div>
 
@@ -94,7 +94,7 @@
           </div>
         </div>
 
-        <template v-if="!deadline.completed">
+        <template v-if="!(deadline.status === 'fulfilled')">
           <div class="flex flex-col lg:flex-row gap-2 lg:items-center">
             <span class="text-sm text-muted-foreground">{{
               deadline.input_prompt
@@ -159,9 +159,7 @@
             >
               <CalendarIcon class="size-3" />
               {{
-                dayjs(deadline.date, {
-                  timezone: getSignedInUser()?.timezone,
-                }).format("D MMM YYYY")
+                dayjs(deadline.date, { utc: true }).format("D MMM YYYY")
               }}
             </button>
           </SharedDeadlineCompleteDeadline>

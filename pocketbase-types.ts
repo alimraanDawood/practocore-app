@@ -123,7 +123,7 @@ export type DeadlinesRecord<Trules = unknown> = {
 	completed?: boolean
 	created?: IsoDateString
 	date?: IsoDateString
-	dependancy?: RecordIdString
+	dependency?: RecordIdString
 	description?: string
 	dynamic?: boolean
 	fulfilled_prompt?: string

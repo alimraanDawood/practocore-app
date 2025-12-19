@@ -8,7 +8,7 @@
     "allowHolidays": true
   },
   "fields": [],
-  "triggerPrompt": "When was the appeal filed?",
+  "triggerDatePrompt": "When was the appeal filed?",
   "deadlines": [
     {
       "id": "d_001",

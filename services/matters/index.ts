@@ -1,5 +1,6 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
+import {options} from "kolorist";
 
 const SERVER_URL = "https://api.practocore.com";
 
@@ -108,6 +109,46 @@ export async function getMatter(matterId: string, options: Object) {
 
 export async function updateDeadline(deadlineId: string, options: Object) {
     return pocketbase.collection('Deadlines').update(deadlineId, options);
+}
+
+export async function fulfillDeadline(deadline: Deadline, date: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: {
+                action: "FULFILL",
+                meta: {
+                    targetId: deadline?.t_id,
+                    fulfilledDate: date,
+                }
+            }
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function adjournDeadline(deadline: Deadline, date: string, force = false, reason = "") {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: {
+                action: "ADJOURN",
+                meta: {
+                    targetId: deadline?.t_id,
+                    adjournedDate: date,
+                    force: force,
+                    reason: reason,
+                }
+            }
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
 }
 
 export function subscribeToDeadlines(fn: (data: RecordSubscription<RecordModel>) => void) {
@@ -232,19 +273,6 @@ export async function acknowledgeReminder(reminderId: string) {
     }).then((e) => e.json());
 }
 
-/**
- * Mark a deadline as fulfilled (completes the deadline and deactivates all reminders)
- * @param deadlineId - Deadline ID
- */
-export async function fulfillDeadline(deadlineId: string) {
-    return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/fulfill`, {
-        method: 'POST',
-        headers: {
-            'Authorization': pocketbase.authStore.token,
-            'Content-Type': 'application/json'
-        }
-    }).then((e) => e.json());
-}
 
 /**
  * Reset a deadline to its template-calculated value
