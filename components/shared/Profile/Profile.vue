@@ -4,16 +4,22 @@
       <PopoverTrigger>
         <button>
           <Avatar>
-            <AvatarImage  :src="getSignedInUser()?.avatar" alt="@unovue"/>
-            <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
+            <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue"/>
+            <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{
+                getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase()
+              }}
+            </AvatarFallback>
           </Avatar>
         </button>
       </PopoverTrigger>
       <PopoverContent class="p-0 flex flex-col divide-y w-fit">
         <div class="flex flex-row gap-2 p-2">
           <Avatar class="size-10 rounded-lg">
-            <AvatarImage  :src="getSignedInUser()?.avatar" alt="@unovue"/>
-            <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{ getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase() }}</AvatarFallback>
+            <AvatarImage :src="getSignedInUser()?.avatar" alt="@unovue"/>
+            <AvatarFallback class="text-xs bg-primary text-primary-foreground">{{
+                getSignedInUser()?.name?.split(" ").at(0).at(0).toUpperCase() + getSignedInUser()?.name?.split(" ").at(1).at(0).toUpperCase()
+              }}
+            </AvatarFallback>
           </Avatar>
 
           <div class="flex flex-col">
@@ -23,23 +29,29 @@
         </div>
 
         <div class="flex flex-col p-2">
-          <Button variant="ghost" class="justify-start w-full" size="sm">
-            <UserCircle />
-            Account
-          </Button>
+          <SharedSettingsSettingsDialog>
+            <Button variant="ghost" class="justify-start w-full" size="sm">
+              <Settings/>
+              Settings
+            </Button>
+          </SharedSettingsSettingsDialog>
+
 
           <Button variant="ghost" class="justify-start w-full" size="sm">
-            <Settings />
-            Settings
-          </Button>
-
-          <Button variant="ghost" class="justify-start w-full" size="sm">
-            <CreditCard />
+            <CreditCard/>
             Billing
           </Button>
 
+          <SharedSettingsOrganisationSettingsDialog>
+            <Button variant="ghost" class="justify-start w-full" size="sm">
+              <Users2 />
+              Manage Organisation
+            </Button>
+          </SharedSettingsOrganisationSettingsDialog>
+
+
           <Button variant="ghost" class="justify-start w-full" size="sm">
-            <Building2 />
+            <Building2/>
             Change Organisation
           </Button>
         </div>
@@ -48,7 +60,7 @@
           <AlertDialog>
             <AlertDialogTrigger as-child>
               <Button variant="ghost" class="justify-start w-full" size="sm">
-                <LogOut />
+                <LogOut/>
                 Sign Out
               </Button>
             </AlertDialogTrigger>
@@ -72,9 +84,10 @@
 </template>
 
 <script setup>
-import {ChevronsUpDown, Settings, UserCircle, Building2, CreditCard, LogOut} from 'lucide-vue-next';
+import {ChevronsUpDown, Settings, UserCircle, Building2, CreditCard, LogOut, Users2} from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
 import OrganisationSelector from './OrganisationSelector.vue';
+import {PopoverClose} from "reka-ui";
 
 const authStore = useAuthStore();
 

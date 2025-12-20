@@ -355,8 +355,8 @@
       </div>
 
       <!-- Footer Navigation -->
-      <div class="flex flex-row w-full gap-3 p-5 border-t bg-background">
-        <div class="flex flex-row w-full gap-3">
+      <div class="flex flex-row w-full gap-3 items-center justify-center p-5 border-t bg-background">
+        <div class="flex flex-row w-fit gap-5">
           <Button
               variant="outline"
               @click="previousStep"
@@ -367,7 +367,7 @@
             Back
           </Button>
 
-          <div class="hidden md:flex flex-row gap-1 items-center justify-center md:w-full">
+          <div class="hidden md:flex flex-row gap-1 items-center justify-center">
             <div class="size-2 bg-muted rounded-full" v-for="i in (steps.length - 1)"
                  :class="{ 'bg-primary': (currentStep + 1) > i }"></div>
           </div>

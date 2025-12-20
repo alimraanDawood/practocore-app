@@ -207,6 +207,15 @@
           </div>
         </div>
 
+        <div v-if="deadline?.applications_enabled" class="flex flex-col my-1 w-full">
+          <SharedMattersCreateMatterCreateApplication class="w-fit" :deadlineId="deadline.t_id" :matter="matter" :triggerDate="deadline.date">
+            <Button size="sm" class="w-fit">
+              <Plus />
+              Add Application
+            </Button>
+          </SharedMattersCreateMatterCreateApplication>
+        </div>
+
         <SharedDeadlineAssignees
           @click="(e) => e.stopPropagation()"
           v-if="matterMembers.length > 0"
@@ -262,6 +271,7 @@ import {
   CalendarSync,
   RotateCcw,
   User,
+  Plus
 } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import dayjs from "dayjs";

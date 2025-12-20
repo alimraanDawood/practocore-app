@@ -92,18 +92,18 @@ const indicatorClass = computed(() => {
 });
 
 const deadlineText = computed(() => {
-    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.completed === false)).length;
+    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.status === 'pending')).length;
     return `${deadlineCount} upcoming deadline${deadlineCount !== 1 ? 's' : ''}`;
 });
 
 const deadlineCompletion = computed(() => {
-    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.completed === true)).length;
+    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.status === 'fulfilled')).length;
     
     return ((deadlineCount / props.matter.deadlines.length) * 100);
 });
 
 const nextDeadLineText = computed(() => {
-    let deadlines = props.matter.expand.deadlines?.filter(d => d.completed === false);
+    let deadlines = props.matter.expand.deadlines?.filter(d => d.status === 'pending');
     if(deadlines.length > 0) {
         return `${dayjs().from(deadlines?.at(0)?.date, true)}`;
     }

@@ -1,20 +1,19 @@
 <template>
-    <div class="grid grid-cols-5 w-full h-screen dark">
-        <div class="flex flex-col w-full h-full justify-between bg-background col-span-2 p-5">
-            <img src="@/assets/img/logos/Practo Core Horizontal -- Dark.svg" class="w-52 dark:block hidden" />
-            
+    <div class="flex flex-col w-screen bg-primary h-screen items-center justify-center">
+      <div class="flex flex-col items-center justify-center w-full h-full">
+        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-32" />
+        <div class="flex flex-col items-center gap-1">
+          <span class="text-primary-foreground text-4xl ibm-plex-serif">PractoCore</span>
+          <span class="text-sm text-primary-foreground">Litigation Deadline Management</span>
 
-            <div class="flex flex-col gap-5">
-                <div class="loader"></div>
-                <span class="text-sm text-muted-foreground hidden">PractoCore prevents litigation attorneys from missing court
-                    deadlines through intelligent deadline calculation and failsafe reminder systems.</span>
-
-                <div class="flex flex-row w-full justify-between items-center text-xs text-muted-foreground">
-                    <img src="@/assets/img/logos/fiika-logo.svg" class="w-44 dark:block hidden" />
-                </div>
-            </div>
+          <div class="loader mt-2"></div>
         </div>
-        <div class="flex flex-col w-full h-full col-span-3 bg-[url('@/assets/img/splash-deco.jpg')] bg-cover bg-center"></div>
+      </div>
+
+      <div class="flex flex-col p-2">
+        <span class="text-xs text-primary-foreground">All rights reserved. Software by Fiika Tech Solutions Limited</span>
+      </div>
+
     </div>
 </template>
 <script setup lang="ts">
@@ -53,7 +52,7 @@ async function setup() {
 
     // Set the frontend task as being completed
     invoke('set_complete', {task: 'frontend'});
-    // useRouter().push('/');
+    useRouter().push('/');
 }
 
 onMounted(async () => {
@@ -83,14 +82,14 @@ onMounted(async () => {
   width: 130px;
   height: var(--height-of-loader);
   border-radius: 30px;
-  background-color: var(--color-muted);
+  background-color: white;
   position: relative;
 }
 
 .loader::before {
   content: "";
   position: absolute;
-  background: var(--color-primary);
+  background: #fa8869;
   top: 0;
   left: 0;
   width: 0%;

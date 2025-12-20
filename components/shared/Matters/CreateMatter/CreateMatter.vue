@@ -1,6 +1,6 @@
 <template>
   <DefineTemplate>
-    <div class="p-3 h-full flex flex-col w-full">
+    <div class=" h-full flex flex-col w-full">
       <Form
         ref="formRef"
         v-slot="{ meta, values, setFieldValue, validate }"
@@ -11,9 +11,10 @@
           template: { id: template?.id, fields: template?.template?.fields, triggerDatePrompt: '' },
           members: [],
         }"
+        class="h-full flex flex-col w-full h-full"
       >
         <Stepper
-          class="flex flex-col w-full h-full "
+          class="flex flex-col w-full h-full"
           v-slot="{ isNextDisabled, isPrevDisabled, nextStep, prevStep }"
           v-model="stepIndex"
         >
@@ -30,320 +31,276 @@
               }
             "
             id="matter_create"
-            class="flex flex-col w-full h-full "
+            class="flex flex-col lg:flex-row w-full h-full"
           >
             <!-- Stepper Navigation -->
+<!--              :class="{ hidden: noStepper }"-->
             <div
-              :class="{ hidden: noStepper }"
-              class="flex w-full flex-start gap-2"
+              class="lg:flex hidden lg:flex-col p-5 bg-muted/50 border-r shrink-0 w-[200px] gap-2"
             >
               <StepperItem
                 v-for="step in steps"
                 :key="step.step"
                 v-slot="{ state }"
-                class="relative flex w-full flex-col items-center justify-center"
+                class="relative flex w-full flex-col items-start justify-center"
                 :step="step.step"
               >
-                <StepperSeparator
-                  v-if="step.step !== steps[steps.length - 1].step"
-                  class="absolute left-[calc(50%+20px)] right-[calc(-50%+10px)] top-5 block h-0.5 shrink-0 rounded-full bg-muted group-data-[state=completed]:bg-primary"
-                />
-
                 <StepperTrigger as-child>
-                  <Button
-                    :variant="
-                      state === 'completed' || state === 'active'
-                        ? 'default'
-                        : 'outline'
-                    "
-                    size="icon"
-                    class="z-10 rounded-full shrink-0"
-                    :class="[
-                      state === 'active' &&
-                        'ring-2 ring-ring ring-offset-2 ring-offset-background',
-                    ]"
-                    :disabled="state !== 'completed' && !meta.valid"
-                  >
-                    <Check v-if="state === 'completed'" class="size-5" />
-                    <Circle v-if="state === 'active'" />
-                    <Dot v-if="state === 'inactive'" />
-                  </Button>
+                  <div class="flex flex-row items-center gap-3">
+                    <Button
+                      :variant="
+                        state === 'completed' || state === 'active'
+                          ? 'default'
+                          : 'outline'
+                      "
+                      size="icon"
+                      class="z-10 rounded-full shrink-0"
+                      :class="[
+                        state === 'active' &&
+                          'ring-2 ring-ring ring-offset-2 ring-offset-background',
+                      ]"
+                      :disabled="state !== 'completed' && !meta.valid"
+                    >
+                      <Check v-if="state === 'completed'" class="size-5" />
+                      <Circle v-if="state === 'active'" />
+                      <Dot v-if="state === 'inactive'" />
+                    </Button>
+                    <StepperTitle
+                      :class="[state === 'active' && 'text-primary']"
+                      class="text-xs font-medium transition"
+                    >
+                      {{ step.title }}
+                    </StepperTitle>
+                  </div>
                 </StepperTrigger>
-
-                <div class="flex flex-col items-center text-center">
-                  <StepperTitle
-                    :class="[state === 'active' && 'text-primary']"
-                    class="text-xs font-medium transition"
-                  >
-                    {{ step.title }}
-                  </StepperTitle>
-                </div>
               </StepperItem>
             </div>
-            <div v-show="noStepper" class="flex flex-col">
+
+            <div class="flex flex-col px-5 lg:hidden">
               <span class="font-semibold ibm-plex-serif"
                 >Step {{ stepIndex }} of {{ steps.length }}</span
               >
               <span class="text-sm">{{ steps[stepIndex - 1]?.title }}</span>
             </div>
 
-            <!-- Step Content -->
-            <div class="flex flex-col gap-4 mt-4 h-full overflow-y-scroll">
-              <!-- STEP 1 -->
-              <template v-if="steps[stepIndex - 1]?.id === 'matter_details'">
-                <FormField v-slot="{ componentField }" name="name">
-                  <FormItem>
-                    <FormLabel>Case Name*</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="A vs B"
-                        v-bind="componentField"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                </FormField>
-
-                <FormField name="caseNumber" v-slot="{ componentField }">
-                  <FormItem class="flex flex-col">
-                    <FormLabel>Case Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        v-bind="componentField"
-                        type="text"
-                        placeholder="Enter Case Number"
-                      />
-                    </FormControl>
-                  </FormItem>
-                </FormField>
-
-                <FormField
-                  v-if="getSignedInUser()?.organisation"
-                  v-slot="{ value, handleChange }"
-                  name="personal"
-                >
-                  <FormItem
-                    class="flex flex-row items-start justify-between rounded-lg border p-4"
-                  >
-                    <FormControl>
-                      <Switch
-                        :model-value="value"
-                        @update:model-value="handleChange"
-                      />
-                    </FormControl>
-                    <div class="space-y-0.5">
-                      <FormLabel class="text-base">
-                        Make this Matter Private
-                      </FormLabel>
-                      <FormDescription>
-                        This will prevent other members of the organisation from
-                        viewing this matter.
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                </FormField>
-              </template>
-
-              <!-- STEP 2 -->
-              <template v-if="steps[stepIndex - 1]?.id === 'matter_type'">
-                <FormField v-slot="{ componentField }" name="template">
-                  <FormItem>
-                    <FormLabel>Matter Type</FormLabel>
-                    <FormDescription>
-                    </FormDescription>
-                    <SharedMattersCreateMatterTemplateSelector
-                      v-bind="componentField"
-
-                      @template-selected="st => selectedTemplate = st"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                </FormField>
-              </template>
-              <!-- Step 3 choose members -->
-              <template
-                v-if="steps[stepIndex - 1]?.id === 'members' && getSignedInUser()?.organisation"
-              >
-                <FormField v-slot="{ setValue, value }" name="members">
-                  <FormItem>
-                    <FormLabel>Choose Members</FormLabel>
-                    <FormDescription>
-                      Choose which members can receive reminders and updates on
-                      this matter
-                    </FormDescription>
-
-                    <SharedMattersCreateMatterMemberSelector
-                      :model-value="value"
-                      @update:model-value="(v) => setValue(v)"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                </FormField>
-              </template>
-
-              <!-- STEP: DEFINE PARTIES (if template has data.parties) -->
-              <template
-                v-if="
-                  steps[stepIndex - 1]?.id === 'parties' &&
-                  selectedTemplate?.template?.data?.parties?.enabled
-                "
-              >
-                <div class="space-y-2">
-                  <h3 class="font-semibold text-sm">Add Parties</h3>
-                  <p class="text-xs text-muted-foreground">
-                    Add the parties involved in this matter and specify who
-                    you're representing.
-                  </p>
-                </div>
-
-                <SharedMattersCreateMatterParties
-                  ref="partiesRef"
-                  v-model="parties"
-                  v-model:representing="representing"
-                  :party-roles="
-                    selectedTemplate?.template?.data?.parties?.roles || []
-                  "
-                />
-              </template>
-
-              <!-- STEP: COMPLETE (DYNAMIC FIELDS) -->
-              <template v-if="steps[stepIndex - 1]?.id === 'complete'">
-                <div class="space-y-4">
-                  <FormField
-                    v-for="field in templateFields || []"
-                    :key="field.name"
-                    :name="`fields.${field.id}`"
-                    v-slot="{ componentField }"
-                  >
+            <div class="flex flex-col w-full h-full p-5">
+              <!-- Step Content -->
+              <div class="flex flex-col gap-4 h-full overflow-y-scroll">
+                <!-- STEP 1 -->
+                <template v-if="steps[stepIndex - 1]?.id === 'matter_details'">
+                  <FormField v-slot="{ componentField }" name="name">
                     <FormItem>
-                      <FormLabel>{{ field.label }}</FormLabel>
-
-                      <!-- string -->
-                      <FormControl v-if="field.type === 'string'">
+                      <FormLabel>Case Name*</FormLabel>
+                      <FormControl>
                         <Input
-                          v-bind="componentField"
                           type="text"
-                          :placeholder="field.placeholder || ''"
+                          placeholder="A vs B"
+                          v-bind="componentField"
                         />
                       </FormControl>
-
-                      <FormControl v-else-if="field.type === 'select'">
-                        <!-- select -->
-                        <Select v-bind="componentField">
-                          <SelectTrigger class="w-full">
-                            <SelectValue
-                              :placeholder="`Select ${field.label}`"
-                            />
-                          </SelectTrigger>
-
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectLabel>{{ field.label }}</SelectLabel>
-                              <SelectItem
-                                v-for="opt in field.options"
-                                :key="opt.value"
-                                :value="opt.value"
-                              >
-                                {{ opt.label }}
-                              </SelectItem>
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-
-                      <!-- boolean -->
-                      <FormControl v-else-if="field.type === 'boolean'">
-                        <Switch
-                          :model-value="componentField.value"
-                          @update:model-value="
-                            (v) => setFieldValue(`fields.${field.id}`, v)
-                          "
-                        />
-                      </FormControl>
-
-                      <!-- date -->
-<!--                      <Popover v-else-if="field.type === 'date'" :modal="true">-->
-<!--                        <PopoverTrigger as-child>-->
-<!--                          <FormControl>-->
-<!--                            <Button-->
-<!--                              variant="outline"-->
-<!--                              :class="-->
-<!--                                cn(-->
-<!--                                  'w-full ps-3 text-start font-normal',-->
-<!--                                  !value && 'text-muted-foreground'-->
-<!--                                )-->
-<!--                              "-->
-<!--                            >-->
-<!--                              <span>{{-->
-<!--                                value ? df.format(toDate(value)) : "Pick a date"-->
-<!--                              }}</span>-->
-<!--                              <CalendarIcon-->
-<!--                                class="ms-auto h-4 w-4 opacity-50"-->
-<!--                              />-->
-<!--                            </Button>-->
-<!--                            <input hidden />-->
-<!--                          </FormControl>-->
-<!--                        </PopoverTrigger>-->
-<!--                        <PopoverContent class="w-auto p-0">-->
-<!--                          <Calendar-->
-<!--                            v-model:placeholder="placeholder"-->
-<!--                            :model-value="value"-->
-<!--                            calendar-label="Project Date"-->
-<!--                            initial-focus-->
-<!--                            :min-value="new CalendarDate(1900, 1, 1)"-->
-<!--                            @update:model-value="-->
-<!--                              (v) => {-->
-<!--                                if (v)-->
-<!--                                  setFieldValue('fields.date', v.toString());-->
-<!--                                else setFieldValue('fields.date', undefined);-->
-<!--                              }-->
-<!--                            "-->
-<!--                          />-->
-<!--                        </PopoverContent>-->
-<!--                      </Popover>-->
-                      <DateInput v-else-if="field.type === 'date'" v-bind="componentField" />
-
-                      <!-- fallback -->
-                      <span v-else class="italic text-muted-foreground">
-                        Unsupported type: {{ field.type }}
-                      </span>
                       <FormMessage />
                     </FormItem>
                   </FormField>
-                </div>
-              </template>
-            </div>
 
-            <!-- Navigation Buttons -->
-            <div class="flex items-center justify-between mt-4">
-              <Button
-                :disabled="isPrevDisabled"
-                variant="outline"
-                size="sm"
-                @click="prevStep()"
-              >
-                Back
-              </Button>
-              <div class="flex items-center gap-3">
+                  <FormField name="caseNumber" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormLabel>Case Number</FormLabel>
+                      <FormControl>
+                        <Input
+                          v-bind="componentField"
+                          type="text"
+                          placeholder="Enter Case Number"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField
+                    v-if="getSignedInUser()?.organisation"
+                    v-slot="{ value, handleChange }"
+                    name="personal"
+                  >
+                    <FormItem
+                      class="flex flex-row items-start justify-between rounded-lg border p-4"
+                    >
+                      <FormControl>
+                        <Switch
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                        />
+                      </FormControl>
+                      <div class="space-y-0.5">
+                        <FormLabel class="text-base">
+                          Make this Matter Private
+                        </FormLabel>
+                        <FormDescription>
+                          This will prevent other members of the organisation from
+                          viewing this matter.
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  </FormField>
+                </template>
+
+                <!-- STEP 2 -->
+                <template v-if="steps[stepIndex - 1]?.id === 'matter_type'">
+                  <FormField v-slot="{ componentField }" name="template">
+                    <FormItem>
+                      <FormLabel>Matter Type</FormLabel>
+                      <FormDescription>
+                      </FormDescription>
+                      <SharedMattersCreateMatterTemplateSelector
+                        v-bind="componentField"
+
+                        @template-selected="st => selectedTemplate = st"
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  </FormField>
+                </template>
+                <!-- Step 3 choose members -->
+                <template v-if="steps[stepIndex - 1]?.id === 'members' && getSignedInUser()?.organisation">
+                  <FormField v-slot="{ setValue, value }" name="members">
+                    <FormItem>
+                      <FormLabel>Choose Members</FormLabel>
+                      <FormDescription>
+                        Choose which members can receive reminders and updates on
+                        this matter
+                      </FormDescription>
+
+                      <SharedMattersCreateMatterMemberSelector
+                        :model-value="value"
+                        @update:model-value="(v) => setValue(v)"
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  </FormField>
+                </template>
+
+                <!-- STEP: DEFINE PARTIES (if template has data.parties) -->
+                <template v-if="steps[stepIndex - 1]?.id === 'parties' && selectedTemplate?.template?.data?.parties?.enabled">
+                  <div class="space-y-2">
+                    <h3 class="font-semibold text-sm">Add Parties</h3>
+                    <p class="text-xs text-muted-foreground">
+                      Add the parties involved in this matter and specify who
+                      you're representing.
+                    </p>
+                  </div>
+
+                  <SharedMattersCreateMatterParties
+                    ref="partiesRef"
+                    v-model="parties"
+                    v-model:representing="representing"
+                    :party-roles="
+                      selectedTemplate?.template?.data?.parties?.roles || []
+                    "
+                  />
+                </template>
+
+                <!-- STEP: COMPLETE (DYNAMIC FIELDS) -->
+                <template v-if="steps[stepIndex - 1]?.id === 'field_values'">
+                  <div class="space-y-4">
+                    <FormField
+                      v-for="field in templateFields || []"
+                      :key="field.name"
+                      :name="`fields.${field.id}`"
+                      v-slot="{ componentField }"
+                    >
+                      <FormItem>
+                        <FormLabel>{{ field.label }}</FormLabel>
+
+                        <!-- string -->
+                        <FormControl v-if="field.type === 'string'">
+                          <Input
+                            v-bind="componentField"
+                            type="text"
+                            :placeholder="field.placeholder || ''"
+                          />
+                        </FormControl>
+
+                        <FormControl v-else-if="field.type === 'select'">
+                          <!-- select -->
+                          <Select v-bind="componentField">
+                            <SelectTrigger class="w-full">
+                              <SelectValue
+                                :placeholder="`Select ${field.label}`"
+                              />
+                            </SelectTrigger>
+
+                            <SelectContent>
+                              <SelectGroup>
+                                <SelectLabel>{{ field.label }}</SelectLabel>
+                                <SelectItem
+                                  v-for="opt in field.options"
+                                  :key="opt.value"
+                                  :value="opt.value"
+                                >
+                                  {{ opt.label }}
+                                </SelectItem>
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+
+                        <!-- boolean -->
+                        <FormControl v-else-if="field.type === 'boolean'">
+                          <Switch
+                            :model-value="componentField.value"
+                            @update:model-value="
+                              (v) => setFieldValue(`fields.${field.id}`, v)
+                            "
+                          />
+                        </FormControl>
+
+                        <!-- date -->
+                        <DateInput v-else-if="field.type === 'date'" v-bind="componentField" />
+
+                        <!-- fallback -->
+                        <span v-else class="italic text-muted-foreground">
+                          Unsupported type: {{ field.type }}
+                        </span>
+                        <FormMessage />
+                      </FormItem>
+                    </FormField>
+                  </div>
+                </template>
+
+                <!-- STEP: PREVIEW --->
+                <template v-if="steps[stepIndex - 1]?.id === 'preview'">
+                  <PreviewMatter :template="selectedTemplate.template" :trigger-date="formRef.values.fields?.date" :field-values="formRef.values.fields" />
+                </template>
+              </div>
+
+              <!-- Navigation Buttons -->
+              <div class="flex items-center justify-between mt-4">
                 <Button
-                  v-if="stepIndex !== steps?.length"
-                  :type="meta.valid && isPartyStepValid ? 'button' : 'submit'"
-                  :disabled="isNextDisabled || !isPartyStepValid"
+                  :disabled="isPrevDisabled"
+                  variant="outline"
                   size="sm"
-                  @click="meta.valid && isPartyStepValid && nextStep()"
+                  @click="prevStep()"
                 >
-                  Next
+                  Back
                 </Button>
-                <Button
-                  v-if="stepIndex === steps?.length"
-                  :disabled="loading"
-                  size="sm"
-                  type="submit"
-                >
-                  <span v-if="!loading">Create Matter</span>
-                  <Loader class="animate-spin" v-else />
-                </Button>
+                <div class="flex items-center gap-3">
+                  <Button
+                    v-if="stepIndex !== steps?.length"
+                    :type="meta.valid && isPartyStepValid ? 'button' : 'submit'"
+                    :disabled="isNextDisabled || !isPartyStepValid"
+                    size="sm"
+                    @click="meta.valid && isPartyStepValid && nextStep()"
+                  >
+                    Next
+                  </Button>
+                  <Button
+                    v-if="stepIndex === steps?.length"
+                    :disabled="loading"
+                    size="sm"
+                    type="submit"
+                  >
+                    <span v-if="!loading">Create Matter</span>
+                    <Loader class="animate-spin" v-else />
+                  </Button>
+                </div>
               </div>
             </div>
           </form>
@@ -360,12 +317,14 @@
       <DialogTrigger>
         <slot />
       </DialogTrigger>
-      <DialogContent >
-        <DialogHeader>
-          <DialogTitle>Adding a new matter</DialogTitle>
-        </DialogHeader>
+      <DialogContent class="flex flex-col !w-full !max-w-4xl p-0 h-[85vh] !gap-0">
+        <div class="flex flex-col p-3 pb-5 h-fit grow-0 w-full border-b">
+          <DialogHeader>
+            <DialogTitle>Adding a new matter</DialogTitle>
+          </DialogHeader>
+        </div>
 
-        <div class="flex flex-col w-full h-full overflow-y-auto max-h-[calc(100vh-10rem)]">
+        <div class="flex flex-col w-full h-full overflow-y-auto">
           <ReuseTemplate />
         </div>
       </DialogContent>
@@ -412,6 +371,7 @@ import type { RecordModel } from "pocketbase";
 import { getSignedInUser } from "~/services/auth";
 
 import CreateMatterParties from "./CreateMatterParties.vue";
+import PreviewMatter from "~/components/shared/Matters/CreateMatter/PreviewMatter.vue";
 
 definePageMeta({
   viewport: {
@@ -458,14 +418,16 @@ const steps = computed(() => {
         { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
         { step: 4, title: "Choose Members", id: "members" },
-        { step: 5, title: "Complete", id: "complete" },
+        { step: 5, title: "Field Values", id: "field_values" },
+        { step: 6, title: "Preview", id: "preview" },
       ];
     } else {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Matter Details", id: "matter_details" },
         { step: 3, title: "Choose Members", id: "members" },
-        { step: 4, title: "Complete", id: "complete" },
+        { step: 4, title: "Field Values", id: "field_values" },
+        { step: 5, title: "Preview", id: "preview" },
       ];
     }
   } else {
@@ -475,13 +437,15 @@ const steps = computed(() => {
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Complete", id: "complete" },
+        { step: 4, title: "Field Values", id: "field_values" },
+        { step: 5, title: "Preview", id: "preview" },
       ];
     } else {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Complete", id: "complete" },
+        { step: 3, title: "Field Values", id: "field_values" },
+        { step: 4, title: "Preview", id: "preview" },
       ];
     }
   }

@@ -32,7 +32,7 @@ const isMainWindow = computed(() => {
 
 const redirect = async () => {
   // Check if we're running in Tauri desktop app
-  if (isTauri.value) {
+  if (isTauri.value && isMainWindow.value) {
     // In Tauri: close login window and show main window
     console.log('Login successful, transitioning to main window');
     await invoke('login_complete');
@@ -81,15 +81,15 @@ const toggleMaximizeWindow = () => {
 
   <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
-      <div class="flex flex-row w-full">
+      <div data-tauri-drag-region class="flex flex-row w-full">
         <NuxtLink :to="query?.ref ? `/auth/register?ref=${query?.ref}` : '/auth/register'">
           <Button size="sm" variant="outline">Sign Up Instead</Button>
         </NuxtLink>
       </div>
-      <div class="flex flex-row w-full text-center  items-center justify-center">
+      <div data-tauri-drag-region class="flex flex-row w-full text-center  items-center justify-center">
         <span class="ibm-plex-serif">Sign In to PractoCore</span>
       </div>
-      <div class="flex flex-row w-full justify-end gap-2 items-center">
+      <div data-tauri-drag-region class="flex flex-row w-full justify-end gap-2 items-center">
         <DarkModeSwitch class="mr-2" />
         <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
         <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
@@ -98,6 +98,7 @@ const toggleMaximizeWindow = () => {
         <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
       </div>
     </div>
+
     <div class="flex flex-col items-center w-full divide-x h-full">
       <div class="flex flex-col h-full w-full max-w-xl items-center justify-center border-x overflow-hidden p-3">
         <div class="flex flex-col max-w-sm w-full">

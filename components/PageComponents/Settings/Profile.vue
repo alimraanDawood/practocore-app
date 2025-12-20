@@ -87,24 +87,6 @@
         <span v-else>Update Profile</span>
       </Button>
     </form>
-
-    <AlertDialog>
-      <AlertDialogTrigger as-child>
-        <Button class="lg:w-fit" type="button" variant="destructive">Sign Out</Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Sign Out</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to sign out?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button variant="destructive" @click="signOutUser">Sign Out</Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   </div>
 </template>
 

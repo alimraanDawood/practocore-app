@@ -20,16 +20,18 @@
 <!--                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-templates') }">Templates</button>-->
 <!--        </NuxtLink>-->
 
-        <NuxtLink v-if="getSignedInUser()?.organisation && authStore.isAdmin" to="/main/organisation">
-            <button class="p-2 border-b-2 border-transparent"
-                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-organisation') }">Organisation</button>
-        </NuxtLink>
+        <template v-if="!isTauri">
+          <NuxtLink v-if="getSignedInUser()?.organisation && authStore.isAdmin" to="/main/organisation">
+              <button class="p-2 border-b-2 border-transparent"
+                  :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-organisation') }">Organisation</button>
+          </NuxtLink>
 
-        <!-- <button class="p-2 border-b-2 border-transparent">Team</button> -->
+          <!-- <button class="p-2 border-b-2 border-transparent">Team</button> -->
 
-        <NuxtLink to="/main/settings">
-            <button class="p-2 border-b-2 border-transparent" :class="{ '!border-primary font-medium': $route.name === 'main-settings' }">Settings</button>
-        </NuxtLink>
+          <NuxtLink to="/main/settings">
+              <button class="p-2 border-b-2 border-transparent" :class="{ '!border-primary font-medium': $route.name === 'main-settings' }">Settings</button>
+          </NuxtLink>
+        </template>
     </div>
 </template>
 <script setup lang="ts">
@@ -39,5 +41,7 @@ import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
 authStore.init();
+
+const { isTauri } = useTauri();
 
 </script>

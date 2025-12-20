@@ -52,15 +52,15 @@
 
   <div v-else-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
-      <div class="flex flex-row w-full">
+      <div data-tauri-drag-region class="flex flex-row w-full">
         <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
           <Button size="sm" variant="outline">Login Instead</Button>
         </NuxtLink>
       </div>
-      <div class="flex flex-row w-full text-center  items-center justify-center">
+      <div data-tauri-drag-region class="flex flex-row w-full text-center  items-center justify-center">
         <span class="ibm-plex-serif">Getting Started With PractoCore</span>
       </div>
-      <div class="flex flex-row w-full justify-end gap-2 items-center">
+      <div data-tauri-drag-region class="flex flex-row w-full justify-end gap-2 items-center">
         <DarkModeSwitch class="mr-2" />
 
         <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>

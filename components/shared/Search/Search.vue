@@ -41,7 +41,7 @@
             </CommandGroup>
 
             <!-- Templates -->
-            <CommandGroup v-if="filteredTemplates.length > 0" heading="Templates">
+            <CommandGroup v-if="false" heading="Templates">
                 <CommandItem
                     v-for="template in filteredTemplates"
                     :key="template.id"
