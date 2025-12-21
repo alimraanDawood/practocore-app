@@ -1,11 +1,11 @@
 <template>
   <div class="flex flex-col w-full h-[100dvh]">
-    <SharedDesktopTitleBar v-if="isTauri" />
+    <SharedDesktopTitleBar class="hidden lg:flex"  />
 
     <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">
         <div class="flex flex-col w-full lg:w-[95vw] bg-background gap-4 text-foreground p-5 pb-0 h-full">
-          <div v-if="!isTauri" class="flex flex-row items-center gap-2">
+          <div v-if="false" class="flex flex-row items-center gap-2">
             <img src="@/assets/img/logos/Practo Core Horizontal.svg" class="w-44 dark:hidden" />
             <img src="@/assets/img/logos/Practo Core Horizontal -- Dark.svg" class="w-44 dark:block hidden" />
 

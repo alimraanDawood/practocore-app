@@ -1063,14 +1063,13 @@ export class DeadlineEngine {
 
         const buildContext = DeadlineEngine.buildLogicContext(template, output, deadline);
         const logicResult = jsonLogic.apply(templateDeadline.applications.conditions.rules, buildContext);
-        console.log(logicResult);
 
         if (!(logicResult)) {
             throw new Error(`Deadline ${action.meta.targetId} conditions are not satisfied for application or subprocesses!`);
         }
 
         // create the spawn output for us
-        const spawnOutput = DeadlineEngine.generate(template, deadline.date, action.meta.fieldValues);
+        const spawnOutput = DeadlineEngine.generate(templateData, deadline.date, action.meta.fieldValues);
 
         const subProcess = {
             id: "_new_",

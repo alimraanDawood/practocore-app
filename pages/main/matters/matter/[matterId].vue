@@ -99,6 +99,7 @@
         </div>
         <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"
                                      :matter="matter"/>
+
       </div>
 
       <div class="flex flex-col max-w-sm w-full h-full">

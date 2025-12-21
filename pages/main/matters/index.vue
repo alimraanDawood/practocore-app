@@ -388,7 +388,7 @@ const onMatterTap = (matter: any) => {
         }
         return;
     }
-
+    console.log("Matter")
     useRouter().push(`/main/matters/matter/${matter.id}`);
 }
 

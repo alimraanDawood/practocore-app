@@ -151,6 +151,26 @@ export async function adjournDeadline(deadline: Deadline, date: string, force = 
     }).then((e) => e.json())
 }
 
+export async function applyApplication(deadline: Deadline, template: any, fieldValues: any) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: {
+                action: "SPAWN",
+                meta: {
+                    targetId: deadline?.t_id,
+                    template: template,
+                    fieldValues: fieldValues,
+                }
+            }
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
 export function subscribeToDeadlines(fn: (data: RecordSubscription<RecordModel>) => void) {
     return pocketbase.collection('Deadlines').subscribe('*', fn);
 }

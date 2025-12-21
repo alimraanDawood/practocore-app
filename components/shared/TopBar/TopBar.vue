@@ -20,7 +20,7 @@
 <!--                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-templates') }">Templates</button>-->
 <!--        </NuxtLink>-->
 
-        <template v-if="!isTauri">
+        <template>
           <NuxtLink v-if="getSignedInUser()?.organisation && authStore.isAdmin" to="/main/organisation">
               <button class="p-2 border-b-2 border-transparent"
                   :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-organisation') }">Organisation</button>

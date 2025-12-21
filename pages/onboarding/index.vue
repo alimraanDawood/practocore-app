@@ -381,25 +381,6 @@
             <ArrowRight class="size-4 ml-2"/>
           </Button>
         </div>
-
-        <!--        <Button-->
-        <!--            v-else-if="currentStep === 0"-->
-        <!--            @click="nextStep"-->
-        <!--            :disabled="!canProceed"-->
-        <!--            class="flex-1 md:w-fit"-->
-        <!--        >-->
-        <!--          Let's Get Started-->
-        <!--          <ArrowRight class="size-4 ml-2" />-->
-        <!--        </Button>-->
-
-        <!--        <Button-->
-        <!--            v-else-->
-        <!--          @click="finishOnboarding"-->
-        <!--          class="flex-1 lg:w-fit"-->
-        <!--        >-->
-        <!--          Go to Dashboard-->
-        <!--          <Sparkles class="size-4 ml-2" />-->
-        <!--        </Button>-->
       </div>
     </div>
   </div>

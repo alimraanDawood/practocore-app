@@ -25,7 +25,7 @@
 
       <SharedProfile />
 
-      <div class="flex flex-row items-center gap-2">
+      <div v-if="isTauri" class="flex flex-row items-center gap-2">
         <DarkModeSwitch class="mr-2" />
         <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
         <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
@@ -42,6 +42,8 @@
 import {Maximize2, Minus, X, ChevronDown, Bell, Settings, RotateCw} from "lucide-vue-next";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
 import {getCurrentWindow} from "@tauri-apps/api/window";
+
+const { isTauri } = useTauri();
 
 const closeWindow = () => {
   const currentWindow = getCurrentWindow();
