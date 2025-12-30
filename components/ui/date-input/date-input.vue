@@ -26,10 +26,12 @@ const value = computed({
   },
   set: (val) => val
 });
+
+const isOpen = ref(false);
 </script>
 
 <template>
-  <Popover :modal="true">
+  <Popover :modal="true" v-model:open="isOpen">
     <PopoverTrigger as-child>
       <FormControl>
         <Button
@@ -63,6 +65,8 @@ const value = computed({
             } else {
               emits('update:modelValue', undefined);
             }
+
+            isOpen = false;
           }"
       />
     </PopoverContent>

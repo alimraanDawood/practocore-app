@@ -6,15 +6,15 @@
       </Button>
 
       <div class="flex flex-row relative w-full">
-        <marquee class="text-lg font-semibold ibm-plex-serif">{{ matter?.name }}</marquee>
+        <marquee class="text-lg font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</marquee>
         <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
       </div>
 
       <div class="flex flex-row gap-2 items-center">
         <SharedDarkModeSwitch/>
 
-        <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
-          <SharedAvatarStack :members="matter?.expand?.members" :max-visible="3"/>
+        <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
+          <SharedAvatarStack :members="currentMatterOrApplication?.expand?.members" :max-visible="3"/>
         </SharedMattersMemberManagement>
 
         <AlertDialog>
@@ -37,23 +37,21 @@
           </AlertDialogContent>
         </AlertDialog>
       </div>
-
     </div>
 
     <div class="flex flex-col h-full w-full overflow-y-scroll">
       <div class="flex flex-col w-full p-3 gap-3">
-        <div v-if="matter?.members?.length > 1 && matter?.members?.includes(getSignedInUser()?.id)"
+        <div v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication?.members?.includes(getSignedInUser()?.id)"
              class="flex flex-row gap-2 w-full">
           <Button @click="mobileChatOpen = true" variant="outline" size="sm" class="gap-2 flex-1">
             <MessageSquare class="size-4"/>
             Open Chat
           </Button>
         </div>
+
         <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="toggleDeadlineView" :matter="matter"/>
       </div>
     </div>
-    <SharedDeadlineViewDeadline v-model:open="viewDeadlineOpen" :index="d_index"
-                                :deadline="deadline"></SharedDeadlineViewDeadline>
 
     <!-- Mobile Chat Sheet -->
     <Sheet v-if="matter?.members?.length > 1 && matter?.members?.includes(getSignedInUser()?.id)"
@@ -68,8 +66,13 @@
   <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
     <div class="flex flex-row w-[90vw] h-full border-x divide-x">
       <div class="flex flex-col w-full overflow-y-scroll p-3 gap-3">
+        <div class="flex flex-col w-full">
+          <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
+          <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
+        </div>
+
         <div class="flex flex-row items-center gap-2">
-          <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
+          <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
               Assigned Lawyers
@@ -82,7 +85,7 @@
 
           <Sheet>
             <SheetTrigger>
-              <Button v-if="matter?.members?.length > 1 && matter.members.includes(getSignedInUser()?.id)"
+              <Button v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication.members.includes(getSignedInUser()?.id)"
                       @click="showChat = !showChat" variant="outline" size="sm" class="gap-2">
                 <MessageSquare class="size-4"/>
                 {{ showChat ? 'Hide Chat' : 'Show Chat' }}
@@ -91,27 +94,92 @@
 
             <SheetContent>
               <div class="flex flex-col w-full h-full ">
-                <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id"/>
+                <SharedChatBox :members="currentMatterOrApplication.expand?.members" v-if="currentMatterOrApplication?.id" :matter-id="currentMatterOrApplication.id"/>
               </div>
             </SheetContent>
           </Sheet>
 
+          <div v-if="currentMatterOrApplication?.parties">
+            <SharedMattersMatterParties :matter="currentMatterOrApplication"/>
+          </div>
         </div>
-        <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"
-                                     :matter="matter"/>
 
+        <div class="flex flex-row gap-2">
+          <div class="flex flex-row gap-1 items-center">
+            <Tabs default-value="all" v-model="currentApplicationOption">
+              <TabsList class="gap-2 items-center">
+                <TabsTrigger value="all">
+                  All
+                </TabsTrigger>
+
+                <TabsTrigger v-for="application in matter?.expand?.applications" :value="application?.id">
+                  {{ application.caseNumber }}
+                </TabsTrigger>
+
+                <SharedMattersCreateMatterCreateApplication :parent-matter="matter">
+                  <Button size="sm">
+                    <Plus />
+
+                    Add Application
+                  </Button>
+                </SharedMattersCreateMatterCreateApplication>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+
+        <Separator />
+
+        <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"  :matter="matter" :application-filter="currentApplicationOption"/>
       </div>
 
-      <div class="flex flex-col max-w-sm w-full h-full">
-        <div v-if="selectedDeadline === null"
-             class="flex flex-col w-full h-full text-center items-center justify-center">
-          <span>{{ selectedDeadline }}</span>
+      <div class="flex flex-col max-w-sm w-full h-full p-3 gap-5">
+        <div class="flex flex-col" v-if="latestDeadline">
+          <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
+          <span
+              class="text-sm italic text-muted-foreground ibm-plex-serif"
+              v-html="
+                latestDeadline.pending_prompt
+                  .replace(
+                    '<<date>>',
+                    `<b class='text-foreground'>${dayjs(latestDeadline.date, {
+                      timezone: getSignedInUser()?.timezone,
+                    }).format('D MMM YYYY')}</b>`
+                  )
+                  .replace(
+                    '<<from_now>>',
+                    `<b class='text-foreground'>${dayjs(latestDeadline.date, {
+                      timezone: getSignedInUser()?.timezone,
+                    }).fromNow()}</b>`
+                  )
+              "
+          ></span>
         </div>
-        <SharedDeadlineViewDeadline :index="matter?.expand?.deadlines.indexOf(selectedDeadline)" v-else
-                                    :deadline="selectedDeadline" :no-sheet="true"></SharedDeadlineViewDeadline>
+
+        <div class="flex flex-col" v-if="latestDeadline">
+          <span class="text-lg font-semibold ibm-plex-serif">Missed Deadlines</span>
+          <span v-if="missedDeadlines.length > 0" v-for="deadline in missedDeadlines"
+              class="text-sm italic text-muted-foreground ibm-plex-serif"
+              v-html="
+                deadline.overdue_prompt
+                  .replace(
+                    '<<date>>',
+                    `<b class='text-foreground'>${dayjs(deadline.date, {
+                      timezone: getSignedInUser()?.timezone,
+                    }).format('D MMM YYYY')}</b>`
+                  )
+                  .replace(
+                    '<<from_now>>',
+                    `<b class='text-foreground'>${dayjs(deadline.date, {
+                      timezone: getSignedInUser()?.timezone,
+                    }).fromNow()}</b>`
+                  )
+              "
+          ></span>
+
+          <span class="text-sm text-muted-foreground mx-auto p-3" v-else>No Missed Deadlines</span>
+        </div>
       </div>
-
-
     </div>
   </div>
 </template>
@@ -155,6 +223,20 @@ const actionExpanded = ref(false);
 const query = useRoute().query;
 const showChat = ref(false);
 const mobileChatOpen = ref(false);
+
+const currentApplicationOption = ref("all");
+
+const currentMatterOrApplication = computed(() => {
+  return currentApplicationOption.value === "all" ? matter.value : matter.value?.expand?.applications?.find(ap => ap.id === currentApplicationOption.value);
+});
+
+const latestDeadline = computed(() => {
+  return currentMatterOrApplication?.value?.expand?.deadlines?.filter(d => d.status === 'pending')?.sort((a, b) => new Date(a.date) - new Date(b.date))?.at(0) || null;
+});
+
+const missedDeadlines = computed(() => {
+  return currentMatterOrApplication?.value?.expand?.deadlines?.filter(d => (new Date(d.date) < new Date() && d.status != "fulfilled"))?.sort((a, b) => new Date(a.date) - new Date(b.date)) || [];
+});
 
 const signOutUser = () => {
   signOut();
@@ -230,26 +312,6 @@ definePageMeta({
 const matter = ref(null);
 const isInitialLoad = ref(true);
 
-const accentClasses = (accentIndex) => {
-  const accentMap = {
-    0: 'bg-accent-1/10 text-accent-1 border-accent-1',
-    1: 'bg-accent-2/10 text-accent-2 border-accent-2',
-    2: 'bg-accent-3/10 text-accent-3 border-accent-3',
-    3: 'bg-accent-4/10 text-accent-4 border-accent-4'
-  };
-  return accentMap[accentIndex % 4];
-};
-
-const badgeAccentClasses = (accentIndex, completed) => {
-  const accentMap = {
-    0: completed ? 'bg-accent-1/10 text-accent-1 border-2 border-accent-1' : 'bg-accent-1 !text-accents-foreground data-[selected]:!bg-accent-1 hover:bg-accent-1 data-[selected]:hover:!bg-accent-1',
-    1: completed ? 'bg-accent-2/10 text-accent-2 border-2 border-accent-2' : 'bg-accent-2 !text-accents-foreground data-[selected]:!bg-accent-2 hover:bg-accent-2 data-[selected]:hover:!bg-accent-2',
-    2: completed ? 'bg-accent-3/10 text-accent-3 border-2 border-accent-3' : 'bg-accent-3 !text-accents-foreground data-[selected]:!bg-accent-3 hover:bg-accent-3 data-[selected]:hover:!bg-accent-3',
-    3: completed ? 'bg-accent-4/10 text-accent-4 border-2 border-accent-4' : 'bg-accent-4 !text-accents-foreground data-[selected]:!bg-accent-4 hover:bg-accent-4 data-[selected]:hover:!bg-accent-4'
-  };
-
-  return accentMap[accentIndex % 4];
-}
 
 const mockEvents = computed(() => {
   const accentMap = [

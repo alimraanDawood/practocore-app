@@ -5,7 +5,7 @@
         @touchstart="prefetchMatter(matter.id)"
         @focus="prefetchMatter(matter.id)"
     >
-        
+
         <span class="font-semibold truncate">{{ matter?.name }}</span>
         <span>{{ deadlineText }}</span>
 
@@ -16,8 +16,8 @@
 
                 <span class="font-bold text-xs">{{ deadlineCompletion }}%</span>
             </div>
-    
-            <Progress 
+
+            <Progress
                 class="h-1"
                 :model-value="deadlineCompletion"
             />
@@ -33,9 +33,13 @@
             <span>All Deadlines Met</span>
         </div>
 
-        <div v-if="matter?.expand?.members && matter.expand.members.length > 0" class="flex flex-row items-center justify-between pt-2 border-t border-border/50">
+        <div v-if="matter?.expand?.members && matter.expand.members.length > 0" class="flex flex-row items-center justify-between pt-2 border-t border-border/50 gap-2">
             <span class="text-xs text-muted-foreground">Members</span>
-            <SharedAvatarStack :members="matter.expand.members" :max-visible="3" />
+            <SharedAvatarStack class="ml-auto" :members="matter.expand.members" :max-visible="3" />
+            <Badge variant="outline" v-if="matter?.applications?.length > 0">
+              {{ matter?.applications?.length }}
+              Application{{ matter?.applications?.length > 1 ? 's' : '' }}
+            </Badge>
         </div>
     </button>
 </template>
@@ -59,36 +63,6 @@ const props = defineProps({
         type: Number,
         required: true
     },
-});
-
-const accentClasses = computed(() => {
-    const accentMap = {
-        0: 'bg-accent-1/10 text-accent-1 border-accent-1',
-        1: 'bg-accent-2/10 text-accent-2 border-accent-2',
-        2: 'bg-accent-3/10 text-accent-3 border-accent-3',
-        3: 'bg-accent-4/10 text-accent-4 border-accent-4'
-    };
-    return accentMap[props.accentIndex % 4];
-});
-
-const progressClasses = computed(() => {
-    const accentMap = {
-        0: 'bg-accent-1/10 text-accent-1',
-        1: 'bg-accent-2/10 text-accent-2',
-        2: 'bg-accent-3/10 text-accent-3',
-        3: 'bg-accent-4/10 text-accent-4'
-    };
-    return accentMap[props.accentIndex % 4];
-});
-
-const indicatorClass = computed(() => {
-    const accentMap = {
-        0: 'bg-accent-1',
-        1: 'bg-accent-2',
-        2: 'bg-accent-3',
-        3: 'bg-accent-4'
-    };
-    return accentMap[props.accentIndex % 4];
 });
 
 const deadlineText = computed(() => {

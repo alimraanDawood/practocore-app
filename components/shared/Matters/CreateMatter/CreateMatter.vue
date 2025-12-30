@@ -85,7 +85,7 @@
 
             <div class="flex flex-col w-full h-full p-5">
               <!-- Step Content -->
-              <div class="flex flex-col gap-4 h-full overflow-y-scroll">
+              <div class="flex flex-col gap-4 h-full px-1 overflow-y-scroll">
                 <!-- STEP 1 -->
                 <template v-if="steps[stepIndex - 1]?.id === 'matter_details'">
                   <FormField v-slot="{ componentField }" name="name">
@@ -104,12 +104,11 @@
 
                   <FormField name="caseNumber" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
-                      <FormLabel>Case Number</FormLabel>
+                      <FormLabel>{{ selectedTemplate?.caseNumberLabel || 'Case Number' }}</FormLabel>
                       <FormControl>
                         <Input
                           v-bind="componentField"
                           type="text"
-                          placeholder="Enter Case Number"
                         />
                       </FormControl>
                     </FormItem>
@@ -418,16 +417,14 @@ const steps = computed(() => {
         { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
         { step: 4, title: "Choose Members", id: "members" },
-        { step: 5, title: "Field Values", id: "field_values" },
-        { step: 6, title: "Preview", id: "preview" },
+        { step: 5, title: "Timeline", id: "field_values" },
       ];
     } else {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Matter Details", id: "matter_details" },
         { step: 3, title: "Choose Members", id: "members" },
-        { step: 4, title: "Field Values", id: "field_values" },
-        { step: 5, title: "Preview", id: "preview" },
+        { step: 4, title: "Timeline", id: "field_values" },
       ];
     }
   } else {
@@ -437,15 +434,13 @@ const steps = computed(() => {
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Field Values", id: "field_values" },
-        { step: 5, title: "Preview", id: "preview" },
+        { step: 4, title: "Timeline", id: "field_values" },
       ];
     } else {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Field Values", id: "field_values" },
-        { step: 4, title: "Preview", id: "preview" },
+        { step: 3, title: "Timeline", id: "field_values" },
       ];
     }
   }

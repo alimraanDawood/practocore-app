@@ -32,8 +32,8 @@
         >
           <!-- Name and Type Row -->
           <div class="flex flex-col gap-2 items-start">
-            <div class="flex flex-col w-full">
-              <Label class="text-xs">Name*</Label>
+            <div class="flex flex-col w-full gap-2">
+              <Label class="text-xs">Name<span class="text-destructive">*</span></Label>
               <div class="flex flex-row items-center gap-2">
                 <Input
                   v-model="member.name"
@@ -124,9 +124,9 @@
 
     <!-- Representation Selection -->
     <div v-if="partyRoles.length > 0" class="flex flex-col gap-2 mt-4 border-t pt-4">
-      <Label class="text-sm font-semibold">Who are you representing?*</Label>
+      <Label class="text-sm font-semibold">Who are you representing?<span class="text-destructive">*</span></Label>
       <p class="text-xs text-muted-foreground mb-2">
-        Select which party/parties you are representing in this matter
+        Specify the party/parties represented
       </p>
 
       <!-- Role Selection -->
@@ -155,8 +155,9 @@
       <!-- Individual Party Member Selection (if role selected) -->
       <div v-if="representing?.role_id && modelValue[representing.role_id]?.length" class="flex flex-col gap-2 mt-2">
         <Label class="text-xs text-muted-foreground">
-          Select specific party members (or leave empty to represent all)
+          Select the party/parties represented
         </Label>
+
         <div class="flex flex-col gap-1">
           <div
             v-for="member in modelValue[representing.role_id]"

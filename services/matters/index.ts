@@ -2,7 +2,7 @@ import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 import {options} from "kolorist";
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
@@ -63,6 +63,27 @@ export async function createMatter(options: {
     representing?: { role_id: string, party_member_ids: string[] }  // Representation data
 }) {
     return fetch(`${SERVER_URL}/api/practocore/create-matter`, {
+        method: 'POST',
+        body: JSON.stringify(options),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+export async function createApplication(matterId: string, options: {
+    name: string,
+    caseNumber: string,
+    personal: boolean,
+    members?: string[],
+    templateId: string,
+    date: string,
+    fieldValues: any[],
+    parties?: Record<string, any[]>,  // Party data organized by role ID
+    representing?: { role_id: string, party_member_ids: string[] }  // Representation data
+}) {
+    return fetch(`${SERVER_URL}/api/practocore/create-application/${matterId}`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {

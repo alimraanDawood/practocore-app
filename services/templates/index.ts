@@ -8,7 +8,7 @@ import type {
 } from '~/lib/types/template';
 import { enhanceTemplate } from '~/lib/types/template';
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 /**
  * Build PocketBase filter from category filter object
@@ -157,6 +157,6 @@ export async function searchTemplates(query: string, limit: number = 20): Promis
     isPublic: true, // Only search public templates
   };
 
-  const result = await getTemplates(1, limit, filter);
+  const result = await getTemplates(1, limit, filter, 'order');
   return result.items;
 }

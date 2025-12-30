@@ -14,7 +14,7 @@ import type { DeviceTokenRecord, NotificationData } from '~/types/push-notificat
 import { toast } from "vue-sonner";
 import { firebaseConfig, vapidKey } from '~/config/firebase.config';
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://127.0.0.1:8090";
 const pocketbase = new PocketBase(SERVER_URL);
 
 // Store Firebase messaging instance for web

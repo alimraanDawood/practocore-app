@@ -1,19 +1,23 @@
 <template>
-  <Collapsible v-if="hasParties" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
-    <CollapsibleTrigger class="flex flex-row items-center gap-2 w-full">
-      <Users class="size-4 text-primary"/>
-      <h3 class="font-semibold text-sm mr-auto">Parties</h3>
+  <Popover v-if="hasParties" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
+    <PopoverTrigger>
+      <Button variant="outline" size="sm">
+        <Users class="size-4"/>
+        Parties
 
+        <ChevronDown class="size-5"/>
+      </Button>
+    </PopoverTrigger>
+
+    <PopoverContent class="flex flex-col w-md gap-3">
       <SharedMattersMatterPartiesEditMatterParties @click="e => e.stopPropagation()" :matter="matter" :representing="matter?.representing"
                                                    :parties="matter?.parties" class="ml-auto">
-        <Button size="xs" variant="destructive">Edit</Button>
+
+        <div class="flex flex-row w-full justify-between items-center">
+         <span class="text-lg font-semibold ibm-plex-serif">Parties</span>
+        <Button class="w-fit ml-auto" size="xs" variant="destructive">Edit</Button>
+        </div>
       </SharedMattersMatterPartiesEditMatterParties>
-
-      <ChevronDown class="size-5"/>
-    </CollapsibleTrigger>
-
-    <CollapsibleContent class="flex flex-col w-full gap-3">
-
       <!-- Party Roles -->
       <div class="flex flex-col gap-4">
         <div v-for="(members, roleId) in parties" :key="roleId" class="flex flex-col gap-2">
@@ -83,8 +87,8 @@
           Representing: {{ representedCount }} {{ representedCount === 1 ? 'party' : 'parties' }}
         </span>
       </div>
-    </CollapsibleContent>
-  </Collapsible>
+    </PopoverContent>
+  </Popover>
 </template>
 
 <script setup lang="ts">

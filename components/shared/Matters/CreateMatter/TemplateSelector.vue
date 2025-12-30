@@ -55,7 +55,7 @@ const loading = ref(false);
 
 onMounted(async () => {
   loading.value = true;
-  templates.value = (await getTemplates(1, 10, {filter: `name ~ '${query.value}'`})).items;
+  templates.value = (await getTemplates(1, 10, {filter: `name ~ '${query.value}'`}, 'order')).items;
   loading.value = false;
 });
 
@@ -64,7 +64,8 @@ const selectTemplate = (template: RecordModel) => {
     emits('update:modelValue', {
       id: template.id,
       fields: template?.template?.data?.fields,
-      triggerDatePrompt: template?.template?.data?.triggerDatePrompt
+      triggerDatePrompt: template?.template?.data?.triggerDatePrompt,
+      partyConfig: template?.template?.data?.parties
     });
 
     emits('templateSelected', template);
@@ -72,6 +73,6 @@ const selectTemplate = (template: RecordModel) => {
   }
 
   emits('templateSelected', template);
-  emits('update:modelValue', {id: template.id, fields: [], triggerDatePrompt: template?.template?.data?.triggerDatePrompt});
+  emits('update:modelValue', {id: template.id, fields: [], triggerDatePrompt: template?.template?.data?.triggerDatePrompt, partyConfig: template?.template?.data?.parties});
 }
 </script>

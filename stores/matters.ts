@@ -40,7 +40,7 @@ export const useMattersStore = defineStore('matters', {
       selected: [] as any[],
     } as SelectionState,
 
-    // housekeeping
+    // housekeeping)
     lastFetched: 0 as number,
     _subscribed: false as boolean,
     _lastQuery: '' as string,

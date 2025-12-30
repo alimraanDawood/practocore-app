@@ -67,22 +67,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class=" hidden flex-col gap-2 bg-primary/10 p-3 rounded">
-      <div class="flex flex-row gap-2 font-semibold items-center">
-        <Badge>New</Badge>
-
-        Feature Discussion
-
-        <Button variant="ghost" size="icon" class="ml-auto">
-          <X />
-        </Button>
-      </div>
-
-      <span class="text-sm">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Numquam eos excepturi non
-                saepe, tempora corporis neque, obcaecati illo recusandae nulla laudantium consequatur. Optio, eveniet
-                iusto?</span>
-    </div>
-
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
       <div class="flex flex-col lg:col-span-3 gap-3">
         <div class="flex flex-row justify-between">
@@ -124,7 +108,11 @@ onUnmounted(() => {
             <NuxtLink v-for="matter in statistics?.matters" :to="`/main/matters/matter/${matter?.id}`">
               <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between hover:bg-muted hover:text-primary transition-colors ease-in-out duration-500">
                 <div class="flex flex-col p-3 w-full">
-                  <span class="font-semibold text-sm text-muted-foreground">Matter</span>
+                  <div class="flex flex-row gap-1 items-center">
+                    <span class="font-semibold text-sm text-muted-foreground">Matter</span>
+                    <div class="size-1 rounded-full bg-muted-foreground"></div>
+                    <span class="font-semibold text-sm text-muted-foreground">{{ matter?.caseNumber }}</span>
+                  </div>
                   <span class="font-medium text-lg">{{ matter?.name }}</span>
                 </div>
 

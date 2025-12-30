@@ -1083,6 +1083,28 @@ export class DeadlineEngine {
         return mutable;
     }
 
+    static checkApplicationCondition(template: DeadlineTemplate, output: DeadlineEngineOutput, deadlineId : string) {
+        const deadline = DeadlineEngine.findDeadlineInOutput(output, deadlineId);
+        const templateDeadline = template.data.deadlines.find(d => d.id === deadline.id);
+
+        if (!deadline) {
+            throw new Error(`Deadline ${deadlineId} not found`);
+        }
+
+        if (!templateDeadline) {
+            throw new Error(`Deadline ${deadlineId} not found in template`);
+        }
+
+        if(!(templateDeadline.applications && templateDeadline.applications.enabled)) {
+            throw new Error(`Deadline ${deadlineId} does not support applications and subprocesses!`);
+        }
+
+        const buildContext = DeadlineEngine.buildLogicContext(template, output, deadline);
+        const logicResult = jsonLogic.apply(templateDeadline.applications.conditions.rules, buildContext);
+
+        return logicResult;
+    }
+
     private static calculateOffsetDeadlineDate(deadline: DeadlineTemplateDeadLine, template: DeadlineTemplate, output: DeadlineEngineOutput) {
         let targetDependency = deadline.dependency.targetId;
 
