@@ -43,7 +43,7 @@ const showPassword = ref(false)
           class="size-4"
           aria-hidden="true"
       />
-      <EyeOff class="size-4" aria-hidden="true" />
+      <EyeOff v-else class="size-4" aria-hidden="true" />
       <span class="sr-only">
         {{ showPassword ? "Show password" : "Hide password" }}
       </span>

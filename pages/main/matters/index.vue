@@ -13,8 +13,8 @@
                         </InputGroupAddon>
                     </InputGroup>
 
-                    <Drawer>
-                        <DrawerTrigger>
+                    <Dialog>
+                        <DialogTrigger>
                             <Button class="hidden lg:flex" variant="outline">
                                 <span>{{ sortLabel?.label }}</span>
                                 <SortAsc v-if="sortLabel?.asc" />
@@ -25,14 +25,12 @@
                                 <SortAsc v-if="sortLabel?.asc" />
                                 <SortDesc v-else />
                             </Button>
-                        </DrawerTrigger>
+                        </DialogTrigger>
 
-                        <DrawerContent>
-                            <DrawerHeader>
-                                <DrawerTitle>Sort Matters</DrawerTitle>
-                                <DrawerDescription>Lorem ipsum dolor sit amet consectetur adipisicing elit. Dignissimos
-                                    blanditiis dolorem quos.</DrawerDescription>
-                            </DrawerHeader>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Sort Matters</DialogTitle>
+                            </DialogHeader>
 
                             <div class="flex flex-col space-y-3 w-full p-3">
                                 <RadioGroup :model-value="sort" @update:model-value="v => sort = v">
@@ -68,8 +66,8 @@
                                     </div>
                                 </RadioGroup>
                             </div>
-                        </DrawerContent>
-                    </Drawer>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </DefineSearchFilterTemplate>
 
@@ -78,7 +76,7 @@
                     <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
 
                     <div class="flex flex-row gap-3 items-center">
-<!--                        <ReuseSearchFilterTemplate class="hidden lg:flex" />-->
+                        <ReuseSearchFilterTemplate class="hidden lg:flex" />
                         <SharedMattersCreateMatter :no-stepper="true" @created="mattersStore.fetchMatters(true)">
                             <Button>
                                 <Plus /> Add Matter

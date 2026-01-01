@@ -41,13 +41,15 @@
 
     <div class="flex flex-col h-full w-full overflow-y-scroll">
       <div class="flex flex-col w-full p-3 gap-3">
-        <div v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication?.members?.includes(getSignedInUser()?.id)"
-             class="flex flex-row gap-2 w-full">
-          <Button @click="mobileChatOpen = true" variant="outline" size="sm" class="gap-2 flex-1">
-            <MessageSquare class="size-4"/>
-            Open Chat
-          </Button>
-        </div>
+        <template v-if="false">
+          <div v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication?.members?.includes(getSignedInUser()?.id)"
+               class="flex flex-row gap-2 w-full">
+            <Button @click="mobileChatOpen = true" variant="outline" size="sm" class="gap-2 flex-1">
+              <MessageSquare class="size-4"/>
+              Open Chat
+            </Button>
+          </div>
+        </template>
 
         <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="toggleDeadlineView" :matter="matter"/>
       </div>
@@ -83,7 +85,7 @@
             </Button>
           </SharedMattersMemberManagement>
 
-          <Sheet>
+          <Sheet v-if="false">
             <SheetTrigger>
               <Button v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication.members.includes(getSignedInUser()?.id)"
                       @click="showChat = !showChat" variant="outline" size="sm" class="gap-2">

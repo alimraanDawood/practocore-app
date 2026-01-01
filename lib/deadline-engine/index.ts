@@ -9,6 +9,7 @@ export interface DeadlineTemplate {
     author?: string;
     description?: string;
 
+
     data: {
         fields: DeadlineTemplateField[],
         holidays: {
@@ -947,7 +948,6 @@ export class DeadlineEngine {
     private static handleFulfill(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineFulfillAction) {
         let mutable = _.cloneDeep(output);
         const deadline = DeadlineEngine.findDeadlineInOutput(mutable, action.meta.targetId);
-
 
         if (!deadline) {
             throw new Error(`Deadline ${action.meta.targetId} not found`);

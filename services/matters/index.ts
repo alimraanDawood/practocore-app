@@ -2,7 +2,7 @@ import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 import {options} from "kolorist";
 
-const SERVER_URL = "http://127.0.0.1:8090";
+const SERVER_URL = "http://192.168.0.108:8090";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
@@ -346,4 +346,12 @@ export async function changeMatterTriggerDate(matterId: string, date: string | D
             'Content-Type': 'application/json'
         }
     }).then((e) => e.json());
+}
+
+export async function getCourts(page : number, perPage : number, options : any) {
+    return pocketbase.collection("Courts").getList(page, perPage, options);
+}
+
+export async function getJudges(page : number, perPage : number, options : any) {
+    return pocketbase.collection("Judges").getList(page, perPage, options);
 }

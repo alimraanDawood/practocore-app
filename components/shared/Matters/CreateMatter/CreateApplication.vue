@@ -114,6 +114,25 @@
                       </FormControl>
                     </FormItem>
                   </FormField>
+
+                  <FormField name="court" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormLabel>Court</FormLabel>
+                      <FormControl>
+                        <CourtSelector v-bind="componentField" />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField name="judges" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormLabel>Judges</FormLabel>
+                      <FormControl>
+                        <JudgeSelector :court="values?.court" v-bind="componentField" />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
                 </template>
 
                 <!-- STEP 2 -->
@@ -344,6 +363,8 @@ import { getSignedInUser } from "~/services/auth";
 
 import CreateMatterParties from "./CreateMatterParties.vue";
 import PreviewMatter from "~/components/shared/Matters/CreateMatter/PreviewMatter.vue";
+import CourtSelector from "~/components/shared/Matters/CreateMatter/CourtSelector.vue";
+import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelector.vue";
 
 definePageMeta({
   viewport: {
@@ -505,6 +526,8 @@ const formSchema = computed(() => {
             .string()
             .min(3, "You need at least 3 characters for a valid name!"),
         caseNumber: z.string().optional(),
+        court: z.string({ error: "Please select a court" }),
+        judges: z.array(z.string()),
         personal: z.boolean().optional(),
         // date: z.string().refine(v => v, { message: "A date is required." }),
       }),

@@ -26,7 +26,6 @@
             </div>
 
             <SharedMattersChangeTriggerDate v-if="isSupervisor" :matter="matter" @updated="emits('updated')">
-
               <button class="rounded bg-primary/10 text-primary px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-primary/20 transition-colors">
                 <CalendarIcon class="size-3"/>
                 Change Date

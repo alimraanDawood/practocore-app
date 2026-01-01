@@ -59,7 +59,7 @@ import {ArrowLeft, Bell} from "lucide-vue-next";
 const query =  useRoute().query;
 
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'default'
 })
 
 const activeTab = ref(query?.tab || 'profile');
