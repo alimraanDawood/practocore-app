@@ -214,7 +214,7 @@ const inviteStats = computed(() => {
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="flex flex-col p-4 border rounded-lg bg-background">
+      <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Pending</span>
           <Clock class="size-4 text-orange-600" />
@@ -222,7 +222,7 @@ const inviteStats = computed(() => {
         <span class="text-2xl font-bold mt-1">{{ inviteStats.pending }}</span>
       </div>
 
-      <div class="flex flex-col p-4 border rounded-lg bg-background">
+      <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Accepted</span>
           <CheckCircle class="size-4 text-green-600" />
@@ -230,7 +230,7 @@ const inviteStats = computed(() => {
         <span class="text-2xl font-bold mt-1">{{ inviteStats.accepted }}</span>
       </div>
 
-      <div class="flex flex-col p-4 border rounded-lg bg-background">
+      <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Expired</span>
           <XCircle class="size-4 text-gray-600" />

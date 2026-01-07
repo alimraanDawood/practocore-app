@@ -2,16 +2,18 @@
   <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
     <div data-tauri-drag-region class="flex flex-row w-full text-center items-center justify-start gap-3">
       <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-7" />
-
       <span class="font-semibol text-xl ibm-plex-serif">PractoCore</span>
+
     </div>
 
-    <div data-tauri-drag-region class="">
+    <div data-tauri-drag-region class="hidden lg:flex">
       <SharedSearch />
     </div>
 
     <div data-tauri-drag-region class="flex flex-row w-full justify-end gap-4 items-center">
       <div class="flex flex-row items-center gap-2">
+        <SharedSearch :as-icon="true" />
+
         <Button @click="reloadPage" size="icon-sm" variant="outline">
           <RotateCw />
         </Button>

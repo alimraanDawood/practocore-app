@@ -5,6 +5,7 @@
     "": {
       "name": "practocore-app",
       "dependencies": {
+        "@amirafa/vue3-pull-to-refresh": "^1.2.17",
         "@animxyz/vue3": "^0.6.7",
         "@capacitor/android": "^7.4.0",
         "@capacitor/app": "^7.1.0",
@@ -78,6 +79,8 @@
   },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
+
+    "@amirafa/vue3-pull-to-refresh": ["@amirafa/vue3-pull-to-refresh@1.2.17", "", { "peerDependencies": { "vue": "^3.4.0" } }, "sha512-9ULw/A61XjqOhU7v9QovmPhb/KMrFmmrnB/A44ubkyTWTjs3kVcyws2dgkyxHsHwuZ5q3gYcvCCaiqIV2swlmg=="],
 
     "@animxyz/core": ["@animxyz/core@0.6.6", "", {}, "sha512-NtAA/G0Gq3hzAiL6yuE/4U8IgHMPUl3MxbWUbhO443T9UCsf9rBY94P5aK79Zd+/529FeoNdDphIOcOZLsI2sA=="],
 

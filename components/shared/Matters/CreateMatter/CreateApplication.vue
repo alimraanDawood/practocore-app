@@ -11,7 +11,7 @@
           template: { id: template?.id, fields: template?.template?.fields, triggerDatePrompt: '' },
           members: [],
         }"
-          class="h-full flex flex-col w-full h-full"
+          class="h-full flex flex-col w-full"
       >
         <Stepper
             class="flex flex-col w-full h-full"
@@ -36,7 +36,7 @@
             <!-- Stepper Navigation -->
             <!--              :class="{ hidden: noStepper }"-->
             <div
-                class="lg:flex hidden lg:flex-col p-5 bg-muted/50 border-r shrink-0 w-[200px] gap-2"
+                class="lg:flex hidden lg:flex-col p-3 lg:p-5 bg-muted/50 border-r shrink-0 w-[200px] gap-2"
             >
               <StepperItem
                   v-for="step in steps"
@@ -83,7 +83,7 @@
               <span class="text-sm">{{ steps[stepIndex - 1]?.title }}</span>
             </div>
 
-            <div class="flex flex-col w-full h-full p-5">
+            <div class="flex flex-col overflow-hidden w-full h-full p-3 lg:p-5">
               <!-- Step Content -->
               <div class="flex flex-col gap-4 h-full overflow-y-scroll px-1">
                 <!-- STEP 1 -->
@@ -132,6 +132,26 @@
                       </FormControl>
                     </FormItem>
                   </FormField>
+
+                  <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />
+
+                  <FormField name="firm" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormLabel>Firm</FormLabel>
+                      <FormControl>
+                        <FirmSelector v-bind="componentField" />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField name="opposingCounsel" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormControl>
+                        <OpposingCounsel v-bind="componentField" />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
 
                 </template>
 
@@ -329,10 +349,10 @@
 
       <SheetContent class="h-[100dvh]" side="bottom">
         <SheetHeader>
-          <SheetTitle>Adding a new matter</SheetTitle>
+          <SheetTitle>Add an application</SheetTitle>
         </SheetHeader>
 
-        <div class="flex flex-col items-center overflow-hidden w-full h-full ">
+        <div class="flex flex-col items-center overflow-hidden w-full h-full">
           <div class="flex flex-col w-full h-full lg:max-w-lg">
             <ReuseTemplate />
           </div>
@@ -365,6 +385,9 @@ import CreateMatterParties from "./CreateMatterParties.vue";
 import PreviewMatter from "~/components/shared/Matters/CreateMatter/PreviewMatter.vue";
 import CourtSelector from "~/components/shared/Matters/CreateMatter/CourtSelector.vue";
 import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelector.vue";
+import PreviewRegistrarsAndClerks from "~/components/shared/Matters/CreateMatter/PreviewRegistrarsAndClerks.vue";
+import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.vue";
+import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
 
 definePageMeta({
   viewport: {
@@ -528,8 +551,9 @@ const formSchema = computed(() => {
         caseNumber: z.string().optional(),
         court: z.string({ error: "Please select a court" }),
         judges: z.array(z.string()),
+        firm: z.string(),
         personal: z.boolean().optional(),
-        // date: z.string().refine(v => v, { message: "A date is required." }),
+        opposingCounsel: z.array(z.any()).optional(),
       }),
       z.object({
         members: z.array(z.any()).optional(),

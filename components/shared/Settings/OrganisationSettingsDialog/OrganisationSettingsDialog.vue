@@ -4,7 +4,7 @@
       <slot/>
     </DialogTrigger>
 
-    <DialogContent class="!max-w-5xl w-full p-0 max-h-[85vh] h-full overflow-hidden">
+    <DialogContent class="lg:!max-w-5xl xs:!max-w-[95vw] w-full p-0 max-h-[85vh] h-full overflow-hidden">
       <div class="flex flex-col lg:flex-row w-full  gap-3 h-full overflow-hidden">
         <!-- Tabs -->
         <div

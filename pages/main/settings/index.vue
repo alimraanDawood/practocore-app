@@ -22,10 +22,11 @@
       <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full overflow-hidden">
         <!-- Tabs -->
         <div
-            class="flex flex-row items-center lg:items-start lg:flex-col lg:max-w-[150px] w-full overflow-x-scroll overflow-y-visible py-1 lg:h-full gap-3">
+            class="flex flex-row bg-muted lg:bg-background p-1 rounded-lg w-fit items-center lg:items-start lg:flex-col lg:max-w-[150px] lg:w-full overflow-x-scroll overflow-y-visible py-1 lg:h-full gap-3">
           <Button
+              size="sm"
               class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'profile' ? 'secondary' : 'ghost'"
+              :variant="activeTab === 'profile' ? 'default' : 'ghost'"
               @click="activeTab = 'profile'"
           >Profile
           </Button>
@@ -35,8 +36,9 @@
               @click="activeTab = 'appearance'"
           >Appearance</Button> -->
           <Button
+              size="sm"
               class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'notifications' ? 'secondary' : 'ghost'"
+              :variant="activeTab === 'notifications' ? 'default' : 'ghost'"
               @click="activeTab = 'notifications'"
           >Notifications
           </Button>
@@ -57,7 +59,7 @@ import {ref} from 'vue'
 import {ArrowLeft, Bell} from "lucide-vue-next";
 
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'no-mobile-top-bar'
 })
 
 const activeTab = ref('profile');

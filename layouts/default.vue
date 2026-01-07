@@ -1,6 +1,13 @@
 <template>
-  <div class="flex flex-col w-full h-[100dvh]">
-    <SharedDesktopTitleBar class="hidden lg:flex" />
+  <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
+    <SharedDesktopTitleBar class="hidden xs:flex" />
+
+    <Vue3PullToRefresh
+        :distance="50"
+        :duration="2000"
+        :size="32"
+        :options="{ color: '#111', bgColor: '#fff' }"
+    />
 
     <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
       <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
@@ -17,27 +24,6 @@
               <Bell />
             </Button>
           </SharedNotifications>
-
-          <AlertDialog>
-            <AlertDialogTrigger as-child>
-              <Button variant="destructive" size="icon">
-                <LogOut />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Sign Out</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to sign out?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <Button variant="destructive" @click="signOutUser">Sign Out</Button>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
           <SharedProfile />
         </div>
       </div>
@@ -102,8 +88,9 @@
 <script setup>
 import { Search, LogOut, Bell, MessageSquareText, ChevronDown } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
-import {computed} from "vue";
-
+import {computed, ref, onMounted} from "vue";
+import { Capacitor } from '@capacitor/core';
+import {Vue3PullToRefresh} from "@amirafa/vue3-pull-to-refresh";
 const hours = new Date().getHours();
 
 const welcomeMessage = computed(() => {
@@ -119,5 +106,13 @@ const signOutUser = () => {
 
 const isTauri = computed(() => {
   return '__TAURI_INTERNALS__' in window;
+});
+
+// Platform detection for pull-to-refresh
+const isMobile = ref(false);
+
+onMounted(() => {
+  const platform = Capacitor.getPlatform();
+  isMobile.value = platform === 'android' || platform === 'ios';
 });
 </script>

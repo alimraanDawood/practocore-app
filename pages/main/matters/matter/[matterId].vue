@@ -1,6 +1,6 @@
 <template>
-  <div class="flex flex-col w-full h-full lg:hidden">
-    <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
+  <div class="flex flex-col w-full xs:hidden">
+    <div class="flex flex-row w-full items-center justify-between p-3 border-b">
       <Button @click="$router.go(-1)" size="icon" variant="ghost">
         <ArrowLeft/>
       </Button>
@@ -17,58 +17,15 @@
           <SharedAvatarStack :members="currentMatterOrApplication?.expand?.members" :max-visible="3"/>
         </SharedMattersMemberManagement>
 
-        <AlertDialog>
-          <AlertDialogTrigger as-child>
-            <Button variant="destructive" size="icon">
-              <LogOut/>
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Sign Out</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to sign out?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <Button variant="destructive" @click="signOutUser">Sign Out</Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <SharedProfile />
       </div>
     </div>
-
-    <div class="flex flex-col h-full w-full overflow-y-scroll">
-      <div class="flex flex-col w-full p-3 gap-3">
-        <template v-if="false">
-          <div v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication?.members?.includes(getSignedInUser()?.id)"
-               class="flex flex-row gap-2 w-full">
-            <Button @click="mobileChatOpen = true" variant="outline" size="sm" class="gap-2 flex-1">
-              <MessageSquare class="size-4"/>
-              Open Chat
-            </Button>
-          </div>
-        </template>
-
-        <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="toggleDeadlineView" :matter="matter"/>
-      </div>
-    </div>
-
-    <!-- Mobile Chat Sheet -->
-    <Sheet v-if="matter?.members?.length > 1 && matter?.members?.includes(getSignedInUser()?.id)"
-           v-model:open="mobileChatOpen">
-      <SheetContent side="bottom" class="flex flex-col h-full max-h-[100vh] overflow-hidden p-0">
-        <SharedChatBox :members="matter.expand?.members" v-if="matter?.id" :matter-id="matter.id" :show-close="true"
-                       @close="mobileChatOpen = false"/>
-      </SheetContent>
-    </Sheet>
   </div>
 
-  <div class="hidden lg:flex flex-col w-full h-full items-center overflow-y-scroll">
-    <div class="flex flex-row w-[90vw] h-full border-x divide-x">
+  <div class="flex flex-col w-full h-full items-center overflow-y-scroll">
+    <div class="flex flex-col w-full lg:flex-row lg:w-[90vw] h-full lg:border-x lg:divide-x">
       <div class="flex flex-col w-full overflow-y-scroll p-3 gap-3">
-        <div class="flex flex-col w-full">
+        <div class="xs:flex flex-col w-full hidden">
           <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
@@ -107,7 +64,7 @@
         </div>
 
         <div class="flex flex-row gap-2">
-          <div class="flex flex-row gap-1 items-center">
+          <div class="flex flex-row flex-wrap gap-1 items-center">
             <Tabs default-value="all" v-model="currentApplicationOption">
               <TabsList class="gap-2 items-center">
                 <TabsTrigger value="all">
@@ -135,7 +92,7 @@
         <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"  :matter="matter" :application-filter="currentApplicationOption"/>
       </div>
 
-      <div class="flex flex-col max-w-sm w-full h-full p-3 gap-5">
+      <div class="hidden lg:flex flex-col max-w-sm w-full h-full p-3 gap-5">
         <div class="flex flex-col" v-if="latestDeadline">
           <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
           <span

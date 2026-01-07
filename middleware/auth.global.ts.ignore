@@ -1,6 +1,6 @@
 import Pocketbase from "pocketbase";
-// const SERVER_URL = "http://192.168.0.108:8090";
-const SERVER_URL = "http://192.168.1.125:8090";
+// const SERVER_URL = "http://127.0.0.1:8090";
+const SERVER_URL = "http://127.0.0.1:8090";
 
 export default defineNuxtRouteMiddleware((to, from) => {
     const pb = new Pocketbase(SERVER_URL);

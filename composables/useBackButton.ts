@@ -34,13 +34,11 @@ export const useBackButton = () => {
 
                 document.dispatchEvent(escEvent)
                 return
-            }
-
+            } else if (canGoBack && router.options.history.state.back) {
             // // If we can navigate back in the router history
-            // if (canGoBack && router.options.history.state.back) {
-            //     router.go(-1)
-            //     return
-            // }
+                router.go(-1)
+                return
+            }
             //
             // // If we're at the root and can't go back, minimize or exit the app
             // App.exitApp()

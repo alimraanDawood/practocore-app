@@ -83,7 +83,7 @@
               <span class="text-sm">{{ steps[stepIndex - 1]?.title }}</span>
             </div>
 
-            <div class="flex flex-col w-full h-full p-5">
+            <div class="flex flex-col w-full h-full p-3 lg:p-5 overflow-y-hidden">
               <!-- Step Content -->
               <div class="flex flex-col gap-4 h-full px-1 overflow-y-scroll">
                 <!-- STEP 1 -->
@@ -337,10 +337,10 @@
 
       <SheetContent class="h-[100dvh]" side="bottom">
         <SheetHeader>
-          <SheetTitle>Adding a new matter</SheetTitle>
+          <SheetTitle>Add a new matter</SheetTitle>
         </SheetHeader>
 
-        <div class="flex flex-col items-center overflow-hidden w-full h-full ">
+        <div class="flex flex-col items-center overflow-hidden w-full h-full">
           <div class="flex flex-col w-full h-full lg:max-w-lg">
             <ReuseTemplate />
           </div>

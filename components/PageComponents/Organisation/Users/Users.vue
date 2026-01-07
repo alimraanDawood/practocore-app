@@ -292,7 +292,7 @@ const confirmRemoveUser = async () => {
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="flex flex-col p-4 border rounded-lg bg-background">
+      <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Total Members</span>
           <UsersIcon class="size-4 text-muted-foreground"/>
@@ -300,7 +300,7 @@ const confirmRemoveUser = async () => {
         <span class="text-2xl font-bold mt-1">{{ users?.items?.length || 0 }}</span>
       </div>
 
-      <div class="flex flex-col p-4 border rounded-lg bg-background">
+      <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Admins</span>
           <Crown class="size-4 text-yellow-600"/>
@@ -310,7 +310,7 @@ const confirmRemoveUser = async () => {
         </span>
       </div>
 
-      <div class="flex flex-col p-4 border rounded-lg bg-background">
+      <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Active</span>
           <Shield class="size-4 text-green-600"/>

@@ -28,7 +28,7 @@
           </div>
         </div>
 
-        <div class="flex flex-col p-2">
+        <div class="hidden xs:flex flex-col p-2">
           <SharedSettingsSettingsDialog>
             <Button variant="ghost" class="justify-start w-full" size="sm">
               <Settings/>
@@ -48,6 +48,34 @@
               Manage Organisation
             </Button>
           </SharedSettingsOrganisationSettingsDialog>
+
+
+          <Button variant="ghost" class="justify-start w-full" size="sm">
+            <Building2/>
+            Change Organisation
+          </Button>
+        </div>
+
+        <div class="xs:hidden flex flex-col p-2">
+          <NuxtLink to="/main/settings">
+            <Button variant="ghost" class="justify-start w-full" size="sm">
+              <Settings/>
+              Settings
+            </Button>
+          </NuxtLink>
+
+
+          <Button variant="ghost" class="justify-start w-full" size="sm">
+            <CreditCard/>
+            Billing
+          </Button>
+
+          <NuxtLink to="/main/organisation">
+            <Button variant="ghost" class="justify-start w-full" size="sm">
+              <Users2 />
+              Manage Organisation
+            </Button>
+          </NuxtLink>
 
 
           <Button variant="ghost" class="justify-start w-full" size="sm">

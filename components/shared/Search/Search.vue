@@ -1,5 +1,8 @@
 <template>
-    <Button @click="open = true" variant="outline" size="sm" class="w-[240px] flex flex-row justify-start">
+    <Button v-if="asIcon" @click="open = true" variant="outline" size="icon-sm">
+      <SearchIcon />
+    </Button>
+    <Button v-else @click="open = true" variant="outline" size="sm" class="w-[240px] flex flex-row justify-start">
         <SearchIcon /> Search
     </Button>
 
@@ -143,6 +146,8 @@ const isAdmin = computed(() => authStore.isAdmin)
 // Keyboard shortcuts
 const keys = useMagicKeys()
 const CmdJ = keys['Cmd+J']
+
+const props = defineProps(['asIcon'])
 
 function handleOpenChange() {
     open.value = !open.value

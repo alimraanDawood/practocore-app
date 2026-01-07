@@ -14,7 +14,7 @@ import type { DeviceTokenRecord, NotificationData } from '~/types/push-notificat
 import { toast } from "vue-sonner";
 import { firebaseConfig, vapidKey } from '~/config/firebase.config';
 
-const SERVER_URL = "http://192.168.0.108:8090";
+const SERVER_URL = "http://127.0.0.1:8090";
 const pocketbase = new PocketBase(SERVER_URL);
 
 // Store Firebase messaging instance for web
@@ -379,7 +379,7 @@ function handleForegroundNotification(notification: PushNotificationSchema) {
   // For example, show a toast or add to notification center
   console.log('Foreground notification:', notification.title, notification.body);
 
-  toast.message(notification.title, { description: notification.body, position: 'top-right', duration: 3000 });
+  toast.message(notification, { description: notification.body, position: 'top-right', duration: 3000 });
 }
 
 /**
