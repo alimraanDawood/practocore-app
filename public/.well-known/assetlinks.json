@@ -1,5 +1,10 @@
 [{
   "relation": ["delegate_permission/common.handle_all_urls"],
-  "target" : { "namespace": "android_app", "package_name": "com.practocore.app",
-    "sha256_cert_fingerprints": ["6D:1D:95:15:BF:41:2B:F6:92:E3:BA:46:B2:39:A7:E8:12:B7:EC:30:BB:F4:45:B8:1E:DB:28:28:D5:5B:37:30"] }
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.practocore.app",
+    "sha256_cert_fingerprints": [
+      "6D:1D:95:15:BF:41:2B:F6:92:E3:BA:46:B2:39:A7:E8:12:B7:EC:30:BB:F4:45:B8:1E:DB:28:28:D5:5B:37:30"
+    ]
+  }
 }]
