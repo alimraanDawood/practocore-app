@@ -18,12 +18,15 @@ const { setupBackButton } = useBackButton();
 onMounted(async () => {1
   // Initialize notification system
   setupBackButton();
+  console.log(await App.getLaunchUrl());
 });
 
 const router = useRouter();
 
+
 App.addListener('appUrlOpen', (event) => {
   const slug = event.url.split('.com').pop();
+  console.log("Tried opening")
 
   // We only push to the route if there is a slug present
   if (slug) {

@@ -2,8 +2,10 @@ import PocketBase from "pocketbase";
 import type { PushNotificationPayload, OrganizationPushPayload, PushNotificationResponse } from '~/types/push-notifications';
 import type { Notification, NotificationListResponse, CreateNotificationPayload } from '~/types/notifications';
 
-const SERVER_URL = "http://127.0.0.1:8090";
+const SERVER_URL = "http://192.168.0.108:8090";
 const pocketbase = new PocketBase(SERVER_URL);
+
+pocketbase.autoCancellation(false);
 
 /**
  * Get notifications list with filtering and pagination

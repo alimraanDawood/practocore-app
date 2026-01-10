@@ -1,56 +1,5 @@
 <template>
-  <div v-if="joiningAndIsSignedIn && organisationRef && inviteSent === false" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
-    <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
-      <div class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
-        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
-
-        <span class="font-semibold text-2xl ibm-plex-serif text-center">You are being invited to join an organisation</span>
-        <span class="text-center"><b>{{ organisationRef?.invite?.invitedBy?.name }}</b> is inviting you to join <b>{{ organisationRef?.invite?.organisation?.name }}</b> on PractoCore.</span>
-
-
-        <Button @click="acceptInvitation(query?.ref)" class="w-full">Accept Invitation</Button>
-        <NuxtLink to="/main/" class="w-full">
-          <Button class="w-full" variant="secondary">Skip</Button>
-        </NuxtLink>
-        <Button variant="destructive" class="w-full">Reject Invitation</Button>
-      </div>
-    </div>
-  </div>
-
-  <div v-else-if="joiningAndIsSignedIn && organisationRef === null && inviteSent === false" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
-    <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
-      <div class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
-        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
-
-        <span class="font-semibold text-2xl ibm-plex-serif text-center">Invalid Invite Reference</span>
-        <span class="text-center">The invite reference you have provided is invalid. Please request for a valid invite reference to join an organisation.</span>
-        <NuxtLink to="/auth/register" class="w-full">
-          <Button class="w-full">Register a Personal Account</Button>
-        </NuxtLink>
-
-        <NuxtLink to="/main/" class="w-full">
-          <Button class="w-full" variant="secondary">Skip</Button>
-        </NuxtLink>
-      </div>
-    </div>
-  </div>
-
-  <div v-else-if="joiningAndIsSignedIn && organisationRef && inviteSent === true" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
-    <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
-      <div class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
-        <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
-
-        <span class="font-semibold text-2xl ibm-plex-serif text-center">Invitation Accepted</span>
-        <span class="text-center">Your invitation has been acknowledged. You will be admitted into the organisation soon. Keep an eye on your inbox for any notifications.</span>
-
-        <NuxtLink to="/main/" class="w-full">
-          <Button class="w-full" variant="secondary">Complete</Button>
-        </NuxtLink>
-      </div>
-    </div>
-  </div>
-
-  <div v-else-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
+  <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
       <div data-tauri-drag-region class="flex flex-row w-full">
         <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
@@ -76,7 +25,6 @@
         <XyzTransition mode="out-in" xyz="fade in-right out-left" class="max-w-sm">
           <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" :organisation-data="registrationData.organisation" @complete="accountTypeRegistComplete" />
           <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
-          <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
           <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
           <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
           <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
@@ -281,8 +229,6 @@ onMounted(async () => {
   if(query?.ref) {
     currentStep.value = RegistrationSteps.ADMIN_REGIST;
     organisationRef.value = await getOrganisationInviteReference(query?.ref);
-    console.log(organisationRef.value);
-    console.log(organisationRef.value);
   }
 
   if(joiningAndIsSignedIn.value) {
@@ -295,10 +241,7 @@ const registrationData = reactive({
   type: 'IND',
   organisation: {
     firmName: '',
-    legalBusinessName: '',
     firmEmailDomain: '',
-    firmSize: '',
-    primaryPracticeAreas: [],
     contact: {
       fullName: '',
       emailAddress: '',
@@ -362,7 +305,7 @@ const accountTypeRegistComplete = (val: 'ORG' | 'IND') => {
 
 const organisationRegistComplete = (val: any) => { // Consider more specific type for val
   registrationData.organisation = { ...registrationData.organisation, ...val };
-  goToStep(RegistrationSteps.FIRM_DETAILS_REGIST);
+  goToStep(RegistrationSteps.PRIMARY_CONTACT_REGIST);
 }
 
 const firmDetailsRegistComplete = (val: any) => { // Consider more specific type for val

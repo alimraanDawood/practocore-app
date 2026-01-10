@@ -120,7 +120,7 @@
                     name="personal"
                   >
                     <FormItem
-                      class="flex flex-row items-start justify-between rounded-lg border p-4"
+                      class="flex flex-row items-start gap-3 justify-between rounded-lg border p-4"
                     >
                       <FormControl>
                         <Switch
@@ -128,7 +128,7 @@
                           @update:model-value="handleChange"
                         />
                       </FormControl>
-                      <div class="space-y-0.5">
+                      <div class="space-y-0.5 w-full">
                         <FormLabel class="text-base">
                           Make this Matter Private
                         </FormLabel>
@@ -137,6 +137,35 @@
                           viewing this matter.
                         </FormDescription>
                       </div>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField name="court" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormLabel>Court</FormLabel>
+                      <FormControl>
+                        <CourtSelector v-bind="componentField" />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField name="judges" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormLabel>Judges</FormLabel>
+                      <FormControl>
+                        <JudgeSelector :court="values?.court" v-bind="componentField" />
+                      </FormControl>
+                    </FormItem>
+                  </FormField>
+
+                  <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />
+
+
+                  <FormField name="opposingCounsel" v-slot="{ componentField }">
+                    <FormItem class="flex flex-col">
+                      <FormControl>
+                        <OpposingCounsel :modelValue="componentField.modelValue" @update:modelValue="v => setFieldValue('opposingCounsel', v)" />
+                      </FormControl>
                     </FormItem>
                   </FormField>
                 </template>
@@ -371,6 +400,11 @@ import { getSignedInUser } from "~/services/auth";
 
 import CreateMatterParties from "./CreateMatterParties.vue";
 import PreviewMatter from "~/components/shared/Matters/CreateMatter/PreviewMatter.vue";
+import CourtSelector from "~/components/shared/Matters/CreateMatter/CourtSelector.vue";
+import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelector.vue";
+import PreviewRegistrarsAndClerks from "~/components/shared/Matters/CreateMatter/PreviewRegistrarsAndClerks.vue";
+import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.vue";
+import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
 
 definePageMeta({
   viewport: {
@@ -572,6 +606,9 @@ const __formSchema = computed(() => {
             .min(3, "You need at least 3 characters for a valid name!"),
         caseNumber: z.string().optional(),
         personal: z.boolean().optional(),
+        court: z.string().optional(),
+        judges: z.array(z.string()).optional(),
+        opposingCounsel: z.array(z.any()).optional(),
         // date: z.string().refine(v => v, { message: "A date is required." }),
       }),
       "members": z.object({
@@ -595,6 +632,9 @@ const __formSchema = computed(() => {
           .min(3, "You need at least 3 characters for a valid name!"),
       caseNumber: z.string().optional(),
       personal: z.boolean().optional(),
+      court: z.string().optional(),
+      judges: z.array(z.string()).optional(),
+      opposingCounsel: z.array(z.any()).optional(),
       // date: z.string().refine(v => v, { message: "A date is required." }),
     }),
     "members": z.object({
@@ -754,12 +794,16 @@ const onSubmit = async (values: any) => {
 
     const result = await createMatter({
       name: values.name,
-      caseNumber: values.caseNumber.toString(),
+      caseNumber: values.caseNumber?.toString() || '',
       personal: values.personal ? true : false,
       members: values.members ? values.members.map((m) => m?.id) : [],
       templateId: values.template?.id,
       date: values.fields.date,
       fieldValues: values.fields,
+      // Include court, judges, firm, and opposing counsel
+      court: values.court,
+      judges: values.judges || [],
+      opposingCounsel: values.opposingCounsel || [],
       // Include parties and representing if template has data.parties
       ...(selectedTemplate?.value?.template?.data.parties?.enabled && {
         parties: cleanedParties,

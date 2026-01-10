@@ -63,11 +63,7 @@
         <!-- Firm Name -->
         <div>
           <Label class="text-xs">Firm/Organization</Label>
-          <Input
-            v-model="lawyer.firm"
-            placeholder="Law firm or organization"
-            class="h-9 mt-1"
-          />
+          <FirmSelector v-model="lawyer.firm" />
         </div>
 
         <!-- Address -->
@@ -106,6 +102,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-vue-next";
 import { v4 as uuidv4 } from "uuid";
 import { computed } from "vue";
+import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.vue";
 
 interface Lawyer {
   id: string;
@@ -117,36 +114,33 @@ interface Lawyer {
 }
 
 const props = withDefaults(
-  defineProps<{
-    modelValue?: Lawyer[];
-  }>(),
-  {
-    modelValue: () => [],
-  }
+    defineProps<{
+      modelValue?: Lawyer[];
+    }>(),
+    {
+      modelValue: () => [],
+    }
 );
 
 const emits = defineEmits<{
   "update:modelValue": [value: Lawyer[]];
 }>();
 
+
 const addLawyer = () => {
   const newLawyer: Lawyer = {
     id: uuidv4(),
-    name: "",
+    name: "", // Removed "Test Separation" so validation catches it
     email: "",
     phone: "",
     firm: "",
     address: "",
   };
-
-  const currentLawyers = props.modelValue || [];
-  emits("update:modelValue", [...currentLawyers, newLawyer]);
+  emits("update:modelValue", [...props.modelValue, newLawyer]);
 };
 
 const removeLawyer = (index: number) => {
-  const currentLawyers = props.modelValue || [];
-  const newLawyers = [...currentLawyers];
-  newLawyers.splice(index, 1);
+  const newLawyers = props.modelValue.filter((_, i) => i !== index);
   emits("update:modelValue", newLawyers);
 };
 
@@ -155,18 +149,15 @@ const validationErrors = computed(() => {
   const errors: string[] = [];
   const lawyers = props.modelValue || [];
 
-  // Check for empty names only if there are lawyers added
   if (lawyers.length > 0) {
     const emptyNames = lawyers.filter((lawyer) => !lawyer.name?.trim());
     if (emptyNames.length > 0) {
       errors.push(`${emptyNames.length} lawyer(s) missing names`);
     }
   }
-
   return errors;
 });
 
-// Expose validation method for parent component
 defineExpose({
   isValid: computed(() => validationErrors.value.length === 0),
   errors: validationErrors,

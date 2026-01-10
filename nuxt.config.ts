@@ -85,7 +85,7 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
-            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'
+            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://192.168.0.108:8090'
         }
     },
     plugins: [

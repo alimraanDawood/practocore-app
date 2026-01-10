@@ -37,12 +37,12 @@
           </SharedSettingsSettingsDialog>
 
 
-          <Button variant="ghost" class="justify-start w-full" size="sm">
+          <Button variant="ghost" class="justify-start w-full" size="sm" v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
             <CreditCard/>
             Billing
           </Button>
 
-          <SharedSettingsOrganisationSettingsDialog>
+          <SharedSettingsOrganisationSettingsDialog v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
             <Button variant="ghost" class="justify-start w-full" size="sm">
               <Users2 />
               Manage Organisation
@@ -65,12 +65,12 @@
           </NuxtLink>
 
 
-          <Button variant="ghost" class="justify-start w-full" size="sm">
+          <Button variant="ghost" class="justify-start w-full" size="sm" v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
             <CreditCard/>
             Billing
           </Button>
 
-          <NuxtLink to="/main/organisation">
+          <NuxtLink to="/main/organisation" v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
             <Button variant="ghost" class="justify-start w-full" size="sm">
               <Users2 />
               Manage Organisation
@@ -113,15 +113,17 @@
 
 <script setup>
 import {ChevronsUpDown, Settings, UserCircle, Building2, CreditCard, LogOut, Users2} from 'lucide-vue-next';
-import {getSignedInUser, signOut} from '~/services/auth';
+import {getOrganisation, getSignedInUser, signOut} from '~/services/auth';
 import OrganisationSelector from './OrganisationSelector.vue';
 import {PopoverClose} from "reka-ui";
 
 const authStore = useAuthStore();
+const organisation = ref(null);
 
-onMounted(() => {
+onMounted(async () => {
   authStore.init();
-})
+  organisation.value = await getOrganisation(getSignedInUser()?.organisation);
+});
 
 const signOutUser = () => {
   signOut();

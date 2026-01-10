@@ -61,7 +61,7 @@ function selectFirm(selectedValue: string) {
         <ChevronsUpDownIcon class="opacity-50" />
       </Button>
     </PopoverTrigger>
-    <PopoverContent class="w-full p-0">
+    <PopoverContent :portal="false" class="p-0 PopoverContent">
       <Command>
         <CommandInput class="h-9" placeholder="Search firms..." />
         <CommandList>
@@ -89,3 +89,11 @@ function selectFirm(selectedValue: string) {
     </PopoverContent>
   </Popover>
 </template>
+
+<style scoped>
+/* styles.css */
+.PopoverContent {
+  width: var(--reka-popover-trigger-width);
+  max-height: var(--reka-popover-content-available-height);
+}
+</style>

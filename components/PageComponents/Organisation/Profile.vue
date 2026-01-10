@@ -25,23 +25,6 @@
         </FormItem>
       </FormField>
 
-      <FormField v-slot="{ componentField }" name="legalBusinessName">
-        <FormItem>
-          <FormLabel>Legal Business Name</FormLabel>
-          <FormControl>
-            <Input
-                type="text"
-                placeholder="Smith & Associates LLC"
-                v-bind="componentField"
-            />
-          </FormControl>
-          <FormDescription>
-            If different from firm name (for billing purposes)
-          </FormDescription>
-          <FormMessage />
-        </FormItem>
-      </FormField>
-
       <FormField v-slot="{ componentField }" name="emailDomain">
         <FormItem>
           <FormLabel>Firm Email Domain</FormLabel>

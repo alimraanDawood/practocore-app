@@ -18,7 +18,6 @@ const emits = defineEmits(['complete'])
 
 const schema = z.object({
   firmName: z.string().min(1, 'Firm name is required'),
-  legalBusinessName: z.string().optional(),
   firmEmailDomain: z.string().optional(),
 })
 
@@ -26,7 +25,6 @@ const form = useForm({
   validationSchema: toTypedSchema(schema),
   initialValues: {
     firmName: props.organisationData?.firmName || '',
-    legalBusinessName: props.organisationData?.legalBusinessName || '',
     firmEmailDomain: props.organisationData?.firmEmailDomain || '',
   }
 })
@@ -56,23 +54,6 @@ const onSubmit = form.handleSubmit((values) => {
           </FormControl>
           <FormDescription>
             Your firm's official business name
-          </FormDescription>
-          <FormMessage />
-        </FormItem>
-      </FormField>
-
-      <FormField v-slot="{ componentField }" name="legalBusinessName">
-        <FormItem>
-          <FormLabel>Legal Business Name</FormLabel>
-          <FormControl>
-            <Input 
-              type="text" 
-              placeholder="Smith & Associates LLC"
-              v-bind="componentField"
-            />
-          </FormControl>
-          <FormDescription>
-            If different from firm name (for billing purposes)
           </FormDescription>
           <FormMessage />
         </FormItem>

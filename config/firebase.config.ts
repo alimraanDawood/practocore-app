@@ -31,4 +31,4 @@ export const firebaseConfig = {
  * 5. Copy the "Key pair" value
  * 6. Replace the placeholder below
  */
-export const vapidKey = "BGzB248hhvoUjphp00DRMy1Ou0QcCjWsvBYszqny7PPjUgPI2EVejp6Aev8ArbFIbuESOnCNxRIPbMFylPphE5c"; // TODO: Replace with your actual VAPID key
+export const vapidKey = "BHkxKUv724JShHnTzaZDBIzlIf6eAmmsVSqMIjZY6LFG4yjEtXnMBUQFwf7eoHM743_x6E8jdVC0i-lfA2UDbAE"; // TODO: Replace with your actual VAPID key

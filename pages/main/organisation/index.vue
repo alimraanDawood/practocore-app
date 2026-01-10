@@ -21,7 +21,7 @@
 
       <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full overflow-hidden">
         <!-- Tabs -->
-        <div class="flex flex-row bg-muted lg:bg-background items-center p-1 lg:items-start lg:flex-col lg:max-w-[250px] w-fit rounded-lg lg:w-full overflow-x-scroll overflow-y-visible no-scrollbar py-1 lg:h-full gap-3">
+        <div class="flex bg-muted lg:bg-background items-center p-1 lg:items-start lg:flex-col lg:max-w-[250px] w-fit rounded-lg lg:w-full overflow-x-scroll overflow-y-visible no-scrollbar py-1 lg:h-full gap-3">
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"

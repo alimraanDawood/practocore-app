@@ -104,14 +104,39 @@
 
                   <FormField name="caseNumber" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
-                      <FormLabel>Case Number</FormLabel>
+                      <FormLabel>{{ selectedTemplate?.caseNumberLabel || 'Case Number' }}</FormLabel>
                       <FormControl>
                         <Input
                             v-bind="componentField"
                             type="text"
-                            placeholder="Enter Case Number"
                         />
                       </FormControl>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField
+                      v-if="getSignedInUser()?.organisation"
+                      v-slot="{ value, handleChange }"
+                      name="personal"
+                  >
+                    <FormItem
+                        class="flex flex-row items-start justify-between rounded-lg border p-4"
+                    >
+                      <FormControl>
+                        <Switch
+                            :model-value="value"
+                            @update:model-value="handleChange"
+                        />
+                      </FormControl>
+                      <div class="space-y-0.5">
+                        <FormLabel class="text-base">
+                          Make this Matter Private
+                        </FormLabel>
+                        <FormDescription>
+                          This will prevent other members of the organisation from
+                          viewing this matter.
+                        </FormDescription>
+                      </div>
                     </FormItem>
                   </FormField>
 
@@ -135,23 +160,14 @@
 
                   <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />
 
-                  <FormField name="firm" v-slot="{ componentField }">
-                    <FormItem class="flex flex-col">
-                      <FormLabel>Firm</FormLabel>
-                      <FormControl>
-                        <FirmSelector v-bind="componentField" />
-                      </FormControl>
-                    </FormItem>
-                  </FormField>
 
                   <FormField name="opposingCounsel" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
                       <FormControl>
-                        <OpposingCounsel v-bind="componentField" />
+                        <OpposingCounsel :modelValue="componentField.modelValue" @update:modelValue="v => setFieldValue('opposingCounsel', v)" />
                       </FormControl>
                     </FormItem>
                   </FormField>
-
 
                 </template>
 
@@ -551,7 +567,6 @@ const formSchema = computed(() => {
         caseNumber: z.string().optional(),
         court: z.string({ error: "Please select a court" }),
         judges: z.array(z.string()),
-        firm: z.string(),
         personal: z.boolean().optional(),
         opposingCounsel: z.array(z.any()).optional(),
       }),
@@ -623,6 +638,9 @@ const __formSchema = computed(() => {
           .min(3, "You need at least 3 characters for a valid name!"),
       caseNumber: z.string().optional(),
       personal: z.boolean().optional(),
+      court: z.string().optional(),
+      judges: z.array(z.string()).optional(),
+      opposingCounsel: z.array(z.any()).optional(),
       // date: z.string().refine(v => v, { message: "A date is required." }),
     }),
     "members": z.object({
@@ -834,6 +852,9 @@ const onSubmit = async (values: any) => {
       templateId: values.template?.id,
       date: values.fields.date,
       fieldValues: values.fields,
+      court: values.court,
+      judges: values.judges || [],
+      opposingCounsel: values.opposingCounsel || [],
       // Include parties and representing if template has data.parties
       ...(selectedTemplate?.value?.template?.data?.parties?.enabled && {
         parties: cleanedParties,

@@ -41,7 +41,7 @@ const redirect = async () => {
 
   // In web/mobile: use normal routing
   if(query?.ref) {
-    useRouter().push('/auth/register?ref=' + query.ref);
+    useRouter().push('/auth/invite?ref=' + query.ref);
     return;
   }
 
@@ -70,14 +70,6 @@ const toggleMaximizeWindow = () => {
 </script>
 
 <template>
-<!--  <LayoutAuth reverse>-->
-<!--    <div class="flex flex-col mx-auto max-w-sm px-3 h-full">-->
-<!--      <div class="grid gap-3 border-x p-3 h-full">-->
-
-<!--        <AuthSignIn />-->
-<!--      </div>-->
-<!--    </div>-->
-<!--  </LayoutAuth>-->
 
   <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
     <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
