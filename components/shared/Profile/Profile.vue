@@ -36,13 +36,14 @@
             </Button>
           </SharedSettingsSettingsDialog>
 
+          <SharedBilling>
+            <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.isAdmin || !authStore?.organisation">
+              <CreditCard/>
+              Billing
+            </Button>
+          </SharedBilling>
 
-          <Button variant="ghost" class="justify-start w-full" size="sm" v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
-            <CreditCard/>
-            Billing
-          </Button>
-
-          <SharedSettingsOrganisationSettingsDialog v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
+          <SharedSettingsOrganisationSettingsDialog v-if="authStore?.isAdmin">
             <Button variant="ghost" class="justify-start w-full" size="sm">
               <Users2 />
               Manage Organisation
@@ -50,7 +51,7 @@
           </SharedSettingsOrganisationSettingsDialog>
 
 
-          <Button variant="ghost" class="justify-start w-full" size="sm">
+          <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.organisations?.length > 1">
             <Building2/>
             Change Organisation
           </Button>
@@ -65,12 +66,15 @@
           </NuxtLink>
 
 
-          <Button variant="ghost" class="justify-start w-full" size="sm" v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
-            <CreditCard/>
-            Billing
-          </Button>
+          <SharedBilling>
+            <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.isAdmin || !authStore?.organisation">
+              <CreditCard/>
+              Billing
+            </Button>
+          </SharedBilling>
 
-          <NuxtLink to="/main/organisation" v-if="organisation?.admins?.includes(getSignedInUser()?.id)">
+
+          <NuxtLink to="/main/organisation" v-if="authStore?.isAdmin">
             <Button variant="ghost" class="justify-start w-full" size="sm">
               <Users2 />
               Manage Organisation
@@ -78,7 +82,7 @@
           </NuxtLink>
 
 
-          <Button variant="ghost" class="justify-start w-full" size="sm">
+          <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.organisations?.length > 1">
             <Building2/>
             Change Organisation
           </Button>
@@ -122,7 +126,6 @@ const organisation = ref(null);
 
 onMounted(async () => {
   authStore.init();
-  organisation.value = await getOrganisation(getSignedInUser()?.organisation);
 });
 
 const signOutUser = () => {

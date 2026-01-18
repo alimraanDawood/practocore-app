@@ -28,10 +28,9 @@ const table = useVueTable({
 </script>
 
 <template>
-  <div class="border rounded-md ">
-    <Table>
+    <Table class="border">
       <TableHeader>
-        <TableRow v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id">
+        <TableRow class="divide-x bg-muted" v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id">
           <TableHead v-for="header in headerGroup.headers" :key="header.id">
             <FlexRender
               v-if="!header.isPlaceholder" :render="header.column.columnDef.header"
@@ -43,6 +42,7 @@ const table = useVueTable({
       <TableBody>
         <template v-if="table.getRowModel().rows?.length">
           <TableRow
+              class="divide-x"
             v-for="row in table.getRowModel().rows" :key="row.id"
             :data-state="row.getIsSelected() ? 'selected' : undefined"
           >
@@ -60,5 +60,4 @@ const table = useVueTable({
         </template>
       </TableBody>
     </Table>
-  </div>
 </template>

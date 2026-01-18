@@ -46,7 +46,7 @@
 
       <!-- Content Area -->
       <div class="flex flex-col w-full h-full items-center overflow-hidden">
-        <div class=" overflow-y-scroll flex flex-col w-full max-w-xl h-full border-x">
+        <div class=" overflow-y-scroll flex flex-col w-full max-w-3xl h-full border-x">
           <!-- Welcome Screen -->
           <div v-if="currentStep === 0" class="flex flex-col gap-6 p-5 animate-in fade-in duration-500">
             <div class="flex flex-col gap-3">
@@ -219,15 +219,45 @@
           </div>
 
           <!-- Create Matter Step -->
-          <div v-if="currentStep === 3" class="flex flex-col gap-6 p-3 animate-in fade-in duration-500">
-            <div class="flex flex-col gap-2 text-center">
-              <h2 class="text-2xl font-bold ibm-plex-serif">Create Your First Matter</h2>
-              <p class="text-muted-foreground">Let's add your first case to get started</p>
+          <div v-if="currentStep === 3" class="flex flex-col gap-2 p-3 animate-in fade-in duration-500">
+            <div class="flex flex-row w-full justify-between">
+              <span class="font-semibold text-lg ibm-plex-serif">Add your matters</span>
+
+              <SharedMattersCreateMatter @created="reloadMatters">
+                <Button size="sm">
+                  <Plus />
+
+                  Add Matter
+                </Button>
+              </SharedMattersCreateMatter>
             </div>
 
-            <div class="mt-4">
-              <SharedMattersCreateMatter :no-stepper="true" :no-modal="true" @created="handleMatterCreated"/>
-            </div>
+            <div class="flex flex-col w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow class="bg-muted divide-x border">
+                      <TableHead class="w-[150px] font-semibold ibm-plex-serif">Case Number</TableHead>
+                      <TableHead class="font-semibold ibm-plex-serif">Case Name</TableHead>
+                      <TableHead class="font-semibold ibm-plex-serif">Upcoming Deadline</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody class="divide-y border border-t-0">
+                    <TableRow v-for="(matter, index) in matters?.items || []" class="divide-x">
+                      <TableCell>{{ matter?.caseNumber }}</TableCell>
+                      <TableCell>{{ matter?.name }}</TableCell>
+                      <TableCell>
+                        <div class="flex flex-row gap-1 items-center">
+                          <Clock class="size-4" />
+
+                          <span>
+                            {{ dayjs(matter?.expand?.deadlines?.sort((a, b) => new Date(a) - new Date(b))?.at(0)?.date)?.fromNow() || 'UNKOWN DATE' }}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
           </div>
 
           <!-- Invite Members Step (for organization users) -->
@@ -405,6 +435,11 @@ import {toast} from 'vue-sonner'
 import {App as CapacitorApp} from '@capacitor/app'
 import {invoke} from "@tauri-apps/api/core";
 import {getCurrentWindow} from "@tauri-apps/api/window";
+import {getMatters} from "~/services/matters";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime)
 
 definePageMeta({
   layout: 'blank'
@@ -431,7 +466,7 @@ const isOrganizationUser = computed(() => !!user.value?.organisation);
 const isOrganizationAdmin = ref(false);
 
 // Step management
-const currentStep = ref(0)
+const currentStep = ref(3)
 const steps = computed(() => {
   const baseSteps = [
     {id: 'welcome', title: 'Welcome', required: false},
@@ -755,10 +790,14 @@ onMounted(async () => {
     console.log(user?.value);
     if (user?.value?.organisation) {
       const organisation = await getOrganisation(user?.value?.organisation);
+      console.log(organisation);
       if (organisation) {
         isOrganizationAdmin.value = organisation?.admins?.includes(user?.value?.id);
       }
     }
+
+
+    await reloadMatters();
 
   } catch (error) {
     console.error('Failed to load preferences:', error)
@@ -805,6 +844,20 @@ const closeWindow = () => {
   const currentWindow = getCurrentWindow();
   currentWindow?.close();
 }
+
+const matters = ref([]);
+
+const reloadMatters = async () => {
+  try {
+    matters.value = await getMatters(1, 10, {});
+
+  } catch (e) {
+    toast.error("Failed to load matters!");
+    console.log(e);
+  }
+}
+
+
 </script>
 
 <style scoped>

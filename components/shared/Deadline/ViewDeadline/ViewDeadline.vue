@@ -6,16 +6,14 @@
                 <div class="flex flex-col flex-1">
                     <div class="flex flex-row items-center gap-2 mb-1">
                         <h3 class="font-semibold text-lg">{{ deadline.name }}</h3>
-                        <Badge v-if="getDeadlineStatus() === 'pending'"
-                            :class="badgeAccentClasses(index)">
+                        <Badge v-if="getDeadlineStatus() === 'pending'">
                             <Clock class="size-3 mr-1" /> Pending
                         </Badge>
                         <Badge v-else-if="getDeadlineStatus() === 'overdue'"
                             variant="destructive">
                             <AlertTriangle class="size-3 mr-1" /> Overdue
                         </Badge>
-                        <Badge v-else-if="getDeadlineStatus() === 'completed'"
-                            :class="badgeAccentClasses(index, true)">
+                        <Badge v-else-if="getDeadlineStatus() === 'completed'">
                             <CheckCircle class="size-3 mr-1" /> Completed
                         </Badge>
                     </div>
@@ -114,7 +112,7 @@
         <div class="flex flex-col gap-2 p-4 border-t bg-background">
             <SharedDeadlineCompleteDeadline v-if="deadline.dynamic" :deadline="deadline" :index="index"
                 @updated="handleUpdate">
-                <Button v-if="!deadline.completed" class="w-full" :class="badgeAccentClasses(index)">
+                <Button v-if="!deadline.completed" class="w-full">
                     <CheckCircle class="size-4 mr-2" />
                     {{ deadline?.action || 'Mark as Complete' }}
                 </Button>
@@ -149,16 +147,14 @@
                         <div class="flex flex-col flex-1">
                             <div class="flex flex-row items-center gap-2 mb-1 flex-wrap">
                                 <h3 class="font-semibold text-lg">{{ deadline.name }}</h3>
-                                <Badge v-if="getDeadlineStatus() === 'pending'"
-                                    :class="badgeAccentClasses(index)">
+                                <Badge v-if="getDeadlineStatus() === 'pending'">
                                     <Clock class="size-3 mr-1" /> Pending
                                 </Badge>
                                 <Badge v-else-if="getDeadlineStatus() === 'overdue'"
                                     variant="destructive">
                                     <AlertTriangle class="size-3 mr-1" /> Overdue
                                 </Badge>
-                                <Badge v-else-if="getDeadlineStatus() === 'completed'"
-                                    :class="badgeAccentClasses(index, true)">
+                                <Badge v-else-if="getDeadlineStatus() === 'completed'">
                                     <CheckCircle class="size-3 mr-1" /> Completed
                                 </Badge>
                             </div>
@@ -249,10 +245,10 @@
             </div>
 
             <SheetFooter class="p-4 border-t">
-                <div class="flex flex-col gap-2 w-full">
+                <div class="flex flex-col gap-1 w-full">
                     <SharedDeadlineCompleteDeadline v-if="deadline.dynamic" :deadline="deadline" :index="index"
                         @updated="handleUpdate">
-                        <Button v-if="!deadline.completed" class="w-full" :class="badgeAccentClasses(index)">
+                        <Button v-if="!deadline.completed" class="w-full">
                             <CheckCircle class="size-4 mr-2" />
                             {{ deadline?.action || 'Mark as Complete' }}
                         </Button>
@@ -357,26 +353,6 @@ const navigateToMatter = () => {
     if (props.deadline.expand?.matter) {
         router.push(`/main/matters/matter/${props.deadline.matter}`);
     }
-};
-
-const accentClasses = (accentIndex: number) => {
-    const accentMap = {
-        0: 'bg-accent-1/10 text-accent-1 border-accent-1',
-        1: 'bg-accent-2/10 text-accent-2 border-accent-2',
-        2: 'bg-accent-3/10 text-accent-3 border-accent-3',
-        3: 'bg-accent-4/10 text-accent-4 border-accent-4'
-    };
-    return accentMap[accentIndex % 4];
-};
-
-const badgeAccentClasses = (accentIndex: number, completed = false) => {
-    const accentMap = {
-        0: completed ? 'bg-accent-1/10 text-accent-1 border-2 border-accent-1' : 'bg-accent-1 !text-accents-foreground',
-        1: completed ? 'bg-accent-2/10 text-accent-2 border-2 border-accent-2' : 'bg-accent-2 !text-accents-foreground',
-        2: completed ? 'bg-accent-3/10 text-accent-3 border-2 border-accent-3' : 'bg-accent-3 !text-accents-foreground',
-        3: completed ? 'bg-accent-4/10 text-accent-4 border-2 border-accent-4' : 'bg-accent-4 !text-accents-foreground'
-    };
-    return accentMap[accentIndex % 4];
 };
 
 const handleUpdate = () => {

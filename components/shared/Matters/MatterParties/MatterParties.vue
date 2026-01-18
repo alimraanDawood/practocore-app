@@ -1,5 +1,5 @@
 <template>
-  <Popover v-if="hasParties" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
+  <Popover v-if="hasParties && $viewport.isGreaterOrEquals('tablet')" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
     <PopoverTrigger>
       <Button variant="outline" size="sm">
         <Users class="size-4"/>
@@ -89,6 +89,98 @@
       </div>
     </PopoverContent>
   </Popover>
+
+  <Drawer v-else-if="hasParties && $viewport.isLessThan('tablet')" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
+    <DrawerTrigger>
+      <Button variant="outline" size="sm">
+        <Users class="size-4"/>
+        Parties
+
+        <ChevronDown class="size-5"/>
+      </Button>
+    </DrawerTrigger>
+
+    <DrawerContent class="flex flex-col gap-3 p-3">
+      <SharedMattersMatterPartiesEditMatterParties @click="e => e.stopPropagation()" :matter="matter" :representing="matter?.representing"
+                                                   :parties="matter?.parties" class="ml-auto">
+
+        <div class="flex flex-row w-full justify-between items-center">
+          <span class="text-lg font-semibold ibm-plex-serif">Parties</span>
+          <Button class="w-fit ml-auto" size="xs" variant="destructive">Edit</Button>
+        </div>
+      </SharedMattersMatterPartiesEditMatterParties>
+      <!-- Party Roles -->
+      <div class="flex flex-col gap-4">
+        <div v-for="(members, roleId) in parties" :key="roleId" class="flex flex-col gap-2">
+          <!-- Role Header -->
+          <div class="flex flex-row items-center justify-between">
+            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {{ getRoleLabel(roleId) }}
+            </h4>
+            <Badge
+                v-if="isRepresentedRole(roleId)"
+                variant="default"
+                class="text-xs gap-1"
+            >
+              <Scale class="size-3"/>
+              We Represent
+            </Badge>
+          </div>
+
+          <!-- Party Members -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div
+                v-for="member in members"
+                :key="member.id"
+                class="flex flex-col gap-1 p-2 bg-background border rounded-md"
+                :class="{
+                'ring-2 ring-primary ring-offset-2 ring-offset-background': isRepresentedMember(member.id),
+              }"
+            >
+              <div class="flex flex-row items-start justify-between gap-2">
+                <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+                  <span class="font-medium text-sm truncate">{{ member.name }}</span>
+                  <!--                <Badge variant="outline" class="w-fit text-xs">-->
+                  <!--                  {{ formatPartyType(member.type) }}-->
+                  <!--                </Badge>-->
+                </div>
+                <CheckCircle2
+                    v-if="isRepresentedMember(member.id)"
+                    class="size-4 text-primary shrink-0 mt-0.5"
+                />
+              </div>
+
+              <!-- Contact Info (if available) -->
+              <div
+                  v-if="hasContactInfo(member)"
+                  class="flex flex-col gap-0.5 text-xs text-muted-foreground mt-1"
+              >
+                <div v-if="member.contact_info?.email" class="flex items-center gap-1">
+                  <Mail class="size-3"/>
+                  <span class="truncate">{{ member.contact_info.email }}</span>
+                </div>
+                <div v-if="member.contact_info?.phone" class="flex items-center gap-1">
+                  <Phone class="size-3"/>
+                  <span>{{ member.contact_info.phone }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Footer -->
+      <div class="flex flex-row items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+        <span>
+          Total: {{ totalPartyCount }} {{ totalPartyCount === 1 ? 'party' : 'parties' }}
+        </span>
+        <span v-if="representedCount > 0">
+          Representing: {{ representedCount }} {{ representedCount === 1 ? 'party' : 'parties' }}
+        </span>
+      </div>
+    </DrawerContent>
+  </Drawer>
+
 </template>
 
 <script setup lang="ts">

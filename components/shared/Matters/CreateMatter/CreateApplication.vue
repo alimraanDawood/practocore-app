@@ -191,7 +191,7 @@
                 <template v-if="steps[stepIndex - 1]?.id === 'members' && getSignedInUser()?.organisation">
                   <FormField v-slot="{ setValue, value }" name="members">
                     <FormItem>
-                      <FormLabel>Choose Members</FormLabel>
+                      <FormLabel>Choose Lawyers</FormLabel>
                       <FormDescription>
                         Choose which members can receive reminders and updates on
                         this matter
@@ -358,23 +358,23 @@
     </Dialog>
 
     <!-- SHEET -->
-    <Sheet v-else v-model:open="open">
-      <SheetTrigger>
+    <Drawer v-else v-model:open="open">
+      <DrawerTrigger>
         <slot />
-      </SheetTrigger>
+      </DrawerTrigger>
 
-      <SheetContent class="h-[100dvh]" side="bottom">
-        <SheetHeader>
-          <SheetTitle>Add an application</SheetTitle>
-        </SheetHeader>
+      <DrawerContent class="h-[100dvh]" side="bottom">
+        <DrawerHeader>
+          <DrawerTitle>Add an application</DrawerTitle>
+        </DrawerHeader>
 
         <div class="flex flex-col items-center overflow-hidden w-full h-full">
           <div class="flex flex-col w-full h-full lg:max-w-lg">
             <ReuseTemplate />
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   </div>
 </template>
 
@@ -448,14 +448,14 @@ const steps = computed(() => {
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Choose Members", id: "members" },
+        { step: 4, title: "Choose Lawyers", id: "members" },
         { step: 5, title: "Timeline", id: "field_values" },
       ];
     } else {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Choose Members", id: "members" },
+        { step: 3, title: "Choose Lawyers", id: "members" },
         { step: 4, title: "Timeline", id: "field_values" },
       ];
     }

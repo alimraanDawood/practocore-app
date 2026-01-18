@@ -1,8 +1,8 @@
 <template>
   <div class="flex flex-col space-y-3">
     <div class="flex flex-col">
-      <span class="text-xl">Organisation Profile</span>
-      <span class="text-sm">Update your organisation settings. </span>
+      <h2 class="text-2xl font-semibold ibm-plex-serif">Organisation Profile</h2>
+      <p class="text-sm text-muted-foreground">Update your organisation settings. </p>
     </div>
 
     <Separator />

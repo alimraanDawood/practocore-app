@@ -21,7 +21,7 @@ import type { RecordModel } from "pocketbase";
 
 const courts = ref<RecordModel[]>([]);
 
-const props = defineProps(['modelValue']);
+const props = defineProps(['modelValue', 'limitCourts']);
 const emits = defineEmits(['update:modelValue']);
 
 const open = ref(false)
@@ -35,7 +35,9 @@ const value = computed({
 
 
 onMounted(async () => {
-  courts.value = (await getCourts(1, 1000, {}))?.items;
+  courts.value = (await getCourts(1, 1000, {
+    filter: props?.limitCourts?.length ? props?.limitCourts?.map(c => `id = '${c}'`)?.join(' || ') : ''
+  }))?.items;
 });
 
 const selectedCourt = computed(() =>

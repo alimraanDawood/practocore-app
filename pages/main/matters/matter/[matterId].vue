@@ -16,21 +16,19 @@
         <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
           <SharedAvatarStack :members="currentMatterOrApplication?.expand?.members" :max-visible="3"/>
         </SharedMattersMemberManagement>
-
-        <SharedProfile />
       </div>
     </div>
   </div>
 
   <div class="flex flex-col w-full h-full items-center overflow-y-scroll">
-    <div class="flex flex-col w-full lg:flex-row lg:w-[90vw] h-full lg:border-x lg:divide-x">
-      <div class="flex flex-col w-full overflow-y-scroll p-3 gap-3">
-        <div class="xs:flex flex-col w-full hidden">
+    <div class="flex flex-col w-full lg:flex-row lg:w-[95vw] h-full lg:border-x lg:divide-x">
+      <div class="flex flex-col w-full overflow-y-scroll">
+        <div class="xs:flex flex-col w-full hidden p-3">
           <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
 
-        <div class="flex flex-row items-center gap-2">
+        <div class="flex flex-row items-center gap-2 p-3">
           <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
@@ -63,7 +61,7 @@
           </div>
         </div>
 
-        <div class="flex flex-row gap-2">
+        <div class="flex flex-row gap-2 p-3">
           <div class="flex flex-row flex-wrap gap-1 items-center">
             <Tabs default-value="all" v-model="currentApplicationOption">
               <TabsList class="gap-2 items-center">
@@ -89,7 +87,9 @@
 
         <Separator />
 
-        <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"  :matter="matter" :application-filter="currentApplicationOption"/>
+        <div class="flex flex-col w-full p-3">
+          <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"  :matter="matter" :application-filter="currentApplicationOption"/>
+        </div>
       </div>
 
       <div class="hidden lg:flex flex-col max-w-sm w-full h-full p-3 gap-5">

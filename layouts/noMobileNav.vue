@@ -2,12 +2,7 @@
   <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
     <SharedDesktopTitleBar class="hidden xs:flex" />
 
-    <Vue3PullToRefresh
-        :distance="50"
-        :duration="2000"
-        :size="32"
-        :options="{ color: '#111', bgColor: '#fff' }"
-    />
+
 
     <div class="flex flex-col  h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">

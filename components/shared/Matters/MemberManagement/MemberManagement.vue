@@ -1,5 +1,245 @@
 <template>
-  <Sheet v-model:open="sheetOpen">
+  <DefineTemplate>
+    <div class="flex flex-col gap-4 flex-1 overflow-y-auto p-5">
+      <!-- Current Members Section -->
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-row items-center justify-between">
+          <span class="text-sm font-semibold">Current Members ({{ currentMembers.length }})</span>
+
+          <Sheet v-model:open="addMemberSheetOpen">
+            <SheetTrigger as-child>
+              <Button size="sm" variant="outline">
+                <UserPlus class="size-4" />
+                Add
+              </Button>
+            </SheetTrigger>
+            <SheetContent class="w-screen">
+              <SheetHeader>
+                <SheetTitle>Add Members</SheetTitle>
+                <SheetDescription>
+                  Select organization members to add to this matter
+                </SheetDescription>
+              </SheetHeader>
+
+              <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+                  <div
+                      v-for="member in availableMembers"
+                      :key="member.id"
+                      class="flex flex-row items-center justify-between p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                      @click="toggleMemberSelection(member)"
+                  >
+                    <div class="flex flex-row items-center gap-2">
+                      <Avatar class="size-8">
+                        <AvatarImage :src="member?.avatar" :alt="member?.name" />
+                        <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+                          {{ getInitials(member?.name) }}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div class="flex flex-col">
+                        <span class="text-sm font-semibold">{{ member.name }}</span>
+                        <span class="text-xs text-muted-foreground">{{ member.email }}</span>
+                      </div>
+                    </div>
+
+                    <div v-if="selectedNewMembers.includes(member.id)" class="size-5 bg-primary rounded-full grid place-items-center">
+                      <Check class="size-3 text-primary-foreground stroke-[3]" />
+                    </div>
+                  </div>
+
+                  <div v-if="availableMembers.length === 0" class="text-center text-sm text-muted-foreground py-8">
+                    All organization members are already added
+                  </div>
+                </div>
+              </div>
+
+              <SheetFooter>
+                <Button variant="outline" @click="addMemberSheetOpen = false">Cancel</Button>
+                <Button @click="addSelectedMembers" :disabled="selectedNewMembers.length === 0 || loading">
+                  <Loader2 v-if="loading" class="size-4 animate-spin" />
+                  <template v-else>
+                    Add {{ selectedNewMembers.length > 0 ? `(${selectedNewMembers.length})` : '' }}
+                  </template>
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        <!-- Members List -->
+        <div v-if="currentMembers.length > 0" class="flex flex-col gap-2">
+          <div
+              v-for="member in currentMembers"
+              :key="member.id"
+              class="flex flex-row items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
+          >
+            <div class="flex flex-row items-center gap-3">
+              <Avatar class="size-10">
+                <AvatarImage :src="member?.avatar" :alt="member?.name" />
+                <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+                  {{ getInitials(member?.name) }}
+                </AvatarFallback>
+              </Avatar>
+              <div class="flex flex-col">
+                <span class="text-sm font-semibold">{{ member.name }}</span>
+                <span class="text-xs text-muted-foreground">{{ member.email }}</span>
+              </div>
+            </div>
+
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button size="icon" variant="ghost" class="hover:bg-destructive/10 hover:text-destructive">
+                  <X class="size-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove Member</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to remove <strong>{{ member.name }}</strong> from this matter? They will lose access to all matter information and deadlines.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <Button variant="destructive" @click="removeMember(member.id)" :disabled="loading">
+                    <Loader2 v-if="loading" class="size-4 animate-spin" />
+                    <template v-else>Remove</template>
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+
+        <div v-else class="flex flex-col items-center justify-center text-center py-12 px-4 border-2 border-dashed rounded-lg">
+          <Users class="size-12 text-muted-foreground/50 mb-3" />
+          <span class="text-sm font-medium text-muted-foreground">No members added yet</span>
+          <span class="text-xs text-muted-foreground mt-1">Click "Add" to assign members to this matter</span>
+        </div>
+      </div>
+
+      <!-- Supervisors Section -->
+      <div v-if="isSupervisor" class="flex flex-col gap-3 pt-4 border-t">
+        <div class="flex flex-row items-center justify-between">
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-semibold">Supervisors ({{ supervisors.length }})</span>
+            <span class="text-xs text-muted-foreground">Supervisors can assign deadlines and manage members</span>
+          </div>
+        </div>
+
+        <!-- Supervisors List -->
+        <div v-if="supervisors.length > 0" class="flex flex-col gap-2">
+          <div
+              v-for="supervisor in supervisors"
+              :key="supervisor.id"
+              class="flex flex-col gap-2 justify-between p-3 rounded-lg border transition-colors"
+          >
+            <div class="flex flex-row items-center gap-3">
+              <Avatar class="size-10 ring-2 ring-primary/20">
+                <AvatarImage :src="supervisor?.avatar" :alt="supervisor?.name" />
+                <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+                  {{ getInitials(supervisor?.name) }}
+                </AvatarFallback>
+              </Avatar>
+              <div class="flex flex-col">
+                <div class="flex flex-row items-center gap-2">
+                  <span class="text-sm font-semibold">{{ supervisor.name }}</span>
+                  <Badge variant="secondary" class="text-xs">Supervisor</Badge>
+                </div>
+                <span class="text-xs text-muted-foreground">{{ supervisor.email }}</span>
+              </div>
+            </div>
+
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="supervisors.length === 1"
+                >
+                  <ShieldOff class="size-4 mr-2" />
+                  Demote
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Demote Supervisor</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to remove supervisor status from <strong>{{ supervisor.name }}</strong>? They will no longer be able to assign deadlines or manage members.
+                    <span v-if="supervisors.length === 1" class="block mt-2 text-destructive font-medium">
+                        ⚠️ You cannot demote the last supervisor. At least one supervisor must remain.
+                      </span>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <Button
+                      variant="destructive"
+                      @click="demoteSupervisor(supervisor.id)"
+                      :disabled="loading || supervisors.length === 1"
+                  >
+                    <Loader2 v-if="loading" class="size-4 animate-spin" />
+                    <template v-else>Demote</template>
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+
+        <!-- Non-Supervisor Members (can be promoted) -->
+        <div v-if="nonSupervisorMembers.length > 0" class="flex flex-col gap-2 mt-2">
+          <span class="text-xs font-medium text-muted-foreground">Members (can be promoted)</span>
+          <div
+              v-for="member in nonSupervisorMembers"
+              :key="member.id"
+              class="flex flex-col gap-2 justify-between p-3 rounded-lg border"
+          >
+            <div class="flex flex-row items-center gap-3">
+              <Avatar class="size-10">
+                <AvatarImage :src="member?.avatar" :alt="member?.name" />
+                <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+                  {{ getInitials(member?.name) }}
+                </AvatarFallback>
+              </Avatar>
+              <div class="flex flex-col">
+                <span class="text-sm font-semibold">{{ member.name }}</span>
+                <span class="text-xs text-muted-foreground">{{ member.email }}</span>
+              </div>
+            </div>
+
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button size="sm" variant="outline">
+                  <Shield class="size-4 mr-2" />
+                  Promote
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Promote to Supervisor</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to promote <strong>{{ member.name }}</strong> to supervisor? They will be able to assign deadlines and manage members.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <Button
+                      @click="promoteMember(member.id)"
+                      :disabled="loading"
+                  >
+                    <Loader2 v-if="loading" class="size-4 animate-spin" />
+                    <template v-else>Promote</template>
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </div>
+    </div>
+  </DefineTemplate>
+  <Sheet v-if="$viewport.isGreaterOrEquals('tablet')" v-model:open="sheetOpen">
     <SheetTrigger as-child>
       <slot />
     </SheetTrigger>
@@ -12,246 +252,28 @@
         </SheetDescription>
       </SheetHeader>
 
-      <div class="flex flex-col gap-4 flex-1 overflow-y-auto p-5">
-        <!-- Current Members Section -->
-        <div class="flex flex-col gap-3">
-          <div class="flex flex-row items-center justify-between">
-            <span class="text-sm font-semibold">Current Members ({{ currentMembers.length }})</span>
+      <ReuseTemplate />
 
-            <Sheet v-model:open="addMemberSheetOpen">
-              <SheetTrigger as-child>
-                <Button size="sm" variant="outline">
-                  <UserPlus class="size-4" />
-                  Add
-                </Button>
-              </SheetTrigger>
-              <SheetContent class="w-screen">
-                <SheetHeader>
-                  <SheetTitle>Add Members</SheetTitle>
-                  <SheetDescription>
-                    Select organization members to add to this matter
-                  </SheetDescription>
-                </SheetHeader>
-
-                <div class="flex flex-col gap-3">
-                  <div class="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-                    <div
-                      v-for="member in availableMembers"
-                      :key="member.id"
-                      class="flex flex-row items-center justify-between p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
-                      @click="toggleMemberSelection(member)"
-                    >
-                      <div class="flex flex-row items-center gap-2">
-                        <Avatar class="size-8">
-                          <AvatarImage :src="member?.avatar" :alt="member?.name" />
-                          <AvatarFallback class="text-xs bg-primary text-primary-foreground">
-                            {{ getInitials(member?.name) }}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div class="flex flex-col">
-                          <span class="text-sm font-semibold">{{ member.name }}</span>
-                          <span class="text-xs text-muted-foreground">{{ member.email }}</span>
-                        </div>
-                      </div>
-
-                      <div v-if="selectedNewMembers.includes(member.id)" class="size-5 bg-primary rounded-full grid place-items-center">
-                        <Check class="size-3 text-primary-foreground stroke-[3]" />
-                      </div>
-                    </div>
-
-                    <div v-if="availableMembers.length === 0" class="text-center text-sm text-muted-foreground py-8">
-                      All organization members are already added
-                    </div>
-                  </div>
-                </div>
-
-                <SheetFooter>
-                  <Button variant="outline" @click="addMemberSheetOpen = false">Cancel</Button>
-                  <Button @click="addSelectedMembers" :disabled="selectedNewMembers.length === 0 || loading">
-                    <Loader2 v-if="loading" class="size-4 animate-spin" />
-                    <template v-else>
-                      Add {{ selectedNewMembers.length > 0 ? `(${selectedNewMembers.length})` : '' }}
-                    </template>
-                  </Button>
-                </SheetFooter>
-              </SheetContent>
-            </Sheet>
-          </div>
-
-          <!-- Members List -->
-          <div v-if="currentMembers.length > 0" class="flex flex-col gap-2">
-            <div
-              v-for="member in currentMembers"
-              :key="member.id"
-              class="flex flex-row items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
-            >
-              <div class="flex flex-row items-center gap-3">
-                <Avatar class="size-10">
-                  <AvatarImage :src="member?.avatar" :alt="member?.name" />
-                  <AvatarFallback class="text-xs bg-primary text-primary-foreground">
-                    {{ getInitials(member?.name) }}
-                  </AvatarFallback>
-                </Avatar>
-                <div class="flex flex-col">
-                  <span class="text-sm font-semibold">{{ member.name }}</span>
-                  <span class="text-xs text-muted-foreground">{{ member.email }}</span>
-                </div>
-              </div>
-
-              <AlertDialog>
-                <AlertDialogTrigger as-child>
-                  <Button size="icon" variant="ghost" class="hover:bg-destructive/10 hover:text-destructive">
-                    <X class="size-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Remove Member</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to remove <strong>{{ member.name }}</strong> from this matter? They will lose access to all matter information and deadlines.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <Button variant="destructive" @click="removeMember(member.id)" :disabled="loading">
-                      <Loader2 v-if="loading" class="size-4 animate-spin" />
-                      <template v-else>Remove</template>
-                    </Button>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-
-          <div v-else class="flex flex-col items-center justify-center text-center py-12 px-4 border-2 border-dashed rounded-lg">
-            <Users class="size-12 text-muted-foreground/50 mb-3" />
-            <span class="text-sm font-medium text-muted-foreground">No members added yet</span>
-            <span class="text-xs text-muted-foreground mt-1">Click "Add" to assign members to this matter</span>
-          </div>
-        </div>
-
-        <!-- Supervisors Section -->
-        <div v-if="isSupervisor" class="flex flex-col gap-3 pt-4 border-t">
-          <div class="flex flex-row items-center justify-between">
-            <div class="flex flex-col gap-1">
-              <span class="text-sm font-semibold">Supervisors ({{ supervisors.length }})</span>
-              <span class="text-xs text-muted-foreground">Supervisors can assign deadlines and manage members</span>
-            </div>
-          </div>
-
-          <!-- Supervisors List -->
-          <div v-if="supervisors.length > 0" class="flex flex-col gap-2">
-            <div
-              v-for="supervisor in supervisors"
-              :key="supervisor.id"
-              class="flex flex-col gap-2 justify-between p-3 rounded-lg border transition-colors"
-            >
-              <div class="flex flex-row items-center gap-3">
-                <Avatar class="size-10 ring-2 ring-primary/20">
-                  <AvatarImage :src="supervisor?.avatar" :alt="supervisor?.name" />
-                  <AvatarFallback class="text-xs bg-primary text-primary-foreground">
-                    {{ getInitials(supervisor?.name) }}
-                  </AvatarFallback>
-                </Avatar>
-                <div class="flex flex-col">
-                  <div class="flex flex-row items-center gap-2">
-                    <span class="text-sm font-semibold">{{ supervisor.name }}</span>
-                    <Badge variant="secondary" class="text-xs">Supervisor</Badge>
-                  </div>
-                  <span class="text-xs text-muted-foreground">{{ supervisor.email }}</span>
-                </div>
-              </div>
-
-              <AlertDialog>
-                <AlertDialogTrigger as-child>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    :disabled="supervisors.length === 1"
-                  >
-                    <ShieldOff class="size-4 mr-2" />
-                    Demote
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Demote Supervisor</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to remove supervisor status from <strong>{{ supervisor.name }}</strong>? They will no longer be able to assign deadlines or manage members.
-                      <span v-if="supervisors.length === 1" class="block mt-2 text-destructive font-medium">
-                        ⚠️ You cannot demote the last supervisor. At least one supervisor must remain.
-                      </span>
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <Button
-                      variant="destructive"
-                      @click="demoteSupervisor(supervisor.id)"
-                      :disabled="loading || supervisors.length === 1"
-                    >
-                      <Loader2 v-if="loading" class="size-4 animate-spin" />
-                      <template v-else>Demote</template>
-                    </Button>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-
-          <!-- Non-Supervisor Members (can be promoted) -->
-          <div v-if="nonSupervisorMembers.length > 0" class="flex flex-col gap-2 mt-2">
-            <span class="text-xs font-medium text-muted-foreground">Members (can be promoted)</span>
-            <div
-              v-for="member in nonSupervisorMembers"
-              :key="member.id"
-              class="flex flex-col gap-2 justify-between p-3 rounded-lg border"
-            >
-              <div class="flex flex-row items-center gap-3">
-                <Avatar class="size-10">
-                  <AvatarImage :src="member?.avatar" :alt="member?.name" />
-                  <AvatarFallback class="text-xs bg-primary text-primary-foreground">
-                    {{ getInitials(member?.name) }}
-                  </AvatarFallback>
-                </Avatar>
-                <div class="flex flex-col">
-                  <span class="text-sm font-semibold">{{ member.name }}</span>
-                  <span class="text-xs text-muted-foreground">{{ member.email }}</span>
-                </div>
-              </div>
-
-              <AlertDialog>
-                <AlertDialogTrigger as-child>
-                  <Button size="sm" variant="outline">
-                    <Shield class="size-4 mr-2" />
-                    Promote
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Promote to Supervisor</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to promote <strong>{{ member.name }}</strong> to supervisor? They will be able to assign deadlines and manage members.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <Button
-                      @click="promoteMember(member.id)"
-                      :disabled="loading"
-                    >
-                      <Loader2 v-if="loading" class="size-4 animate-spin" />
-                      <template v-else>Promote</template>
-                    </Button>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-        </div>
-      </div>
     </SheetContent>
   </Sheet>
+
+  <Drawer v-else v-model:open="sheetOpen">
+    <DrawerTrigger as-child>
+      <slot />
+    </DrawerTrigger>
+
+    <DrawerContent :side="$viewport.isGreaterOrEquals('tablet') ? 'right' : 'bottom'" class="flex flex-col max-h-[100dvh]">
+      <DrawerHeader>
+        <DrawerTitle>Manage Members</DrawerTitle>
+        <DrawerDescription>
+          Add or remove members from this matter
+        </DrawerDescription>
+      </DrawerHeader>
+
+      <ReuseTemplate />
+
+    </DrawerContent>
+  </Drawer>
 </template>
 
 <script setup lang="ts">
@@ -261,6 +283,7 @@ import { addMemberToMatter, removeMemberFromMatter, promoteMemberToSupervisor, d
 import { getSignedInUser } from '~/services/auth'
 import { toast } from 'vue-sonner'
 
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 const props = defineProps<{
   matter: any
 }>()

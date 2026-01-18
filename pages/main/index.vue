@@ -41,9 +41,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5 p-3 lg:p-5 lg:w-[95vw] w-full h-full overflow-y-scroll">
-
-    <div class="flex flex-col gap-3.5 lg:flex-row justify-between">
+  <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-scroll lg:overflow-y-hidden border-x">
+    <div class="flex flex-col gap-3.5 p-3 lg:p-5 lg:flex-row lg:items-center justify-between border-b">
       <div class="xs:flex flex-col hidden">
         <span class=" text-xl lg:text-2xl font-semibold ibm-plex-serif">{{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0) }}</span>
         <span>Welcome to PractoCore, Your Litigation Deadline Management Expert</span>
@@ -67,8 +66,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
-      <div class="flex flex-col lg:col-span-3 gap-3">
+    <div class="grid grid-cols-1 lg:grid-cols-4 h-full">
+      <div class="flex flex-col lg:col-span-3 border-r p-3 gap-3">
         <div class="flex flex-row justify-between">
           <div class="flex flex-row gap-1 items-center">
             <span class="font-semibold ibm-plex-sans">Upcoming Deadlines</span>
@@ -169,7 +168,7 @@ onUnmounted(() => {
         </XyzTransition>
       </div>
 
-      <div class="flex flex-col lg:col-span-1 gap-3">
+      <div class="flex flex-col lg:col-span-1 p-3 gap-3">
         <div class="flex flex-row justify-between">
           <div class="flex flex-row gap-1 items-center">
             <span class="font-semibold">Your Calendar</span>

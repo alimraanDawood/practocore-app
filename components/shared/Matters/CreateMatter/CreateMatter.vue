@@ -114,37 +114,37 @@
                     </FormItem>
                   </FormField>
 
-                  <FormField
-                    v-if="getSignedInUser()?.organisation"
-                    v-slot="{ value, handleChange }"
-                    name="personal"
-                  >
-                    <FormItem
-                      class="flex flex-row items-start gap-3 justify-between rounded-lg border p-4"
-                    >
-                      <FormControl>
-                        <Switch
-                          :model-value="value"
-                          @update:model-value="handleChange"
-                        />
-                      </FormControl>
-                      <div class="space-y-0.5 w-full">
-                        <FormLabel class="text-base">
-                          Make this Matter Private
-                        </FormLabel>
-                        <FormDescription>
-                          This will prevent other members of the organisation from
-                          viewing this matter.
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  </FormField>
+<!--                  <FormField-->
+<!--                    v-if="getSignedInUser()?.organisation"-->
+<!--                    v-slot="{ value, handleChange }"-->
+<!--                    name="personal"-->
+<!--                  >-->
+<!--                    <FormItem-->
+<!--                      class="flex flex-row items-start gap-3 justify-between rounded-lg border p-4"-->
+<!--                    >-->
+<!--                      <FormControl>-->
+<!--                        <Switch-->
+<!--                          :model-value="value"-->
+<!--                          @update:model-value="handleChange"-->
+<!--                        />-->
+<!--                      </FormControl>-->
+<!--                      <div class="space-y-0.5 w-full">-->
+<!--                        <FormLabel class="text-base">-->
+<!--                          Make this Matter Private-->
+<!--                        </FormLabel>-->
+<!--                        <FormDescription>-->
+<!--                          This will prevent other members of the organisation from-->
+<!--                          viewing this matter.-->
+<!--                        </FormDescription>-->
+<!--                      </div>-->
+<!--                    </FormItem>-->
+<!--                  </FormField>-->
 
                   <FormField name="court" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
                       <FormLabel>Court</FormLabel>
                       <FormControl>
-                        <CourtSelector v-bind="componentField" />
+                        <CourtSelector :limit-courts="selectedTemplate?.courts" v-bind="componentField" />
                       </FormControl>
                     </FormItem>
                   </FormField>
@@ -190,7 +190,7 @@
                 <template v-if="steps[stepIndex - 1]?.id === 'members' && getSignedInUser()?.organisation">
                   <FormField v-slot="{ setValue, value }" name="members">
                     <FormItem>
-                      <FormLabel>Choose Members</FormLabel>
+                      <FormLabel>Choose Lawyers</FormLabel>
                       <FormDescription>
                         Choose which members can receive reminders and updates on
                         this matter
@@ -359,23 +359,23 @@
     </Dialog>
 
     <!-- SHEET -->
-    <Sheet v-else v-model:open="open">
-      <SheetTrigger>
+    <Drawer v-else v-model:open="open">
+      <DrawerTrigger>
         <slot />
-      </SheetTrigger>
+      </DrawerTrigger>
 
-      <SheetContent class="h-[100dvh]" side="bottom">
-        <SheetHeader>
-          <SheetTitle>Add a new matter</SheetTitle>
-        </SheetHeader>
+      <DrawerContent class="h-[100dvh]" side="bottom">
+        <DrawerHeader>
+          <DrawerTitle>Add a new matter</DrawerTitle>
+        </DrawerHeader>
 
         <div class="flex flex-col items-center overflow-hidden w-full h-full">
           <div class="flex flex-col w-full h-full lg:max-w-lg">
             <ReuseTemplate />
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   </div>
 </template>
 
@@ -450,14 +450,14 @@ const steps = computed(() => {
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Add Parties", id: "parties" },
         { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Choose Members", id: "members" },
+        { step: 4, title: "Choose Lawyers", id: "members" },
         { step: 5, title: "Timeline", id: "field_values" },
       ];
     } else {
       return [
         { step: 1, title: "Choose Matter Type", id: 'matter_type' },
         { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Choose Members", id: "members" },
+        { step: 3, title: "Choose Lawyers", id: "members" },
         { step: 4, title: "Timeline", id: "field_values" },
       ];
     }

@@ -204,11 +204,9 @@ async function loadSearchData() {
 
             // Load invitations (both types)
             const directInvitesResponse = await getDirectInvites(1, 100, { sort: '-created' })
-            const inviteRequestsResponse = await getInviteRequests(1, 100, { sort: '-created' })
 
             invitations.value = [
                 ...(directInvitesResponse.items || []),
-                ...(inviteRequestsResponse.items || [])
             ]
         }
     } catch (error) {

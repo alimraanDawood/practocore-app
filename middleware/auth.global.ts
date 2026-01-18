@@ -7,7 +7,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
         return;
     }
 
-    if(to.path.startsWith("/auth") || to.path.startsWith('/splash')) {
+    if(to.path === '/' || to.path.startsWith("/auth") || to.path.startsWith('/splash') || to.path.startsWith('/intro')) {
         return;
     }
 

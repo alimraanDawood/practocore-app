@@ -1,8 +1,8 @@
 <template>
-    <div class="flex flex-col gap-5 lg:p-5 lg:w-[95vw] w-full h-full overflow-y-hidden">
+    <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-hidden border-x">
         <div class="flex flex-col h-full w-full">
             <DefineSearchFilterTemplate>
-                <div class="flex flex-row items-center gap-2 w-full px-3">
+                <div class="flex flex-row items-center gap-2 w-full">
                     <InputGroup class="bg-background lg:w-fit">
                         <InputGroupInput v-model="query" placeholder="Search..." />
                         <InputGroupAddon>
@@ -71,12 +71,23 @@
                 </div>
             </DefineSearchFilterTemplate>
 
-            <div class="flex flex-col w-full h-full gap-2">
-                <div class="flex flex-row items-center p-3 justify-between">
+            <div class="flex flex-col w-full h-full">
+                <div class="flex flex-row items-center p-3 border-b justify-between">
                     <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
 
                     <div class="flex flex-row gap-3 items-center">
                         <ReuseSearchFilterTemplate class="hidden lg:flex" />
+
+                        <Tabs v-model="displayMode" class="hidden lg:flex">
+                          <TabsList>
+                            <TabsTrigger value="grid">
+                              <Grid2X2 /> Grid
+                            </TabsTrigger>
+                            <TabsTrigger value="table">
+                              <Table /> Table
+                            </TabsTrigger>
+                          </TabsList>
+                        </Tabs>
 
                         <SharedMattersCreateMatter :no-stepper="true" @created="mattersStore.fetchMatters(true)">
                             <Button>
@@ -86,46 +97,22 @@
                     </div>
                 </div>
 
-
-                <ReuseSearchFilterTemplate class="lg:hidden" />
-
-                <div v-if="getSignedInUser()?.organisation" class="flex flex-row border-b p-3 pb-0 gap-3" role="tablist" aria-label="Templates tabs">
-                    <button
-                        role="tab"
-                        :aria-selected="activeTab === 'all'"
-                        :class="['text-sm pb-1 border-b-4', activeTab === 'all' ? 'font-semibold border-primary' : 'border-transparent']"
-                        @click="setTab('all')"
-                    >
-                        All
-                    </button>
-                    <button
-                        role="tab"
-                        :aria-selected="activeTab === 'organisation'"
-                        :class="['text-sm pb-1 border-b-4', activeTab === 'organisation' ? 'font-semibold border-primary' : 'border-transparent']"
-                        @click="setTab('organisation')"
-                    >
-                        Organisation
-                    </button>
-                    <button
-                        role="tab"
-                        :aria-selected="activeTab === 'private'"
-                        :class="['text-sm pb-1 border-b-4', activeTab === 'private' ? 'font-semibold border-primary' : 'border-transparent']"
-                        @click="setTab('private')"
-                    >
-                        Private
-                    </button>
+                <div class="flex flex-col p-3 border-b gap-2 lg:hidden">
+                  <ReuseSearchFilterTemplate />
                 </div>
 
+
                 <XyzTransition mode="out-in" xyz="fade">
-                    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 gap-3 p-3">
+                    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 gap-3 p-3">
                         <div v-for="i in 12" class="rounded w-full aspect-video bg-muted-foreground/20 animate-pulse">
                         </div>
                     </div>
 
                     <template v-else-if="matters !== null && matters?.items?.length > 0 ">
-                        <div class="flex flex-col w-full h-full overflow-y-scroll">
+                        <div class="flex flex-col w-full h-full overflow-y-hidden">
                             <div
-                                class="grid grid-cols-1 lg:grid-cols-3 gap-3 p-3">
+                                v-if="displayMode === 'grid' || $viewport.isLessThan('customxs')"
+                                class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 h-full gap-3 p-3 overflow-y-scroll">
                                 <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
@@ -137,10 +124,56 @@
                                         <Check class="size-3 stroke-3" />
                                     </div>
                                 </div>
+                              <div class=" flex flex-col sm:hidden items-center justify-between gap-3 p-3 border-t">
+                                <div class="text-sm text-muted-foreground">
+                                  Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
+                                </div>
+
+                                <div class="flex flex-row items-center gap-2">
+                                  <Button
+                                      size="sm"
+                                      variant="outline"
+                                      @click="mattersStore.previousPage()"
+                                      :disabled="mattersStore.page <= 1"
+                                  >
+                                    <ChevronLeft class="size-4" />
+                                    Previous
+                                  </Button>
+
+                                  <div class="flex flex-row items-center gap-1">
+                                    <template v-for="(pageNum, index) in visiblePages" :key="index">
+                                      <span v-if="pageNum === -1" class="px-2 text-muted-foreground">...</span>
+                                      <Button
+                                          v-else
+                                          size="sm"
+                                          :variant="pageNum === mattersStore.page ? 'default' : 'ghost'"
+                                          @click="mattersStore.goToPage(pageNum)"
+                                          class="!size-[32px]"
+                                      >
+                                        {{ pageNum }}
+                                      </Button>
+                                    </template>
+                                  </div>
+
+                                  <Button
+                                      size="sm"
+                                      variant="outline"
+                                      @click="mattersStore.nextPage()"
+                                      :disabled="mattersStore.page >= matters.totalPages"
+                                  >
+                                    Next
+                                    <ChevronRight class="size-4" />
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
 
+                          <div v-else class="flex flex-col w-full h-full p-3">
+                            <SharedMattersMatterTable :columns="columns" :data="matters?.items || []" />
+                          </div>
+
                             <!-- Pagination -->
-                            <div v-if="matters.totalPages > 1" class="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t">
+                            <div class="hidden sm:flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t">
                                 <div class="text-sm text-muted-foreground">
                                     Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
                                 </div>
@@ -164,7 +197,7 @@
                                                 size="sm"
                                                 :variant="pageNum === mattersStore.page ? 'default' : 'ghost'"
                                                 @click="mattersStore.goToPage(pageNum)"
-                                                class="min-w-[2.5rem]"
+                                                class="!size-[32px]"
                                             >
                                                 {{ pageNum }}
                                             </Button>
@@ -252,7 +285,7 @@
 
 <script setup lang="ts">
 import { vOnLongPress } from '@vueuse/components'
-import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table,  Grid2X2} from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
@@ -277,6 +310,8 @@ const { result: matters, loading, sort, query, selection, activeTab } = storeToR
 const setTab = (newVal : string) => {
     activeTab.value = newVal;
 }
+
+const displayMode = ref('grid'); // grid || table
 
 function onLongPressCallbackDirective(e: PointerEvent, matter: any) {
     longPressedDirective.value = true

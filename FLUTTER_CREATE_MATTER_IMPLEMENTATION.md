@@ -131,7 +131,7 @@ The form steps change dynamically based on:
   Step 1: Choose Matter Type (matter_type)
   Step 2: Add Parties (parties)
   Step 3: Matter Details (matter_details)
-  Step 4: Choose Members (members)
+  Step 4: Choose Lawyers (members)
   Step 5: Timeline (field_values)
 ]
 ```
@@ -141,7 +141,7 @@ The form steps change dynamically based on:
 [
   Step 1: Choose Matter Type (matter_type)
   Step 2: Matter Details (matter_details)
-  Step 3: Choose Members (members)
+  Step 3: Choose Lawyers (members)
   Step 4: Timeline (field_values)
 ]
 ```
@@ -558,7 +558,7 @@ final matterDetailsSchema = {
 
 ---
 
-### Step 4: Choose Members (members) - Organization Users Only
+### Step 4: Choose Lawyers (members) - Organization Users Only
 
 **Show When**: `user.organisation != null`
 

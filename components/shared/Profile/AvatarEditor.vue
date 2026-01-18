@@ -118,7 +118,7 @@ const clearAvatar = async () => {
     <DialogTrigger>
       <Avatar class="size-16">
         <AvatarImage :src="user?.avatar" alt="Profile photo"/>
-        <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+        <AvatarFallback class="bg-primary text-primary-foreground">
           {{ userInitials }}
         </AvatarFallback>
       </Avatar>
@@ -183,11 +183,11 @@ const clearAvatar = async () => {
     </DialogContent>
   </Dialog>
 
-  <Drawer v-model:open="open" v-else>
+  <Drawer :dismissible="false"  v-model:open="open" v-else>
     <DrawerTrigger>
       <Avatar class="size-24">
         <AvatarImage :src="user?.avatar" alt="Profile photo"/>
-        <AvatarFallback class="text-xs bg-primary text-primary-foreground">
+        <AvatarFallback class="text-xl bg-primary text-primary-foreground">
           {{ userInitials }}
         </AvatarFallback>
       </Avatar>
@@ -211,12 +211,15 @@ const clearAvatar = async () => {
           Change Profile Photo
         </Button>
         <Button
-          variant="outline"
+          variant="destructive"
           @click="clearAvatar"
           :disabled="isUploading || !user?.avatar"
         >
           Clear Profile Photo
         </Button>
+        <DrawerClose class="w-full">
+          <Button class="w-full" variant="secondary">Close</Button>
+        </DrawerClose>
       </div>
 
       <div v-else class="flex flex-col p-3 gap-3">

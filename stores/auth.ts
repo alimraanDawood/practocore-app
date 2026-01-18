@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia';
-import {getOrganisations, getSignedInUser, refreshUserData, subscribeToUser} from "~/services/auth";
+import {getOrganisation, getOrganisations, getSignedInUser, refreshUserData, subscribeToUser} from "~/services/auth";
 import {checkIfUserIsAdmin} from "~/services/admin";
 
 export const useAuthStore = defineStore('auth', {
     state: () => ({
         pb: getSignedInUser(),
-        organisation: null,
+        organisation: null as null | any,
         isAdmin: false,
         _subscribed: false,
         organisations: [] as any[]
@@ -19,6 +19,10 @@ export const useAuthStore = defineStore('auth', {
             this._subscribed = true;
             this.isAdmin = (await checkIfUserIsAdmin()).isAdmin;
             this.organisations = await getOrganisations();
+
+            if(this.pb?.organisation) {
+                this.organisation = await getOrganisation(this.pb.organisation);
+            }
         },
 
         init() {

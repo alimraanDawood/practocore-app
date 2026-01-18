@@ -170,6 +170,7 @@ const _acceptInvitation = async () => {
         </div>
       </div>
     </div>
+
     <div class="flex flex-row p-3 border-t"></div>
   </div>
 </template>

@@ -18,6 +18,7 @@ const isDark = computed(() => {
     return colorMode.preference === 'dark'
 });
 
+
 const toggleTheme = () => {
     colorMode.preference = isDark.value ? 'light' : 'dark'; 
 }

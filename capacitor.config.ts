@@ -12,6 +12,15 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: "ic_stat_practo_core_logo",
     },
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: true,
+      backgroundColor: '#f9623a',
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: false,
+      splashFullScreen: true,
+      splashImmersive: true,
+    }
   }
 };
 

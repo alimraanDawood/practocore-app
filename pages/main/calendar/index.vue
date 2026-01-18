@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-hidden">
+  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-hidden border-x">
     <!-- Main Calendar Area -->
     <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-scroll">
       <!-- Header with filters -->
@@ -64,8 +64,7 @@
           :key="deadline.id"
           :index="calendar.accentIndexFor(deadline.id)"
           :deadline="deadline">
-          <div class="flex text-left flex-row border p-3 gap-3 rounded-lg hover:bg-muted/50 transition-colors"
-               :class="accentClasses(calendar.accentIndexFor(deadline.id))">
+          <div class="flex text-left flex-row border p-3 gap-3 rounded-lg bg-muted hover:bg-muted/70 transition-colors">
             <CalendarIcon class="size-4 shrink-0 mt-0.5" />
 
             <div class="flex flex-col gap-1 flex-1">
@@ -74,17 +73,14 @@
               <span class="text-xs font-semibold">{{ dayjs(deadline.date).format("DD MMM YYYY") }}</span>
 
               <Badge v-if="getDeadlineStatus(deadline) === 'pending'"
-                     :class="badgeAccentClasses(calendar.accentIndexFor(deadline.id), false)"
                      class="w-fit">
                 <Clock class="size-3 mr-1" /> PENDING
               </Badge>
               <Badge v-else-if="getDeadlineStatus(deadline) === 'overdue'"
-                     :class="badgeAccentClasses(calendar.accentIndexFor(deadline.id), false)"
                      class="w-fit">
                 <AlertCircle class="size-3 mr-1" /> OVERDUE
               </Badge>
               <Badge v-else-if="getDeadlineStatus(deadline) === 'completed'"
-                     :class="badgeAccentClasses(calendar.accentIndexFor(deadline.id), true)"
                      class="w-fit">
                 <CheckCircle class="size-3 mr-1" /> COMPLETED
               </Badge>
@@ -104,23 +100,23 @@
 
         <!-- Status breakdown -->
         <div class="grid grid-cols-3 gap-2">
-          <div class="flex flex-col items-center p-2 bg-background border rounded-lg">
+          <div class="flex flex-col items-center p-2 bg-background border rounded">
             <span class="text-xs text-muted-foreground">Pending</span>
-            <span class="text-lg font-bold text-orange-500">{{ statusCounts.pending }}</span>
+            <span class="text-lg font-bold">{{ statusCounts.pending }}</span>
           </div>
-          <div class="flex flex-col items-center p-2 bg-background border rounded-lg">
+          <div class="flex flex-col items-center p-2 bg-background border rounded">
             <span class="text-xs text-muted-foreground">Overdue</span>
-            <span class="text-lg font-bold text-red-500">{{ statusCounts.overdue }}</span>
+            <span class="text-lg font-bold">{{ statusCounts.overdue }}</span>
           </div>
-          <div class="flex flex-col items-center p-2 bg-background border rounded-lg">
+          <div class="flex flex-col items-center p-2 bg-background border rounded">
             <span class="text-xs text-muted-foreground">Done</span>
-            <span class="text-lg font-bold text-green-500">{{ statusCounts.completed }}</span>
+            <span class="text-lg font-bold">{{ statusCounts.completed }}</span>
           </div>
         </div>
       </div>
 
       <!-- Deadlines list -->
-      <div class="flex flex-col flex-1 overflow-y-scroll p-4 gap-2">
+      <div class="flex flex-col flex-1 overflow-y-scroll p-4 gap-2 bg-background">
         <div v-if="loading" class="flex flex-col gap-2">
           <div v-for="i in 3" :key="i" class="animate-pulse flex flex-col gap-2 p-3 border rounded-lg bg-background">
             <div class="h-4 bg-muted rounded w-3/4"></div>
@@ -141,22 +137,19 @@
           :key="deadline.id"
           :index="calendar.accentIndexFor(deadline.id)"
           :deadline="deadline">
-          <div class="flex flex-col p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors cursor-pointer group"
-               :class="accentClasses(calendar.accentIndexFor(deadline.id))">
+          <div class="flex flex-col p-3 border rounded-lg bg-muted hover:bg-muted/70 transition-colors cursor-pointer group">
             <div class="flex flex-row items-start justify-between mb-2">
               <div class="flex flex-col flex-1">
                 <span class="font-semibold text-sm">{{ deadline.name }}</span>
                 <span class="text-xs text-muted-foreground mt-0.5">{{ deadline.expand?.matter?.name || 'No matter' }}</span>
               </div>
-              <div class="size-6 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
-                   :class="`bg-accent-${(calendar.accentIndexFor(deadline.id) % 4) + 1}`">
+              <div class="size-6 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <CalendarIcon class="size-3 text-white" />
               </div>
             </div>
 
             <div class="flex flex-row items-center gap-2">
               <Badge v-if="getDeadlineStatus(deadline) === 'pending'"
-                     :class="badgeAccentClasses(calendar.accentIndexFor(deadline.id), false)"
                      class="text-xs">
                 <Clock class="size-3 mr-1" /> Pending
               </Badge>
@@ -166,7 +159,6 @@
                 <AlertCircle class="size-3 mr-1" /> Overdue
               </Badge>
               <Badge v-else-if="getDeadlineStatus(deadline) === 'completed'"
-                     :class="badgeAccentClasses(calendar.accentIndexFor(deadline.id), true)"
                      class="text-xs">
                 <CheckCircle class="size-3 mr-1" /> Done
               </Badge>

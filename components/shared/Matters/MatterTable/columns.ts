@@ -47,5 +47,22 @@ export const columns: ColumnDef<MattersRecord>[] = [
             return '-';
         }
 
+    },
+    {
+        accessorKey: 'members',
+        header: () => h('div', { class: 'font-semibold ibm-plex-serif' }, 'Lawyers'),
+        cell: ({ row }) => {
+            const matter = row.original;
+
+            return h('div', {
+                class: 'flex flex-row -space-x-4 items-center ibm-plex-serif',
+            }, [
+                matter?.expand?.members?.map(m => {
+                    return h('div', { class: 'size-8 border rounded-full text-xs bg-muted grid place-items-center text-muted-foreground' }, m?.name?.split(' ').map(n => n[0]).join(''))
+                })
+            ])
+
+        }
+
     }
 ]

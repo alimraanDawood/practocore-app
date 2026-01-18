@@ -30,7 +30,7 @@ const _acknowledgeReminder = async () => {
         // reload reminder
         loading.value = true;
         deadlineReminder.value = await getDeadlineReminder(useRoute().params?.reminderId, {expand: 'deadline'});
-        loading.value = true;
+        loading.value = false;
 
         console.log(data);
         return 'Successfully Acknowledged Reminder!'
@@ -59,11 +59,11 @@ const _acknowledgeReminder = async () => {
             class="font-semibold text-2xl ibm-plex-serif text-center">Reminder Not Found!</span>
 
         <NuxtLink to="/main/" class="w-full">
-          <Button class="w-full" variant="secondary">Take me to main</Button>
+          <Button class="w-full" variant="secondary">Take me home</Button>
         </NuxtLink>
       </div>
 
-      <div v-else-if="deadlineReminder?.acknowledged"
+      <div v-else-if="deadlineReminder?.acknowledgedBy?.length > 0"
            class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
         <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5"/>
 
@@ -71,7 +71,7 @@ const _acknowledgeReminder = async () => {
             class="font-semibold text-2xl ibm-plex-serif text-center">Reminder Acknowledged!</span>
 
         <NuxtLink to="/main/" class="w-full">
-          <Button class="w-full" variant="secondary">Take me to main</Button>
+          <Button class="w-full" variant="secondary">Take me home</Button>
         </NuxtLink>
 
         <Button variant="outline" class="w-full">View Matter</Button>
@@ -91,7 +91,9 @@ const _acknowledgeReminder = async () => {
           <Button class="w-full" variant="secondary">Ignore</Button>
         </NuxtLink>
 
-        <Button variant="destructive" class="w-full">Complete Deadline</Button>
+        <SharedDeadlineCompleteDeadline :deadline="deadlineReminder?.expand?.deadline">
+          <Button variant="destructive" class="w-full">Complete Deadline</Button>
+        </SharedDeadlineCompleteDeadline>
       </div>
     </div>
   </div>

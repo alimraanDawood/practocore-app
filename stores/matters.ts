@@ -115,7 +115,7 @@ export const useMattersStore = defineStore('matters', {
         }
 
         // Build search filter if query exists
-        const searchFilter = this.query.trim() ? `name ~ '${this.query}'` : '';
+        const searchFilter = this.query.trim() ? `name ~ '${this.query}' || caseNumber ~ '${this.query}'` : '';
 
         // Combine filters
         let combinedFilter = '';

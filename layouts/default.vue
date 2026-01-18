@@ -2,13 +2,6 @@
   <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
     <SharedDesktopTitleBar class="hidden xs:flex" />
 
-    <Vue3PullToRefresh
-        :distance="50"
-        :duration="2000"
-        :size="32"
-        :options="{ color: '#111', bgColor: '#fff' }"
-    />
-
     <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
       <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
         <div class="flex flex-col">
@@ -78,7 +71,9 @@
         </div>
       </div>
 
-      <slot />
+      <div class="flex flex-col w-full items-center h-full overflow-hidden">
+        <slot />
+      </div>
 
       <SharedMobileNavigation class="w-full xs:hidden" />
     </div>
