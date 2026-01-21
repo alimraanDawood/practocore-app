@@ -112,7 +112,7 @@
                         <div class="flex flex-col w-full h-full overflow-y-hidden">
                             <div
                                 v-if="displayMode === 'grid' || $viewport.isLessThan('customxs')"
-                                class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 h-full gap-3 p-3 overflow-y-scroll">
+                                class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 h-full gap-3 p-3 content-start overflow-y-scroll">
                                 <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
@@ -124,7 +124,7 @@
                                         <Check class="size-3 stroke-3" />
                                     </div>
                                 </div>
-                              <div class=" flex flex-col sm:hidden items-center justify-between gap-3 p-3 border-t">
+                              <div v-if="(mattersStore?.totalItems / mattersStore?.perPage) > 1" class=" flex flex-col sm:hidden items-center justify-between gap-3 p-3 border-t">
                                 <div class="text-sm text-muted-foreground">
                                   Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
                                 </div>

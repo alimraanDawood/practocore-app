@@ -1,6 +1,6 @@
 import { pb as pocketbase } from '~/lib/pocketbase';
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://localhost:8090";
 
 
 export async function getOrganisationUsers(page : number, perPage: number, options : Object) {

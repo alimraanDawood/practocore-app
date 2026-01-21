@@ -10,38 +10,31 @@
       </div>
 
 
-      <!-- Header -->
-      <div v-if="isTauri && !isMainWindow" data-tauri-drag-region
-           class="flex flex-row w-full px-3 py-2 items-center border-b">
-        <div class="flex flex-row w-full">
-          <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
-            <Button size="sm" variant="outline">Login Instead</Button>
-          </NuxtLink>
-        </div>
-        <div class="flex flex-row w-full text-center  items-center justify-center">
-          <span class="ibm-plex-serif">Getting Started With PractoCore</span>
-        </div>
-        <div class="flex flex-row w-full justify-end">
-          <button @click="closeWindow" class="bg-muted text-muted-foreground p-1 rounded-full">
-            <X class="size-4"/>
-          </button>
-        </div>
-      </div>
 
-      <div v-else class="flex w-full  flex-row items-center justify-between p-5 border-b">
+      <div class="flex w-full  flex-row items-center justify-between p-3 border-b">
         <div class="flex items-center gap-2">
-          <img src="@/assets/img/logos/Practo%20Core%20Horizontal.svg" class="h-8 w-auto dark:hidden"/>
-          <img src="@/assets/img/logos/Practo%20Core%20Horizontal%20--%20Dark.svg"
-               class="h-8 w-auto dark:block hidden"/>
+          <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" alt="logo" class="h-8 w-auto"/>
+          <span class="text-lg font-semibold ibm-plex-serif">PractoCore</span>
         </div>
-        <Button
-            v-if="currentStep > 0 && currentStep < steps.length - 1"
-            variant="ghost"
-            size="sm"
-            @click="skipStep"
-        >
-          Skip
-        </Button>
+        <div class="flex flex-row gap-2 items-center">
+          <SharedDarkModeSwitch />
+          <Button
+              v-if="currentStep > 0 && currentStep < steps.length - 1"
+              variant="outline"
+              size="sm"
+              @click="skipStep"
+          >
+            Skip
+          </Button>
+
+          <div v-if="isTauri" class="flex flex-row items-center gap-2">
+            <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
+            <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
+              <Maximize2 class="size-3 stroke-3" />
+            </button>
+            <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
+          </div>
+        </div>
       </div>
 
       <!-- Content Area -->
@@ -233,30 +226,50 @@
             </div>
 
             <div class="flex flex-col w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow class="bg-muted divide-x border">
-                      <TableHead class="w-[150px] font-semibold ibm-plex-serif">Case Number</TableHead>
-                      <TableHead class="font-semibold ibm-plex-serif">Case Name</TableHead>
-                      <TableHead class="font-semibold ibm-plex-serif">Upcoming Deadline</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody class="divide-y border border-t-0">
-                    <TableRow v-for="(matter, index) in matters?.items || []" class="divide-x">
-                      <TableCell>{{ matter?.caseNumber }}</TableCell>
-                      <TableCell>{{ matter?.name }}</TableCell>
-                      <TableCell>
-                        <div class="flex flex-row gap-1 items-center">
-                          <Clock class="size-4" />
+                <div class="lg:block hidden">
+                  <Table class="w-full">
+                    <TableHeader>
+                      <TableRow class="bg-muted divide-x border">
+                        <TableHead class="w-[150px] font-semibold ibm-plex-serif">Case Number</TableHead>
+                        <TableHead class="font-semibold ibm-plex-serif">Case Name</TableHead>
+                        <TableHead class="font-semibold ibm-plex-serif">Upcoming Deadline</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody class="divide-y border border-t-0">
+                      <TableRow v-for="(matter, index) in matters?.items || []" class="divide-x">
+                        <TableCell>{{ matter?.caseNumber }}</TableCell>
+                        <TableCell>{{ matter?.name }}</TableCell>
+                        <TableCell>
+                          <div class="flex flex-row gap-1 items-center">
+                            <Clock class="size-4" />
 
-                          <span>
-                            {{ dayjs(matter?.expand?.deadlines?.sort((a, b) => new Date(a) - new Date(b))?.at(0)?.date)?.fromNow() || 'UNKOWN DATE' }}
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
+                            <span>
+                              {{ dayjs(matter?.expand?.deadlines?.sort((a, b) => new Date(a) - new Date(b))?.at(0)?.date)?.fromNow() || 'UNKOWN DATE' }}
+                            </span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+                <div class="lg:hidden flex flex-col bg-muted divide-y border rounded-lg">
+                  <div v-for="matter in matters?.items" class="flex flex-col gap-2 p-3">
+                    <div class="flex flex-row gap-1 items-center">
+                      <span class="text-sm text-muted-foreground">Matter</span>
+                      <div class="bg-muted-foreground size-1.5 rounded-full"></div>
+                      <span class="text-sm text-muted-foreground">{{ matter?.caseNumber }}</span>
+                    </div>
+
+                    <span class="ibm-plex-serif text-xl">
+                      {{ matter?.name }}
+                    </span>
+
+                    <div class="flex flex-row gap-2 items-center">
+                      <Clock class="size-4" />
+                      {{ dayjs(matter?.expand?.deadlines?.sort((a, b) => new Date(a) - new Date(b))?.at(0)?.date)?.fromNow() || 'UNKNOWN DATE' }}
+                    </div>
+                  </div>
+                </div>
               </div>
           </div>
 
@@ -385,8 +398,8 @@
       </div>
 
       <!-- Footer Navigation -->
-      <div class="flex flex-row w-full gap-3 items-center justify-center p-5 border-t bg-background">
-        <div class="flex flex-row w-fit gap-5">
+      <div class="flex flex-row w-full gap-3 items-center justify-center p-3 border-t bg-background">
+        <div class="flex flex-row w-full lg:w-fit gap-5">
           <Button
               variant="outline"
               @click="previousStep"
@@ -422,7 +435,7 @@ import {useRouter} from 'vue-router'
 import {
   ArrowLeft, ArrowRight, Bell, BellRing, Camera, CalendarCheck,
   CheckCircle2, Clock, Mail, Plus, Send, Smartphone, Sparkles,
-  Upload, UserPlus, Users, X
+  Upload, UserPlus, Users, X, Minus, Maximize2
 } from 'lucide-vue-next';
 import {Cropper} from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
@@ -466,7 +479,7 @@ const isOrganizationUser = computed(() => !!user.value?.organisation);
 const isOrganizationAdmin = ref(false);
 
 // Step management
-const currentStep = ref(3)
+const currentStep = ref(0)
 const steps = computed(() => {
   const baseSteps = [
     {id: 'welcome', title: 'Welcome', required: false},
@@ -797,7 +810,7 @@ onMounted(async () => {
     }
 
 
-    await reloadMatters();
+    reloadMatters();
 
   } catch (error) {
     console.error('Failed to load preferences:', error)
@@ -833,6 +846,17 @@ onUnmounted(() => {
 const isTauri = computed(() => {
   return '__TAURI_INTERNALS__' in window;
 });
+
+
+const minimizeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.minimize();
+}
+
+const toggleMaximizeWindow = () => {
+  const currentWindow = getCurrentWindow();
+  currentWindow?.toggleMaximize();
+}
 
 const isMainWindow = computed(() => {
   const currentWindow = getCurrentWindow();

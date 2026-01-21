@@ -13,7 +13,7 @@ onMounted(async () => {
 });
 
 const fetchDetails = async () => {
-  registrars.value = await getRegistrars(1, 100, { filter: props.judges.map(j => `judge = '${j}'`).join(' || '), expand: 'judge' });
+  registrars.value = await getRegistrars(1, 100, { filter: `court = '${props.court}'`, expand: 'court' });
   clerks.value = await getClerks(1, 100, { filter: props.judges.map(j => `judge = '${j}'`).join(' || '), expand: 'judge' });
 }
 
@@ -41,7 +41,7 @@ watch(() => props.judges, async () => {
           <span class="ibm-plex-serif font-semibold text-sm">Registrars</span>
           <div class="flex flex-col divide-y">
             <div v-for="registrar in registrars.items" class="flex flex-col w-full py-1">
-              <span class="text-xs">Working for: <span class="font-semibold">{{ registrar?.expand?.judge?.name }}</span></span>
+              <span class="text-xs">Working for: <span class="font-semibold">{{ registrar?.expand?.court?.name }}</span></span>
               <span>{{ registrar.name }}</span>
             </div>
           </div>

@@ -2,7 +2,7 @@ import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import { pb as pocketbase } from '~/lib/pocketbase';
 import {options} from "kolorist";
 
-const SERVER_URL = "https://api.practocore.com";
+const SERVER_URL = "http://localhost:8090";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
