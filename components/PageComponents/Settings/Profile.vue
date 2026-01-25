@@ -1,8 +1,8 @@
 <template>
   <div class="flex flex-col space-y-3">
     <div class="flex flex-col">
-      <span class="text-xl">Account</span>
-      <span class="text-sm">Update your account settings. Set your preferred language and timezone. </span>
+      <h2 class="text-2xl font-semibold ibm-plex-serif">Account</h2>
+      <p class="text-sm text-muted-foreground">Update your account settings. Set your preferred language and timezone.</p>
     </div>
 
     <Separator/>

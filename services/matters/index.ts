@@ -1,8 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
-import { pb as pocketbase } from '~/lib/pocketbase';
 import {options} from "kolorist";
+import { pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
 
-const SERVER_URL = "http://localhost:8090";
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
@@ -133,6 +132,7 @@ export async function updateDeadline(deadlineId: string, options: Object) {
 }
 
 export async function fulfillDeadline(deadline: Deadline, date: string) {
+    console.log(deadline);
     return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
         method: 'POST',
         body: JSON.stringify({
@@ -320,7 +320,7 @@ export async function acknowledgeReminder(reminderId: string) {
  * @param deadlineId - Deadline ID
  */
 export async function resetDeadline(deadlineId: string) {
-    return fetch(`${SERVER_URL}/api/practocore/deadlines/${deadlineId}/reset`, {
+    return fetch(`${SERVER_URL}/api/practocore/deadlines/reset/${deadlineId}`, {
         method: 'POST',
         headers: {
             'Authorization': pocketbase.authStore.token,

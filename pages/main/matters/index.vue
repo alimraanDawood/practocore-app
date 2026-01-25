@@ -169,7 +169,11 @@
                             </div>
 
                           <div v-else class="flex flex-col w-full h-full p-3">
-                            <SharedMattersMatterTable :columns="columns" :data="matters?.items || []" />
+                            <SharedMattersMatterTable
+                              :columns="columns"
+                              :data="matters?.items || []"
+                              @selection-change="onTableSelectionChange"
+                            />
                           </div>
 
                             <!-- Pagination -->
@@ -294,6 +298,17 @@ import { useDashboardStore } from '~/stores/dashboard';
 import MatterTable from '~/components/shared/Matters/MatterTable/MatterTable.vue';
 import { columns } from '@/components/shared/Matters/MatterTable/columns';
 import {getSignedInUser} from "~/services/auth";
+import { Capacitor } from "@capacitor/core";
+import { Haptics } from "@capacitor/haptics";
+
+const triggerSelectionHaptic = async () => {
+  if (!Capacitor.isNativePlatform()) return
+  try {
+    await Haptics.selectionChanged()
+  } catch (e) {
+    console.warn("Haptics failed:", e)
+  }
+}
 
 definePageMeta({
   layout: 'no-mobile-top-bar'
@@ -311,11 +326,12 @@ const setTab = (newVal : string) => {
     activeTab.value = newVal;
 }
 
-const displayMode = ref('grid'); // grid || table
+const displayMode = useLocalStorage('matters-display-mode', 'grid') // grid || table
 
 function onLongPressCallbackDirective(e: PointerEvent, matter: any) {
     longPressedDirective.value = true
     mattersStore.activateSelectionWith(matter);
+    triggerSelectionHaptic();
 }
 
 function resetDirective() {
@@ -407,6 +423,17 @@ watch(query, () => {
     mattersStore.fetchMatters();
 });
 
+const onTableSelectionChange = (selectedRows: any[]) => {
+    if (selectedRows.length > 0) {
+        selection.value.active = true
+        selection.value.selected = selectedRows
+    } else {
+        selection.value.active = false
+        selection.value.selected = []
+    }
+    triggerSelectionHaptic();
+}
+
 const onMatterTap = (matter: any) => {
     if (selection.value.active) {
         const exists = selection.value.selected.find(p => p.id === matter.id);
@@ -420,6 +447,7 @@ const onMatterTap = (matter: any) => {
         } else {
             selection.value.selected.push(matter);
         }
+        triggerSelectionHaptic();
         return;
     }
     console.log("Matter")

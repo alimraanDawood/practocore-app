@@ -1,8 +1,8 @@
 <template>
     <div class="flex flex-col space-y-3">
         <div class="flex flex-col">
-            <span class="text-xl">Notifications </span>
-            <span class="text-sm">Configure how you receive notifications. </span>
+          <h2 class="text-2xl font-semibold ibm-plex-serif">Notifications</h2>
+          <p class="text-sm text-muted-foreground">Configure how you receive notifications. </p>
         </div>
 
         <Separator />
@@ -57,25 +57,24 @@
             </FormField>
 
             <FormField v-slot="{ value, handleChange }" name="reminder_time">
-                <FormItem class="flex flex-col items-center justify-between rounded-lg border p-4">
-                    <div class="flex flex-col w-full gap-2">
-                        <div class="space-y-0.5">
-                            <FormLabel class="text-base">
-                                Reminder Time
-                            </FormLabel>
-                            <FormDescription>
-                                Set the time for daily reminders (HH:mm).
-                            </FormDescription>
-                        </div>
-                        <FormControl>
-                            <input
-                                type="time"
-                                class="input border w-full"
-                                :value="value"
-                                @input="handleChange($event.target.value)"
-                            />
-                        </FormControl>
+                <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div class="space-y-0.5">
+                        <FormLabel class="text-base">
+                            Reminder Time
+                        </FormLabel>
+                        <FormDescription>
+                            Set the time for daily reminders.
+                        </FormDescription>
                     </div>
+                    <FormControl>
+                        <SharedTimePicker
+                            :model-value="value"
+                            button-variant="outline"
+                            button-size="sm"
+                            type="button"
+                            @update:model-value="handleChange"
+                        />
+                    </FormControl>
                 </FormItem>
             </FormField>
 
@@ -89,12 +88,11 @@
 </template>
 
 <script setup>
-import { ChevronsUpDown, Loader, Server } from 'lucide-vue-next';
+import { Loader } from 'lucide-vue-next';
 import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
-import { cn } from '~/lib/utils';
 import * as z from 'zod';
-import { getSignedInUser, getUserPreferences, updateUser, updateUserPreferences } from '~/services/auth';
+import { getUserPreferences, updateUserPreferences } from '~/services/auth';
 import { toast } from 'vue-sonner';
 
 const formSchema = toTypedSchema(z.object({
@@ -107,7 +105,6 @@ const formSchema = toTypedSchema(z.object({
 const loading = ref(false);
 
 const form = useForm({ validationSchema: formSchema });
-const { setFieldValue } = form;
 
 const submitForm = form.handleSubmit(async (values) => {
     loading.value = true;

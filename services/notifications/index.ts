@@ -1,9 +1,6 @@
-import PocketBase from "pocketbase";
 import type { PushNotificationPayload, OrganizationPushPayload, PushNotificationResponse } from '~/types/push-notifications';
 import type { Notification, NotificationListResponse, CreateNotificationPayload } from '~/types/notifications';
-
-const SERVER_URL = "http://localhost:8090";
-const pocketbase = new PocketBase(SERVER_URL);
+import { pb as pocketbase, SERVER_URL } from '~/lib/pocketbase';
 
 pocketbase.autoCancellation(false);
 

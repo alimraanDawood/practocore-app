@@ -4,6 +4,8 @@ import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { Check } from "lucide-vue-next"
 import { CheckboxIndicator, CheckboxRoot, useForwardPropsEmits } from "reka-ui"
+import { Capacitor } from "@capacitor/core"
+import { Haptics, ImpactStyle } from "@capacitor/haptics"
 import { cn } from "@/lib/utils"
 
 const props = defineProps<CheckboxRootProps & { class?: HTMLAttributes["class"] }>()
@@ -12,6 +14,15 @@ const emits = defineEmits<CheckboxRootEmits>()
 const delegatedProps = reactiveOmit(props, "class")
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
+
+const triggerHaptic = async () => {
+  if (!Capacitor.isNativePlatform()) return
+  try {
+    await Haptics.impact({ style: ImpactStyle.Light })
+  } catch (e) {
+    console.warn("Haptics failed:", e)
+  }
+}
 </script>
 
 <template>
@@ -21,6 +32,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     :class="
       cn('peer border-input data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50',
          props.class)"
+    @click="triggerHaptic"
   >
     <CheckboxIndicator
       data-slot="checkbox-indicator"

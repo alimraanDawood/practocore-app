@@ -13,9 +13,7 @@ import PocketBase from 'pocketbase';
 import type { DeviceTokenRecord, NotificationData } from '~/types/push-notifications';
 import { toast } from "vue-sonner";
 import { firebaseConfig, vapidKey } from '~/config/firebase.config';
-
-const SERVER_URL = "http://localhost:8090";
-const pocketbase = new PocketBase(SERVER_URL);
+import { pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
 
 // Store Firebase messaging instance for web
 let firebaseMessaging: Messaging | null = null;

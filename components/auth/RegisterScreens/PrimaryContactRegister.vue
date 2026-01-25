@@ -40,7 +40,7 @@ const onSubmit = form.handleSubmit((values) => {
   <div class="flex flex-col gap-5 h-full justify-center">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Primary Contact Information</span>
-      <span class="text-sm">Let's set up your firm's PractoCore workspace</span>
+      <span class="text-sm">This person will manage the firm's account and receive critical notifications.</span>
     </div>
     
     <form @submit="onSubmit" class="flex flex-col w-full gap-6">

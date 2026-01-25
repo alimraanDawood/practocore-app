@@ -1,24 +1,6 @@
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden items-center">
     <div class="flex flex-col h-full lg:w-[90vw] w-full">
-      <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
-        <Button @click="$router.go(-1)" size="icon" variant="ghost">
-          <ArrowLeft/>
-        </Button>
-
-        <div class="flex flex-row relative w-full">
-          <marquee class="text-lg font-semibold ibm-plex-serif">{{ matter?.name }}</marquee>
-          <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
-        </div>
-
-        <div class="flex flex-row gap-2 items-center">
-          <SharedDarkModeSwitch/>
-          <Button size="icon" variant="secondary">
-            <Bell/>
-          </Button>
-        </div>
-      </div>
-
       <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full overflow-hidden">
         <!-- Tabs -->
         <div

@@ -25,7 +25,7 @@
               </span>
             </div>
 
-            <SharedMattersChangeTriggerDate v-if="isSupervisor" :matter="matter" @updated="emits('updated')">
+            <SharedMattersChangeTriggerDate v-if="isSupervisor && false" :matter="matter" @updated="emits('updated')">
               <button class="rounded bg-primary/10 text-primary px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-primary/20 transition-colors">
                 <CalendarIcon class="size-3"/>
                 Change Date
@@ -51,6 +51,12 @@
         <div class="flex flex-col text-left w-full p-2 pb-8 gap-2">
           <div class="flex flex-row items-center justify-between gap-2">
             <div class="flex flex-col gap-1 flex-1">
+              <div v-if="deadline?.application" class="flex flex-row gap-2">
+                <Badge variant="outline">Application</Badge>
+
+                <Badge variant="secondary">{{ matter?.expand?.applications?.find(a => a.id === deadline?.application)?.type }}</Badge>
+              </div>
+
               <button
                   @click="$emit('deadlineSelected', deadline.id)"
                   class="text-left w-fit font-semibold ibm-plex-serif underline hover:text-primary"
@@ -141,7 +147,7 @@
             </SharedDeadlineCompleteDeadline>
 
             <button
-                v-if="isSupervisor"
+                v-if="isSupervisor && false"
                 @click="handleResetDeadline(deadline)"
                 class="rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-amber-500/20 transition-colors"
             >
@@ -266,6 +272,7 @@ const formatPartyType = (type) => {
     government: "Government",
     other: "Other",
   };
+
   return typeMap[type] || type;
 };
 

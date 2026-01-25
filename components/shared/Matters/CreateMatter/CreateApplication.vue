@@ -114,32 +114,6 @@
                     </FormItem>
                   </FormField>
 
-                  <FormField
-                      v-if="getSignedInUser()?.organisation"
-                      v-slot="{ value, handleChange }"
-                      name="personal"
-                  >
-                    <FormItem
-                        class="flex flex-row items-start justify-between rounded-lg border p-4"
-                    >
-                      <FormControl>
-                        <Switch
-                            :model-value="value"
-                            @update:model-value="handleChange"
-                        />
-                      </FormControl>
-                      <div class="space-y-0.5">
-                        <FormLabel class="text-base">
-                          Make this Matter Private
-                        </FormLabel>
-                        <FormDescription>
-                          This will prevent other members of the organisation from
-                          viewing this matter.
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  </FormField>
-
                   <FormField name="court" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
                       <FormLabel>Court</FormLabel>
@@ -216,7 +190,16 @@
                     </p>
                   </div>
 
+                  <label class="flex flex-col p-3 border gap-3 rounded-lg bg-muted/20">
+                    <div class="flex flex-col gap-1">
+                      <span class="font-semibold">Inherit Parties</span>
+                      <span class="text-sm text-muted-foreground">This will use the parties of the parent matter in this application. Any changes made to the parent matter's parties will reflect in this application.</span>
+                    </div>
+                    <Switch v-model="inheritParties" />
+                  </label>
+
                   <SharedMattersCreateMatterParties
+                      v-if="!inheritParties"
                       ref="partiesRef"
                       v-model="parties"
                       v-model:representing="representing"
@@ -324,7 +307,7 @@
                       size="sm"
                       type="submit"
                   >
-                    <span v-if="!loading">Create Matter</span>
+                    <span v-if="!loading">Create Application</span>
                     <Loader class="animate-spin" v-else />
                   </Button>
                 </div>
@@ -597,6 +580,8 @@ const formSchema = computed(() => {
   ];
 });
 
+const inheritParties = ref(false);
+
 const __formSchema = computed(() => {
   const step3Schema = buildStep3Schema();
 
@@ -679,11 +664,6 @@ watch(
 );
 
 function adaptPartyProfile(newTemplateProfile : any) {
-  console.log(newTemplateProfile);
-  console.log(parties.value);
-  console.log(representing.value);
-  console.log(props.parentMatter?.partyConfig)
-
   if(!newTemplateProfile)
     return;
 
@@ -727,6 +707,8 @@ watch(open, () => {
 
 // Helper to check if party step is valid
 const isPartyStepValid = computed(() => {
+  if(inheritParties.value) return true;
+
   if (stepIndex.value !== partyStepIndex.value) return true;
   if (!selectedTemplate?.value?.template?.data?.parties?.enabled) return true;
 
@@ -847,7 +829,6 @@ const onSubmit = async (values: any) => {
     const result = await createApplication(props.parentMatter?.id,{
       name: values.name,
       caseNumber: values.caseNumber.toString(),
-      personal: values.personal ? true : false,
       members: values.members ? values.members.map((m) => m?.id) : [],
       templateId: values.template?.id,
       date: values.fields.date,
@@ -860,9 +841,10 @@ const onSubmit = async (values: any) => {
         parties: cleanedParties,
         representing: representing.value,
       }),
+      inheritParties: inheritParties.value
     });
 
-    if (result) toast.success("Matter Created Successfully!");
+    if (result) toast.success("Application Created Successfully!");
     emits("created");
 
     formRef.value?.resetForm();
@@ -872,7 +854,7 @@ const onSubmit = async (values: any) => {
 
     open.value = false;
   } catch (e) {
-    toast.error("Unable to create matter at this time!");
+    toast.error("Unable to create application at this time!");
     console.error(e);
   } finally {
     loading.value = false;

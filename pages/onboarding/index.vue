@@ -41,7 +41,7 @@
       <div class="flex flex-col w-full h-full items-center overflow-hidden">
         <div class=" overflow-y-scroll flex flex-col w-full max-w-3xl h-full border-x">
           <!-- Welcome Screen -->
-          <div v-if="currentStep === 0" class="flex flex-col gap-6 p-5 animate-in fade-in duration-500">
+          <div v-if="currentStep === 0" class="flex flex-col lg:items-center lg:justify-center lg:text-center h-full gap-6 p-5 animate-in fade-in duration-500">
             <div class="flex flex-col gap-3">
               <h1 class="text-4xl font-bold ibm-plex-serif">
                 Welcome to PractoCore
@@ -53,9 +53,7 @@
 
             <div class="flex flex-col">
               <span
-                  class="text-sm text-muted-foreground">PractoCore is an <b>intelligent deadline management software</b> built specifically for <b>litigation lawyers</b> in Uganda. It
-  automatically calculates and schedules <b>filing deadlines</b>, sends <b>appropriates reminders</b>, and ensures
-                that you and your team <b>never misses a critical deadline</b>.</span>
+                  class="text-sm lg:text-lg text-muted-foreground">PractoCore automatically calculates court deadlines under Ugandan civil procedure rules, sends timely reminders, and helps ensure you and your team never miss a filing date.</span>
             </div>
           </div>
 

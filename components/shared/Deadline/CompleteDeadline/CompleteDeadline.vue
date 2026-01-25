@@ -80,7 +80,7 @@
 
             <SheetFooter>
                 <Button 
-                    @click="fulfillDeadline" 
+                    @click="_fulfillDeadline"
                     class="disabled:opacity-50" 
                     :disabled="loading">
                     <span v-if="!loading">Use Date</span>

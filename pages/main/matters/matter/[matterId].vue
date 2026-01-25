@@ -6,24 +6,45 @@
       </Button>
 
       <div class="flex flex-row relative w-full">
-        <marquee class="text-lg font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</marquee>
+        <marquee class="text-lg font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name || "Matter not found" }}</marquee>
         <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
       </div>
 
       <div class="flex flex-row gap-2 items-center">
         <SharedDarkModeSwitch/>
 
-        <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
-          <SharedAvatarStack :members="currentMatterOrApplication?.expand?.members" :max-visible="3"/>
+        <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
+          <SharedAvatarStack :members="matter?.expand?.members" :max-visible="3"/>
         </SharedMattersMemberManagement>
       </div>
     </div>
   </div>
+  <div v-if="isInitialLoad" class="flex flex-col w-full h-full items-center justify-center">
+    <Loader class="animate-spin" />
+  </div>
+  <div v-else-if="!(currentMatterOrApplication?.id)" class="flex flex-col w-full h-full items-center">
+    <div class="flex flex-col w-full lg:flex-row items-center justify-center lg:w-[95vw] h-full lg:border-x lg:divide-x">
+      <div class="flex flex-col text-center p-3 items-center gap-2 lg:gap-4 max-w-sm">
+        <XCircle class="size-32 text-muted-foreground mb-5" />
+        <span class="ibm-plex-serif text-2xl lg:text-3xl font-semibold">Matter Not Found!</span>
+        <span class="text-muted-foreground">The matter you're looking for doesn't exist or may have been deleted.</span>
 
-  <div class="flex flex-col w-full h-full items-center overflow-y-scroll">
+        <div class="flex gap-2 items-center">
+          <Button variant="outline" @click="$router.go(-1)"><ChevronLeft /> Go Back</Button>
+
+          <CreateMatter @created="m => $router.push(`/main/matters`)">
+            <Button><Plus /> Create a new matter</Button>
+          </CreateMatter>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="flex flex-col w-full h-full items-center overflow-y-scroll">
     <div class="flex flex-col w-full lg:flex-row lg:w-[95vw] h-full lg:border-x lg:divide-x">
       <div class="flex flex-col w-full overflow-y-scroll">
         <div class="xs:flex flex-col w-full hidden p-3">
+          <Badge variant="secondary" v-if="currentMatterOrApplication?.collectionName === 'Applications'">Application</Badge>
           <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
@@ -145,7 +166,9 @@
 
 <script setup>
 import {
+  ChevronLeft,
   Plus,
+  Loader,
   CalendarIcon,
   XCircle,
   CheckCircle,
@@ -168,9 +191,11 @@ import dayjs from 'dayjs';
 import {Calendar} from '@/components/ui/calendar_enhanced';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
+import relativeTime from "dayjs/plugin/relativeTime";
 import {toast} from 'vue-sonner';
 import AdjournDeadline from '~/components/shared/Deadline/AdjournDeadline/AdjournDeadline.vue';
 import {getSignedInUser, signOut} from "~/services/auth/index.js";
+import CreateMatter from "~/components/shared/Matters/CreateMatter/CreateMatter.vue";
 
 const mattersStore = useMattersStore();
 
@@ -204,6 +229,7 @@ const signOutUser = () => {
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(relativeTime);
 
 const selectedDeadline = ref(null);
 

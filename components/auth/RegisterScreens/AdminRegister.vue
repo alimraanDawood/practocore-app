@@ -59,9 +59,9 @@ async function continueWithGoogle() {
 <template>
   <div class="flex flex-col gap-5 h-full w-full justify-center overflow-y-scroll">
     <div class="flex flex-col">
-      <span class="text-xl font-semibold">Create your personal account</span>
+      <span class="text-xl font-semibold">Create Your Login</span>
       <span v-if="inviteRef" class="text-sm">Your account will be added to <b>{{ inviteRef.invite.organisation.name }}</b></span>
-      <span v-else class="text-sm">Let's set up your firm's PractoCore workspace</span>
+      <span v-else class="text-sm">You'll use these credentials to access PractoCore.</span>
     </div>
 
     <div class="flex flex-col w-full gap-3">
@@ -123,7 +123,7 @@ async function continueWithGoogle() {
         </FormField>
 
         <Button class="w-full" type="submit">
-          Sign Up
+          Register
         </Button>
       </form>
 

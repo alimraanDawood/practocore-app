@@ -812,7 +812,7 @@ const onSubmit = async (values: any) => {
     });
 
     if (result) toast.success("Matter Created Successfully!");
-    emits("created");
+    emits("created", result);
 
     formRef.value?.resetForm();
     // Reset party state

@@ -10,8 +10,8 @@
         </div>
 
         <div class="flex flex-col w-full">
-          <span class="text-lg font-semibold">Set up my firm's account</span>
-          <span class="text-sm text-muted-foreground">I'm registering my law firm for the first time</span>
+          <span class="text-lg font-semibold">Register my law firm</span>
+          <span class="text-sm text-muted-foreground">For firms with multiple lawyers and support staff</span>
         </div>
 
         <div class="size-4 ring-2 ring-muted-foreground/20 rounded-full bg-muted shrink-0 grid place-items-center my-auto" :class="{ 'ring-tertiary': registerAs === 'ORG' }">
@@ -25,8 +25,8 @@
         </div>
 
         <div class="flex flex-col w-full">
-          <span class="text-lg font-semibold">Join as an individual</span>
-          <span class="text-sm text-muted-foreground">I am solo practitioner looking to use practocore</span>
+          <span class="text-lg font-semibold">Continue as solo practitioner</span>
+          <span class="text-sm text-muted-foreground">For individual lawyers managing their own deadlines</span>
         </div>
 
         <div class="size-4 ring-2 ring-muted-foreground/20 rounded-full bg-muted shrink-0 grid place-items-center my-auto" :class="{ 'ring-tertiary': registerAs === 'IND' }">

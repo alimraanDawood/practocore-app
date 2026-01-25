@@ -2,6 +2,7 @@
   <div class="flex flex-row px-3 h-16 shrink-0 justify-around items-center border-t bg-background">
     <NuxtLink to="/main">
       <button
+          @click="triggerHaptic"
           class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
           :class="{ 'font-semibold text-primary': $route.name === 'main' }">
         <Home class="size-5"/>
@@ -11,6 +12,7 @@
 
     <NuxtLink to="/main/matters">
       <button
+          @click="triggerHaptic"
           class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
           :class="{ 'font-semibold text-primary': $route.name === 'main-matters' }">
         <Scale class="size-5"/>
@@ -20,6 +22,7 @@
 
     <NuxtLink to="/main/calendar">
       <button
+          @click="triggerHaptic"
           class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
           :class="{ 'font-semibold text-primary': $route.name === 'main-calendar' }">
         <CalendarIcon class="size-5"/>
@@ -29,6 +32,7 @@
 
     <NuxtLink v-if="authStore.isAdmin" to="/main/organisation/">
       <button
+          @click="triggerHaptic"
           class="flex flex-col items-center disabled:opacity-50 text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
           :class="{ 'font-semibold text-primary': $route.name === 'main-organisation' }">
         <Users class="size-5"/>
@@ -77,6 +81,7 @@
 
     <NuxtLink to="/main/settings">
       <button
+          @click="triggerHaptic"
           class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
           :class="{ 'font-semibold text-primary': $route.name === 'main-settings' }">
         <Settings class="size-5"/>
@@ -88,8 +93,19 @@
 
 <script setup>
 import {Plus, Home, Settings, Scale, CalendarIcon, Users, ScrollText, EllipsisVertical} from 'lucide-vue-next';
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 const authStore = useAuthStore();
+
+const triggerHaptic = async () => {
+  if (!Capacitor.isNativePlatform()) return
+  try {
+    await Haptics.impact({ style: ImpactStyle.Light })
+  } catch (e) {
+    console.warn("Haptics failed:", e)
+  }
+}
 
 onMounted(() => {
   authStore.init();

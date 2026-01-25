@@ -1,5 +1,4 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
-import { pb as pocketbase } from '~/lib/pocketbase';
 import type {
   DeadlineTemplateRecord,
   EnhancedTemplate,
@@ -8,7 +7,8 @@ import type {
 } from '~/lib/types/template';
 import { enhanceTemplate } from '~/lib/types/template';
 
-const SERVER_URL = "http://localhost:8090";
+import { pb as pocketbase } from '~/lib/pocketbase';
+
 
 /**
  * Build PocketBase filter from category filter object

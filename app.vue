@@ -11,13 +11,10 @@ import { App } from '@capacitor/app';
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
+// Back button handling is auto-initialized by the composable
+useBackButton();
 
-const { setupBackButton } = useBackButton();
-
-
-onMounted(async () => {1
-  // Initialize notification system
-  setupBackButton();
+onMounted(async () => {
   console.log(await App.getLaunchUrl());
 });
 

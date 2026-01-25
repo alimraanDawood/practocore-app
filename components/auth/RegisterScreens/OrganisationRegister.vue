@@ -38,7 +38,6 @@ const onSubmit = form.handleSubmit((values) => {
   <div class="flex flex-col gap-5 h-full justify-center">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Register Your Law Firm</span>
-      <span class="text-sm">Let's set up your firm's PractoCore workspace</span>
     </div>
     
     <form @submit="onSubmit" class="flex flex-col w-full gap-6">
@@ -70,7 +69,7 @@ const onSubmit = form.handleSubmit((values) => {
             />
           </FormControl>
           <FormDescription>
-            Your firm's email domain (helps verify team members)
+            Team members with this domain can join automatically
           </FormDescription>
           <FormMessage />
         </FormItem>
