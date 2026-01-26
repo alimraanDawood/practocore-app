@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { CircleProgressBar } from 'vue3-m-circle-progress-bar';
 import { ArrowRight, Info, Loader, CalendarIcon, Clock, X, XCircle, Plus } from 'lucide-vue-next';
 import { getSignedInUser } from '~/services/auth';
@@ -8,6 +8,7 @@ import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
 import { storeToRefs } from 'pinia';
 import { useDashboardStore } from '~/stores/dashboard';
+import { TourGuideManager, type TourGuideStep } from "v-tour-guide";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -34,13 +35,91 @@ const reloadStatistics = async () => {
 
 // Optional: Add listener for notification actions
 onMounted(() => {
+  if (!hasCompletedTour()) {
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+      welcomeTourGuide.value?.startTourGuide();
+    }, 500);
+  }
 });
 
 onUnmounted(() => {
 });
+
+const welcomeTourGuide = ref<InstanceType<typeof TourGuideManager>>();
+
+const restartTour = () => {
+  welcomeTourGuide.value?.startTourGuide();
+}
+// Tour configuration
+const TOUR_STORAGE_KEY = 'practocore_welcome_tour_completed';
+
+// Check if user has completed the tour
+const hasCompletedTour = () => {
+  if (typeof window === 'undefined') return true;
+  return localStorage.getItem(TOUR_STORAGE_KEY) === 'true';
+}
+
+const markTourCompleted = () => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(TOUR_STORAGE_KEY, 'true');
+  }
+}
+
+// Shared tooltip styling
+const tooltipStyle = {
+  backgroundColor: "var(--color-background)",
+  textColor: "var(--color-foreground)",
+  buttonBackgroundColor: "var(--color-muted)",
+  buttonTextColor: "var(--color-muted-foreground)",
+  skipButtonColor: "var(--color-primary)",
+};
+
+const tourSteps: TourGuideStep[] = [
+  {
+    id: 'statistics',
+    target: 'statistics',
+    title: 'Your Dashboard at a Glance',
+    content: 'Track your progress here. See how many deadlines you\'ve completed, what\'s currently active, and if anything needs urgent attention.',
+    showAction: true,
+    tooltip: tooltipStyle
+  },
+  {
+    id: 'upcoming',
+    target: 'upcoming',
+    title: 'Stay Ahead of Your Deadlines',
+    content: 'Your most urgent matters appear here first. Click any matter to see all its deadlines and take action before time runs out.',
+    showAction: true,
+    tooltip: tooltipStyle
+  },
+  {
+    id: 'calendar',
+    target: 'calendar',
+    title: 'Plan Your Week',
+    content: 'Spot busy days at a glance. Dates with multiple deadlines are highlighted so you can plan ahead and avoid last-minute surprises.',
+    showAction: true,
+    tooltip: tooltipStyle
+  },
+  {
+    id: 'create-matter',
+    target: 'create-matter',
+    title: 'Ready to Get Started?',
+    content: 'Click here to create your first matter. PractoCore will automatically calculate all your deadlines based on your jurisdiction\'s rules.',
+    showAction: true,
+    tooltip: tooltipStyle
+  },
+]
+
+// Handle tour completion
+const onTourComplete = () => {
+  markTourCompleted();
+}
+
 </script>
 
 <template>
+  <TourGuideManager ref="welcomeTourGuide" :steps="tourSteps" @complete="onTourComplete" @skip="onTourComplete" />
+
   <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-scroll lg:overflow-y-hidden border-x">
     <div class="flex flex-col gap-3.5 p-3 lg:p-5 lg:flex-row lg:items-center justify-between border-b">
       <div class="xs:flex flex-col hidden">
@@ -48,7 +127,7 @@ onUnmounted(() => {
         <span>Welcome to PractoCore, Your Litigation Deadline Management Expert</span>
       </div>
 
-      <div class="flex flex-col xs:grid xs:grid-cols-2 lg:flex lg:flex-row gap-3">
+      <div data-tour-guide="statistics" class="flex flex-col xs:grid xs:grid-cols-2 lg:flex lg:flex-row gap-3">
         <div class="flex flex-col p-3 border bg-background">
           <span class="text-lg font-medium">{{ statistics?.completedDeadlines }}</span>
           <span class="text-xs">Completed Deadlines</span>
@@ -66,18 +145,27 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 h-full">
+    <div  class="grid grid-cols-1 lg:grid-cols-4 h-full">
       <div class="flex flex-col lg:col-span-3 border-r p-3 gap-3">
         <div class="flex flex-row justify-between">
           <div class="flex flex-row gap-1 items-center">
             <span class="font-semibold ibm-plex-sans">Upcoming Deadlines</span>
 
-            <Button size="icon" class="size-7" variant="ghost">
-              <Info />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button size="icon" class="size-7" variant="ghost">
+                  <Info />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem @click="restartTour" class="cursor-pointer">
+                  Take a tour
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
-          <SharedMattersCreateMatter @created="reloadStatistics" v-if="statistics?.matters?.length === 0">
+          <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics" v-if="statistics?.matters?.length === 0">
             <Button>
               <Plus />
 
@@ -90,19 +178,19 @@ onUnmounted(() => {
             </NuxtLink>
 
             <SharedMattersCreateMatter @created="reloadStatistics">
-              <Button size="icon-sm">
+              <Button data-tour-guide="create-matter" size="icon-sm">
                 <Plus />
               </Button>
             </SharedMattersCreateMatter>
           </div>
         </div>
 
-        <XyzTransition xyz="fade" mode="out-in">
+        <XyzTransition data-tour-guide="upcoming" xyz="fade" mode="out-in">
           <div v-if="loading" class="flex flex-col h-32 w-full bg-muted border rounded-xl place-items-center justify-center">
             <Loader class="size-5 animate-spin" />
           </div>
 
-          <div v-else-if="statistics?.matters?.length > 0"
+          <div  v-else-if="statistics?.matters?.length > 0"
                class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
             <NuxtLink v-for="matter in statistics?.matters" :to="`/main/matters/matter/${matter?.id}`">
               <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between hover:bg-muted hover:text-primary transition-colors ease-in-out duration-500">
@@ -183,7 +271,7 @@ onUnmounted(() => {
           </NuxtLink>
         </div>
 
-        <div class="flex flex-col border p-2 rounded-xl">
+        <div data-tour-guide="calendar" class="flex flex-col border p-2 rounded-xl">
           <PageComponentsHomeEventCalendar />
         </div>
       </div>
