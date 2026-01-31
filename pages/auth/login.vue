@@ -31,13 +31,6 @@ const isMainWindow = computed(() => {
 });
 
 const redirect = async () => {
-  // Check if we're running in Tauri desktop app
-  if (isTauri.value && isMainWindow.value) {
-    // In Tauri: close login window and show main window
-    console.log('Login successful, transitioning to main window');
-    await invoke('login_complete');
-    return;
-  }
 
   // In web/mobile: use normal routing
   if(query?.ref) {
@@ -72,22 +65,17 @@ const toggleMaximizeWindow = () => {
 <template>
 
   <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
-    <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
-      <div data-tauri-drag-region class="flex flex-row w-full">
+    <div class="flex flex-row w-full px-3 py-2 items-center border-b">
+      <div class="flex flex-row w-full">
         <NuxtLink :to="query?.ref ? `/auth/register?ref=${query?.ref}` : '/auth/register'">
           <Button size="sm" variant="outline">Sign Up Instead</Button>
         </NuxtLink>
       </div>
-      <div data-tauri-drag-region class="flex flex-row w-full text-center  items-center justify-center">
+      <div class="flex flex-row w-full text-center  items-center justify-center">
         <span class="ibm-plex-serif">Sign In to PractoCore</span>
       </div>
-      <div data-tauri-drag-region class="flex flex-row w-full justify-end gap-2 items-center">
+      <div class="flex flex-row w-full justify-end gap-2 items-center">
         <DarkModeSwitch class="mr-2" />
-        <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
-        <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
-          <Maximize2 class="size-3 stroke-3" />
-        </button>
-        <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
       </div>
     </div>
 

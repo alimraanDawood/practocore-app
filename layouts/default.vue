@@ -3,24 +3,6 @@
     <SharedDesktopTitleBar class="hidden xs:flex" />
 
     <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
-      <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
-        <div class="flex flex-col">
-          <span class="text-sm text-muted-foreground">{{ welcomeMessage }}</span>
-          <span class="font-medium">{{ getSignedInUser()?.name }}</span>
-        </div>
-
-        <div class="flex flex-row items-center gap-2">
-          <SharedDarkModeSwitch />
-
-          <SharedNotifications>
-            <Button size="icon" variant="secondary">
-              <Bell />
-            </Button>
-          </SharedNotifications>
-          <SharedProfile />
-        </div>
-      </div>
-
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">
         <div class="flex flex-col w-full lg:w-[95vw] bg-background gap-4 text-foreground p-5 pb-0 h-full">
           <div v-if="false" class="flex flex-row items-center gap-2">
@@ -72,7 +54,10 @@
       </div>
 
       <div class="flex flex-col w-full items-center h-full overflow-hidden">
-        <slot />
+        <NuxtPage :transition="{
+          name: 'page',
+          mode: 'out-in'
+        }" />
       </div>
 
       <SharedMobileNavigation class="w-full xs:hidden" />
@@ -87,12 +72,6 @@ import {computed, ref, onMounted} from "vue";
 import { Capacitor } from '@capacitor/core';
 import {Vue3PullToRefresh} from "@amirafa/vue3-pull-to-refresh";
 const hours = new Date().getHours();
-
-const welcomeMessage = computed(() => {
-  if (hours < 12) return 'Good Morning';
-  if (hours < 18) return 'Good Afternoon';
-  return 'Good Evening';
-});
 
 const signOutUser = () => {
   signOut();
@@ -111,3 +90,57 @@ onMounted(() => {
   isMobile.value = platform === 'android' || platform === 'ios';
 });
 </script>
+
+<style>
+/* Fade transition */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+/* Alternative: Slide transition (uncomment to use) */
+/*
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+*/
+
+/* Alternative: Scale transition (uncomment to use) */
+/*
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.25s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: scale(1.05);
+}
+*/
+</style>

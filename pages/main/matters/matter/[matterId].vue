@@ -1,8 +1,8 @@
 <template>
   <div class="flex flex-col w-full xs:hidden">
-    <div class="flex flex-row w-full items-center justify-between p-3 border-b">
-      <Button @click="$router.go(-1)" size="icon" variant="ghost">
-        <ArrowLeft/>
+    <div class="flex flex-row w-full items-center justify-between p-3 gap-3 border-b">
+      <Button @click="$router.go(-1)" size="icon" variant="outline">
+        <ArrowLeft class="size-4"/>
       </Button>
 
       <div class="flex flex-row relative w-full">

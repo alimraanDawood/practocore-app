@@ -1,9 +1,19 @@
 import {pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 export { pocketbase, SERVER_URL };
 
 export async function signUpWithGoogle() {
-    return pocketbase.collection('Users').authWithOAuth2({provider: 'google'});
+    return pocketbase.collection('Users').authWithOAuth2({
+        provider: 'google',
+        urlCallback: (url) => {
+            const isTauri = '__TAURI_INTERNALS__' in window;
+
+            if(isTauri) {
+                openUrl(url);
+            }
+        }
+    });
 }
 
 export async function getUserPreferences() {

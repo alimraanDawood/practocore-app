@@ -227,7 +227,7 @@ import {getTemplates, subscribeToTemplates} from '~/services/templates';
 import {getSignedInUser} from "~/services/auth/index.js";
 
 definePageMeta({
-  layout: 'no-mobile-top-bar'
+  layout: 'default'
 });
 
 const templates = ref(null);

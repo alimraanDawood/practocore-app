@@ -216,7 +216,7 @@ dayjs.extend(timezone);
 dayjs.extend(relativeTime);
 
 definePageMeta({
-  layout: 'no-mobile-top-bar'
+  layout: 'default'
 });
 
 const calendar = useCalendarStore();

@@ -311,7 +311,7 @@ const triggerSelectionHaptic = async () => {
 }
 
 definePageMeta({
-  layout: 'no-mobile-top-bar'
+  layout: 'default'
 })
 
 const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();

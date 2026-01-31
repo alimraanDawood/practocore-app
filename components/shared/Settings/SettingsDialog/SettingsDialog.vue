@@ -4,7 +4,11 @@
       <slot/>
     </DialogTrigger>
 
-    <DialogContent class="lg:!max-w-5xl xs:!max-w-[95vw] w-full p-0 max-h-[85vh] overflow-hidden">
+    <DialogContent class="flex flex-col gap-0 lg:!max-w-5xl xs:!max-w-[95vw] w-full p-0 max-h-[85vh] h-full overflow-hidden">
+      <div class="flex flex-col border-b p-3">
+        <span class="ibm-plex-serif font-semibold">Account Settings</span>
+      </div>
+
       <div class="flex flex-col lg:flex-row w-full  gap-3 h-full overflow-hidden">
         <!-- Tabs -->
         <div

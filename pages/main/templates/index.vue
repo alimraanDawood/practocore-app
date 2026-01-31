@@ -12,7 +12,7 @@ import { Plus, Grid3x3, List, Loader2 } from 'lucide-vue-next';
 definePageMeta({
   title: 'Template Marketplace',
   description: 'Browse and discover deadline templates',
-  layout: 'no-mobile-top-bar',
+  layout: 'default',
 });
 
 // State

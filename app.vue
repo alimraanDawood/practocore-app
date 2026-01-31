@@ -1,14 +1,14 @@
 <template>
   <NuxtLayout>
-    <NuxtLoadingIndicator :color="'#F9623AFF'" />
-    <Toaster />
-    <NuxtPage />
+    <NuxtLoadingIndicator :color="'#F9623AFF'"/>
+    <Toaster/>
+    <NuxtPage/>
   </NuxtLayout>
 </template>
 
 <script setup>
-import { App } from '@capacitor/app';
-import { Toaster } from '@/components/ui/sonner'
+import {App} from '@capacitor/app';
+import {Toaster} from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
 // Back button handling is auto-initialized by the composable

@@ -28,7 +28,7 @@
 
       <SharedProfile />
 
-      <div v-if="isTauri" class="flex flex-row items-center gap-2">
+      <div v-if="false" class="flex flex-row items-center gap-2">
         <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
         <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
           <Maximize2 class="size-3 stroke-3" />

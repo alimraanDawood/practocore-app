@@ -61,11 +61,6 @@ const toggleMaximizeWindow = () => {
       </div>
       <div data-tauri-drag-region class="flex flex-row w-full justify-end gap-2 items-center">
         <DarkModeSwitch class="mr-2" />
-        <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
-        <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
-          <Maximize2 class="size-3 stroke-3" />
-        </button>
-        <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
       </div>
     </div>
 

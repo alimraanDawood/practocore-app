@@ -3,17 +3,18 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main",
-    "login"
+    "main"
   ],
   "permissions": [
     "core:default",
-    "core:window:allow-start-dragging",
-    "core:window:allow-close",
-    "core:window:allow-minimize",
-    "core:window:allow-toggle-maximize",
-    "notification:default",
-    "core:event:allow-emit",
-    "core:event:allow-listen"
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://*"
+        }
+      ]
+    }
   ]
 }

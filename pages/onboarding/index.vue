@@ -755,14 +755,7 @@ const skipStep = () => {
 }
 
 const finishOnboarding = async () => {
-  if (isTauri.value) {
-    // close current window and load the main window
-    console.log('Login successful, transitioning to main window');
-    await invoke('login_complete');
-    return;
-  } else {
     router.push('/main');
-  }
 }
 
 // Handle Android back button

@@ -41,7 +41,7 @@ import {ref} from 'vue'
 import {ArrowLeft, Bell} from "lucide-vue-next";
 
 definePageMeta({
-  layout: 'no-mobile-top-bar'
+  layout: 'default'
 })
 
 const activeTab = ref('profile');
