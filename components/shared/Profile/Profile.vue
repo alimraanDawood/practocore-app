@@ -36,7 +36,7 @@
             </Button>
           </SharedSettingsSettingsDialog>
 
-          <SharedBilling>
+          <SharedBilling :as-modal="true">
             <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.isAdmin || !authStore?.organisation">
               <CreditCard/>
               Billing
@@ -66,7 +66,7 @@
           </NuxtLink>
 
 
-          <SharedBilling>
+          <SharedBilling :as-modal="true">
             <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.isAdmin || !authStore?.organisation">
               <CreditCard/>
               Billing

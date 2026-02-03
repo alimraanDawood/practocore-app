@@ -20,6 +20,7 @@
             <UserCircle />
             Profile
           </Button>
+
           <Button
               class="lg:w-full flex flex-row justify-start"
               :variant="activeTab === 'notifications' ? 'secondary' : 'ghost'"
@@ -27,12 +28,21 @@
             <Bell />
             Notifications
           </Button>
+
+          <Button
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'billing' ? 'secondary' : 'ghost'"
+              @click="activeTab = 'billing'">
+            <CreditCard />
+            Billing
+          </Button>
         </div>
 
         <!-- Tab Content -->
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
+          <SharedBilling v-if="activeTab === 'billing'" />
         </div>
       </div>
     </DialogContent>
@@ -41,7 +51,7 @@
 
 <script setup>
 import {ref} from 'vue'
-import {ArrowLeft, Bell, UserCircle} from "lucide-vue-next";
+import {ArrowLeft, Bell, UserCircle, CreditCard} from "lucide-vue-next";
 
 definePageMeta({
   layout: 'no-mobile-nav'
