@@ -26,11 +26,21 @@ export default defineNuxtConfig({
         'v-wave/nuxt',
         // '@nuxtjs/tailwindcss',
         '@nuxtjs/color-mode',
-        'nuxt-tiptap-editor'
+        'nuxt-tiptap-editor',
+        'nuxt-electron'
     ],
 
     colorMode: {
         classSuffix: '',
+    },
+
+    electron: {
+        disableDefaultOptions: true,
+        build: [
+            {
+                entry: 'electron/main.ts'
+            }
+        ]
     },
 
     shadcn: {
@@ -51,6 +61,7 @@ export default defineNuxtConfig({
             splitText: true
         }
     },
+
     viewport: {
         breakpoints: {
             desktop: 1024,
