@@ -39,6 +39,9 @@ export default defineNuxtConfig({
         build: [
             {
                 entry: 'electron/main.ts'
+            },
+            {
+                entry: 'electron/preload.ts',
             }
         ]
     },
