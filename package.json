@@ -1,8 +1,11 @@
 {
   "name": "practocore-app",
+  "version": "1.0.0",
+  "description": "Litigation Deadline Management for Ugandan Litigators",
+  "author": "Fiika Tech Solutions Limited",
   "private": true,
   "type": "module",
-  "main": "dist-electron/main.js",
+  "__main": "dist-electron/main.js",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",

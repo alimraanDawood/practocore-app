@@ -26,7 +26,12 @@ function createWindow () {
 
     setupPushReceiver(win.webContents);
 
-    win.loadURL("http://localhost:3000");
+    if (process.env.VITE_DEV_SERVER_URL) {
+        win.loadURL("http://localhost:3000")
+    } else {
+        // In production, load the static index.html
+        win.loadFile(path.join(__dirname, '../.output/public/index.html'))
+    }
     win.webContents.openDevTools();
 }
 

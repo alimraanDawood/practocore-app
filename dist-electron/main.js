@@ -1,23 +1,23 @@
-import { app as o, BrowserWindow as n } from "electron";
-import r from "node:path";
-import { createRequire as i } from "module";
+import { app as o, BrowserWindow as r } from "electron";
+import t from "node:path";
+import { createRequire as s } from "module";
 import { fileURLToPath as a } from "url";
-const s = i(import.meta.url), { setup: l } = s("firebase-electron"), p = a(import.meta.url), c = r.dirname(p);
+const l = s(import.meta.url), { setup: p } = l("firebase-electron"), c = a(import.meta.url), n = t.dirname(c);
 let e;
-function t() {
-  e = new n({
+function i() {
+  e = new r({
     width: 1200,
     height: 600,
     icon: "@/assets/icon.png",
     webPreferences: {
-      preload: r.join(c, "preload.js"),
+      preload: t.join(n, "preload.js"),
       sandbox: !1
     }
-  }), l(e.webContents), e.loadURL("http://localhost:3000"), e.webContents.openDevTools();
+  }), p(e.webContents), process.env.VITE_DEV_SERVER_URL ? e.loadURL("http://localhost:3000") : e.loadFile(t.join(n, "../.output/public/index.html")), e.webContents.openDevTools();
 }
 o.whenReady().then(() => {
-  t(), o.on("activate", () => {
-    n.getAllWindows().length === 0 && t();
+  i(), o.on("activate", () => {
+    r.getAllWindows().length === 0 && i();
   });
 });
 o.on("window-all-closed", () => {
