@@ -23,3 +23,5 @@ logs
 .env.*
 !.env.example
 src-tauri/target
+
+dist-electron
