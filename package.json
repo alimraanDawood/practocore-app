@@ -5,7 +5,7 @@
   "author": "Fiika Tech Solutions Limited",
   "private": true,
   "type": "module",
-  "__main": "dist-electron/main.js",
+  "main": "dist-electron/main.js",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",

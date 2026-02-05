@@ -42,7 +42,17 @@
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
-          <SharedBilling v-if="activeTab === 'billing'" />
+          <div v-if="activeTab === 'billing'" class="flex flex-col w-full gap-6">
+            <div class="flex flex-col">
+              <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
+              <p class="text-sm text-muted-foreground">Update your account settings. Set your preferred language and
+                timezone.</p>
+            </div>
+
+            <Separator/>
+
+            <SharedBilling />
+          </div>
         </div>
       </div>
     </DialogContent>

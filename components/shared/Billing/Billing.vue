@@ -1,14 +1,6 @@
 <template>
   <DefineTemplate>
     <div class="flex flex-col gap-6">
-      <div class="flex flex-col">
-        <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
-        <p class="text-sm text-muted-foreground">Update your account settings. Set your preferred language and
-          timezone.</p>
-      </div>
-
-      <Separator/>
-
       <div class="flex flex-col gap-2">
         <div class="flex flex-col">
           <span class="font-semibold">Subscription</span>
@@ -93,7 +85,7 @@
       <div class="flex flex-col lg:flex-row w-full  gap-3 h-full overflow-hidden">
         <!-- Tab Content -->
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
-
+          <ReuseTemplate />
         </div>
       </div>
     </DialogContent>

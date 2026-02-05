@@ -41,7 +41,7 @@ export async function initializePushNotifications() {
   const platform = getPlatform();
   console.log('Platform:', platform);
 
-  const isSupported = (await isPushNotificationsSupported()) && (platform === 'electron');
+  const isSupported = (await isPushNotificationsSupported()) || (platform === 'electron');
   if (!isSupported) {
     console.log('Push notifications not supported on this platform');
     return;
