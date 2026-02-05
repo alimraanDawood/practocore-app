@@ -119,7 +119,7 @@ const onTourComplete = () => {
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full overflow-hidden">
+  <div class="flex flex-col w-full h-full items-center overflow-hidden">
     <TourGuideManager ref="welcomeTourGuide" :steps="tourSteps" @complete="onTourComplete" @skip="onTourComplete"/>
 
     <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">

@@ -1,7 +1,11 @@
 {
   "name": "practocore-app",
+  "version": "1.0.0",
+  "description": "Litigation Deadline Management for Ugandan Litigators",
+  "author": "Fiika Tech Solutions Limited",
   "private": true,
   "type": "module",
+  "__main": "dist-electron/main.js",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -47,8 +51,10 @@
     "clsx": "^2.1.1",
     "cordova-plugin-lottie-splashscreen": "^0.10.0",
     "dayjs": "^1.11.18",
+    "electron-push-receiver": "^2.1.3",
     "embla-carousel-vue": "^8.6.0",
     "firebase": "^12.6.0",
+    "firebase-electron": "^1.1.0",
     "json-logic-js": "^2.0.5",
     "lodash": "^4.17.21",
     "lucide-vue-next": "^0.522.0",
@@ -58,6 +64,7 @@
     "pinia": "^3.0.4",
     "pocketbase": "^0.26.1",
     "reka-ui": "^2.5.1",
+    "request": "^2.88.2",
     "shadcn-nuxt": "2.2.0",
     "spltjs": "^1.1.0",
     "tailwind-merge": "^3.3.1",
@@ -85,6 +92,11 @@
     "@pinia/nuxt": "^0.11.1",
     "@tauri-apps/cli": "^2.8.4",
     "@vueuse/nuxt": "^13.5.0",
-    "baseline-browser-mapping": "^2.9.15"
+    "baseline-browser-mapping": "^2.9.15",
+    "electron": "^40.1.0",
+    "electron-builder": "^26.7.0",
+    "nuxt-electron": "^0.7.0",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
   }
 }

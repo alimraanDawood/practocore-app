@@ -10,7 +10,7 @@ import type { RecordModel } from 'pocketbase';
 export interface DeviceTokenRecord extends RecordModel {
   user: string;
   token: string;
-  platform: 'android' | 'ios' | 'web';
+  platform: 'android' | 'ios' | 'web' | 'electron';
   device_info?: {
     model?: string;
     platform?: string;

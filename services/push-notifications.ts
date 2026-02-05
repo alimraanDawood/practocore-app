@@ -21,8 +21,10 @@ let firebaseMessaging: Messaging | null = null;
 /**
  * Get current platform
  */
-function getPlatform(): 'web' | 'android' | 'ios' {
+function getPlatform(): 'web' | 'android' | 'ios' | 'electron' {
   const platform = Capacitor.getPlatform();
+
+  if ((window as any)?.is_desktop) return 'electron';
   if (platform === 'web') return 'web';
   if (platform === 'android') return 'android';
   if (platform === 'ios') return 'ios';
@@ -39,15 +41,16 @@ export async function initializePushNotifications() {
   const platform = getPlatform();
   console.log('Platform:', platform);
 
-  // Check if platform supports push notifications
-  const isSupported = await isPushNotificationsSupported();
+  const isSupported = (await isPushNotificationsSupported()) && (platform === 'electron');
   if (!isSupported) {
     console.log('Push notifications not supported on this platform');
     return;
   }
 
   try {
-    if (platform === 'web') {
+    if (platform === 'electron') {
+      await initializeElectronNotifications();
+    } else if (platform === 'web') {
       // Initialize Firebase for web
       await initializeWebPushNotifications();
     } else {
@@ -56,6 +59,61 @@ export async function initializePushNotifications() {
     }
   } catch (error) {
     console.error('Error initializing push notifications:', error);
+  }
+}
+
+async function initializeElectronNotifications() {
+  const electronNotifications = (window as any)?.electronNotifications;
+
+  if(electronNotifications) {
+    try {
+      // Check if browser supports notifications
+      if (!('Notification' in window)) {
+        console.log('This browser does not support notifications');
+        return;
+      }
+
+      // Check current permission status (don't request it automatically)
+      const permission = Notification.permission;
+      if (permission !== 'granted') {
+        console.log('Notification permission not granted. Call requestWebPushPermission() from a user interaction.');
+        return;
+      }
+
+      electronNotifications.onTokenUpdate((_, token) => {
+        console.log("Token updated", token);
+      });
+
+      electronNotifications.onInitialize(async (_, token) => {
+        console.log('FCM token received:', token);
+        await saveDeviceToken(token);
+      });
+
+      electronNotifications.onNotificationReceived((_, serverNotificationPayload) => {
+        if (serverNotificationPayload.data.body) {
+          // payload has a body, so show it to the user
+          console.log('display notification', serverNotificationPayload)
+          let myNotification = new Notification(serverNotificationPayload.data.title, {
+            body: serverNotificationPayload.data.body
+          });
+
+          handleWebForegroundNotification(serverNotificationPayload);
+
+          myNotification.onclick = () => {
+            console.log('Notification clicked')
+          }
+        } else {
+          // payload has no body, so consider it silent (and just consider the data portion)
+          console.log('do something with the key/value pairs in the data', serverNotificationPayload.data)
+        }
+      })
+
+      // starts the service
+      electronNotifications.initialize();
+
+    } catch (e) {
+      console.error('Error while initializing electron notifications!', e);
+    }
   }
 }
 
