@@ -219,6 +219,8 @@
     --shadow-lg: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 4px 6px -1px oklch(0.00 0 0 / 0.10);
     --shadow-xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 8px 10px -1px oklch(0.00 0 0 / 0.10);
     --shadow-2xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.25);
+    --safe-area-top: env(safe-area-inset-top);
+    --safe-area-bottom: env(safe-area-inset-bottom);
 }
 
 .dark {
@@ -270,6 +272,7 @@
 }
 
 @layer base {
+
     * {
         @apply border-border outline-ring/50;
     }
@@ -279,6 +282,8 @@
         font-optical-sizing: auto;
         font-weight: 400;
         font-style: normal;
+        padding-top: var(--safe-area-top);
+        padding-bottom: var(--safe-area-bottom);
         @apply bg-background text-foreground;
     }
 

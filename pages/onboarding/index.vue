@@ -9,8 +9,6 @@
         />
       </div>
 
-
-
       <div class="flex w-full  flex-row items-center justify-between p-3 border-b">
         <div class="flex items-center gap-2">
           <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" alt="logo" class="h-8 w-auto"/>
@@ -417,8 +415,18 @@
               @click="nextStep"
               :disabled="!canProceed"
               class="flex-1 md:w-fit"
+              v-if="currentStep < finalStep"
           >
-            {{ currentStep < finalStep ? "Next" : "Complete" }}
+            Next
+            <ArrowRight class="size-4 ml-2"/>
+          </Button>
+          <Button
+              v-else
+              @click="router.push('/main')"
+              :disabled="!canProceed"
+              class="flex-1 md:w-fit"
+          >
+            Complete
             <ArrowRight class="size-4 ml-2"/>
           </Button>
         </div>
@@ -731,10 +739,6 @@ const nextStep = async () => {
   if (currentStep.value < finalStep.value) {
     currentStep.value++
   }
-
-  if (currentStep.value >= finalStep.value) {
-    await finishOnboarding();
-  }
 }
 
 const previousStep = () => {
@@ -755,7 +759,6 @@ const skipStep = () => {
 }
 
 const finishOnboarding = async () => {
-    router.push('/main');
 }
 
 // Handle Android back button

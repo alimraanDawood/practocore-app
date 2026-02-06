@@ -44,8 +44,6 @@ onMounted(async () => {
 
   const router = useRouter();
 
-  console.log("Performing Start Up Check!!");
-
   if(Capacitor.getPlatform() === 'android' || Capacitor.getPlatform() === 'ios') {
     // Give a brief moment for splash to show
     const isAuthenticated = $pb.authStore.isValid && $pb.authStore.record?.collectionName === 'Users';
