@@ -41,7 +41,7 @@ practocore-fcm (port 2051) ← Push notification microservice
 - **Frontend**: Vue 3 with TypeScript
 - **UI**: Shadcn-nuxt, Reka UI, TailwindCSS 4
 - **State Management**: Pinia
-- **Backend Integration**: PocketBase (http://localhost:8090)
+- **Backend Integration**: PocketBase (https://api.practocore.com)
 - **Desktop Platform**: Tauri 2.x
 - **Mobile Platform**: Capacitor 7.x (Android)
 - **Animations**: GSAP, AnimXYZ, anime.js
@@ -79,7 +79,7 @@ npx cap run android         # Run on Android device/emulator
 cd ../practocore-backend
 ./practocore-backend serve --dev    # Start PocketBase on port 8090
 ```
-- Admin dashboard: http://localhost:8090/_/
+- Admin dashboard: https://api.practocore.com/_/
 - Custom hooks in `pb_hooks/*.pb.js` (auto-reload enabled)
 - See `../practocore-backend/pb_hooks/CLAUDE.md` for backend-specific guidance
 
@@ -114,7 +114,7 @@ Platform detection should use `@tauri-apps/api` for desktop features and `@capac
 
 ### Backend Communication
 
-All backend communication goes through PocketBase (http://localhost:8090):
+All backend communication goes through PocketBase (https://api.practocore.com):
 - Authentication state managed via `pocketbase.authStore`
 - Real-time updates via PocketBase subscriptions
 - Custom API endpoints at `/api/practocore/*` and `/api/invitations/*`
@@ -124,7 +124,7 @@ All backend communication goes through PocketBase (http://localhost:8090):
 - Shared instance: `lib/pocketbase.ts` exports `pb` singleton (auto-cancellation disabled globally)
 - Plugin: `plugins/pocketbase.client.ts` provides `$pb` using the shared instance
 - Service modules: Import `pb` from `lib/pocketbase` to ensure consistent authStore
-- Runtime config: `nuxt.config.ts:86-90` defines `pocketbaseUrl` (defaults to http://localhost:8090)
+- Runtime config: `nuxt.config.ts:86-90` defines `pocketbaseUrl` (defaults to https://api.practocore.com)
 
 **Backend Custom Endpoints** (defined in `practocore-backend/pb_hooks/*.pb.js`):
 - `/api/practocore/matters` - Optimized matter fetching with expanded deadlines/adjournments
@@ -290,8 +290,8 @@ To run the complete PractoCore system locally:
    cd ../practocore-backend
    ./practocore-backend serve --dev
    ```
-   - Runs on http://localhost:8090
-   - Admin dashboard: http://localhost:8090/_/
+   - Runs on https://api.practocore.com
+   - Admin dashboard: https://api.practocore.com/_/
 
 2. **Start FCM Service** (Terminal 2) - Optional, only needed for push notifications:
    ```bash

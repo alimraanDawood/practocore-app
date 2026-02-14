@@ -131,9 +131,11 @@ export async function updateDeadline(deadlineId: string, options: Object) {
     return pocketbase.collection('Deadlines').update(deadlineId, options);
 }
 
+
+
 export async function fulfillDeadline(deadline: Deadline, date: string) {
     console.log(deadline);
-    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
         method: 'POST',
         body: JSON.stringify({
             action: {
@@ -151,8 +153,28 @@ export async function fulfillDeadline(deadline: Deadline, date: string) {
     }).then((e) => e.json())
 }
 
+export async function fulfillEvent(event: any, date: string) {
+    console.log(event);
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${event.id}/events`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: {
+                action: "FULFILL_EVENT",
+                meta: {
+                    targetId: event?.t_id,
+                    fulfilledDate: date,
+                }
+            }
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
 export async function adjournDeadline(deadline: Deadline, date: string, force = false, reason = "") {
-    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
         method: 'POST',
         body: JSON.stringify({
             action: {

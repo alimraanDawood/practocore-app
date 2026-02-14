@@ -21,8 +21,8 @@ export const useBillingStore = defineStore("billing", {
         },
 
         async reloadSubscriptionData() {
-            this.activeSubscription = (await getSubscriptions(1, 1, { filter: `active = true`, sort: '-created' })).items[0] || null;
-            this.subscriptionHistory = (await getSubscriptions(1, 1, { sort: '-created' }));
+            this.activeSubscription = (await getSubscriptions(1, 1, { expand: 'plan', filter: `active = true`, sort: '-created' })).items[0] || null;
+            this.subscriptionHistory = (await getSubscriptions(1, 1, { expand: 'plan', sort: '-created' }));
         },
 
         init() {

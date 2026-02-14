@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-5 h-full justify-center">
+  <div class="flex flex-col gap-5 h-full justify-center-safe">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Get Started with PractoCore</span>
     </div>
@@ -42,9 +42,11 @@
 <script setup>
 import { BriefcaseBusiness, User } from 'lucide-vue-next'
 
-const registerAs = ref('IND'); // ORG | IND
 
+const props = defineProps(['accountType'])
 const emits = defineEmits(['complete']);
+
+const registerAs = ref( props.accountType || 'IND'); // ORG | IND
 const emitComplete = () => {
   emits('complete', registerAs.value);
 };

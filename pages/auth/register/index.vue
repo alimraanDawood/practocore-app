@@ -1,73 +1,50 @@
 <template>
-  <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
-    <div data-tauri-drag-region class="flex flex-row w-full px-3 py-2 items-center border-b">
-      <div data-tauri-drag-region class="flex flex-row w-full">
-        <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'">
-          <Button size="sm" variant="outline">Login Instead</Button>
-        </NuxtLink>
-      </div>
-      <div data-tauri-drag-region class="flex flex-row w-full text-center  items-center justify-center">
-        <span class="ibm-plex-serif">Getting Started With PractoCore</span>
-      </div>
-      <div data-tauri-drag-region class="flex flex-row w-full justify-end gap-2 items-center">
-        <DarkModeSwitch class="mr-2" />
-      </div>
-    </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 w-screen h-dvh divide-x">
+    <div class="flex flex-col w-full overflow-hidden items-center col-span justify-center">
+      <div class="flex flex-row justify-between w-full items-center p-3 border-b">
+        <div class="flex flex-row gap-2">
+          <Button size="icon" variant="secondary" :disabled="!canGoBack" @click="goBack">
+            <ArrowLeft/>
+          </Button>
 
-    <div class="flex flex-col w-full items-center h-full">
-      <div class="flex flex-col h-full w-full max-w-xl items-center lg:justify-center border-x p-3 overflow-hidden">
-        <XyzTransition mode="out-in" xyz="fade in-right out-left" class="max-w-sm">
-          <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" :organisation-data="registrationData.organisation" @complete="accountTypeRegistComplete" />
+          <Button size="icon" variant="secondary" :disabled="!canGoForward" @click="goForward">
+            <ArrowRight/>
+          </Button>
+        </div>
+
+        <SharedDarkModeSwitch />
+      </div>
+
+      <div class="flex flex-col h-full w-[95vw] max-w-xl items-center border-x overflow-hidden">
+        <Transition mode="out-in" :name="direction === 'forward' ? 'slide-left' : 'slide-right'" class="max-w-sm">
+          <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" :account-type="registrationData?.type" @complete="accountTypeRegistComplete" />
           <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
+          <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
           <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
           <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
           <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
           <OTP class="max-w-sm p-3" :otp-id="otpId" @complete="OTPEntryComplete" :user-id="userId" v-else-if="currentStep === RegistrationSteps.OTP" />
-          <Subscription @complete="subscriptionRegistComplete" v-else-if="currentStep === RegistrationSteps.SUBSCRIPTION" />
-        </XyzTransition>
+        </Transition>
       </div>
-    </div>
 
-    <div class="flex flex-row text-sm text-center w-full gap-5 justify-center text-muted-foreground border-t p-3">
-      <Button @click="goBack" :disabled="!canGoBack" size="sm" variant="secondary">Previous</Button>
-      <div class="flex flex-row w-fit items-center justify-center gap-1">
-        <div class="size-2 bg-muted rounded-full" v-for="i in 5"></div>
-      </div>
-      <Button @click="goForward" :disabled="!canGoForward" size="sm">Next</Button>
-    </div>
-  </div>
-
-  <div v-else class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
-    <div class="flex flex-row justify-center w-full items-center p-3 border-b">
-      <div class="flex flex-row gap-2">
-        <Button size="icon" variant="secondary" :disabled="!canGoBack" @click="goBack">
-          <ArrowLeft/>
-        </Button>
-
-        <Button size="icon" variant="secondary" :disabled="!canGoForward" @click="goForward">
-          <ArrowRight/>
-        </Button>
-      </div>
-    </div>
-
-    <div class="flex flex-col h-full w-[95vw] max-w-xl items-center border-x overflow-hidden">
-      <XyzTransition mode="out-in" xyz="fade in-right out-left" class="max-w-sm">
-        <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" @complete="accountTypeRegistComplete" />
-        <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
-        <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
-        <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
-        <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
-        <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
-        <OTP class="max-w-sm p-3" :otp-id="otpId" @complete="OTPEntryComplete" :user-id="userId" v-else-if="currentStep === RegistrationSteps.OTP" />
-        <Subscription @complete="subscriptionRegistComplete" v-else-if="currentStep === RegistrationSteps.SUBSCRIPTION" />
-      </XyzTransition>
-    </div>
-
-    <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
+      <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
         <span>
           Already have an account?
           <NuxtLink :to="query?.ref ? `/auth/login?ref=${query?.ref}` : '/auth/login'" class="text-primary font-semibold underline">Login Instead</NuxtLink>.
         </span>
+      </div>
+    </div>
+
+    <div class="bg-muted w-full h-full col-span-1 lg:flex flex-col hidden">
+      <div class="flex flex-col w-full p-8">
+        <span class="font-semibold text-3xl ibm-plex-serif">Litigation Deadline Management made effortless</span>
+        <span class="text-muted-foreground">Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. A</span>
+      </div>
+
+      <div class="relative w-full overflow-hidden pl-8 flex flex-col items-end justify-end h-full">
+        <img src="@/assets/img/screenshots/home_desktop_dark_corner.png" class="hidden dark:block shadow border rounded-xl" />
+        <img src="@/assets/img/screenshots/home_desktop_light_corner.png" class="dark:hidden border shadow rounded-xl" />
+      </div>
     </div>
   </div>
 </template>
@@ -96,6 +73,12 @@ import {getCurrentWindow} from "@tauri-apps/api/window";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
 // query allows us to tell whether the registration is from a link
 const query = useRoute().query;
+
+const xyzAnimation = computed(() => {
+  return direction.value === 'forward'
+      ? 'fade in-right out-left'
+      : 'fade in-left out-right'
+})
 
 // --- Registration Steps Enum ---
 enum RegistrationSteps {
@@ -268,11 +251,16 @@ const canGoForward = computed(() => historyManager.canGoForward());
 
 // --- Navigation Functions (Wrapper for historyManager) ---
 const goToStep = (step: RegistrationSteps) => {
+  direction.value = 'forward';
+
   historyManager.addStep(step);
   currentStep.value = step;
 };
 
+const direction = ref('forward'); // 'back' || 'forward'
+
 const goBack = () => {
+  direction.value = 'back';
   const previousStep = historyManager.goBack();
   if (previousStep !== null) {
     currentStep.value = previousStep;
@@ -280,6 +268,8 @@ const goBack = () => {
 };
 
 const goForward = () => {
+  direction.value = 'forward';
+
   const nextStep = historyManager.goForward();
   if (nextStep !== null) {
     currentStep.value = nextStep;
@@ -299,7 +289,7 @@ const accountTypeRegistComplete = (val: 'ORG' | 'IND') => {
 
 const organisationRegistComplete = (val: any) => { // Consider more specific type for val
   registrationData.organisation = { ...registrationData.organisation, ...val };
-  goToStep(RegistrationSteps.PRIMARY_CONTACT_REGIST);
+  goToStep(RegistrationSteps.FIRM_DETAILS_REGIST);
 }
 
 const firmDetailsRegistComplete = (val: any) => { // Consider more specific type for val
@@ -414,6 +404,37 @@ const toggleMaximizeWindow = () => {
 }
 </script>
 
+
 <style scoped>
-/* Your existing styles */
+/* Forward animation (slide from right) */
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: all 0.4s ease;
+}
+
+.slide-left-enter-from {
+  opacity: 0;
+  transform: translateX(20%);
+}
+
+.slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(-20%);
+}
+
+/* Backward animation (slide from left) */
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: all 0.4s ease;
+}
+
+.slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-20%);
+}
+
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(20%);
+}
 </style>

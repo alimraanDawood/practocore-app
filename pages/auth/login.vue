@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import {invoke} from '@tauri-apps/api/core';
+import {getCurrentWindow} from '@tauri-apps/api/window';
 
 import {X, Minus, Maximize2, Minimize2} from "lucide-vue-next";
 import AccountType from "~/components/auth/RegisterScreens/AccountType.vue";
@@ -33,12 +33,12 @@ const isMainWindow = computed(() => {
 const redirect = async () => {
 
   // In web/mobile: use normal routing
-  if(query?.ref) {
+  if (query?.ref) {
     useRouter().push('/auth/invite?ref=' + query.ref);
     return;
   }
 
-  if(query?.next) {
+  if (query?.next) {
     return useRouter().push(query?.next);
   }
 
@@ -63,42 +63,19 @@ const toggleMaximizeWindow = () => {
 </script>
 
 <template>
+  <div class="grid grid-cols-1 lg:grid-cols-2 w-screen h-dvh divide-x">
+    <div class="flex flex-col w-full h-full col-span-1">
+      <div class="flex flex-row p-3 border-b justify-between">
+        <div></div>
 
-  <div v-if="isTauri" class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh]">
-    <div class="flex flex-row w-full px-3 py-2 items-center border-b">
-      <div class="flex flex-row w-full">
-        <NuxtLink :to="query?.ref ? `/auth/register?ref=${query?.ref}` : '/auth/register'">
-          <Button size="sm" variant="outline">Sign Up Instead</Button>
-        </NuxtLink>
+        <SharedDarkModeSwitch />
       </div>
-      <div class="flex flex-row w-full text-center  items-center justify-center">
-        <span class="ibm-plex-serif">Sign In to PractoCore</span>
-      </div>
-      <div class="flex flex-row w-full justify-end gap-2 items-center">
-        <DarkModeSwitch class="mr-2" />
-      </div>
-    </div>
-
-    <div class="flex flex-col items-center w-full divide-x h-full">
-      <div class="flex flex-col h-full w-full max-w-xl items-center justify-center border-x overflow-hidden p-3">
-        <div class="flex flex-col max-w-sm w-full">
-          <AuthSignIn @success="redirect" class="w-full !max-w-sm" />
-        </div>
-      </div>
-    </div>
-
-    <div class="flex flex-row text-sm text-center w-full justify-center text-muted-foreground border-t p-3">
-    </div>
-  </div>
-
-    <div v-else class="flex flex-col w-full h-[100dvh]">
-      <div class="flex flex-row p-3 border-b"></div>
       <div class="flex flex-col w-full h-full gap-5 items-center justify-center">
         <div class="flex flex-col w-[95vw] items-center justify-center  max-w-xl  p-3 border-x h-full">
           <div class="flex flex-col w-full lg:max-w-sm gap-5">
             <div class="grid gap-2 text-center">
               <div class="flex flex-row w-full items-center justify-center">
-                <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-12" />
+                <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-12"/>
               </div>
               <h1 class="text-2xl font-semibold tracking-tight ibm-plex-serif">
                 Welcome back
@@ -108,10 +85,23 @@ const toggleMaximizeWindow = () => {
               </p>
             </div>
 
-            <AuthSignIn @success="redirect" class="w-full !max-w-sm" />
+            <AuthSignIn @success="redirect" class="w-full !max-w-sm"/>
           </div>
         </div>
       </div>
       <div class="flex flex-row p-3 border-t"></div>
     </div>
+
+    <div class="bg-muted w-full h-full col-span-1 lg:flex flex-col hidden">
+      <div class="flex flex-col w-full p-8">
+        <span class="font-semibold text-3xl ibm-plex-serif">Litigation Deadline Management made effortless</span>
+        <span class="text-muted-foreground">Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. A</span>
+      </div>
+
+      <div class="relative w-full overflow-hidden pl-8 flex flex-col items-end justify-end h-full">
+        <img src="@/assets/img/screenshots/home_desktop_dark_corner.png" class="hidden dark:block shadow border rounded-xl" />
+        <img src="@/assets/img/screenshots/home_desktop_light_corner.png" class="dark:hidden border shadow rounded-xl" />
+      </div>
+    </div>
+  </div>
 </template>

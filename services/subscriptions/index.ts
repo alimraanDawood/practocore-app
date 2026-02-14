@@ -10,3 +10,7 @@ export async function getSubscriptions(page: number, perPage: number, options: a
 export function subscribeToSubscriptions(callback : (data: RecordSubscription<RecordModel>) => void) {
   pocketbase.collection('Subscriptions').subscribe('*', callback)
 }
+
+export async function getSubscriptionPlans(page: number, perPage: number, options: any) {
+  return pocketbase.collection('SubscriptionPlans').getList(page, perPage, options);
+}

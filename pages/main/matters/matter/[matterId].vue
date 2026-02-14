@@ -19,9 +19,11 @@
       </div>
     </div>
   </div>
+
   <div v-if="isInitialLoad" class="flex flex-col w-full h-full items-center justify-center">
     <Loader class="animate-spin" />
   </div>
+
   <div v-else-if="!(currentMatterOrApplication?.id)" class="flex flex-col w-full h-full items-center">
     <div class="flex flex-col w-full lg:flex-row items-center justify-center lg:w-[95vw] h-full lg:border-x lg:divide-x">
       <div class="flex flex-col text-center p-3 items-center gap-2 lg:gap-4 max-w-sm">
@@ -113,7 +115,7 @@
         </div>
       </div>
 
-      <div class="hidden lg:flex flex-col max-w-sm w-full h-full p-3 gap-5">
+      <div class="hidden lg:flex flex-col max-w-sm w-full h-full gap-5 p-3">
         <div class="flex flex-col" v-if="latestDeadline">
           <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
           <span
@@ -158,6 +160,22 @@
           ></span>
 
           <span class="text-sm text-muted-foreground mx-auto p-3" v-else>No Missed Deadlines</span>
+        </div>
+
+        <div v-if="matter?.expand?.events?.filter(e => e.status === 'pending')?.length > 0" class="flex flex-col gap-5">
+          <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
+
+
+          <div v-for="event in matter?.expand?.events?.filter(e => e.status === 'pending')" class="flex flex-col gap-3">
+            <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
+            <SharedEventsCompleteEvent @updated="reloadMatter"  :event="event">
+              <Button size="sm" class="w-fit">
+                <CalendarIcon class="size-3"/>
+                Set Date
+              </Button>
+            </SharedEventsCompleteEvent>
+          </div>
+
         </div>
       </div>
     </div>

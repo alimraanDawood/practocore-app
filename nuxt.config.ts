@@ -27,7 +27,7 @@ export default defineNuxtConfig({
         // '@nuxtjs/tailwindcss',
         '@nuxtjs/color-mode',
         'nuxt-tiptap-editor',
-        'nuxt-electron'
+        // 'nuxt-electron'
     ],
 
     colorMode: {
@@ -99,7 +99,7 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
-            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://localhost:8090'
+            pocketbaseUrl: process.env.POCKETBASE_URL || 'https://api.practocore.com'
         }
     },
     plugins: [

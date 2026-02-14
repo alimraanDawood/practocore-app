@@ -39,8 +39,12 @@
         <div class="flex flex-col px-2 items-center">
           <div class="w-1 h-5 bg-muted group-first:opacity-0" :class="{ 'bg-primary': deadline.status === 'fulfilled' }"></div>
           <div class="size-8 bg-muted shrink-0 rounded-full grid place-items-center" :class="{'bg-primary text-primary-foreground border-0': deadline.status === 'fulfilled'}">
-            <CalendarCheck v-if="deadline.status === 'fulfilled'" class="size-4"/>
-            <CalendarClock v-else class="size-4"/>
+            <template v-if="deadline.collectionName === 'Deadlines'">
+              <CalendarCheck v-if="deadline.status === 'fulfilled'" class="size-4"/>
+              <CalendarClock v-else class="size-4"/>
+            </template>
+
+            <Asterisk v-else class="size-4"/>
           </div>
           <div
               class="w-1 h-full bg-muted group-last:opacity-0"
@@ -48,7 +52,7 @@
           ></div>
         </div>
 
-        <div class="flex flex-col text-left w-full p-2 pb-8 gap-2">
+        <div v-if="deadline.collectionName === 'Deadlines'" class="flex flex-col text-left w-full p-2 pb-8 gap-2">
           <div class="flex flex-row items-center justify-between gap-2">
             <div class="flex flex-col gap-1 flex-1">
               <div v-if="deadline?.application" class="flex flex-row gap-2">
@@ -97,12 +101,13 @@
             ></span>
 
             <div class="flex flex-col lg:flex-row gap-2 lg:items-center">
-              <span class="text-sm text-muted-foreground">{{
+              <span v-if="!deadline.disableFulfill" class="text-sm text-muted-foreground">{{
                   deadline.input_prompt
                 }}</span>
 
               <div class="flex flex-row items-center gap-2 flex-wrap">
                 <SharedDeadlineCompleteDeadline
+                    v-if="!deadline?.disableFulfill"
                     @updated="emits('updated')"
                     :deadline="deadline"
                 >
@@ -199,6 +204,23 @@
               @updated="handleAssigneesUpdated"
           />
         </div>
+
+        <div v-else class="flex flex-col text-left w-full p-2 pb-8 gap-2">
+          <button class="text-left w-fit font-semibold ibm-plex-serif underline">
+            <span v-html="deadline?.fulfilled_prompt.replace('<<date>>', `<b class='text-foreground'>${dayjs(deadline.date, {timezone: getSignedInUser()?.timezone,}).format('D MMM YYYY')}</b>`)"></span>
+          </button>
+
+          <div class="flex flex-row">
+            <SharedEventsCompleteEvent :event="deadline" @updated="emits('updated')">
+              <button
+                  class="border bg-muted px-2 p-1 flex flex-row items-center gap-1 text-xs w-fit"
+              >
+                <CalendarIcon class="size-3"/>
+                Set Date
+              </button>
+            </SharedEventsCompleteEvent>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -246,6 +268,7 @@ import {
   CalendarSync,
   RotateCcw,
   User,
+  Asterisk,
   Plus
 } from "lucide-vue-next";
 import {Badge} from "@/components/ui/badge";
@@ -258,8 +281,6 @@ import {resetDeadline} from "~/services/matters";
 import {toast} from "vue-sonner";
 
 dayjs.extend(relativeTime);
-
-import { DeadlineEngine } from "~/lib/deadline-engine/index.ts";
 
 const props = defineProps(["matter", "applicationFilter"]);
 const emits = defineEmits(["updated", "deadlineSelected"]);
@@ -305,10 +326,10 @@ const matterMembers = computed(() => {
 const deadlines = computed(() => {
   // const baseList = matter?.expand?.deadlines?.sort((d1, d2) => { return new Date(d1.date) - new Date(d2.date); })
   if(props.applicationFilter === "all" || !props.applicationFilter) {
-    return ([...(props?.matter?.expand?.deadlines || []), ...(props?.matter?.expand?.applications?.flatMap(application => application?.expand?.deadlines) || [])]).sort((d1, d2) => { return new Date(d1.date) - new Date(d2.date); });
+    return ([...(props?.matter?.expand?.deadlines || []), ...(props?.matter?.expand?.events?.filter(e => e.status === 'fulfilled')), ...(props?.matter?.expand?.applications?.flatMap(application => application?.expand?.deadlines) || [])]).sort((d1, d2) => { return new Date(d1.date ? d1.date : '1-1-1') - new Date(d2.date ? d2.date : '1-1-1' ); }).filter(d => d.status !== "unavailable");
   }
 
-  return props?.matter?.expand?.applications.find(ap => ap.id === props?.applicationFilter)?.expand?.deadlines || [];
+  return props?.matter?.expand?.applications.find(ap => ap.id === props?.applicationFilter)?.expand?.deadlines?.filter(d => d.status !== "unavailable") || [];
 });
 
 // Check if current user is a supervisor

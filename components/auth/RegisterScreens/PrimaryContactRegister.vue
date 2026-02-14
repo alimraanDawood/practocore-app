@@ -37,7 +37,7 @@ const onSubmit = form.handleSubmit((values) => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5 h-full justify-center">
+  <div class="flex flex-col gap-5 h-full justify-center-safe">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Primary Contact Information</span>
       <span class="text-sm">This person will manage the firm's account and receive critical notifications.</span>

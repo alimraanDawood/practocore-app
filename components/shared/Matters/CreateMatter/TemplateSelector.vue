@@ -55,7 +55,7 @@ const loading = ref(false);
 
 onMounted(async () => {
   loading.value = true;
-  templates.value = (await getTemplates(1, 10, {filter: `name ~ '${query.value}'`}, 'order')).items;
+  templates.value = (await getTemplates(1, 20, {filter: `name ~ '${query.value}'`}, 'order')).items;
   loading.value = false;
 });
 

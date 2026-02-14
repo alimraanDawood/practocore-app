@@ -9,7 +9,6 @@ export interface DeadlineTemplate {
     author?: string;
     description?: string;
 
-
     data: {
         fields: DeadlineTemplateField[],
         holidays: {
@@ -24,12 +23,23 @@ export interface DeadlineTemplate {
         triggerDateRules: {
             allowHolidays: boolean;
             allowWeekends: boolean;
+            allowDeadDays: boolean;
         },
         triggerDatePrompt: string;
         triggerDateName: string;
+        events?: DeadlineEvent[],
         deadlines: DeadlineTemplateDeadLine[];
         meta?: any;
     }
+}
+
+export interface DeadlineEvent {
+    id: string;
+    name: string;
+    prompts: {
+        fulfilled: string;
+        input: string;
+    },
 }
 
 interface DeadlineTemplateDeadLine {
@@ -59,7 +69,8 @@ interface DeadlineTemplateDeadLine {
                 offset: number; // override the default if this condition is fulfilled
             }[]; //json logic condition
         }
-    }
+    },
+    disabledFulfill?: boolean,
     prompts: {
         fulfilled: string;
         input: string;
@@ -72,7 +83,15 @@ interface DeadlineTemplateDeadLine {
             rules: any;
         }
     },
-    reminders: {}[],
+    reminders: {
+        id: string,
+        title: string;
+        body: string;
+        bodyHTML: string;
+        escalate: boolean;
+        channels: string[];
+        offset: number; // number of days from the scheduled date
+    }[],
     type: "offset"
 }
 
@@ -125,18 +144,25 @@ interface PartyConfig {
 export interface DeadlineEngineDeadline {
     id: string;
     name?: string;
-    date: string;
-    status: "pending" | "fulfilled" | "overdue";
+    date: string | undefined | null;
+    status: "pending" | "fulfilled" | "overdue" | "unavailable";
     dependency: {
         targetId: string;
     }
+}
+
+export interface DeadlineEngineEvent {
+    id: string;
+    name?: string;
+    date: string | null | undefined;
+    status: "pending" | "fulfilled";
 }
 
 export interface DeadlineEngineOutput {
     triggerDate: string;
     deadlines: DeadlineEngineDeadline[];
     fieldValues: Record<string, any>;
-    events: {}[];
+    events: DeadlineEngineEvent[];
     warnings: string[];
     adjournments: Adjournment[];
     generatedAt: string;
@@ -172,6 +198,14 @@ export interface DeadlineEngineFulfillAction {
     }
 }
 
+export interface DeadlineEngineFulfillEventAction {
+    action: "FULFILL_EVENT";
+    meta: {
+        targetId: string;
+        fulfilledDate: string;
+    }
+}
+
 export interface DeadlineEngineRecalculateAction {
     action: "RECALCULATE";
     meta: {
@@ -181,7 +215,7 @@ export interface DeadlineEngineRecalculateAction {
     }
 }
 
-export interface  DeadlineEngineAdjournAction {
+export interface DeadlineEngineAdjournAction {
     action: "ADJOURN";
     meta: {
         targetId: string;
@@ -205,6 +239,7 @@ export class DeadlineEngine {
     private static readonly TRIGGER_ID = "_trigger_";
     private static readonly DEADLINE_PREFIX = "d_";
     private static readonly FIELD_PREFIX = "f_";
+    private static readonly EVENT_PREFIX = "e_";
     private static readonly REMINDER_PREFIX = "r_";
 
     static {
@@ -565,17 +600,29 @@ export class DeadlineEngine {
             subProcesses: []
         };
 
+        for (let event of template.data.events || []) {
+            output.events.push({
+                id: event.id,
+                date: null, // well events are set by the user
+                status: "pending"
+            });
+        }
+
         for (let deadline of template.data.deadlines) {
             switch (deadline.type) {
                 case "offset":
+                    let deadlineDate = null;
 
-                    const deadlineDate = DeadlineEngine.calculateOffsetDeadlineDate(deadline, template, output)
+                    // if this resolves then a target date is available
+                    if (DeadlineEngine.resolveTargetDate(deadline?.dependency?.targetId, output)) {
+                        deadlineDate = DeadlineEngine.calculateOffsetDeadlineDate(deadline, template, output)
+                    }
 
                     output.deadlines.push({
                         id: deadline.id,
                         name: deadline.name,
-                        date: DeadlineEngine.formatToDateString(deadlineDate),
-                        status: deadlineDate < _triggerDate ? "overdue" : "pending",
+                        date: deadlineDate ? DeadlineEngine.formatToDateString(deadlineDate) : null,
+                        status: deadlineDate ? (deadlineDate < _triggerDate ? "overdue" : "pending") : "unavailable",
                         dependency: deadline.dependency
                     });
                     break;
@@ -588,26 +635,26 @@ export class DeadlineEngine {
     }
 
     private static formatToDateString(d: Date): string {
-        if(!d) {
+        if (!d) {
             throw new Error("Invalid Date");
         }
 
         return d.toISOString().split('T')[0];
     }
 
-    static resolveTargetDate(targetId: string, generatedTemplate: DeadlineEngineOutput): Date {
+    static resolveTargetDate(targetId: string, generatedTemplate: DeadlineEngineOutput): Date | null {
         if (targetId === this.TRIGGER_ID) {
-            return new Date (generatedTemplate.triggerDate);
+            return new Date(generatedTemplate.triggerDate);
         }
 
         if (targetId.startsWith(this.DEADLINE_PREFIX)) { // deadline date
-            let date = generatedTemplate.deadlines.find(deadline => deadline.id === targetId)?.date;
+            let deadline = generatedTemplate.deadlines.find(deadline => deadline.id === targetId);
 
-            if (!date) {
+            if (!deadline) {
                 throw new Error(`Could not find deadline with id ${targetId}`);
             }
 
-            return new Date(date);
+            return deadline?.date ? new Date(deadline?.date) : null;
         }
 
         if (targetId.startsWith(this.FIELD_PREFIX)) {
@@ -618,6 +665,16 @@ export class DeadlineEngine {
             }
 
             return new Date(fieldValue);
+        }
+
+        if (targetId.startsWith(this.EVENT_PREFIX)) {
+            let event = generatedTemplate.events.find(event => event.id === targetId);
+
+            if (!event) {
+                throw new Error(`Could not find field with id ${targetId}`);
+            }
+
+            return event?.date ? new Date(event?.date) : null;
         }
 
         throw new Error(`Could not resolve target date for id ${targetId}`);
@@ -631,16 +688,20 @@ export class DeadlineEngine {
         throw new Error(`Could not find field with id ${fieldId}`);
     }
 
-    static validateDate(date: Date, rules: { allowHolidays: boolean, allowWeekends: boolean }, holidays: {
+    static validateDate(date: Date, rules: {
+        allowHolidays: boolean,
+        allowWeekends: boolean,
+        allowDeadDays?: boolean
+    }, holidays: {
         name: string,
         date: string
-    }[] = [],deadDays: {
+    }[] = [], deadDays: {
         name: string,
         date: string
     }[] = []): { valid: boolean, error: Error | null } {
 
         // check if the date falls on a dead day
-        if(deadDays.find(d => d.date === this.formatToDateString(date))) {
+        if (!rules?.allowDeadDays && deadDays.find(d => d.date === this.formatToDateString(date))) {
             return {valid: false, error: new Error("Date falls on a dead day!")};
         }
 
@@ -683,7 +744,10 @@ export class DeadlineEngine {
         ignoreWeekends: false,
         ignoreHolidays: false,
         includeFirst: false
-    }, holidays: { name: string, date: string }[] = [], deadDays: { name: string, date: string }[] = []): { date: Date, error: Error | null } {
+    }, holidays: { name: string, date: string }[] = [], deadDays: { name: string, date: string }[] = []): {
+        date: Date,
+        error: Error | null
+    } {
 
         const addDays = (date: Date, days: number) => {
             const result = new Date(date);
@@ -824,7 +888,7 @@ export class DeadlineEngine {
             }
         }
 
-        return {date: current, error: null};
+        return {date: new Date(current.toISOString()), error: null};
     }
 
     static findAllTemplateDependents(deadlineId: string, template: DeadlineTemplate): string[] {
@@ -904,7 +968,7 @@ export class DeadlineEngine {
             "deadlines": output.deadlines.reduce((acc, d) => {
                 acc[d.id] = {
                     date: d.date,
-                    status: d.status == "pending" ? ((new Date(d.date) < now) ? "overdue" : "pending" ) : d.status,
+                    status: d.status == "pending" ? ((new Date(d.date) < now) ? "overdue" : "pending") : d.status,
                 };
 
                 return acc;
@@ -926,10 +990,12 @@ export class DeadlineEngine {
         }
     }
 
-    static applyAction(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineFulfillAction | DeadlineEngineRecalculateAction | DeadlineEngineAdjournAction | DeadlineEngineSpawnAction): DeadlineEngineOutput {
+    static applyAction(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineFulfillAction | DeadlineEngineFulfillEventAction | DeadlineEngineRecalculateAction | DeadlineEngineAdjournAction | DeadlineEngineSpawnAction): DeadlineEngineOutput {
         switch (action.action) {
             case "FULFILL":
                 return DeadlineEngine.handleFulfill(template, output, action);
+            case "FULFILL_EVENT":
+                return DeadlineEngine.handleFulfillEvent(template, output, action);
             case "RECALCULATE":
                 return DeadlineEngine.handleRecalculate(template, output, action);
             case "ADJOURN":
@@ -974,6 +1040,36 @@ export class DeadlineEngine {
         return mutable;
     }
 
+    private static handleFulfillEvent(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineFulfillEventAction) {
+        let mutable = _.cloneDeep(output);
+        const event = mutable.events.find(e => e.id === action.meta.targetId);
+
+        if (!event) {
+            throw new Error(`Event ${action.meta.targetId} not found`);
+        }
+
+        event.status = "fulfilled";
+        event.date = DeadlineEngine.formatToDateString(new Date(action.meta.fulfilledDate));
+
+        const dependents = DeadlineEngine.findAllTemplateDependents(event.id, template);
+        console.log("Dependants are: ", dependents);
+
+        for (const dependent of dependents) {
+            const dynamic = template.data.deadlines.find(d => d.id === dependent)?.dynamic || false;
+
+            if (!dynamic) {
+                continue;
+            }
+
+            mutable = DeadlineEngine.applyAction(template, mutable, {
+                action: "RECALCULATE",
+                meta: {targetId: dependent}
+            });
+        }
+
+        return mutable;
+    }
+
     private static handleRecalculate(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineRecalculateAction) {
         let mutable = _.cloneDeep(output);
         const deadline = DeadlineEngine.findDeadlineInOutput(mutable, action.meta.targetId);
@@ -987,14 +1083,20 @@ export class DeadlineEngine {
         if (!templateDeadline) {
             throw new Error(`Deadline ${action.meta.targetId} not found in template`);
         }
-        const newDate = DeadlineEngine.calculateOffsetDeadlineDate(templateDeadline, template, output);
 
-        deadline.date = newDate;
+        if (!DeadlineEngine.resolveTargetDate(templateDeadline?.dependency?.targetId, mutable)) {
+            deadline.date = null;
+            deadline.status = "unavailable";
+        }
+
+        const newDate = DeadlineEngine.calculateOffsetDeadlineDate(templateDeadline, template, output);
+        deadline.date = DeadlineEngine.formatToDateString(newDate);
+        deadline.status = "pending";
         return mutable;
     }
 
     private static handleAdjourn(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineAdjournAction) {
-        let mutable : DeadlineEngineOutput = _.cloneDeep(output);
+        let mutable: DeadlineEngineOutput = _.cloneDeep(output);
         const deadline = DeadlineEngine.findDeadlineInOutput(mutable, action.meta.targetId);
         const templateDeadline = template.data.deadlines.find(d => d.id === deadline.id);
 
@@ -1002,13 +1104,16 @@ export class DeadlineEngine {
             throw new Error(`Deadline ${action.meta.targetId} not found`);
         }
 
-        if(!templateDeadline) {
+        if (!templateDeadline) {
             throw new Error(`Deadline ${action.meta.targetId} not found in template`);
         }
 
-        const { valid: isDateValid, error: error } = DeadlineEngine.validateDate(new Date(action.meta.adjournedDate), templateDeadline.offset.dateRules);
+        const {
+            valid: isDateValid,
+            error: error
+        } = DeadlineEngine.validateDate(new Date(action.meta.adjournedDate), templateDeadline.offset.dateRules);
 
-        if(!isDateValid && !action.meta.force) {
+        if (!isDateValid && !action.meta.force) {
             throw error;
         }
 
@@ -1043,7 +1148,7 @@ export class DeadlineEngine {
     }
 
     private static handleSpawn(template: DeadlineTemplate, output: DeadlineEngineOutput, action: DeadlineEngineSpawnAction) {
-        let mutable : DeadlineEngineOutput = _.cloneDeep(output);
+        let mutable: DeadlineEngineOutput = _.cloneDeep(output);
         const deadline = DeadlineEngine.findDeadlineInOutput(mutable, action.meta.targetId);
         const templateDeadline = template.data.deadlines.find(d => d.id === deadline.id);
 
@@ -1057,7 +1162,7 @@ export class DeadlineEngine {
             throw new Error(`Deadline ${action.meta.targetId} not found in template`);
         }
 
-        if(!(templateDeadline.applications && templateDeadline.applications.enabled)) {
+        if (!(templateDeadline.applications && templateDeadline.applications.enabled)) {
             throw new Error(`Deadline ${action.meta.targetId} does not support applications and subprocesses!`);
         }
 
@@ -1083,7 +1188,7 @@ export class DeadlineEngine {
         return mutable;
     }
 
-    static checkApplicationCondition(template: DeadlineTemplate, output: DeadlineEngineOutput, deadlineId : string) {
+    static checkApplicationCondition(template: DeadlineTemplate, output: DeadlineEngineOutput, deadlineId: string) {
         const deadline = DeadlineEngine.findDeadlineInOutput(output, deadlineId);
         const templateDeadline = template.data.deadlines.find(d => d.id === deadline.id);
 
@@ -1095,7 +1200,7 @@ export class DeadlineEngine {
             throw new Error(`Deadline ${deadlineId} not found in template`);
         }
 
-        if(!(templateDeadline.applications && templateDeadline.applications.enabled)) {
+        if (!(templateDeadline.applications && templateDeadline.applications.enabled)) {
             throw new Error(`Deadline ${deadlineId} does not support applications and subprocesses!`);
         }
 

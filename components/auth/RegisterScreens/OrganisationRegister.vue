@@ -35,7 +35,7 @@ const onSubmit = form.handleSubmit((values) => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5 h-full justify-center">
+  <div class="flex flex-col gap-5 h-full justify-center-safe">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Register Your Law Firm</span>
     </div>

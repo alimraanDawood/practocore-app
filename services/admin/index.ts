@@ -1,6 +1,12 @@
 import { pb as pocketbase, SERVER_URL } from '~/lib/pocketbase';
 
+export async function getOrganisation(id : string) {
+    return pocketbase.collection('Organisations').getOne(id);
+}
 
+export async function updateOrganisation(id: string, options: Object) {
+    return pocketbase.collection('Organisations').update(id, options);
+}
 export async function getOrganisationUsers(page : number, perPage: number, options : Object) {
     return pocketbase.collection('Users').getList(page, perPage, options);
 }

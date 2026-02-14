@@ -88,7 +88,7 @@ const handleComplete = (e: string[]) => console.log(e.join(''))
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full items-center justify-center">
+  <div class="flex flex-col h-full w-full items-center justify-center-safe">
     <div class="flex text-muted-foreground flex-col gap-3 items-center border bg-muted p-3 rounded-lg w-full">
       <span class="font-semibold text-lg">Enter code sent to your email</span>
       <form id="register-otp-form" class="flex flex-col items-center rounded-lg w-full" @submit="onSubmit">

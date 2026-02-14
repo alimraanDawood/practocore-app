@@ -62,7 +62,7 @@ async function continueWithGoogle() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5 h-full w-full justify-center overflow-y-scroll">
+  <div class="flex flex-col gap-5 h-full w-full justify-center-safe overflow-y-scroll">
     <div class="flex flex-col">
       <span class="text-xl font-semibold">Create Your Login</span>
       <span v-if="inviteRef" class="text-sm">Your account will be added to <b>{{ inviteRef.invite.organisation.name }}</b></span>

@@ -7,64 +7,34 @@
           <span class="text-sm text-muted-foreground">Details about your current subscription</span>
         </div>
 
-        <div v-if="billingStore?.activeSubscription" class="flex flex-col bg-muted border p-2 rounded-lg">
-          <table class="border-separate border-spacing-y-1">
-            <tbody>
-            <tr class="align-center">
-              <td>
-                <div class="flex text-sm text-muted-foreground flex-row gap-1 items-center">
-                  <Tag class="size-4"/>
-                  <span class="font-semibold">Plan</span>
-                </div>
-              </td>
+        <div v-if="billingStore?.activeSubscription" class="flex flex-col border gap-1 p-1 rounded-lg">
+          <div class="bg-muted p-3 border gap-2 flex flex-col rounded">
+            <span class="text-xl ibm-plex-serif font-semibold">Free Trial</span>
+            <div class="flex flex-row gap-2 text-sm items-center">{{ dayjs(billingStore?.activeSubscription?.startDate).format('d ddd, MMMM YYYY') }} <ArrowRight class="size-4" /> {{ dayjs(billingStore?.activeSubscription?.endDate).format('d ddd, MMMM YYYY') }}</div>
+            <span class="text-sm">Plan Type: <b>{{ billingStore?.activeSubscription?.expand?.plan?.name }}</b></span>
 
-              <td class="gap-2 flex flex-row items-center">
-                <Badge>{{ billingStore?.activeSubscription?.trial ? 'Free Trial' : ( billingStore?.activeSubscription?.type === 'organisation' ? 'Organisation' : 'Individual' ) }}</Badge>
+            <div class="flex flex-col gap-1">
+              <div class="flex flex-row w-full justify-between text-sm">
+                <span class="font-semibold">Seats</span>
+                <span class="font-bold ibm-plex-serif">{{ 1 }} / {{ billingStore?.activeSubscription?.expand?.plan?.maxSeats }}</span>
+              </div>
 
-                <span class="text-xs text-muted-foreground">Expiring <b>{{ dayjs(billingStore?.activeSubscription?.endDate).format('d MMMM YYYY') }}</b></span>
-              </td>
-            </tr>
+              <div class="flex flex-row bg-muted-foreground/50 h-1 overflow-hidden rounded-full w-full">
+                <div class="bg-primary h-full rounded-full" :style="{ width: `${(1/1) * 100}%` }"></div>
+              </div>
+            </div>
+          </div>
 
-            <tr class="align-center">
-              <td>
-                <div class="flex text-sm text-muted-foreground flex-row gap-1 items-center">
-                  <User class="size-4"/>
-                  <span class="font-semibold">Seats</span>
-                </div>
-              </td>
-              <td>
-                <span class="font-semibold text-muted-foreground text-xs">1 seat</span>
-              </td>
-            </tr>
-            </tbody>
-          </table>
-        </div>
+          <div class="flex flex-row w-full justify-between pl-2">
+            <span class="ibm-plex-serif text-lg font-semibold">Purchase a plan</span>
 
-        <div class="flex flex-row gap-2">
-          <Button variant="secondary" size="sm">Switch to Yearly</Button>
+            <Button size="sm">Subscribe to PractoCore</Button>
+          </div>
         </div>
       </div>
 
-      <div class="flex flex-col gap-2">
-        <div class="flex flex-col">
-          <span class="font-semibold">Manage billing information</span>
-          <span class="text-sm text-muted-foreground">Edit payment method, see your invoices and more</span>
-        </div>
-
-        <div class="flex flex-row gap-2">
-          <Button variant="secondary" size="sm"> <CreditCard /> View Billing Details</Button>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-2">
-        <div class="flex flex-col">
-          <span class="font-semibold">Cancel subscription</span>
-          <span class="text-sm text-muted-foreground">Your workspace will be disabled on subscription expiry</span>
-        </div>
-
-        <div class="flex flex-row gap-2">
-          <Button variant="destructive" size="sm"> <CircleStop /> Cancel Plan</Button>
-        </div>
+      <div class="w-full outline-2 outline-border text-muted-foreground bg-muted/30 items-center justify-center flex flex-col outline-dashed p-3 h-32 rounded-lg">
+        <span>Subscription History</span>
       </div>
     </div>
   </DefineTemplate>
@@ -101,12 +71,17 @@
 </template>
 
 <script setup lang="ts">
-import {Bell, CreditCard, Calendar, User, Tag, CircleStop} from "lucide-vue-next";
+import {Bell, CreditCard, Calendar, User, Tag, CircleStop, ArrowRight} from "lucide-vue-next";
 import dayjs from "dayjs";
+import { useOrganisationStore } from "~/stores/organisation";
+import {getSignedInUser} from "~/services/auth";
 
 const props = defineProps(['asModal']);
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 const billingStore = useBillingStore();
 billingStore.ensureSubscribed();
+
+const organisationStore = useOrganisationStore();
+organisationStore.fetchOrganisation(getSignedInUser()?.organisation);
 
 </script>
