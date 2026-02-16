@@ -342,9 +342,10 @@
   <div v-else>
     <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
-      <DialogTrigger>
+      <DialogTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
         <slot />
       </DialogTrigger>
+
       <DialogContent class="flex flex-col !w-full !max-w-4xl p-0 h-[85vh] !gap-0">
         <div class="flex flex-col p-3 pb-5 h-fit grow-0 w-full border-b">
           <DialogHeader>
@@ -360,7 +361,7 @@
 
     <!-- SHEET -->
     <Drawer v-else v-model:open="open">
-      <DrawerTrigger>
+      <DrawerTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
         <slot />
       </DrawerTrigger>
 
@@ -405,6 +406,9 @@ import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelecto
 import PreviewRegistrarsAndClerks from "~/components/shared/Matters/CreateMatter/PreviewRegistrarsAndClerks.vue";
 import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.vue";
 import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
+import {useBillingStore} from "~/stores/billing";
+
+const billingStore = useBillingStore();
 
 definePageMeta({
   viewport: {

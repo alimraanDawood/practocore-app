@@ -24,6 +24,7 @@
           <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
           <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
           <OTP class="max-w-sm p-3" :otp-id="otpId" @complete="OTPEntryComplete" :user-id="userId" v-else-if="currentStep === RegistrationSteps.OTP" />
+          <TrialPayment class="max-w-sm p-3" :acc-type="registrationData.type" v-else-if="currentStep === RegistrationSteps.TRIAL_PAYMENT" @complete="trialPaymentComplete" />
         </Transition>
       </div>
 
@@ -64,13 +65,14 @@ import Subscription from "~/components/auth/RegisterScreens/Subscription.vue";
 import {
   acceptInvite,
   getOrganisationInviteReference,
-  getSignedInUser,
+  getSignedInUser, individualSignUp, organisationSignUp,
   signInWithEmail,
   submitAccountDetails
 } from "~/services/auth";
 import {toast} from "vue-sonner";
 import {getCurrentWindow} from "@tauri-apps/api/window";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
+import TrialPayment from "~/components/auth/RegisterScreens/TrialPayment.vue";
 // query allows us to tell whether the registration is from a link
 const query = useRoute().query;
 
@@ -89,7 +91,7 @@ enum RegistrationSteps {
   ADMIN_REGIST = 5,
   CREATING = 6,
   OTP = 7,
-  SUBSCRIPTION = 8
+  TRIAL_PAYMENT = 8
 }
 
 const joiningAndIsSignedIn = computed(() => {
@@ -231,7 +233,8 @@ const registrationData = reactive({
     emailAddress: '',
     password: '',
     confirmPassword: '',
-    timezone: ''
+    timezone: '',
+    mobileMoneyNumber: ''
   }
 });
 
@@ -309,12 +312,29 @@ const adminRegistComplete = (val: any) => { // Consider more specific type for v
   // For the final step before submission, you might not want to add it to history
   // if you don't want the user to go back to "Creating Account" or "OTP" from the next step.
   // I'll keep it simple for now, but you could skip `goToStep` and just set `currentStep.value` directly.
-  currentStep.value = RegistrationSteps.CREATING; // This step is purely for UI feedback
-  submitData();
+
+  if(query?.ref) {
+    currentStep.value = RegistrationSteps.CREATING;
+    submitData();
+    return;
+  }
+  goToStep(RegistrationSteps.TRIAL_PAYMENT);
 }
 
 const adminRegistGoogle = (val: any) => { // registered using google
   registrationData.user = {...registrationData.user, id: val?.record?.id };
+
+  if(query?.ref) {
+    currentStep.value = RegistrationSteps.CREATING;
+    submitData();
+    return;
+  }
+
+  goToStep(RegistrationSteps.TRIAL_PAYMENT);
+}
+
+const trialPaymentComplete = (phone: any) => {
+  registrationData.user = {...registrationData.user, mobileMoneyNumber: phone}
 
   currentStep.value = RegistrationSteps.CREATING;
   submitData();
@@ -349,7 +369,12 @@ const subscriptionRegistComplete = () => {
 
 const submitData = async () => {
   try {
-    const result = await submitAccountDetails(registrationData, query?.ref ? query?.ref : null);
+    let result;
+    if(registrationData.type === 'ORG') {
+      result = await organisationSignUp(registrationData, ''); // query?.ref ? query?.ref : null
+    } else {
+      result = await individualSignUp(registrationData, query?.ref ? query?.ref : null);
+    }
 
     if(result) {
       otpId.value = result.otpId;

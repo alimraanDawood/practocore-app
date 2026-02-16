@@ -132,7 +132,7 @@ const onSubmit = form.handleSubmit((values) => {
             <div v-if="bestPlan?.perSeatMonthly > 0" class="flex flex-col gap-3">
 
               <div class="flex flex-row items-end gap-3 size-sm text-muted-foreground">
-                <span class="text-lg font-semibold">UGX {{ (bestPlan?.perSeatAnnually * form.values?.firmSize)?.toLocaleString() }}</span> Per Year <Badge>Save 14%</Badge>
+                <span class="text-lg font-semibold">UGX {{ (bestPlan?.perSeatAnnually * form.values?.firmSize * 12)?.toLocaleString() }}</span> Per Year <Badge>Save 14%</Badge>
               </div>
 
               <div class="text-sm border p-3 bg-background text-muted-foreground font-semibold rounded-lg"> By continuing you agree to start a 14-day free trial. No credit card or banking details required.</div>

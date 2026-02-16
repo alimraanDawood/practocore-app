@@ -324,7 +324,7 @@
   <div v-else>
     <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
-      <DialogTrigger>
+      <DialogTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
         <slot />
       </DialogTrigger>
       <DialogContent class="flex flex-col !w-full !max-w-4xl p-0 h-[85vh] !gap-0">
@@ -342,7 +342,7 @@
 
     <!-- SHEET -->
     <Drawer v-else v-model:open="open">
-      <DrawerTrigger>
+      <DrawerTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
         <slot />
       </DrawerTrigger>
 
@@ -358,6 +358,7 @@
         </div>
       </DrawerContent>
     </Drawer>
+
   </div>
 </template>
 

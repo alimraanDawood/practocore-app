@@ -72,7 +72,7 @@ const toggleMaximizeWindow = () => {
       </div>
       <div class="flex flex-col w-full h-full gap-5 items-center justify-center">
         <div class="flex flex-col w-[95vw] items-center justify-center  max-w-xl  p-3 border-x h-full">
-          <div class="flex flex-col w-full lg:max-w-sm gap-5">
+          <div class="flex flex-col w-full max-w-sm gap-5">
             <div class="grid gap-2 text-center">
               <div class="flex flex-row w-full items-center justify-center">
                 <img alt="logo" src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-12"/>

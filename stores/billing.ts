@@ -1,5 +1,11 @@
 import { defineStore } from "pinia";
-import {getSubscriptions, subscribeToSubscriptions} from "~/services/subscriptions";
+import {
+    getActiveSubscription,
+    getSubscription,
+    getSubscriptions,
+    subscribeToSubscriptions
+} from "~/services/subscriptions";
+import {getSignedInUser} from "~/services/auth";
 
 export const useBillingStore = defineStore("billing", {
     state: () => ({
@@ -21,7 +27,11 @@ export const useBillingStore = defineStore("billing", {
         },
 
         async reloadSubscriptionData() {
-            this.activeSubscription = (await getSubscriptions(1, 1, { expand: 'plan', filter: `active = true`, sort: '-created' })).items[0] || null;
+            if(getSignedInUser()?.organisation) {
+
+            }
+
+            this.activeSubscription = (await getActiveSubscription())?.subscription || null;
             this.subscriptionHistory = (await getSubscriptions(1, 1, { expand: 'plan', sort: '-created' }));
         },
 

@@ -41,6 +41,38 @@ export async function submitAccountDetails(accountDetails : any, organisationRef
     return response.json();
 }
 
+export async function individualSignUp(accountDetails : any, organisationReference : string | null = null) {
+    const endpoint = organisationReference ? `${SERVER_URL}/api/practocore/auth/individual/signup?ref=${organisationReference}` : `${SERVER_URL}/api/practocore/auth/individual/signup`;
+
+    const response = await fetch( endpoint, {
+        method: "POST",
+        body: JSON.stringify(accountDetails),
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+
+    if(!response.ok) {
+        throw new Error(response.statusText);
+    }
+
+    return response.json();
+}
+
+export async function organisationSignUp(accountDetails : any, organisationReference : string | null = null) {
+    const endpoint = `${SERVER_URL}/api/practocore/auth/organisation/signup`;
+
+    const response = await fetch( endpoint, {
+        method: "POST",
+        body: JSON.stringify(accountDetails),
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+
+    if(!response.ok) {
+        throw new Error(response.statusText);
+    }
+
+    return response.json();
+}
+
 export function getSignedInUser() {
     return pocketbase.authStore.record;
 }

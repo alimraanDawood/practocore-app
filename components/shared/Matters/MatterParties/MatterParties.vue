@@ -90,17 +90,17 @@
     </PopoverContent>
   </Popover>
 
-  <Drawer v-else-if="hasParties && $viewport.isLessThan('tablet')" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
-    <DrawerTrigger>
+  <Sheet v-else-if="hasParties && $viewport.isLessThan('tablet')" class="flex flex-col lg:max-w-lg w-full border rounded-lg p-3 gap-3 bg-muted/30">
+    <SheetTrigger>
       <Button variant="outline" size="sm">
         <Users class="size-4"/>
         Parties
 
         <ChevronDown class="size-5"/>
       </Button>
-    </DrawerTrigger>
+    </SheetTrigger>
 
-    <DrawerContent class="flex flex-col gap-3 p-3">
+    <SheetContent class="flex flex-col gap-3 p-3 pt-8" side="bottom">
       <SharedMattersMatterPartiesEditMatterParties @click="e => e.stopPropagation()" :matter="matter" :representing="matter?.representing"
                                                    :parties="matter?.parties" class="ml-auto">
 
@@ -178,8 +178,8 @@
           Representing: {{ representedCount }} {{ representedCount === 1 ? 'party' : 'parties' }}
         </span>
       </div>
-    </DrawerContent>
-  </Drawer>
+    </SheetContent>
+  </Sheet>
 
 </template>
 

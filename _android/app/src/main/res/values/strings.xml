@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PractoCore</string>
+    <string name="title_activity_main">PractoCore</string>
+    <string name="package_name">com.practocore.app</string>
+    <string name="custom_url_scheme">com.practocore.app</string>
+</resources>

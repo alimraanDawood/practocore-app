@@ -1,6 +1,6 @@
 <template>
   <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
-    <DialogTrigger :as-child="true">
+    <DialogTrigger :as-child="true" :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
       <slot />
     </DialogTrigger>
 
@@ -47,7 +47,7 @@
   </Dialog>
 
   <Sheet v-else v-model:open="open">
-    <SheetTrigger :as-child="true">
+    <SheetTrigger :as-child="true" :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
       <slot />
     </SheetTrigger>
 

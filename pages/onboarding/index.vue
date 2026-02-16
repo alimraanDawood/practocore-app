@@ -16,14 +16,15 @@
         </div>
         <div class="flex flex-row gap-2 items-center">
           <SharedDarkModeSwitch />
-          <Button
-              v-if="currentStep > 0 && currentStep < steps.length - 1"
-              variant="outline"
-              size="sm"
-              @click="skipStep"
-          >
-            Skip
-          </Button>
+          <NuxtLink to="/main">
+            <Button
+                v-if="currentStep > 0 && currentStep < steps.length - 1"
+                variant="outline"
+                size="sm"
+            >
+              Skip
+            </Button>
+          </NuxtLink>
 
           <div v-if="isTauri" class="flex flex-row items-center gap-2">
             <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>

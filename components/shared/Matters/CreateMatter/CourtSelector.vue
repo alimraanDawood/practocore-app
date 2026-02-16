@@ -63,7 +63,7 @@ function selectCourt(selectedValue: string) {
         <ChevronsUpDownIcon class="opacity-50" />
       </Button>
     </PopoverTrigger>
-    <PopoverContent class="w-full p-0">
+    <PopoverContent class="w-full p-0 pointer-events-auto">
       <Command>
         <CommandInput class="h-9" placeholder="Search courts..." />
         <CommandList>

@@ -51,7 +51,7 @@
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
 
-        <div class="flex flex-row items-center gap-2 p-3">
+        <div class="flex flex-row flex-wrap w-full items-center gap-2 p-3">
           <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
@@ -63,21 +63,17 @@
             </Button>
           </SharedMattersMemberManagement>
 
-          <Sheet v-if="false">
-            <SheetTrigger>
-              <Button v-if="currentMatterOrApplication?.members?.length > 1 && currentMatterOrApplication.members.includes(getSignedInUser()?.id)"
-                      @click="showChat = !showChat" variant="outline" size="sm" class="gap-2">
-                <MessageSquare class="size-4"/>
-                {{ showChat ? 'Hide Chat' : 'Show Chat' }}
-              </Button>
-            </SheetTrigger>
+          <Button size="sm" variant="outline">
+            <Scale />
 
-            <SheetContent>
-              <div class="flex flex-col w-full h-full ">
-                <SharedChatBox :members="currentMatterOrApplication.expand?.members" v-if="currentMatterOrApplication?.id" :matter-id="currentMatterOrApplication.id"/>
-              </div>
-            </SheetContent>
-          </Sheet>
+            Opposing Counsel
+          </Button>
+
+          <Button size="sm" variant="outline">
+            <Gavel />
+
+            Court Officers
+          </Button>
 
           <div v-if="currentMatterOrApplication?.parties">
             <SharedMattersMatterParties :matter="currentMatterOrApplication"/>
@@ -109,6 +105,18 @@
         </div>
 
         <Separator />
+
+        <div class="lg:hidden">
+          <div class="flex flex-col p-3">
+            <div class="border text-left flex flex-col gap-1 bg-muted p-2 rounded-lg">
+              <span class="ibm-plex-serif font-semibold">{{ matter?.expand?.events?.at(0)?.input_prompt }} (and {{ matter?.expand?.events?.length - 1 }} other{{matter?.expand?.events?.length - 1 > 1 ? 's' : '' }})</span>
+
+              <Button size="sm" variant="outline" class="w-fit">Manage Events</Button>
+            </div>
+          </div>
+
+          <Separator />
+        </div>
 
         <div class="flex flex-col w-full p-3">
           <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"  :matter="matter" :application-filter="currentApplicationOption"/>
@@ -189,9 +197,11 @@ import {
   Loader,
   CalendarIcon,
   XCircle,
+  Gavel,
   CheckCircle,
   Clock,
   Bell,
+  Scale,
   ArrowLeft,
   Proportions,
   LogOut,
