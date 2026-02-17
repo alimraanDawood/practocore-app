@@ -65,11 +65,7 @@
 
           <SharedMattersOpposingCounselMatterOpposingCounsel @updated="reloadMatter" :matter="currentMatterOrApplication"/>
 
-          <Button size="sm" variant="outline">
-            <Gavel />
-
-            Court Officers
-          </Button>
+          <SharedMattersCourtOfficersMatterCourtOfficers @updated="reloadMatter" :matter="currentMatterOrApplication" />
 
           <div v-if="currentMatterOrApplication?.parties">
             <SharedMattersMatterParties :matter="currentMatterOrApplication"/>
@@ -102,7 +98,7 @@
 
         <Separator />
 
-        <div class="lg:hidden">
+        <div v-if="matter?.expand?.events?.length > 0" class="lg:hidden">
           <div class="flex flex-col p-3">
             <div class="border text-left flex flex-col gap-1 bg-muted p-2 rounded-lg">
               <span class="ibm-plex-serif font-semibold">{{ matter?.expand?.events?.at(0)?.input_prompt }} (and {{ matter?.expand?.events?.length - 1 }} other{{matter?.expand?.events?.length - 1 > 1 ? 's' : '' }})</span>

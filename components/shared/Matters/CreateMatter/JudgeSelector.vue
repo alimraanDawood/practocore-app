@@ -48,8 +48,8 @@ const valueText = computed(() => {
 <template>
   <Select v-model="value" multiple>
     <SelectTrigger class="w-full">
-      <SelectValue placeholder="Select a judge">
-        {{ valueText }}
+      <SelectValue class="text-muted-foreground" :class="{ 'text-foreground': valueText }">
+        {{ valueText || 'Select a judge' }}
       </SelectValue>
     </SelectTrigger>
     <SelectContent class="w-full" position="popper">

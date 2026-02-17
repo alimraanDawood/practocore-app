@@ -109,6 +109,7 @@
                         <Input
                             v-bind="componentField"
                             type="text"
+                            placeholder="e.g HCCS No. 27 of 20XX"
                         />
                       </FormControl>
                     </FormItem>
@@ -132,7 +133,7 @@
                     </FormItem>
                   </FormField>
 
-                  <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />
+<!--                  <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />-->
 
 
                   <FormField name="opposingCounsel" v-slot="{ componentField }">

@@ -57,7 +57,8 @@ function selectCourt(selectedValue: string) {
           variant="outline"
           role="combobox"
           :aria-expanded="open"
-          class="w-full border border-muted-foreground/60 justify-between"
+          class="w-full border border-muted-foreground/60 text-muted-foreground justify-between"
+          :class="{ 'text-foreground': selectedCourt }"
       >
         {{ selectedCourt?.name || "Select Court..." }}
         <ChevronsUpDownIcon class="opacity-50" />

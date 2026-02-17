@@ -109,6 +109,7 @@
                         <Input
                           v-bind="componentField"
                           type="text"
+                          placeholder="e.g HCCS of No. 27 of 20XX"
                         />
                       </FormControl>
                     </FormItem>
@@ -158,7 +159,7 @@
                     </FormItem>
                   </FormField>
 
-                  <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />
+<!--                  <PreviewRegistrarsAndClerks :court="values?.court" :judges="values?.judges" />-->
 
 
                   <FormField name="opposingCounsel" v-slot="{ componentField }">
@@ -808,6 +809,7 @@ const onSubmit = async (values: any) => {
       court: values.court,
       judges: values.judges || [],
       opposingCounsel: values.opposingCounsel || [],
+      courtOfficers: values.courtOfficers || { registrars: [], clerks: [] },
       // Include parties and representing if template has data.parties
       ...(selectedTemplate?.value?.template?.data.parties?.enabled && {
         parties: cleanedParties,
