@@ -63,11 +63,7 @@
             </Button>
           </SharedMattersMemberManagement>
 
-          <Button size="sm" variant="outline">
-            <Scale />
-
-            Opposing Counsel
-          </Button>
+          <SharedMattersOpposingCounselMatterOpposingCounsel @updated="reloadMatter" :matter="currentMatterOrApplication"/>
 
           <Button size="sm" variant="outline">
             <Gavel />
