@@ -2,7 +2,6 @@
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_remote_push::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

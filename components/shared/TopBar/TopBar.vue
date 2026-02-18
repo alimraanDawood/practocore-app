@@ -15,6 +15,11 @@
                 :class="{ '!border-primary font-medium': $route?.name === 'main-calendar' }">Calendar</button>
         </NuxtLink>
 
+        <NuxtLink to="/main/lawyers">
+          <button class="p-2 border-b-2 border-transparent"
+                  :class="{ '!border-primary font-medium': $route?.name === 'main-lawyers' }">Lawyers</button>
+        </NuxtLink>
+
 <!--        <NuxtLink to="/main/templates">-->
 <!--            <button class="p-2 border-b-2 border-transparent"-->
 <!--                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-templates') }">Templates</button>-->
