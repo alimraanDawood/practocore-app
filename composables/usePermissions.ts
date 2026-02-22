@@ -15,6 +15,10 @@ let fetched = false;
 
 export const usePermissions = () => {
     const fetchPermissions = async () => {
+        if(usePlanActive()?.value?.type === "individual") {
+            return;
+        }
+
         loading.value = true;
         error.value = null;
         try {
@@ -37,6 +41,7 @@ export const usePermissions = () => {
     }
 
     const hasPermission = (permission: string): boolean => {
+        if (usePlanActive()?.value?.type === "individual") return true;
         if (!permissions.value) return false;
         if (permissions.value.isAdmin) return true;
         return permissions.value?.permissions?.includes(permission) === true;

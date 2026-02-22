@@ -46,7 +46,7 @@
 
 <script setup lang="ts">
 import {Mail, Phone} from "lucide-vue-next";
-import {getOrganisationRoleString} from "~/components/shared/lawyers/members";
+import {getOrganisationRoleString} from "~/components/shared/Lawyers/members";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 

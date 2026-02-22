@@ -4,7 +4,7 @@ import { getMemberDetails, updateUserPermissions } from '~/services/admin'
 import dayjs from "dayjs";
 import {getSignedInUser} from "~/services/auth";
 import relativeTime from "dayjs/plugin/relativeTime";
-import LawyerRoles from "~/components/shared/lawyers/LawyerDetails/LawyerRoles.vue";
+import LawyerRoles from "~/components/shared/Lawyers/LawyerDetails/LawyerRoles.vue";
 
 dayjs.extend(relativeTime);
 

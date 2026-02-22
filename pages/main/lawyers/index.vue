@@ -7,8 +7,12 @@
       </div>
 
       <div class="flex flex-row gap-3">
-        <Button variant="outline" class="hidden lg:flex"> <Download /> Import</Button>
-        <Button variant="outline" size="icon" class="lg:hidden"><Download /></Button>
+        <ImportLawyers @imported="onInvited">
+          <Button variant="outline" class="hidden lg:flex"><Download class="size-4 mr-2" /> Import</Button>
+        </ImportLawyers>
+        <ImportLawyers @imported="onInvited">
+          <Button variant="outline" size="icon" class="lg:hidden"><Download class="size-4" /></Button>
+        </ImportLawyers>
 
         <InviteUser @invited="onInvited">
           <Button class="w-fit"><Plus /> Add Lawyer</Button>
@@ -105,6 +109,7 @@ import { Plus, Search, Download, ListFilterIcon } from "lucide-vue-next";
 import {getUserOrganisationMembers} from "~/services/admin/index.ts";
 import {getSignedInUser} from "~/services/auth/index.ts";
 import InviteUser from "~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue";
+import ImportLawyers from "~/components/PageComponents/Organisation/Users/ImportLawyers/ImportLawyers.vue";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import LawyersPageInvitations from "~/components/PageComponents/Organisation/Invitations/LawyersPageInvitations.vue";

@@ -115,6 +115,11 @@ const onSubmit = handleSubmit(async (values) => {
 
     // Small delay to show loading state (optional)
     await new Promise(resolve => setTimeout(resolve, 300));
+    if(props.accType === 'IND') {
+      umTrackRevenue("individual-trial-signup", 10000, "UGX")
+    } else {
+      umTrackRevenue("organisation-trial-signup", 50000, "UGX")
+    }
 
     // Emit the complete event with the full phone number
     emit('complete', fullPhoneNumber);

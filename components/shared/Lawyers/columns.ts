@@ -3,10 +3,10 @@ import {getOrganisationRoleString, type Member} from './members'
 import { h } from 'vue'
 import { ArrowUpDown } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import MemberAvatar from '~/components/shared/lawyers/MemberAvatar.vue'
-import MemberRoleBadge from '~/components/shared/lawyers/MemberRoleBadge.vue'
-import MemberVerifiedBadge from '~/components/shared/lawyers/MemberVerifiedBadge.vue'
-import MemberActions from '~/components/shared/lawyers/MemberActions.vue'
+import MemberAvatar from '~/components/shared/Lawyers/MemberAvatar.vue'
+import MemberRoleBadge from '~/components/shared/Lawyers/MemberRoleBadge.vue'
+import MemberVerifiedBadge from '~/components/shared/Lawyers/MemberVerifiedBadge.vue'
+import MemberActions from '~/components/shared/Lawyers/MemberActions.vue'
 
 export const columns: ColumnDef<Member>[] = [
     // ── Member (avatar + name + email) ─────────────────────────────────────────
