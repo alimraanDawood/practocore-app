@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col w-full h-[100dvh] items-center bg-gradient-to-b from-background to-muted/20">
+  <div class="flex flex-col w-full h-dvh items-center from-background">
     <div class="flex flex-col w-full h-full">
       <!-- Progress Bar -->
       <div class="w-full h-1 bg-muted">
@@ -18,7 +18,6 @@
           <SharedDarkModeSwitch />
           <NuxtLink to="/main">
             <Button
-                v-if="currentStep > 0 && currentStep < steps.length - 1"
                 variant="outline"
                 size="sm"
             >

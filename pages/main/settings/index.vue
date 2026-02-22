@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden items-center">
     <div class="flex flex-col h-full lg:w-[90vw] w-full">
-      <div class="flex flex-col lg:flex-row w-full p-3 gap-3 h-full overflow-hidden">
+      <div class="flex flex-col lg:flex-row w-full gap-3 h-full overflow-hidden">
         <!-- Desktop: Tabs Layout -->
         <div class="hidden lg:flex flex-row bg-muted lg:bg-background p-1 rounded-lg w-fit items-center lg:items-start lg:flex-col lg:max-w-[150px] lg:w-full overflow-x-scroll overflow-y-hidden py-1 lg:h-full gap-3">
           <Button
@@ -24,6 +24,21 @@
               @click="activeTab = 'billing'">
             Billing
           </Button>
+          <Separator class="my-1" />
+          <Button
+              size="sm"
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'documentation' ? 'default' : 'ghost'"
+              @click="activeTab = 'documentation'"
+          >Documentation
+          </Button>
+          <Button
+              size="sm"
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'support' ? 'default' : 'ghost'"
+              @click="activeTab = 'support'"
+          >Support
+          </Button>
         </div>
 
         <!-- Desktop: Tab Content -->
@@ -35,21 +50,21 @@
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
               <p class="text-sm text-muted-foreground">Manage your subscription and billing information.</p>
             </div>
-
             <Separator/>
-
             <SharedBilling />
           </div>
+          <PageComponentsSettingsDocumentation v-if="activeTab === 'documentation'" />
+          <PageComponentsSettingsSupport v-if="activeTab === 'support'" />
         </div>
 
         <!-- Mobile: List Layout -->
-        <div class="flex lg:hidden flex-col w-full h-full overflow-y-scroll gap-4">
+        <div class="flex lg:hidden flex-col w-full p-5 h-full overflow-y-scroll gap-5">
           <!-- Profile Card -->
-          <div class="flex flex-col rounded-lg border bg-card">
-            <div class="flex flex-row items-center gap-4 p-4">
-              <Avatar class="size-16">
+          <div class="flex flex-col rounded-lg gap-2">
+            <div class="flex flex-row items-center gap-2">
+              <Avatar class="size-12">
                 <AvatarImage :src="getSignedInUser()?.avatar" alt="Profile" />
-                <AvatarFallback class="text-lg bg-primary text-primary-foreground">
+                <AvatarFallback class=" bg-primary text-primary-foreground">
                   {{ getSignedInUser()?.name?.split(" ").at(0)?.at(0)?.toUpperCase() + getSignedInUser()?.name?.split(" ").at(1)?.at(0)?.toUpperCase() }}
                 </AvatarFallback>
               </Avatar>
@@ -61,8 +76,7 @@
             </div>
 
             <Button
-              variant="ghost"
-              class="justify-center rounded-t-none border-t"
+              class="w-fit"
               size="sm"
               @click="navigateTo('/main/settings/profile')"
             >
@@ -71,107 +85,98 @@
           </div>
 
           <!-- Preferences Section -->
-          <div class="flex flex-col rounded-lg border bg-card overflow-hidden">
-            <div class="p-3 border-b bg-muted/50">
-              <span class="text-sm font-medium text-muted-foreground">Preferences</span>
-            </div>
+          <div class="flex flex-col gap-2">
+            <span class="font-semibold">Preferences</span>
+            <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
+              <NuxtLink to="/main/settings/notifications" class="w-full">
+                <Button variant="ghost" class="justify-between items-center w-full">
+                  <div class="flex flex-row justify-center items-center gap-2">
+                    <Bell />
+                    Notifications
+                  </div>
+                  <ChevronRight class="size-5 text-muted-foreground" />
+                </Button>
+              </NuxtLink>
 
-            <!-- Notifications and sounds -->
-            <NuxtLink to="/main/settings/notifications" class="flex flex-row items-center justify-between p-4 border-b hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <Bell class="size-4" />
+              <Button variant="ghost" class="justify-between items-center">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <Moon />
+                  Dark Mode
                 </div>
-                <span class="font-medium">Notifications and sounds</span>
-              </div>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </NuxtLink>
+                <SharedDarkModeSwitch />
+              </Button>
+            </div>
           </div>
 
-          <!-- Account Section -->
-          <div class="flex flex-col rounded-lg border bg-card overflow-hidden">
-            <div class="px-4 py-3 border-b bg-muted/50">
-              <span class="text-sm font-medium text-muted-foreground">Account</span>
+          <div class="flex flex-col gap-2">
+            <span class="font-semibold">Organisation</span>
+            <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/organisation?tab=profile')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <Building2 />
+                  Organisation Profile
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
+
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/organisation?tab=users')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <Users />
+                  Organisation Members
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
+
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/organisation?tab=invitations')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <UserPlus />
+                  Invitations
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
             </div>
-
-            <!-- Password -->
-            <button class="flex flex-row items-center justify-between p-4 border-b hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <Lock class="size-4" />
-                </div>
-                <span class="font-medium">Password</span>
-              </div>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </button>
-
-            <!-- Login with Face ID -->
-            <button class="flex flex-row items-center justify-between p-4 border-b hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <Fingerprint class="size-4" />
-                </div>
-                <span class="font-medium">Login with Face ID</span>
-              </div>
-              <Switch :checked="true" />
-            </button>
-
-            <!-- Billing -->
-            <NuxtLink to="/main/settings/billing" class="flex flex-row items-center justify-between p-4 border-b hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <CreditCard class="size-4" />
-                </div>
-                <span class="font-medium">Billing</span>
-              </div>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </NuxtLink>
-
-            <!-- Support -->
-            <button class="flex flex-row items-center justify-between p-4 border-b hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <HelpCircle class="size-4" />
-                </div>
-                <span class="font-medium">Support</span>
-              </div>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </button>
-
-            <!-- Clear cache -->
-            <button class="flex flex-row items-center justify-between p-4 border-b hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <Trash2 class="size-4" />
-                </div>
-                <span class="font-medium">Clear cache</span>
-              </div>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </button>
-
-            <!-- Terms and Privacy Policy -->
-            <button class="flex flex-row items-center justify-between p-4 hover:bg-muted/50 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-muted">
-                  <FileText class="size-4" />
-                </div>
-                <span class="font-medium">Terms and Privacy Policy</span>
-              </div>
-              <ChevronRight class="size-5 text-muted-foreground" />
-            </button>
           </div>
 
-          <!-- Logout Button -->
-          <div class="flex flex-col rounded-lg border bg-card overflow-hidden">
-            <button class="flex flex-row items-center justify-between p-4 hover:bg-destructive/10 transition-colors">
-              <div class="flex flex-row items-center gap-3">
-                <div class="flex items-center justify-center size-9 rounded-full bg-destructive/20">
-                  <LogOut class="size-4 text-destructive" />
+          <div class="flex flex-col gap-2">
+            <span class="font-semibold">Advanced</span>
+            <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/billing')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <CreditCard />
+                  Billing
                 </div>
-                <span class="font-medium text-destructive">Logout</span>
-              </div>
-              <ChevronRight class="size-5 text-destructive" />
-            </button>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <span class="font-semibold">Help Center</span>
+            <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/documentation')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <BookOpen />
+                  Documentation
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
+
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/support')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <Headset />
+                  Contact Support
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
+
+          <div class="flex flex-col">
+            <Button class="justify-start" variant="destructive" @click="signOutUser">
+              <LogOut />
+
+              Sign Out
+            </Button>
           </div>
         </div>
       </div>
@@ -182,25 +187,27 @@
 <script setup>
 import { ref } from 'vue'
 import {
-  ArrowLeft,
   Bell,
   CreditCard,
   ChevronRight,
-  Languages,
-  Palette,
-  Lock,
-  Fingerprint,
-  HelpCircle,
-  Trash2,
-  FileText,
-  LogOut
+  LogOut,
+  Headset,
+  BookOpen,
+  Building2,
+  Users,
+  UserPlus,
+  Moon
 } from "lucide-vue-next"
-import { getSignedInUser } from "~/services/auth"
+import { getSignedInUser, signOut } from "~/services/auth"
 
 definePageMeta({
   layout: 'default'
 })
 
 const activeTab = ref('profile')
-const colorMode = useColorMode()
+
+const signOutUser = () => {
+  signOut()
+  window.location.reload()
+}
 </script>

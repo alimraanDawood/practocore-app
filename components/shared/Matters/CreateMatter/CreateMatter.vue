@@ -115,32 +115,6 @@
                     </FormItem>
                   </FormField>
 
-<!--                  <FormField-->
-<!--                    v-if="getSignedInUser()?.organisation"-->
-<!--                    v-slot="{ value, handleChange }"-->
-<!--                    name="personal"-->
-<!--                  >-->
-<!--                    <FormItem-->
-<!--                      class="flex flex-row items-start gap-3 justify-between rounded-lg border p-4"-->
-<!--                    >-->
-<!--                      <FormControl>-->
-<!--                        <Switch-->
-<!--                          :model-value="value"-->
-<!--                          @update:model-value="handleChange"-->
-<!--                        />-->
-<!--                      </FormControl>-->
-<!--                      <div class="space-y-0.5 w-full">-->
-<!--                        <FormLabel class="text-base">-->
-<!--                          Make this Matter Private-->
-<!--                        </FormLabel>-->
-<!--                        <FormDescription>-->
-<!--                          This will prevent other members of the organisation from-->
-<!--                          viewing this matter.-->
-<!--                        </FormDescription>-->
-<!--                      </div>-->
-<!--                    </FormItem>-->
-<!--                  </FormField>-->
-
                   <FormField name="court" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
                       <FormLabel>Court</FormLabel>
@@ -206,7 +180,6 @@
                   </FormField>
                 </template>
 
-                <!-- STEP: DEFINE PARTIES (if template has data.parties) -->
                 <template v-if="steps[stepIndex - 1]?.id === 'parties' && selectedTemplate?.template?.data?.parties?.enabled">
                   <div class="space-y-2">
                     <h3 class="font-semibold text-sm">Add Parties</h3>
@@ -338,9 +311,9 @@
     </div>
   </DefineTemplate>
 
-  <ReuseTemplate v-if="noModal" class="w-full h-full flex flex-col" />
+  <ReuseTemplate v-if="noModal" class="w-full h-full flex flex-col" :class="{ 'pointer-events-none opacity-50': !hasPermission('canCreateMatters') }" />
 
-  <div v-else>
+  <div v-else-if="hasPermission('canCreateMatters')">
     <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
       <DialogTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
@@ -409,6 +382,7 @@ import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.
 import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
 import {useBillingStore} from "~/stores/billing";
 
+const { hasPermission } = usePermissions();
 const billingStore = useBillingStore();
 
 definePageMeta({
@@ -445,7 +419,6 @@ const selectedTemplate = ref(null);
 
 // Computed steps - dynamically include party step if template has data.parties
 const steps = computed(() => {
-  console.log(selectedTemplate);
   const hasPartyConfig = selectedTemplate?.value?.template?.data.parties?.enabled === true;
   const hasOrg = !!getSignedInUser()?.organisation;
 
@@ -504,7 +477,6 @@ const buildStep3Schema = () => {
   const template = formRef.value?.values?.template;
   const _templateFields = template?.fields || [];
 
-  console.log(template);
 
   templateFields.value = [
     {
@@ -616,6 +588,7 @@ const __formSchema = computed(() => {
         opposingCounsel: z.array(z.any()).optional(),
         // date: z.string().refine(v => v, { message: "A date is required." }),
       }),
+      "parties": z.object({}),
       "members": z.object({
         members: z.array(z.any()).optional(),
       }),
@@ -674,11 +647,14 @@ watch(
 );
 
 watch(open, () => {
+
   if (open.value === false) {
     stepIndex.value = 1;
     // Reset party state when dialog closes
     parties.value = {};
     representing.value = null;
+  } else {
+    umTrackEvent("open-matter-creation-dialog");
   }
 });
 
@@ -797,6 +773,7 @@ const onSubmit = async (values: any) => {
       }));
     }
 
+
     const result = await createMatter({
       name: values.name,
       caseNumber: values.caseNumber?.toString() || '',
@@ -819,6 +796,9 @@ const onSubmit = async (values: any) => {
 
     if (result) toast.success("Matter Created Successfully!");
     emits("created", result);
+
+    umTrackEvent("created-matter", { result: result?.matter });
+
 
     formRef.value?.resetForm();
     // Reset party state

@@ -123,6 +123,7 @@ const _fulfillDeadline = async () => {
     loading.value = true;
     try {
         const result = await fulfillDeadline(props.deadline,  toDate(dateValue.value, 'utc').toISOString().split('T')[0]);
+        umTrackEvent("deadline-fulfilled", { deadline: props.deadline })
 
         open.value = false;
         toast.success("Successfully updated deadline!");

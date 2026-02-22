@@ -24,7 +24,7 @@
                     size="sm" class="rounded-none">
               Pending
             </Button>
-            <Button @click="setFilter('completed')" :variant="activeFilter === 'completed' ? 'secondary' : 'ghost'"
+            <Button @click="setFilter('fulfilled')" :variant="activeFilter === 'fulfilled' ? 'secondary' : 'ghost'"
                     size="sm" class="rounded-l-none">
               Completed
             </Button>
@@ -80,7 +80,7 @@
                      class="w-fit">
                 <AlertCircle class="size-3 mr-1" /> OVERDUE
               </Badge>
-              <Badge v-else-if="getDeadlineStatus(deadline) === 'completed'"
+              <Badge v-else-if="getDeadlineStatus(deadline) === 'fulfilled'"
                      class="w-fit">
                 <CheckCircle class="size-3 mr-1" /> COMPLETED
               </Badge>
@@ -235,20 +235,16 @@ const selectedDeadline = ref({
 });
 
 // Filters
-const activeFilter = ref<'all' | 'pending' | 'completed'>('all');
+const activeFilter = ref<'all' | 'pending' | 'fulfilled'>('all');
 const searchQuery = ref('');
 
-const setFilter = (filter: 'all' | 'pending' | 'completed') => {
+const setFilter = (filter: 'all' | 'pending' | 'fulfilled') => {
   activeFilter.value = filter;
 };
 
 // Get deadline status
 const getDeadlineStatus = (deadline: any) => {
-  if (deadline.completed) return 'completed';
-  const now = new Date();
-  const deadlineDate = new Date(deadline.date);
-  if (now > deadlineDate) return 'overdue';
-  return 'pending';
+  return deadline.status
 };
 
 // Filter deadlines based on active filter and search
@@ -257,9 +253,9 @@ const filteredDeadlines = computed(() => {
 
   // Apply status filter
   if (activeFilter.value === 'pending') {
-    filtered = filtered.filter(d => !d.completed && new Date() <= new Date(d.date));
-  } else if (activeFilter.value === 'completed') {
-    filtered = filtered.filter(d => d.completed);
+    filtered = filtered.filter(d => !(d.status === 'fulfilled') && new Date() <= new Date(d.date));
+  } else if (activeFilter.value === 'fulfilled') {
+    filtered = filtered.filter(d => (d.status === 'fulfilled'));
   }
 
   // Apply search filter

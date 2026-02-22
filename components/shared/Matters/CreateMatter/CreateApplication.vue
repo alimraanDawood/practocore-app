@@ -1,6 +1,6 @@
 <template>
   <DefineTemplate>
-    <div class=" h-full flex flex-col w-full">
+    <div class=" h-full flex flex-col w-full" :class="{ 'pointer-events-none opacity-50': !hasPermission('canCreateApplications') }">
       <Form
           ref="formRef"
           v-slot="{ meta, values, setFieldValue, validate }"
@@ -322,7 +322,7 @@
 
   <ReuseTemplate v-if="noModal" class="w-full h-full flex flex-col" />
 
-  <div v-else>
+  <div v-else-if="hasPermission('canCreateApplications')">
     <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
       <DialogTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
@@ -389,6 +389,8 @@ import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelecto
 import PreviewRegistrarsAndClerks from "~/components/shared/Matters/CreateMatter/PreviewRegistrarsAndClerks.vue";
 import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.vue";
 import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
+
+const { hasPermission } = usePermissions();
 
 definePageMeta({
   viewport: {
@@ -701,6 +703,8 @@ watch(open, () => {
     parties.value = {};
     representing.value = null;
   } else {
+    umTrackEvent('opened-create-application-dialog');
+
     // set it to the fields
     parties.value = props?.parentMatter?.parties;
     representing.value = props?.parentMatter?.representing;
@@ -848,6 +852,10 @@ const onSubmit = async (values: any) => {
 
     if (result) toast.success("Application Created Successfully!");
     emits("created");
+
+    umTrackEvent('created-application', {
+      result: result
+    });
 
     formRef.value?.resetForm();
     // Reset party state

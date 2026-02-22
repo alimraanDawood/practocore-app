@@ -86,6 +86,8 @@ const createDeadlineAdjournment = async (values) => {
     try {
         const result = await adjournDeadline(props.deadline, values.to, false, values.reason);
 
+        umTrackEvent("deadline-adjourned", { deadline: props.deadline, to: values?.to })
+
         toast.success("Adjournment created successfully!");
         emits('updated');
         open.value = false; // close the dialog / sheet

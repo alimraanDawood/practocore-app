@@ -12,7 +12,7 @@
 
     <div v-if="loading === false && filteredTemplates.length > 0"
          class="flex flex-col p-3 border overflow-y-scroll rounded-lg h-full gap-2">
-      <button @click="selectTemplate(template)"
+      <button type="button" @click="selectTemplate(template)"
               class="border p-2 flex flex-row w-full text-left rounded items-center"
               :class="{ 'bg-primary/10 text-primary ring ring-primary border-primary': template?.id === modelValue?.id }"
               v-for="template in filteredTemplates" :key="template.id">

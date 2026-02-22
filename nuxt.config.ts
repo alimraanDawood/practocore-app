@@ -16,18 +16,20 @@ export default defineNuxtConfig({
     },
 
     modules: [
-        'shadcn-nuxt',
-        '@hypernym/nuxt-gsap',
-        '@nuxt/icon',
-        '@pinia/nuxt',
-        '@hypernym/nuxt-gsap',
-        '@vueuse/nuxt',
-        'nuxt-viewport',
-        'v-wave/nuxt',
-        // '@nuxtjs/tailwindcss',
-        '@nuxtjs/color-mode',
-        'nuxt-tiptap-editor',
-        // 'nuxt-electron'
+      'shadcn-nuxt',
+      '@hypernym/nuxt-gsap',
+      '@nuxt/icon',
+      '@pinia/nuxt',
+      '@hypernym/nuxt-gsap',
+      '@vueuse/nuxt',
+      'nuxt-viewport',
+      'v-wave/nuxt',
+      // '@nuxtjs/tailwindcss',
+      '@nuxtjs/color-mode',
+      'nuxt-tiptap-editor',
+      // 'nuxt-electron'
+      '@sentry/nuxt/module',
+      'nuxt-umami'
     ],
 
     colorMode: {
@@ -99,11 +101,26 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
-            pocketbaseUrl: process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'
+            // Override at deploy time by setting NUXT_PUBLIC_POCKETBASE_URL
+            pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'
         }
     },
     plugins: [
         '~/plugins/animxyz',
         '~/plugins/pocketbase.client',
-    ]
+    ],
+
+    umami: {
+        id: '58731ff6-4a2f-47c3-86ed-2a459ffe76f2',
+        host: 'https://analytics.practocore.com',
+        autoTrack: true,
+        // proxy: 'cloak',
+        // useDirective: true,
+        // ignoreLocalhost: true,
+        // excludeQueryParams: false,
+        // domains: ['cool-site.app', 'my-space.site'],
+        // customEndpoint: '/my-custom-endpoint',
+        // enabled: false,
+        // logErrors: true,
+    },
 })

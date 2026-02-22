@@ -39,7 +39,7 @@ export function subscribeToDirectInvites(callBack : Function) {
     pocketbase.collection('OrganisationDirectInvites').subscribe('*', callBack);
 }
 
-export async function sendDirectInvite(email: string, organisationId: string, role: string = 'member', name?: string) {
+export async function sendDirectInvite(email: string, organisationId: string, role: string = 'member', name?: string, organisationRole?: string) {
     return fetch(`${SERVER_URL}/api/invitations/send`, {
         method: 'POST',
         headers: {
@@ -50,7 +50,8 @@ export async function sendDirectInvite(email: string, organisationId: string, ro
             email,
             organisationId,
             role,
-            name
+            name,
+            organisationRole
         })
     }).then(res => res.json());
 }
@@ -186,4 +187,26 @@ export async function getOrganisationMembers(organisationId: string) {
             "Authorization": `Bearer ${pocketbase.authStore.token}`,
         },
     }).then(res => res.json());
+}
+
+export async function getUserOrganisationMembers() {
+    return fetch(`${SERVER_URL}/api/members/organisation`, {
+        method: 'GET',
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`,
+        },
+    }).then(res => res.json());
+}
+
+export function updateUserPermissions(permissionsId : string, permissions: Object) {
+    return pocketbase.collection("OrganisationUserPermissions").update(permissionsId, permissions);
+}
+
+export function getUserPermissions(permissionsId : string) {
+    return pocketbase.collection("OrganisationUserPermissions").getOne(permissionsId);
+}
+
+export function updateUser(userId : string, options: object) {
+    return pocketbase.collection("Users").update(userId, options);
 }

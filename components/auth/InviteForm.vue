@@ -10,7 +10,8 @@ const user = getSignedInUser();
 const formData = ref({
   email: '',
   name: '',
-  role: 'member'
+  role: 'member',
+  organisationRole: 'associate'
 });
 
 const sending = ref(false);
@@ -31,12 +32,6 @@ const roleOptions = [
     description: 'Can view and manage matters they are assigned to'
   },
   {
-    value: 'moderator',
-    label: 'Moderator',
-    icon: Shield,
-    description: 'Can manage all matters and view reports'
-  },
-  {
     value: 'admin',
     label: 'Admin',
     icon: Crown,
@@ -44,8 +39,40 @@ const roleOptions = [
   }
 ];
 
+const organisationRoleOptions = [
+  {
+    value: 'partner',
+    label: 'Partner',
+    description: 'Senior leadership and equity partner'
+  },
+  {
+    value: 'senior_associate',
+    label: 'Senior Associate',
+    description: 'Experienced attorney with advanced responsibilities'
+  },
+  {
+    value: 'associate',
+    label: 'Associate',
+    description: 'Licensed attorney working on matters'
+  },
+  {
+    value: 'paralegal',
+    label: 'Paralegal',
+    description: 'Legal support professional'
+  },
+  {
+    value: 'intern',
+    label: 'Intern',
+    description: 'Law student or trainee'
+  }
+];
+
 const selectedRoleInfo = computed(() => {
   return roleOptions.find(option => option.value === formData.value.role);
+});
+
+const selectedOrganisationRoleInfo = computed(() => {
+  return organisationRoleOptions.find(option => option.value === formData.value.organisationRole);
 });
 
 const handleSendInvite = async () => {
@@ -66,7 +93,8 @@ const handleSendInvite = async () => {
       formData.value.email,
       user.organisation,
       formData.value.role,
-      formData.value.name || undefined
+      formData.value.name || undefined,
+      formData.value.organisationRole
     );
 
     if (result.message) {
@@ -89,7 +117,8 @@ const handleSendInvite = async () => {
       formData.value = {
         email: '',
         name: '',
-        role: 'member'
+        role: 'member',
+        organisationRole: 'associate'
       };
 
       // Emit event to parent
@@ -181,8 +210,8 @@ const formatTimeAgo = (timestamp: Date) => {
       <!-- Role Selection -->
       <div class="flex flex-col gap-1.5">
         <Label for="role">Role <span class="text-destructive">*</span></Label>
-        <Select v-model="formData.role">
-          <SelectTrigger id="role">
+        <Select v-model="formData.role" class="w-full">
+          <SelectTrigger id="role" class="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -202,6 +231,34 @@ const formatTimeAgo = (timestamp: Date) => {
           <component :is="selectedRoleInfo.icon" class="size-4 mt-0.5 text-muted-foreground" />
           <p class="text-xs text-muted-foreground">
             {{ selectedRoleInfo.description }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Organisation Role Selection -->
+      <div class="flex flex-col gap-1.5 w-full">
+        <Label for="organisationRole">Organisation Role <span class="text-destructive">*</span></Label>
+        <Select class="w-full" v-model="formData.organisationRole">
+          <SelectTrigger id="organisationRole" class="w-full">
+            {{ formData.organisationRole ? organisationRoleOptions.find(option => option.value === formData.organisationRole)?.label : 'Select organisation role' }}
+          </SelectTrigger>
+          <SelectContent class="w-full">
+            <SelectItem
+              v-for="option in organisationRoleOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              <div class="flex flex-col gap-0.5">
+                <span class="font-medium">{{ option.label }}</span>
+                <span class="text-xs text-muted-foreground">{{ option.description }}</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <div v-if="selectedOrganisationRoleInfo" class="flex flex-row items-start gap-2 p-2 bg-muted/50 rounded-md">
+          <Shield class="size-4 mt-0.5 text-muted-foreground" />
+          <p class="text-xs text-muted-foreground">
+            {{ selectedOrganisationRoleInfo.description }}
           </p>
         </div>
       </div>

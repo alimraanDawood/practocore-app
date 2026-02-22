@@ -116,6 +116,7 @@ const onTourComplete = () => {
   markTourCompleted();
 }
 
+const { hasPermission } = usePermissions()
 </script>
 
 <template>

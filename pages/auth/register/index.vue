@@ -381,7 +381,6 @@ const submitData = async () => {
       userId.value = result.userId;
 
       orgId.value = result.organisation || null;
-
     }
     // Directly setting currentStep here, as OTP might be a terminal step not for history nav
     // If you want OTP to be part of back/forward, use `goToStep(RegistrationSteps.OTP)`

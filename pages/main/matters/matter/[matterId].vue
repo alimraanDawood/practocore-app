@@ -103,7 +103,16 @@
             <div class="border text-left flex flex-col gap-1 bg-muted p-2 rounded-lg">
               <span class="ibm-plex-serif font-semibold">{{ matter?.expand?.events?.at(0)?.input_prompt }} (and {{ matter?.expand?.events?.length - 1 }} other{{matter?.expand?.events?.length - 1 > 1 ? 's' : '' }})</span>
 
-              <Button size="sm" variant="outline" class="w-fit">Manage Events</Button>
+              <Drawer>
+                <DrawerTrigger class="w-fit">
+                  <Button size="sm" variant="outline" class="w-fit">Manage Events</Button>
+                </DrawerTrigger>
+
+                <DrawerContent>
+                  <DialogHeader>
+                  </DialogHeader>
+                </DrawerContent>
+              </Drawer>
             </div>
           </div>
 

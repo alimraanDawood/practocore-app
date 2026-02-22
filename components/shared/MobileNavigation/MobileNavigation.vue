@@ -30,13 +30,13 @@
       </button>
     </NuxtLink>
 
-    <NuxtLink v-if="authStore.isAdmin" to="/main/organisation/">
+    <NuxtLink v-if="authStore.isAdmin" to="/main/lawyers/">
       <button
           @click="triggerHaptic"
           class="flex flex-col items-center disabled:opacity-50 text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main-organisation' }">
+          :class="{ 'font-semibold text-primary': $route.name === 'main-lawyers' }">
         <Users class="size-5"/>
-        <span>Organisation</span>
+        <span>Lawyers</span>
       </button>
     </NuxtLink>
 

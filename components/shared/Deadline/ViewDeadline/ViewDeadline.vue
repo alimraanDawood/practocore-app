@@ -112,7 +112,7 @@
         <div class="flex flex-col gap-2 p-4 border-t bg-background">
             <SharedDeadlineCompleteDeadline v-if="deadline.dynamic" :deadline="deadline" :index="index"
                 @updated="handleUpdate">
-                <Button v-if="!deadline.completed" class="w-full">
+                <Button v-if="!(deadline.status === 'fulfilled')" class="w-full">
                     <CheckCircle class="size-4 mr-2" />
                     {{ deadline?.action || 'Mark as Complete' }}
                 </Button>
@@ -248,7 +248,7 @@
                 <div class="flex flex-col gap-1 w-full">
                     <SharedDeadlineCompleteDeadline v-if="deadline.dynamic" :deadline="deadline" :index="index"
                         @updated="handleUpdate">
-                        <Button v-if="!deadline.completed" class="w-full">
+                        <Button v-if="!(deadline.status === 'fulfilled')" class="w-full">
                             <CheckCircle class="size-4 mr-2" />
                             {{ deadline?.action || 'Mark as Complete' }}
                         </Button>
@@ -341,7 +341,7 @@ const sortedDeadlines = computed(() => {
 
 // Get deadline status
 const getDeadlineStatus = () => {
-    if (props.deadline.completed) return 'completed';
+    if (props.deadline.status === 'fulfilled') return 'completed';
     const now = new Date();
     const deadlineDate = new Date(props.deadline.date);
     if (now > deadlineDate) return 'overdue';

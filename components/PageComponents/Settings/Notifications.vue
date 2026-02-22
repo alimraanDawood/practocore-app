@@ -1,12 +1,5 @@
 <template>
     <div class="flex flex-col space-y-3">
-        <div class="flex flex-col">
-          <h2 class="text-2xl font-semibold ibm-plex-serif">Notifications</h2>
-          <p class="text-sm text-muted-foreground">Configure how you receive notifications. </p>
-        </div>
-
-        <Separator />
-
         <form class="grid w-full space-y-5" @submit="submitForm">
             <FormField v-slot="{ value, handleChange }" name="use_email_notifications">
                 <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
@@ -56,6 +49,22 @@
                 </FormItem>
             </FormField>
 
+          <FormField v-slot="{ value, handleChange }" name="use_sms_notifications">
+            <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div class="space-y-0.5">
+                <FormLabel class="text-base">
+                  SMS Notifications
+                </FormLabel>
+                <FormDescription>
+                  Receive sms notifications on your mobile phone.
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch :model-value="value" @update:model-value="handleChange" />
+              </FormControl>
+            </FormItem>
+          </FormField>
+
             <FormField v-slot="{ value, handleChange }" name="reminder_time">
                 <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div class="space-y-0.5">
@@ -99,6 +108,7 @@ const formSchema = toTypedSchema(z.object({
     use_email_notifications: z.boolean(),
     use_app_notifications: z.boolean(),
     use_push_notifications: z.boolean(),
+    use_sms_notifications: z.boolean(),
     reminder_time: z.string(), // in the form 13:30
 }));
 
@@ -134,6 +144,7 @@ onMounted(async () => {
         use_app_notifications: preferences.use_app_notifications,
         use_email_notifications: preferences.use_email_notifications,
         use_push_notifications: preferences.use_push_notifications,
+        use_sms_notifications: preferences.use_sms_notifications,
         reminder_time: preferences.reminder_time,
     });
 });

@@ -32,6 +32,7 @@
     "@nuxt/icon": "^1.15.0",
     "@nuxtjs/color-mode": "3.5.2",
     "@nuxtjs/tailwindcss": "^6.14.0",
+    "@sentry/nuxt": "^10.39.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/vue-table": "^8.21.3",
@@ -61,6 +62,7 @@
     "lucide-vue-next": "^0.522.0",
     "nuxt": "^4.3.1",
     "nuxt-tiptap-editor": "^2.3.1",
+    "nuxt-umami": "3.2.1",
     "nuxt-viewport": "^2.3.1",
     "pinia": "^3.0.4",
     "pocketbase": "^0.26.8",
@@ -85,6 +87,7 @@
     "vue-sonner": "^2.0.9",
     "vue3-lottie": "^3.3.1",
     "vue3-m-circle-progress-bar": "^0.6.1",
+    "wizard-of-zod": "^0.5.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

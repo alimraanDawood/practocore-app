@@ -212,3 +212,14 @@ export function unsubscribeFromUser() {
 export function refreshUserData() {
     pocketbase.collection('Users').authRefresh();
 }
+
+export function getUserPermissions() {
+    return fetch(`${SERVER_URL}/api/practocore/auth/get-user-permissions`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        }
+    });
+}
+
