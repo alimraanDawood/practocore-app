@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col h-dvh overflow-hidden">
     <!-- Header -->
-    <div class="flex-shrink-0 flex flex-row w-full p-3 border-b items-center justify-between">
+    <div class="shrink-0 flex flex-row w-full p-3 border-b items-center justify-between">
       <div class="flex flex-row gap-2 items-center">
         <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-10" alt="logo" />
         <span class="text-xl font-semibold ibm-plex-serif">PractoCore</span>

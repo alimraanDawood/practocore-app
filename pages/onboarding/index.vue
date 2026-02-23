@@ -15,7 +15,7 @@
           <span class="text-lg font-semibold ibm-plex-serif">PractoCore</span>
         </div>
         <div class="flex flex-row gap-2 items-center">
-          <SharedDarkModeSwitch />
+          <SharedDarkModeSwitch/>
           <NuxtLink to="/main">
             <Button
                 variant="outline"
@@ -26,11 +26,18 @@
           </NuxtLink>
 
           <div v-if="isTauri" class="flex flex-row items-center gap-2">
-            <button @click="minimizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><Minus class="size-4" /></button>
-            <button @click="toggleMaximizeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
-              <Maximize2 class="size-3 stroke-3" />
+            <button @click="minimizeWindow"
+                    class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
+              <Minus class="size-4"/>
             </button>
-            <button @click="closeWindow" class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full"><X class="size-4" /></button>
+            <button @click="toggleMaximizeWindow"
+                    class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
+              <Maximize2 class="size-3 stroke-3"/>
+            </button>
+            <button @click="closeWindow"
+                    class="bg-muted text-muted-foreground size-6 grid place-items-center rounded-full">
+              <X class="size-4"/>
+            </button>
           </div>
         </div>
       </div>
@@ -39,7 +46,8 @@
       <div class="flex flex-col w-full h-full items-center overflow-hidden">
         <div class=" overflow-y-scroll flex flex-col w-full max-w-3xl h-full border-x">
           <!-- Welcome Screen -->
-          <div v-if="currentStep === 0" class="flex flex-col lg:items-center lg:justify-center lg:text-center h-full gap-6 p-5 animate-in fade-in duration-500">
+          <div v-if="currentStep === 0"
+               class="flex flex-col lg:items-center lg:justify-center lg:text-center h-full gap-6 p-5 animate-in fade-in duration-500">
             <div class="flex flex-col gap-3">
               <h1 class="text-4xl font-bold ibm-plex-serif">
                 Welcome to PractoCore
@@ -202,156 +210,91 @@
                     </div>
                     <Switch :model-value="pushNotifications" @update:model-value="v => pushNotifications = v"/>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <!-- Create Matter Step -->
-          <div v-if="currentStep === 3" class="flex flex-col gap-2 p-3 animate-in fade-in duration-500">
-            <div class="flex flex-row w-full justify-between">
-              <span class="font-semibold text-lg ibm-plex-serif">Add your matters</span>
-
-              <SharedMattersCreateMatter @created="reloadMatters">
-                <Button size="sm">
-                  <Plus />
-
-                  Add Matter
-                </Button>
-              </SharedMattersCreateMatter>
-            </div>
-
-            <div class="flex flex-col w-full">
-                <div class="lg:block hidden">
-                  <Table class="w-full">
-                    <TableHeader>
-                      <TableRow class="bg-muted divide-x border">
-                        <TableHead class="w-[150px] font-semibold ibm-plex-serif">Case Number</TableHead>
-                        <TableHead class="font-semibold ibm-plex-serif">Case Name</TableHead>
-                        <TableHead class="font-semibold ibm-plex-serif">Upcoming Deadline</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody class="divide-y border border-t-0">
-                      <TableRow v-for="(matter, index) in matters?.items || []" class="divide-x">
-                        <TableCell>{{ matter?.caseNumber }}</TableCell>
-                        <TableCell>{{ matter?.name }}</TableCell>
-                        <TableCell>
-                          <div class="flex flex-row gap-1 items-center">
-                            <Clock class="size-4" />
-
-                            <span>
-                              {{ dayjs(matter?.expand?.deadlines?.sort((a, b) => new Date(a) - new Date(b))?.at(0)?.date)?.fromNow() || 'UNKOWN DATE' }}
-                            </span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-                <div class="lg:hidden flex flex-col bg-muted divide-y border rounded-lg">
-                  <div v-for="matter in matters?.items" class="flex flex-col gap-2 p-3">
-                    <div class="flex flex-row gap-1 items-center">
-                      <span class="text-sm text-muted-foreground">Matter</span>
-                      <div class="bg-muted-foreground size-1.5 rounded-full"></div>
-                      <span class="text-sm text-muted-foreground">{{ matter?.caseNumber }}</span>
+                  <div class="flex flex-col gap-3 p-3 rounded-md hover:bg-muted/50 transition-colors">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <MessageSquareText class="size-5 text-muted-foreground"/>
+                        <div>
+                          <p class="font-medium">SMS Notifications</p>
+                          <p class="text-xs text-muted-foreground">Receive reminders via text message</p>
+                        </div>
+                      </div>
+                      <Switch :model-value="smsNotifications" @update:model-value="v => smsNotifications = v"/>
                     </div>
 
-                    <span class="ibm-plex-serif text-xl">
-                      {{ matter?.name }}
-                    </span>
-
-                    <div class="flex flex-row gap-2 items-center">
-                      <Clock class="size-4" />
-                      {{ dayjs(matter?.expand?.deadlines?.sort((a, b) => new Date(a) - new Date(b))?.at(0)?.date)?.fromNow() || 'UNKNOWN DATE' }}
+                    <div v-if="smsNotifications" class="flex flex-col gap-1">
+                      <label class="text-sm font-medium">Phone Number</label>
+                      <InputGroup class="overflow-hidden p-0">
+                        <InputGroupAddon class="border-r px-2 bg-muted">
+                          <InputGroupText>+256</InputGroupText>
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            v-model="phone"
+                            placeholder="712345678"
+                            maxlength="9"
+                            type="tel"
+                        />
+                      </InputGroup>
+                      <p class="text-xs text-muted-foreground">Uganda number — 9 digits after +256</p>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
           </div>
 
           <!-- Invite Members Step (for organization users) -->
-          <div v-if="currentStep === 4 && isOrganizationUser"
+          <div v-if="currentStep === 3 && isOrganizationUser"
                class="flex flex-col gap-6 p-5 animate-in fade-in duration-500">
             <div class="flex flex-col gap-2 text-center">
               <h2 class="text-2xl font-bold ibm-plex-serif">Invite Your Team</h2>
               <p class="text-muted-foreground">Collaborate with your colleagues</p>
             </div>
 
-            <div class="flex flex-col gap-6 mt-4 max-w-xl mx-auto w-full">
-              <div class="flex flex-col gap-3 p-5 rounded-lg border bg-card">
-                <div class="flex items-center gap-2">
-                  <UserPlus class="size-5 text-primary"/>
-                  <h3 class="font-semibold">Invite Team Members</h3>
+            <div class="flex flex-col gap-4 mt-2 max-w-xl mx-auto w-full">
+              <!-- Option cards -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Single invite -->
+                <div class="flex flex-col gap-3 p-5 rounded-lg border bg-card">
+                  <div class="flex items-center gap-2">
+                    <UserPlus class="size-5 text-primary shrink-0"/>
+                    <h3 class="font-semibold">Invite One by One</h3>
+                  </div>
+                  <p class="text-sm text-muted-foreground flex-1">
+                    Enter an email address, assign their role and organisation position, and send an invite.
+                  </p>
+                  <InviteUser @invited="onInvited">
+                    <Button class="w-full">
+                      <UserPlus class="size-4 mr-2"/>
+                      Invite a Member
+                    </Button>
+                  </InviteUser>
                 </div>
-                <p class="text-sm text-muted-foreground">
-                  Send invitations to your team members to join your organization
-                </p>
+
+                <!-- Bulk import -->
+                <div class="flex flex-col gap-3 p-5 rounded-lg border bg-card">
+                  <div class="flex items-center gap-2">
+                    <Download class="size-5 text-primary shrink-0"/>
+                    <h3 class="font-semibold">Import via Excel</h3>
+                  </div>
+                  <p class="text-sm text-muted-foreground flex-1">
+                    Upload an Excel or CSV spreadsheet to invite multiple team members at once with their roles pre-filled.
+                  </p>
+                  <ImportLawyers @imported="onInvited">
+                    <Button variant="outline" class="w-full">
+                      <Download class="size-4 mr-2"/>
+                      Import Spreadsheet
+                    </Button>
+                  </ImportLawyers>
+                </div>
               </div>
 
-              <!-- Invite Form -->
-              <div class="flex flex-col gap-4">
-                <div v-for="(invite, index) in inviteList" :key="index" class="flex gap-2 items-start">
-                  <div class="flex-1 flex flex-col sm:flex-row gap-2">
-                    <Input
-                        v-model="invite.email"
-                        type="email"
-                        placeholder="colleague@lawfirm.com"
-                        class="flex-1"
-                    />
-                    <Input
-                        v-model="invite.name"
-                        type="text"
-                        placeholder="Full Name (optional)"
-                        class="flex-1"
-                    />
-                    <Select v-model="invite.role">
-                      <SelectTrigger class="w-full sm:w-32">
-                        <SelectValue placeholder="Role"/>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="member">Member</SelectItem>
-                        <SelectItem value="moderator">Moderator</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                      v-if="inviteList.length > 1"
-                      variant="ghost"
-                      size="icon"
-                      @click="removeInvite(index)"
-                  >
-                    <X class="size-4"/>
-                  </Button>
-                </div>
-
-                <Button variant="outline" @click="addInviteField" class="w-full">
-                  <Plus class="size-4 mr-2"/>
-                  Add Another
-                </Button>
-
-                <div v-if="invitationStatus" class="p-3 rounded-md"
-                     :class="invitationStatus.success ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'">
-                  <p class="text-sm">{{ invitationStatus.message }}</p>
-                </div>
-
-                <Button @click="sendInvitations" :disabled="isSendingInvites || !hasValidInvites" class="w-full">
-                  <Send class="size-4 mr-2"/>
-                  {{ isSendingInvites ? 'Sending Invitations...' : 'Send Invitations' }}
-                </Button>
-              </div>
-
-              <!-- Already Invited Members -->
-              <div v-if="sentInvites.length > 0" class="flex flex-col gap-2">
-                <h4 class="text-sm font-semibold text-muted-foreground">Invitations Sent</h4>
-                <div class="flex flex-col gap-2">
-                  <div v-for="invite in sentInvites" :key="invite.email"
-                       class="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                    <CheckCircle2 class="size-4 text-green-600"/>
-                    <span class="text-sm">{{ invite.email }}</span>
-                    <Badge variant="secondary" class="ml-auto">{{ invite.role }}</Badge>
-                  </div>
-                </div>
+              <!-- Sent invites counter -->
+              <div v-if="invitesSentCount > 0"
+                   class="flex items-center gap-2 p-3 rounded-md bg-green-500/10 text-green-700 dark:text-green-400 text-sm">
+                <CheckCircle2 class="size-4 shrink-0"/>
+                <span>{{ invitesSentCount }} invitation{{ invitesSentCount === 1 ? '' : 's' }} sent this session — you can still send more or continue.</span>
               </div>
             </div>
           </div>
@@ -439,9 +382,9 @@
 import {ref, computed, watch, onMounted, onUnmounted} from 'vue'
 import {useRouter} from 'vue-router'
 import {
-  ArrowLeft, ArrowRight, Bell, BellRing, Camera, CalendarCheck,
-  CheckCircle2, Clock, Mail, Plus, Send, Smartphone, Sparkles,
-  Upload, UserPlus, Users, X, Minus, Maximize2
+  ArrowLeft, ArrowRight, Bell, BellRing, Camera,
+  CheckCircle2, Clock, Download, Mail, MessageSquareText, Smartphone,
+  Upload, UserPlus, X, Minus, Maximize2
 } from 'lucide-vue-next';
 import {Cropper} from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
@@ -449,8 +392,9 @@ import {
   getSignedInUser, updateUser, getUserPreferences, updateUserPreferencesById, refreshUserData, pocketbase, SERVER_URL,
   getOrganisation
 } from '~/services/auth'
-import {sendDirectInvite} from '~/services/admin'
 import {toast} from 'vue-sonner'
+import InviteUser from '~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue'
+import ImportLawyers from '~/components/PageComponents/Organisation/Users/ImportLawyers/ImportLawyers.vue'
 import {App as CapacitorApp} from '@capacitor/app'
 import {invoke} from "@tauri-apps/api/core";
 import {getCurrentWindow} from "@tauri-apps/api/window";
@@ -491,7 +435,6 @@ const steps = computed(() => {
     {id: 'welcome', title: 'Welcome', required: false},
     {id: 'photo', title: 'Profile Photo', required: false},
     {id: 'preferences', title: 'Preferences', required: false},
-    {id: 'matter', title: 'First Matter', required: false},
   ]
 
   if (isOrganizationAdmin.value) {
@@ -622,6 +565,8 @@ const reminderTime = ref('09:00');
 const emailNotifications = ref(true);
 const appNotifications = ref(true);
 const pushNotifications = ref(true);
+const smsNotifications = ref(false);
+const phone = ref('');
 
 const savePreferences = async () => {
   try {
@@ -629,8 +574,12 @@ const savePreferences = async () => {
       reminder_time: reminderTime.value,
       use_email_notifications: emailNotifications.value,
       use_app_notifications: appNotifications.value,
-      use_push_notifications: pushNotifications.value
+      use_push_notifications: pushNotifications.value,
+      use_sms_notifications: smsNotifications.value,
     });
+    if (smsNotifications.value && phone.value) {
+      await updateUser({phone: `+256${phone.value}`});
+    }
   } catch (error) {
     console.error('Failed to save preferences:', error)
   }
@@ -647,71 +596,10 @@ const handleMatterCreated = () => {
 }
 
 // Invitations
-interface Invite {
-  email: string
-  name: string
-  role: string
-}
+const invitesSentCount = ref(0)
 
-const inviteList = ref<Invite[]>([
-  {email: '', name: '', role: 'member'}
-])
-const sentInvites = ref<Invite[]>([])
-const isSendingInvites = ref(false)
-const invitationStatus = ref<{ success: boolean; message: string } | null>(null)
-
-const hasValidInvites = computed(() => {
-  return inviteList.value.some(invite => invite.email.trim() !== '')
-})
-
-const addInviteField = () => {
-  inviteList.value.push({email: '', name: '', role: 'member'})
-}
-
-const removeInvite = (index: number) => {
-  inviteList.value.splice(index, 1)
-}
-
-const sendInvitations = async () => {
-  const validInvites = inviteList.value.filter(invite => invite.email.trim() !== '')
-
-  if (validInvites.length === 0) return
-
-  isSendingInvites.value = true
-  invitationStatus.value = null
-
-  try {
-    const orgId = user.value?.organisation
-
-    if (!orgId) {
-      throw new Error('No organization found')
-    }
-
-    const promises = validInvites.map(invite =>
-        sendDirectInvite(invite.email, orgId, invite.role, invite.name || undefined)
-    )
-
-    await Promise.all(promises)
-
-    sentInvites.value.push(...validInvites)
-    inviteList.value = [{email: '', name: '', role: 'member'}]
-
-    invitationStatus.value = {
-      success: true,
-      message: `Successfully sent ${validInvites.length} invitation${validInvites.length > 1 ? 's' : ''}`
-    }
-
-    toast.success(`Sent ${validInvites.length} invitation${validInvites.length > 1 ? 's' : ''}`)
-  } catch (error) {
-    console.error('Failed to send invitations:', error)
-    invitationStatus.value = {
-      success: false,
-      message: 'Failed to send invitations. Please try again.'
-    }
-    toast.error('Failed to send invitations')
-  } finally {
-    isSendingInvites.value = false
-  }
+const onInvited = () => {
+  invitesSentCount.value++
 }
 
 // Navigation
@@ -791,6 +679,8 @@ onMounted(async () => {
       emailNotifications.value = prefs.use_email_notifications ?? true
       appNotifications.value = prefs.use_app_notifications ?? true
       pushNotifications.value = prefs.use_push_notifications ?? false
+      smsNotifications.value = prefs.use_sms_notifications ?? false
+      phone.value = (getSignedInUser()?.phone ?? '').replace(/^\+256/, '')
     }
 
 

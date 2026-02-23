@@ -50,18 +50,40 @@
             </FormField>
 
           <FormField v-slot="{ value, handleChange }" name="use_sms_notifications">
-            <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
-              <div class="space-y-0.5">
-                <FormLabel class="text-base">
-                  SMS Notifications
-                </FormLabel>
-                <FormDescription>
-                  Receive sms notifications on your mobile phone.
-                </FormDescription>
+            <FormItem class="rounded-lg border p-4 space-y-3">
+              <div class="flex flex-row items-center justify-between">
+                <div class="space-y-0.5">
+                  <FormLabel class="text-base">
+                    SMS Notifications
+                  </FormLabel>
+                  <FormDescription>
+                    Receive sms notifications on your mobile phone.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch :model-value="value" @update:model-value="handleChange" />
+                </FormControl>
               </div>
-              <FormControl>
-                <Switch :model-value="value" @update:model-value="handleChange" />
-              </FormControl>
+
+              <FormField v-if="value" v-slot="{ componentField }" name="phone">
+                <FormItem>
+                  <FormLabel>Phone Number</FormLabel>
+                  <FormControl>
+                    <InputGroup class="overflow-hidden p-0">
+                      <InputGroupAddon class="border-r px-2 bg-muted">
+                        <InputGroupText>+256</InputGroupText>
+                      </InputGroupAddon>
+                      <InputGroupInput
+                          placeholder="712345678"
+                          v-bind="componentField"
+                          maxlength="9"
+                      />
+                    </InputGroup>
+                  </FormControl>
+                  <FormDescription>Uganda number in the format +256XXXXXXXXX.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              </FormField>
             </FormItem>
           </FormField>
 
@@ -101,7 +123,7 @@ import { Loader } from 'lucide-vue-next';
 import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
 import * as z from 'zod';
-import { getUserPreferences, updateUserPreferences } from '~/services/auth';
+import { getUserPreferences, updateUserPreferences, updateUser, getSignedInUser } from '~/services/auth';
 import { toast } from 'vue-sonner';
 
 const formSchema = toTypedSchema(z.object({
@@ -110,6 +132,17 @@ const formSchema = toTypedSchema(z.object({
     use_push_notifications: z.boolean(),
     use_sms_notifications: z.boolean(),
     reminder_time: z.string(), // in the form 13:30
+    phone: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.use_sms_notifications) {
+        if (!data.phone || !/^\d{9}$/.test(data.phone)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Enter the 9-digit Uganda number (e.g. 712345678).',
+                path: ['phone'],
+            });
+        }
+    }
 }));
 
 const loading = ref(false);
@@ -120,9 +153,16 @@ const submitForm = form.handleSubmit(async (values) => {
     loading.value = true;
 
     try {
-        const result = await updateUserPreferences(values);
+        const { phone, ...preferencesValues } = values;
+
+        const result = await updateUserPreferences(preferencesValues);
+
+        if (values.use_sms_notifications && phone) {
+            await updateUser({ phone: `+256${phone}` });
+        }
+
         if (result) {
-            toast.success("Profile Update Successfully!");
+            toast.success("Profile Updated Successfully!");
 
             if (import.meta.client) {
                 window.location.reload();
@@ -134,11 +174,11 @@ const submitForm = form.handleSubmit(async (values) => {
     }
 
     loading.value = false;
-
 });
 
 onMounted(async () => {
     const preferences = await getUserPreferences();
+    const user = getSignedInUser();
 
     form.setValues({
         use_app_notifications: preferences.use_app_notifications,
@@ -146,6 +186,7 @@ onMounted(async () => {
         use_push_notifications: preferences.use_push_notifications,
         use_sms_notifications: preferences.use_sms_notifications,
         reminder_time: preferences.reminder_time,
+        phone: user?.phone?.replace(/^\+256/, '') ?? '',
     });
 });
 

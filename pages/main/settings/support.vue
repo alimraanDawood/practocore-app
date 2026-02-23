@@ -4,20 +4,16 @@
       <div class="flex flex-col w-full h-full overflow-y-scroll">
 
         <!-- Back button for mobile -->
-        <div class="flex flex-row items-center gap-3 p-4 border-b lg:hidden">
-          <Button variant="ghost" size="icon" @click="$router.back()">
+        <div class="flex flex-row items-center gap-3 p-3 border-b lg:hidden">
+          <Button variant="outline" size="icon-sm" @click="$router.back()">
             <ArrowLeft class="size-5" />
           </Button>
-          <h1 class="text-xl font-semibold">Support</h1>
+          <span class="text-lg font-semibold">Support</span>
+
+          <SharedDarkModeSwitch class="ml-auto" />
         </div>
 
-        <!-- Desktop header -->
-        <div class="hidden lg:flex flex-col p-6 border-b gap-1">
-          <h1 class="text-2xl font-semibold ibm-plex-serif">Support &amp; Help</h1>
-          <p class="text-sm text-muted-foreground">We're here to help. Reach out any time — we typically respond within a few hours.</p>
-        </div>
-
-        <div class="flex flex-col gap-6 p-4 lg:p-6">
+        <div class="flex flex-col gap-6 p-4 lg:p-6 h-full overflow-y-scroll">
 
           <!-- Priority channels -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -187,7 +183,7 @@ import { ArrowLeft, Headset, Mail, MessageCircle, ExternalLink, Copy } from "luc
 import { toast } from 'vue-sonner';
 
 definePageMeta({
-  layout: 'default'
+  layout: 'no-mobile-nav'
 })
 
 const platform = computed(() => {

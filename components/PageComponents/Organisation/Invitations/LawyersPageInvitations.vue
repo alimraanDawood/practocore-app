@@ -147,7 +147,7 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
 <template>
   <div class="flex flex-col gap-4 p-3 h-full overflow-y-scroll">
     <!-- Stats Cards -->
-    <div class="grid lg:grid-cols-3 gap-2">
+    <div class="hidden lg:grid-cols-3 gap-2">
       <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Pending</span>

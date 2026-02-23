@@ -12,8 +12,8 @@
         <div v-if="billingStore?.activeSubscription" class="flex flex-col border rounded-lg overflow-hidden">
           <!-- Subscription Header -->
           <div class="bg-muted/50 p-4 border-b">
-            <div class="flex flex-row items-start justify-between">
-              <div class="flex flex-col gap-2">
+            <div class="flex flex-col lg:flex-row items-start gap-3 justify-between">
+              <div class="flex flex-col gap-1">
                 <div class="flex flex-row items-center gap-2">
                   <span class="text-2xl ibm-plex-serif font-semibold">
                     {{ billingStore.activeSubscription.trial ? 'Free Trial' : billingStore.activeSubscription.expand?.plan?.name || 'Subscription' }}
@@ -30,7 +30,7 @@
                 </div>
               </div>
 
-              <div class="flex flex-col items-end gap-1">
+              <div class="flex lg:flex-col flex-row justify-between w-full lg:w-fit lg:justify-start items-center lg:items-end gap-1">
                 <span class="text-lg lg:text-2xl font-bold ibm-plex-serif">
                   UGX {{ billingStore.activeSubscription?.expand?.plan?.perSeatMonthly?.toLocaleString() || '0' }}
                 </span>
@@ -69,12 +69,17 @@
             </div>
 
             <!-- Seats Usage (if applicable) -->
-            <div v-if="billingStore.activeSubscription.expand?.plan?.maxSeats" class="flex flex-col gap-2">
+            <div v-if="billingStore.activeSubscription?.type === 'organisation'" class="flex flex-col gap-2">
               <div class="flex flex-row justify-between text-sm">
                 <span class="font-medium">Seat Usage</span>
-                <span class="font-semibold ibm-plex-serif">
-                  {{ organisationStore.organisation?.active_seats || 0 }} / {{ billingStore.activeSubscription.expand.plan.maxSeats }}
-                </span>
+                <div class="font-semibold ibm-plex-serif flex gap-1 flex-row">
+                  <span>
+                    {{ organisationStore.organisation?.active_seats || 0 }}
+                  </span>
+                  /
+                  <Infinity v-if="billingStore.activeSubscription.expand.plan.maxSeats === -1" />
+                  <span v-else>{{ billingStore.activeSubscription.expand.plan.maxSeats }}</span>
+                </div>
               </div>
               <div class="flex flex-row bg-muted/50 h-2 overflow-hidden rounded-full w-full">
                 <div
@@ -224,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { Calendar, CreditCard, Tag, ArrowRight, Loader2, FileText } from "lucide-vue-next";
+import { Calendar, CreditCard, Tag, ArrowRight, Loader2, FileText, Infinity } from "lucide-vue-next";
 import dayjs from "dayjs";
 import { useOrganisationStore } from "~/stores/organisation";
 import { getSignedInUser } from "~/services/auth";

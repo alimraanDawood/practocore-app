@@ -108,29 +108,13 @@
             </div>
           </div>
 
-          <div class="flex flex-col gap-2">
+          <div v-if="authStore.isAdmin && getSignedInUser()?.organisation" class="flex flex-col gap-2">
             <span class="font-semibold">Organisation</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/organisation?tab=profile')">
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/organisation')">
                 <div class="flex flex-row justify-center items-center gap-2">
                   <Building2 />
                   Organisation Profile
-                </div>
-                <ChevronRight class="size-5 text-muted-foreground" />
-              </Button>
-
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/organisation?tab=users')">
-                <div class="flex flex-row justify-center items-center gap-2">
-                  <Users />
-                  Organisation Members
-                </div>
-                <ChevronRight class="size-5 text-muted-foreground" />
-              </Button>
-
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/organisation?tab=invitations')">
-                <div class="flex flex-row justify-center items-center gap-2">
-                  <UserPlus />
-                  Invitations
                 </div>
                 <ChevronRight class="size-5 text-muted-foreground" />
               </Button>
@@ -210,4 +194,6 @@ const signOutUser = () => {
   signOut()
   window.location.reload()
 }
+
+const authStore = useAuthStore();
 </script>

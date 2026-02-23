@@ -3,25 +3,50 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 
 export { pocketbase, SERVER_URL };
 
+
+import { Browser } from '@capacitor/browser';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+
 export async function signUpWithGoogle() {
     const isTauri = '__TAURI_INTERNALS__' in window;
-    if(isTauri) {
+    const isNative = Capacitor.isNativePlatform();
+
+    if (isNative) {
+        // 1. Listen for the specific PocketBase redirect URL
+        const urlListener = await App.addListener('appUrlOpen', async (data) => {
+            // Check if the URL being opened is your PocketBase redirect handler
+            if (data.url.includes('/api/oauth2-redirect')) {
+                await Browser.close(); // Close the Chrome Custom Tab
+                urlListener.remove();  // Cleanup the listener
+            }
+        });
+
         return pocketbase.collection('Users').authWithOAuth2({
             provider: 'google',
-            urlCallback: (url) => {
-                openUrl(url);
+            // Use the standard HTTPS redirect that PocketBase expects
+            redirectTo: 'https://your-pocketbase-url.com',
+            urlCallback: async (url) => {
+                await Browser.open({ url });
             }
         });
     }
 
-    return pocketbase.collection('Users').authWithOAuth2({
-        provider: 'google',
-    });
+    if (isTauri) {
+        return pocketbase.collection('Users').authWithOAuth2({
+            provider: 'google',
+            urlCallback: (url) => openUrl(url)
+        });
+    }
+
+    // Default Web Flow
+    return pocketbase.collection('Users').authWithOAuth2({ provider: 'google' });
 }
+
 
 export async function getUserPreferences() {
     if(pocketbase.authStore.record) {
-        return await pocketbase.collection('UserPreferences').getFirstListItem( `Users_via_preferences.id = '${pocketbase.authStore.record?.id}'`);
+        return await pocketbase.collection('UserPreferences').getFirstListItem( `user = '${pocketbase.authStore.record?.id}'`);
     }
 }
 
