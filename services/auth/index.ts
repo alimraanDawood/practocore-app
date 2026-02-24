@@ -185,10 +185,6 @@ export async function requestInviteLink(organisationId : string) {
     }).then(res => res.json());
 }
 
-export async function getOrganisations() {
-    return pocketbase.collection('Organisations').getFullList();
-}
-
 export async function getOrganisationInviteReference(token : string) {
     return fetch(`${SERVER_URL}/api/invitations/verify/${token}`, { method: 'GET',
         headers: {
@@ -248,3 +244,30 @@ export function getUserPermissions() {
     });
 }
 
+export async function subscribeToPermissions(permissionId : string, callback : Function) {
+    return pocketbase.collection('OrganisationUserPermissions').subscribe(permissionId, callback);
+}
+
+export function unsubscribeFromPermissions(permissionId : string) {
+    return pocketbase.collection('OrganisationUserPermissions').unsubscribe(permissionId);
+}
+
+export function getOrganisations() {
+    return fetch(`${SERVER_URL}/api/practocore/auth/get-organisations`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        }
+    });
+}
+
+export function changeOrganisation(organisationId : string) {
+    return fetch(`${SERVER_URL}/api/practocore/auth/change-organisation/${organisationId}`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        }
+    });
+}

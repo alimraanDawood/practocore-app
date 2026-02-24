@@ -50,6 +50,12 @@
             </Button>
           </SharedSettingsOrganisationSettingsDialog>
 
+          <SharedSwitchOrganisations>
+            <Button variant="ghost" class="justify-start w-full" size="sm">
+              <RefreshCcw />
+              Change Organisation
+            </Button>
+          </SharedSwitchOrganisations>
 
           <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.organisations?.length > 1">
             <Building2/>
@@ -116,9 +122,8 @@
 </template>
 
 <script setup>
-import {ChevronsUpDown, Settings, UserCircle, Building2, CreditCard, LogOut, Users2} from 'lucide-vue-next';
+import {ChevronsUpDown, Settings, UserCircle, RefreshCcw, Building2, CreditCard, LogOut, Users2} from 'lucide-vue-next';
 import {getOrganisation, getSignedInUser, signOut} from '~/services/auth';
-import OrganisationSelector from './OrganisationSelector.vue';
 import {PopoverClose} from "reka-ui";
 
 const authStore = useAuthStore();
