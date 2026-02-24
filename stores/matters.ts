@@ -274,15 +274,18 @@ export const useMattersStore = defineStore('matters', {
       subscribeToMatters(async (data: any) => {
         const { action, record } = data
 
-        const expandedRecord = await getMatter(record.id, {});
-        // Handle subscription events optimistically
         switch (action) {
           case 'create':
-            this.addMatterOptimistic(expandedRecord);
+            // Invalidate list cache so next fetch picks it up
+            this.lastFetched = 0;
             break
 
           case 'update':
-            this.updateMatterOptimistic(record.id, expandedRecord);
+            // Invalidate the individual matter cache so the page's
+            // reloadMatter will always fetch fresh data from the backend
+            if (this.matterCache[record.id]) {
+              this.matterCache[record.id]!.timestamp = 0;
+            }
             break
 
           case 'delete':
@@ -290,8 +293,7 @@ export const useMattersStore = defineStore('matters', {
             break
 
           default:
-            // For unknown actions, do a background refresh
-            this.fetchMattersInBackground()
+            this.lastFetched = 0;
         }
       });
       this._subscribed = true;

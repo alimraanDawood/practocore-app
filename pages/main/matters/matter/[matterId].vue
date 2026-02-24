@@ -213,8 +213,10 @@ import {
   subscribeToDeadline,
   subscribeToMatter,
   unsubscribeToAllDeadlines,
+  unsubscribeToDeadline,
   unsubscribeToMatter
 } from '~/services/matters';
+import { useDebounceFn } from '@vueuse/core';
 import {useMattersStore} from '~/stores/matters';
 import dayjs from 'dayjs';
 import {Calendar} from '@/components/ui/calendar_enhanced';
@@ -347,6 +349,52 @@ const mockEvents = computed(() => {
   });
 })
 
+// Track which deadline IDs we are currently subscribed to
+const subscribedDeadlineIds = ref(new Set());
+
+// Debounced reload – collapses rapid bursts from multiple simultaneous
+// subscription events (matter update + several deadline updates) into a
+// single fetch that runs 300 ms after the last event fires.
+const debouncedReloadMatter = useDebounceFn(async () => {
+  try {
+    console.log("Matter updating! Forcing reload!");
+    const matterId = useRoute().params.matterId;
+    // Force-bypass cache so we always get fresh data from the backend
+    const fresh = await mattersStore.fetchMatter(matterId, {
+      forceRefresh: true,
+      showLoading: false
+    });
+    matter.value = fresh;
+    console.log("Updated!");
+
+    // Re-subscribe to any deadlines that were added since the last load
+    syncDeadlineSubscriptions();
+  } catch (e) {
+    console.error(e);
+  }
+}, 300);
+
+// Keep deadline subscriptions in sync with the current matter.deadlines list
+const syncDeadlineSubscriptions = () => {
+  const currentIds = new Set(matter.value?.deadlines ?? []);
+
+  // Subscribe to deadlines we haven't subscribed to yet
+  for (const id of currentIds) {
+    if (!subscribedDeadlineIds.value.has(id)) {
+      subscribeToDeadline(id, debouncedReloadMatter);
+      subscribedDeadlineIds.value.add(id);
+    }
+  }
+
+  // Unsubscribe from deadlines that are no longer part of this matter
+  for (const id of subscribedDeadlineIds.value) {
+    if (!currentIds.has(id)) {
+      unsubscribeToDeadline(id);
+      subscribedDeadlineIds.value.delete(id);
+    }
+  }
+};
+
 onMounted(async () => {
   const matterId = useRoute().params.matterId;
 
@@ -357,35 +405,22 @@ onMounted(async () => {
 
   isInitialLoad.value = false;
 
-  // Subscribe to real-time updates
-  subscribeToMatter(matter?.value?.id, reloadMatter);
+  // Subscribe to real-time updates for the matter itself
+  subscribeToMatter(matter?.value?.id, debouncedReloadMatter);
 
-  for (let deadline of matter.value?.deadlines) {
-    subscribeToDeadline(deadline, useDebounceFn(reloadMatter));
-  }
+  // Subscribe to all current deadlines (and keep them in sync on reload)
+  syncDeadlineSubscriptions();
 
   if (query?.deadline) {
     selectedDeadline.value = matter.value?.expand?.deadlines?.find(d => d.id === query.deadline);
   }
 });
 
-const reloadMatter = async () => {
-  try {
-    console.log("Matter updating! Forcing reload!");
-    const matterId = useRoute().params.matterId;
-    // Refresh in background without showing loading state
-    matter.value = await mattersStore.fetchMatter(matterId, {
-      forceRefresh: true,
-      showLoading: false
-    });
-    console.log("Updated!")
-  } catch (e) {
-    console.error(e);
-  }
-}
+const reloadMatter = debouncedReloadMatter;
 
 onBeforeUnmount(() => {
   unsubscribeToMatter(matter?.value?.id);
   unsubscribeToAllDeadlines();
+  subscribedDeadlineIds.value.clear();
 });
 </script>
