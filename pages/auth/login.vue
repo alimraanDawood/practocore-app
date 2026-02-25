@@ -92,15 +92,15 @@ const toggleMaximizeWindow = () => {
       <div class="flex flex-row p-3 border-t"></div>
     </div>
 
-    <div class="bg-muted w-full h-full col-span-1 lg:flex flex-col hidden">
+    <div class="bg-muted w-full h-full col-span-1 lg:flex overflow-hidden flex-col hidden">
       <div class="flex flex-col w-full p-8">
         <span class="font-semibold text-3xl ibm-plex-serif">Litigation Deadline Management made effortless</span>
         <span class="text-muted-foreground">Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. A</span>
       </div>
 
-      <div class="relative w-full overflow-hidden pl-8 flex flex-col items-end justify-end h-full">
-        <img src="@/assets/img/screenshots/home_desktop_dark_corner.png" class="hidden dark:block shadow border rounded-xl" />
-        <img src="@/assets/img/screenshots/home_desktop_light_corner.png" class="dark:hidden border shadow rounded-xl" />
+      <div class="relative w-full overflow-hidden pl-8  flex flex-col h-full items-end justify-items-end">
+        <img src="@/assets/img/screenshots/home_desktop_dark_corner.png" class="hidden dark:block shadow border rounded-tl-xl" />
+        <img src="@/assets/img/screenshots/home_desktop_light_corner.png" class="dark:hidden border shadow rounded-tl-xl" />
       </div>
     </div>
   </div>
