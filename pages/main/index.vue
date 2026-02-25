@@ -8,6 +8,7 @@ import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/timezone';
 import {storeToRefs} from 'pinia';
 import {useDashboardStore} from '~/stores/dashboard';
+import {useMattersStore} from '~/stores/matters';
 import {TourGuideManager, type TourGuideStep} from "v-tour-guide";
 
 dayjs.extend(relativeTime);
@@ -17,6 +18,7 @@ dayjs.extend(timezone);
 
 const hours = new Date().getHours();
 const dashboard = useDashboardStore();
+const mattersStore = useMattersStore();
 const {statistics, loading} = storeToRefs(dashboard);
 
 const welcomeMessage = computed(() => {
@@ -29,7 +31,18 @@ onMounted(async () => {
   await dashboard.init();
 });
 
-const reloadStatistics = async () => {
+const reloadStatistics = async (newMatter?: any) => {
+  if (newMatter) {
+    // API may return { matter: {...} } or the matter object directly
+    const matterRecord = newMatter?.matter || newMatter;
+    if (matterRecord?.id) {
+      mattersStore.addMatterOptimistic(matterRecord);
+    } else {
+      mattersStore.fetchMattersInBackground();
+    }
+  } else {
+    mattersStore.fetchMattersInBackground();
+  }
   await dashboard.fetchStatistics(true);
 }
 
@@ -271,7 +284,7 @@ const { hasPermission } = usePermissions()
               <span>You have no matters</span>
               <span>Click
                             <div class="inline-block">
-                                <SharedMattersCreateMatter class="w-fit inline-block">
+                                <SharedMattersCreateMatter class="w-fit inline-block" @created="reloadStatistics">
                                     <button variant="link"
                                             class="!p-0 underline text-primary font-semibold">here</button>
                                 </SharedMattersCreateMatter>
