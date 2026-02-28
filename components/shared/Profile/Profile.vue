@@ -71,6 +71,13 @@
             </Button>
           </NuxtLink>
 
+          <SharedSwitchOrganisations>
+            <Button variant="ghost" class="justify-start w-full" size="sm">
+              <RefreshCcw />
+              Change Organisation
+            </Button>
+          </SharedSwitchOrganisations>
+
 
           <SharedBilling :as-modal="true">
             <Button variant="ghost" class="justify-start w-full" size="sm" v-if="authStore?.isAdmin || !authStore?.organisation">

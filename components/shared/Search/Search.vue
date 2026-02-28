@@ -160,7 +160,7 @@ watch(CmdJ, (v) => {
 
 // Load all data when component mounts
 onMounted(async () => {
-    await loadSearchData()
+    // await loadSearchData()
 })
 
 // Watch for dialog open to refresh data

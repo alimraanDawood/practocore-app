@@ -8,8 +8,9 @@
   </div>
 </template>
 
-<script setup>
-import {getSignedInUser, updateUser} from "~/services/auth/index.ts";
+<script setup lang="ts">
+import { getOrganisations, getSignedInUser, updateUser } from '~/services/auth';
+import { toast } from 'vue-sonner';
 
 definePageMeta({
   layout: 'blank'
@@ -18,43 +19,49 @@ definePageMeta({
 import { Loader } from 'lucide-vue-next';
 
 const loading = ref(true);
-const organisationId = useRoute().query?.organisation;
-const next = useRoute().query?.next;
+const organisationId = useRoute().query?.organisation as string | undefined;
+const next = useRoute().query?.next as string | undefined;
+
+// Normalise: treat null/empty as the sentinel string 'null' so all comparisons are string-to-string
+const normalise = (org: string | null | undefined) =>
+  (org == null || org === '') ? 'null' : org;
 
 onMounted(async () => {
-  const authStore = useAuthStore();
+  const router = useRouter();
 
-  await authStore.ensureSubscribed();
+  const redirect = async () => {
+    await router.push({ path: next || '/' });
+  };
 
   try {
-    if(organisationId) {
-      if(organisationId === getSignedInUser()?.organisation) {
-        if(next) {
-          await useRouter().push({ path: next });
-          return;
-        } else {
-          await useRouter().push({ path: '/'});
-          return;
-        }
+    if (organisationId) {
+      const currentOrg = normalise(getSignedInUser()?.organisation);
+      const targetOrg = normalise(organisationId);
+
+      // Already on this organisation — just redirect
+      if (targetOrg === currentOrg) {
+        await redirect();
+        return;
       }
 
-      const exists = authStore.organisations.find(org => org.id === organisationId);
+      // Fetch the user's available organisations and verify the target exists
+      const response = await getOrganisations();
+      const organisations: any[] = (await response.json())?.organisations || [];
 
-      if(exists) {
-        await updateUser({ organisation: organisationId });
-        if(next) {
-          await useRouter().push({ path: next});
-          return;
-        } else {
-          await useRouter().push({ path: '/'});
-          return;
-        }
+      const exists = organisations.find(org => normalise(org.id) === targetOrg);
+
+      if (exists) {
+        // Pass actual null when switching to personal (no-org) account
+        await updateUser({ organisation: targetOrg === 'null' ? null : targetOrg });
+        await redirect();
+        return;
+      } else {
+        toast.error("You do not have access to that organisation.");
       }
     }
-
-  } catch(e) {
+  } catch (e) {
     console.error(e);
-    toast.error("Unable to switch Organisations");
+    toast.error("Unable to switch organisations.");
   }
 
   loading.value = false;

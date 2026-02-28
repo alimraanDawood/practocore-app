@@ -1,9 +1,9 @@
 <template>
-  <NuxtLayout>
-    <NuxtLoadingIndicator :color="'#F9623AFF'"/>
-    <Toaster/>
-    <NuxtPage/>
-  </NuxtLayout>
+    <NuxtLayout>
+      <NuxtLoadingIndicator :color="'#F9623AFF'"/>
+      <Toaster/>
+      <NuxtPage/>
+    </NuxtLayout>
 </template>
 
 <script setup>

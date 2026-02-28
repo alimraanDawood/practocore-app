@@ -18,25 +18,11 @@
               :variant="activeTab === 'profile' ? 'secondary' : 'ghost'"
               @click="activeTab = 'profile'"
           >Organisation Profile</Button>
-
-          <Button
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'users' ? 'secondary' : 'ghost'"
-              @click="activeTab = 'users'"
-          >Members</Button>
-
-          <Button
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'invitations' ? 'secondary' : 'ghost'"
-              @click="activeTab = 'invitations'"
-          >Invitations</Button>
         </div>
 
         <!-- Tab Content -->
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
           <PageComponentsOrganisationProfile v-if="activeTab === 'profile'" />
-          <PageComponentsOrganisationUsers v-if="activeTab === 'users'" />
-          <PageComponentsOrganisationInvitations v-if="activeTab === 'invitations'" />
         </div>
       </div>
     </DialogContent>

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { getMatters, getMatter, subscribeToMatters } from '~/services/matters';
+import {toast} from "vue-sonner";
 
 // Cache duration in milliseconds - increased to 5 minutes for better performance
 const CACHE_TTL = 5 * 60 * 1000;
@@ -269,30 +270,39 @@ export const useMattersStore = defineStore('matters', {
 
       delete this.matterCache[id]
     },
-    ensureSubscribed() {
+    async ensureSubscribed() {
       if (this._subscribed) return;
-      subscribeToMatters(async (data: any) => {
+
+
+      const unsubscribeFn = await subscribeToMatters(async (data: any) => {
         const { action, record } = data
 
+        toast.success("Something changed in matters. Refreshing data...");
+
         const expandedRecord = await getMatter(record.id, {});
+
         // Handle subscription events optimistically
-        switch (action) {
-          case 'create':
-            this.addMatterOptimistic(expandedRecord);
-            break
 
-          case 'update':
-            this.updateMatterOptimistic(record.id, expandedRecord);
-            break
+        // for now we shall force a reload
+        this.fetchMatters(true);
 
-          case 'delete':
-            this.removeMatterFromCache(record.id)
-            break
-
-          default:
-            // For unknown actions, do a background refresh
-            this.fetchMattersInBackground()
-        }
+        // switch (action) {
+        //   case 'create':
+        //     this.addMatterOptimistic(expandedRecord);
+        //     break
+        //
+        //   case 'update':
+        //     this.updateMatterOptimistic(record.id, expandedRecord);
+        //     break
+        //
+        //   case 'delete':
+        //     this.removeMatterFromCache(record.id)
+        //     break
+        //
+        //   default:
+        //     // For unknown actions, do a background refresh
+        //     this.fetchMattersInBackground()
+        // }
       });
       this._subscribed = true;
     },

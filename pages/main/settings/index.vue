@@ -121,7 +121,7 @@
             </div>
           </div>
 
-          <div class="flex flex-col gap-2">
+          <div v-if="(getSignedInUser()?.organisation && authStore.isAdmin) || (!getSignedInUser()?.organisation && usePlanActive()?.value?.type === 'individual')" class="flex flex-col gap-2">
             <span class="font-semibold">Advanced</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
               <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/billing')">

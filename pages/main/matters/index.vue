@@ -113,6 +113,7 @@
                             <div
                                 v-if="displayMode === 'grid' || $viewport.isLessThan('customxs')"
                                 class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 h-full gap-3 p-3 content-start overflow-y-scroll">
+
                                 <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"
                                     v-for="(matter, index) in matters?.items">
                                     <PageComponentsHomeMatter
@@ -291,7 +292,7 @@
 import { vOnLongPress } from '@vueuse/components'
 import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table,  Grid2X2} from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { deleteMatter } from '~/services/matters';
+import {deleteMatter, getMatters, subscribeToMatters} from '~/services/matters';
 import { storeToRefs } from 'pinia';
 import { useMattersStore } from '@/stores/matters';
 import { useDashboardStore } from '~/stores/dashboard';
@@ -344,9 +345,11 @@ const resetSelection = () => {
     mattersStore.resetSelection();
 }
 
+const custom = ref(null);
+
 onMounted(async () => {
-    mattersStore.ensureSubscribed();
     await mattersStore.fetchMatters(false);
+    await mattersStore.ensureSubscribed();
 });
 
 const sortLabel = computed(() => {

@@ -100,7 +100,7 @@ export async function deleteMatter(matterId: string) {
     return pocketbase.collection('Matters').delete(matterId);
 }
 
-export function subscribeToMatters(fn: (data: RecordSubscription<RecordModel>) => void) {
+export async function subscribeToMatters(fn: (data: RecordSubscription<RecordModel>) => void) {
     return pocketbase.collection('Matters').subscribe('*', fn)
 }
 
