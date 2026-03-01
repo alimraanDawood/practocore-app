@@ -19,6 +19,7 @@
           >Notifications
           </Button>
           <Button
+              v-if="canSeeBilling"
               class="lg:w-full flex flex-row justify-start"
               :variant="activeTab === 'billing' ? 'default' : 'ghost'"
               @click="activeTab = 'billing'">
@@ -45,7 +46,7 @@
         <div class="hidden lg:flex flex-col w-full h-full overflow-y-scroll">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
-          <div v-if="activeTab === 'billing'" class="flex flex-col w-full gap-6">
+          <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
             <div class="flex flex-col">
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
               <p class="text-sm text-muted-foreground">Manage your subscription and billing information.</p>
@@ -169,7 +170,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import {
   Bell,
   CreditCard,
@@ -196,4 +197,13 @@ const signOutUser = () => {
 }
 
 const authStore = useAuthStore();
+
+// Show billing for: org admins, or solo practitioners (no organisation)
+const canSeeBilling = computed(() => {
+  const user = getSignedInUser();
+  if (user?.organisation) {
+    return authStore.isAdmin;
+  }
+  return true;
+});
 </script>

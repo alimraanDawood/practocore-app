@@ -25,9 +25,16 @@
 
 <script setup>
 import { ArrowLeft } from "lucide-vue-next";
+import { getSignedInUser } from "~/services/auth";
 
 definePageMeta({
   layout: 'no-mobile-nav'
 })
-</script>
 
+// Redirect non-admin org users away from billing
+const authStore = useAuthStore();
+const user = getSignedInUser();
+if (user?.organisation && !authStore.isAdmin) {
+  navigateTo('/main/settings');
+}
+</script>

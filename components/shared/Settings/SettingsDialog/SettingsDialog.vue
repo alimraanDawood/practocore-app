@@ -30,6 +30,7 @@
           </Button>
 
           <Button
+              v-if="canSeeBilling"
               class="lg:w-full flex flex-row justify-start"
               :variant="activeTab === 'billing' ? 'secondary' : 'ghost'"
               @click="activeTab = 'billing'">
@@ -42,7 +43,7 @@
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
-          <div v-if="activeTab === 'billing'" class="flex flex-col w-full gap-6">
+          <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
             <div class="flex flex-col">
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
               <p class="text-sm text-muted-foreground">Update your account settings. Set your preferred language and
@@ -60,12 +61,23 @@
 </template>
 
 <script setup>
-import {ref} from 'vue'
+import {ref, computed} from 'vue'
 import {ArrowLeft, Bell, UserCircle, CreditCard} from "lucide-vue-next";
+import {getSignedInUser} from "~/services/auth";
 
 definePageMeta({
   layout: 'no-mobile-nav'
 })
 
+const authStore = useAuthStore();
 const activeTab = ref('profile');
+
+// Show billing for: org admins, or solo practitioners (no organisation)
+const canSeeBilling = computed(() => {
+  const user = getSignedInUser();
+  if (user?.organisation) {
+    return authStore.isAdmin;
+  }
+  return true;
+});
 </script>
