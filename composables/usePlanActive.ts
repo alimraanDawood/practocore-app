@@ -1,8 +1,8 @@
 // composables/usePlanActive.ts
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { getActiveSubscription } from "~/services/subscriptions";
 
-const activePlan = ref(null)
+const activePlan = ref<Record<string, any> | null>(null)
 
 export default function () {
     const init = async () => {

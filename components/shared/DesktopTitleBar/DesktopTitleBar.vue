@@ -39,9 +39,7 @@
       </div>
     </div>
 
-    <div v-if="!usePlanActive()?.value?.active" class="flex flex-row p-1 px-3 bg-primary border-b text-primary-foreground">
-      <span class="text-sm font-semibold">Your practocore {{ usePlanActive()?.value?.trial ? 'free trial' : 'subscription' }} has unfortunately expired. Click <SharedBillingSubscribe><button class="font-bold underline">here to renew</button></SharedBillingSubscribe></span>
-    </div>
+    <SharedBillingExpiryBanner />
   </div>
 </template>
 
@@ -49,7 +47,6 @@
 import {Maximize2, Minus, X, ChevronDown, Bell, Settings, RotateCw} from "lucide-vue-next";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
 import {getCurrentWindow} from "@tauri-apps/api/window";
-import usePlanActive from "~/composables/usePlanActive.ts";
 
 const { isTauri } = useTauri();
 

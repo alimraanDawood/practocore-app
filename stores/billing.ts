@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 import {
     getActiveSubscription,
-    getSubscription,
     getSubscriptions,
     subscribeToSubscriptions
 } from "~/services/subscriptions";
@@ -9,9 +8,10 @@ import {getSignedInUser} from "~/services/auth";
 
 export const useBillingStore = defineStore("billing", {
     state: () => ({
-        activeSubscription: null,
+        activeSubscription: null as Record<string, any> | null,
         subscriptionHistory: [] as any[],
         loaded: false,
+        loadingHistory: false,
         _subscribed: false,
     }),
 
@@ -22,17 +22,45 @@ export const useBillingStore = defineStore("billing", {
             }
             await this.reloadSubscriptionData();
 
-            subscribeToSubscriptions(this.reloadSubscriptionData);
+            subscribeToSubscriptions(async () => {
+                await this.reloadSubscriptionData();
+            });
             this._subscribed = true;
         },
 
         async reloadSubscriptionData() {
-            if(getSignedInUser()?.organisation) {
-
+            try {
+                this.activeSubscription = (await getActiveSubscription())?.subscription || null;
+            } catch (err) {
+                console.warn("Failed to fetch active subscription:", err);
+                this.activeSubscription = null;
             }
 
-            this.activeSubscription = (await getActiveSubscription())?.subscription || null;
-            this.subscriptionHistory = (await getSubscriptions(1, 1, { expand: 'plan', sort: '-created' }));
+            try {
+                this.loadingHistory = true;
+                const user = getSignedInUser();
+                if (user?.organisation) {
+                    const result = await getSubscriptions(1, 50, {
+                        expand: 'plan',
+                        sort: '-created',
+                        filter: `organisation = '${user.organisation}'`
+                    });
+                    this.subscriptionHistory = result?.items || [];
+                } else if (user?.id) {
+                    const result = await getSubscriptions(1, 50, {
+                        expand: 'plan',
+                        sort: '-created',
+                        filter: `individual = '${user.id}'`
+                    });
+                    this.subscriptionHistory = result?.items || [];
+                }
+            } catch (err) {
+                console.warn("Failed to fetch subscription history:", err);
+                this.subscriptionHistory = [];
+            } finally {
+                this.loadingHistory = false;
+                this.loaded = true;
+            }
         },
 
         init() {

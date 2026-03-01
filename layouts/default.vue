@@ -2,9 +2,7 @@
   <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
     <SharedDesktopTitleBar class="hidden xs:flex" />
 
-    <div v-if="!usePlanActive()?.value?.active" class="flex flex-row p-1 px-3 bg-primary border-b text-primary-foreground xs:hidden">
-      <span class="text-sm font-semibold">Your practocore {{ usePlanActive()?.value?.trial ? 'free trial' : 'subscription' }} has unfortunately expired. Click <SharedBillingSubscribe><button class="font-bold underline">here to renew</button></SharedBillingSubscribe></span>
-    </div>
+    <SharedBillingExpiryBanner class="xs:hidden" />
 
     <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">
@@ -31,7 +29,6 @@ import {getSignedInUser, signOut} from '~/services/auth';
 import {computed, ref, onMounted} from "vue";
 import { Capacitor } from '@capacitor/core';
 import {Vue3PullToRefresh} from "@amirafa/vue3-pull-to-refresh";
-import usePlanActive from "~/composables/usePlanActive.ts";
 const hours = new Date().getHours();
 
 const signOutUser = () => {

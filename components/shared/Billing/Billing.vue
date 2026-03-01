@@ -9,33 +9,33 @@
         </div>
 
         <!-- Active Subscription Card -->
-        <div v-if="billingStore?.activeSubscription" class="flex flex-col border rounded-lg overflow-hidden">
+        <div v-if="activeSubscription" class="flex flex-col border rounded-lg overflow-hidden">
           <!-- Subscription Header -->
           <div class="bg-muted/50 p-4 border-b">
             <div class="flex flex-col lg:flex-row items-start gap-3 justify-between">
               <div class="flex flex-col gap-1">
                 <div class="flex flex-row items-center gap-2">
                   <span class="text-2xl ibm-plex-serif font-semibold">
-                    {{ billingStore.activeSubscription.trial ? 'Free Trial' : billingStore.activeSubscription.expand?.plan?.name || 'Subscription' }}
+                    {{ activeSubscription.trial ? 'Free Trial' : activeSubscription.expand?.plan?.name || 'Subscription' }}
                   </span>
                   <Badge
-                      :variant="getSubscriptionStatusVariant(billingStore.activeSubscription)"
+                      :variant="getSubscriptionStatusVariant(activeSubscription)"
                   >
-                    {{ getSubscriptionStatusText(billingStore.activeSubscription) }}
+                    {{ getSubscriptionStatusText(activeSubscription) }}
                   </Badge>
                 </div>
 
-                <div v-if="billingStore.activeSubscription.expand?.plan" class="text-sm text-muted-foreground">
-                  {{ billingStore.activeSubscription.expand.plan.subtitle }}
+                <div v-if="activeSubscription.expand?.plan" class="text-sm text-muted-foreground">
+                  {{ activeSubscription.expand.plan.subtitle }}
                 </div>
               </div>
 
               <div class="flex lg:flex-col flex-row justify-between w-full lg:w-fit lg:justify-start items-center lg:items-end gap-1">
                 <span class="text-lg lg:text-2xl font-bold ibm-plex-serif">
-                  UGX {{ billingStore.activeSubscription?.expand?.plan?.perSeatMonthly?.toLocaleString() || '0' }}
+                  UGX {{ activeSubscription?.expand?.plan?.perSeatMonthly?.toLocaleString() || '0' }}
                 </span>
                 <span class="text-xs text-muted-foreground">
-                  {{ billingStore.activeSubscription.seats }} {{ billingStore.activeSubscription.seats === 1 ? 'seat' : 'seats' }}
+                  {{ activeSubscription.seats }} {{ activeSubscription.seats === 1 ? 'seat' : 'seats' }}
                 </span>
               </div>
             </div>
@@ -46,30 +46,30 @@
             <!-- Date Range -->
             <div class="flex flex-row items-center gap-2 text-sm">
               <Calendar class="size-4 text-muted-foreground" />
-              <span class="font-medium">{{ dayjs(billingStore.activeSubscription.startDate).format('MMM D, YYYY') }}</span>
+              <span class="font-medium">{{ dayjs(activeSubscription.startDate).format('MMM D, YYYY') }}</span>
               <ArrowRight class="size-4 text-muted-foreground" />
-              <span class="font-medium">{{ dayjs(billingStore.activeSubscription.endDate).format('MMM D, YYYY') }}</span>
+              <span class="font-medium">{{ dayjs(activeSubscription.endDate).format('MMM D, YYYY') }}</span>
               <span class="hidden lg:block text-muted-foreground ml-2">
-                ({{ getDaysRemaining(billingStore.activeSubscription.endDate) }})
+                ({{ getDaysRemaining(activeSubscription.endDate) }})
               </span>
             </div>
 
             <!-- Payment Info -->
-            <div v-if="billingStore.activeSubscription.mobileMoneyNumber" class="flex flex-row items-center gap-2 text-sm">
+            <div v-if="activeSubscription.mobileMoneyNumber" class="flex flex-row items-center gap-2 text-sm">
               <CreditCard class="size-4 text-muted-foreground" />
               <span>Mobile Money:</span>
-              <span class="font-medium">{{ billingStore.activeSubscription.mobileMoneyNumber }}</span>
+              <span class="font-medium">{{ activeSubscription.mobileMoneyNumber }}</span>
             </div>
 
             <!-- Reference -->
-            <div v-if="billingStore.activeSubscription.reference" class="flex hidden flex-row items-center gap-2 text-sm">
+            <div v-if="activeSubscription.reference" class="flex hidden flex-row items-center gap-2 text-sm">
               <Tag class="size-4 text-muted-foreground" />
               <span>Reference:</span>
-              <code class="px-2 py-1 bg-muted rounded text-xs font-mono">{{ billingStore.activeSubscription.reference }}</code>
+              <code class="px-2 py-1 bg-muted rounded text-xs font-mono">{{ activeSubscription.reference }}</code>
             </div>
 
             <!-- Seats Usage (if applicable) -->
-            <div v-if="billingStore.activeSubscription?.type === 'organisation'" class="flex flex-col gap-2">
+            <div v-if="activeSubscription?.type === 'organisation'" class="flex flex-col gap-2">
               <div class="flex flex-row justify-between text-sm">
                 <span class="font-medium">Seat Usage</span>
                 <div class="font-semibold ibm-plex-serif flex gap-1 flex-row">
@@ -77,14 +77,14 @@
                     {{ organisationStore.organisation?.active_seats || 0 }}
                   </span>
                   /
-                  <Infinity v-if="billingStore.activeSubscription.expand.plan.maxSeats === -1" />
-                  <span v-else>{{ billingStore.activeSubscription.expand.plan.maxSeats }}</span>
+                  <Infinity v-if="activeSubscription.expand.plan.maxSeats === -1" />
+                  <span v-else>{{ activeSubscription.expand.plan.maxSeats }}</span>
                 </div>
               </div>
               <div class="flex flex-row bg-muted/50 h-2 overflow-hidden rounded-full w-full">
                 <div
                     class="bg-primary h-full rounded-full transition-all"
-                    :style="{ width: `${Math.min((organisationStore.organisation?.active_seats || 0) / billingStore.activeSubscription.expand.plan.maxSeats * 100, 100)}%` }"
+                    :style="{ width: `${Math.min((organisationStore.organisation?.active_seats || 0) / activeSubscription.expand.plan.maxSeats * 100, 100)}%` }"
                 ></div>
               </div>
             </div>
@@ -124,13 +124,14 @@
         </div>
 
         <!-- Loading State -->
-        <div v-if="loadingHistory" class="flex items-center justify-center p-8 border rounded-lg">
+        <div v-if="billingStore.loadingHistory" class="flex items-center justify-center p-8 border rounded-lg">
           <Loader2 class="size-6 animate-spin text-muted-foreground" />
         </div>
 
-        <!-- History Table -->
-        <div v-else-if="subscriptionHistory.length > 0" class="border rounded-lg overflow-hidden">
-          <div class="overflow-x-auto">
+        <!-- History Table (Desktop) -->
+        <div v-else-if="historyItems.length > 0" class="border rounded-lg overflow-hidden">
+          <!-- Desktop Table -->
+          <div class="hidden lg:block overflow-x-auto">
             <table class="w-full">
               <thead class="bg-muted/50 border-b">
               <tr>
@@ -143,7 +144,7 @@
               </thead>
               <tbody class="divide-y">
               <tr
-                  v-for="subscription in subscriptionHistory"
+                  v-for="subscription in historyItems"
                   :key="subscription.id"
                   class="hover:bg-muted/30 transition-colors"
               >
@@ -181,6 +182,41 @@
               </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Mobile Cards -->
+          <div class="lg:hidden flex flex-col divide-y">
+            <div
+                v-for="subscription in historyItems"
+                :key="subscription.id"
+                class="flex flex-col gap-2 p-4"
+            >
+              <div class="flex flex-row justify-between items-start">
+                <div class="flex flex-col">
+                  <span class="font-medium">
+                    {{ subscription.trial ? 'Free Trial' : subscription.expand?.plan?.name || 'N/A' }}
+                  </span>
+                  <span class="text-xs text-muted-foreground">
+                    {{ subscription.seats }} {{ subscription.seats === 1 ? 'seat' : 'seats' }}
+                  </span>
+                </div>
+                <span class="font-semibold ibm-plex-serif">
+                  UGX {{ subscription.amount?.toLocaleString() || '0' }}
+                </span>
+              </div>
+              <div class="flex flex-row items-center gap-2 text-xs text-muted-foreground">
+                <Calendar class="size-3" />
+                <span>{{ dayjs(subscription.startDate).format('MMM D, YYYY') }} — {{ dayjs(subscription.endDate).format('MMM D, YYYY') }}</span>
+              </div>
+              <div class="flex flex-row gap-2">
+                <Badge :variant="getSubscriptionStatusVariant(subscription)" class="text-xs">
+                  {{ getSubscriptionStatusText(subscription) }}
+                </Badge>
+                <Badge :variant="getPaymentStatusVariant(subscription.paymentStatus)" class="text-xs">
+                  {{ subscription.paymentStatus || 'N/A' }}
+                </Badge>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -233,7 +269,7 @@ import { Calendar, CreditCard, Tag, ArrowRight, Loader2, FileText, Infinity } fr
 import dayjs from "dayjs";
 import { useOrganisationStore } from "~/stores/organisation";
 import { getSignedInUser } from "~/services/auth";
-import { ref, computed, onMounted } from 'vue';
+import { computed } from 'vue';
 
 const props = defineProps(['asModal']);
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
@@ -243,12 +279,19 @@ billingStore.ensureSubscribed();
 const organisationStore = useOrganisationStore();
 organisationStore.fetchOrganisation(getSignedInUser()?.organisation);
 
-// Subscription history state
-const subscriptionHistory = ref([]);
-const loadingHistory = ref(false);
+// Cast active subscription for template type safety
+const activeSubscription = computed(() => billingStore.activeSubscription as any);
+
+// Derive history items from store
+const historyItems = computed(() => {
+  const history = billingStore.subscriptionHistory;
+  if (!history) return [];
+  if (Array.isArray(history)) return history;
+  return [];
+});
 
 // Helper functions
-const getSubscriptionStatusVariant = (subscription) => {
+const getSubscriptionStatusVariant = (subscription: any) => {
   if (!subscription.active) return 'destructive';
   if (subscription.trial) return 'secondary';
   const daysLeft = dayjs(subscription.endDate).diff(dayjs(), 'day');
@@ -256,7 +299,7 @@ const getSubscriptionStatusVariant = (subscription) => {
   return 'default';
 };
 
-const getSubscriptionStatusText = (subscription) => {
+const getSubscriptionStatusText = (subscription: any) => {
   if (!subscription.active) return 'Expired';
   if (subscription.trial) return 'Trial';
   const daysLeft = dayjs(subscription.endDate).diff(dayjs(), 'day');
@@ -265,7 +308,7 @@ const getSubscriptionStatusText = (subscription) => {
   return 'Active';
 };
 
-const getPaymentStatusVariant = (status) => {
+const getPaymentStatusVariant = (status: string) => {
   switch (status) {
     case 'complete': return 'default';
     case 'pending': return 'secondary';
@@ -274,40 +317,11 @@ const getPaymentStatusVariant = (status) => {
   }
 };
 
-const getDaysRemaining = (endDate) => {
+const getDaysRemaining = (endDate: string) => {
   const days = dayjs(endDate).diff(dayjs(), 'day');
   if (days < 0) return 'Expired';
   if (days === 0) return 'Expires today';
   if (days === 1) return '1 day remaining';
   return `${days} days remaining`;
 };
-
-// Fetch subscription history
-const fetchSubscriptionHistory = async () => {
-  loadingHistory.value = true;
-  try {
-    const user = getSignedInUser();
-    if (!user) return;
-
-    // Fetch subscriptions for the current user/organization
-    const response = await fetch(`/api/collections/Subscriptions/records?filter=(individual='${user.id}')&sort=-created&expand=plan`, {
-      headers: {
-        'Authorization': `Bearer ${pocketbase.authStore.token}`
-      }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      subscriptionHistory.value = data.items || [];
-    }
-  } catch (error) {
-    console.error('Failed to fetch subscription history:', error);
-  } finally {
-    loadingHistory.value = false;
-  }
-};
-
-onMounted(() => {
-  fetchSubscriptionHistory();
-});
 </script>

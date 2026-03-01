@@ -1,163 +1,228 @@
 <template>
-  <Drawer v-model:open="isOpen">
+  <DefineTemplate>
+    <div v-if="plansLoading" class="p-5 flex flex-col w-full items-center justify-center min-h-[300px]">
+      <Loader2 class="size-6 text-primary animate-spin" />
+    </div>
+
+    <template v-else>
+      <!-- Step 1: Plan Selection -->
+      <template v-if="currentStep === 'PLANS'">
+        <div class="flex flex-col gap-1 px-5 pt-5">
+          <h3 class="text-lg font-semibold ibm-plex-serif">Subscribe to PractoCore</h3>
+          <p class="text-sm text-muted-foreground">Choose a plan below to continue</p>
+        </div>
+
+        <div class="flex flex-col lg:flex-row p-5 gap-3">
+          <div
+              class="p-4 flex text-sm flex-col bg-muted/50 border rounded-lg text-muted-foreground cursor-pointer transition-all flex-1 relative"
+              @click="selectedOption = 'annually'"
+              :class="{ 'outline outline-2 outline-primary bg-primary/5': selectedOption === 'annually' }"
+          >
+            <Badge v-if="savingsPercentage > 0" class="absolute -top-2 -right-2 bg-green-600 hover:bg-green-600 text-white text-xs">
+              Save {{ savingsPercentage }}%
+            </Badge>
+            <div class="flex flex-row items-end justify-between gap-2">
+              <span class="text-lg font-semibold text-foreground ibm-plex-serif">Annual Plan</span>
+              <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatAnnually)?.toLocaleString() }}/mo</span>
+            </div>
+            <span class="mt-1">UGX {{ (bestPlan?.perSeatAnnually * 12)?.toLocaleString() }} per year billed annually</span>
+          </div>
+
+          <div
+              class="p-4 text-sm flex flex-col bg-muted/50 border rounded-lg text-muted-foreground cursor-pointer transition-all flex-1"
+              @click="selectedOption = 'monthly'"
+              :class="{ 'outline outline-2 outline-primary bg-primary/5': selectedOption === 'monthly' }"
+          >
+            <div class="flex flex-row items-end justify-between gap-2">
+              <span class="text-lg font-semibold text-foreground ibm-plex-serif">Monthly Plan</span>
+              <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatMonthly)?.toLocaleString() }}/mo</span>
+            </div>
+            <span class="mt-1">UGX {{ (bestPlan?.perSeatMonthly * 12)?.toLocaleString() }} per year billed monthly</span>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 px-5 pb-5">
+          <Button @click="currentStep = 'PAY'" class="w-full">Continue to Payment</Button>
+          <Button variant="secondary" class="w-full" @click="isOpen = false">Cancel</Button>
+        </div>
+      </template>
+
+      <!-- Step 2: Payment -->
+      <template v-else-if="currentStep === 'PAY'">
+        <div class="flex flex-col gap-1 px-5 pt-5">
+          <h3 class="text-lg font-semibold ibm-plex-serif">Pay Now Via Mobile Money</h3>
+          <p class="text-sm text-muted-foreground">Enter your payment details to complete subscription</p>
+        </div>
+
+        <form @submit="onSubmit" class="flex flex-col gap-0">
+          <div class="flex flex-col p-5 w-full gap-6">
+            <div class="flex flex-col items-center justify-center gap-1">
+              <span class="text-sm text-muted-foreground">Total Amount</span>
+              <span class="font-semibold ibm-plex-serif text-3xl">UGX {{ totalCosts?.toLocaleString() }}</span>
+              <span class="text-xs text-muted-foreground">
+                {{ units }} {{ units === 1 ? 'month' : 'months' }} • {{ selectedOption === 'annually' ? 'Annual' : 'Monthly' }} billing
+              </span>
+            </div>
+
+            <FormField v-slot="{ componentField }" name="units">
+              <FormItem>
+                <FormLabel>Number of Months</FormLabel>
+                <FormControl>
+                  <NumberField :min="1" v-model="units" v-bind="componentField">
+                    <NumberFieldContent>
+                      <NumberFieldDecrement />
+                      <NumberFieldInput />
+                      <NumberFieldIncrement />
+                    </NumberFieldContent>
+                  </NumberField>
+                </FormControl>
+                <FormDescription>
+                  How many months would you like to subscribe for?
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+
+            <FormField v-slot="{ componentField }" name="phone">
+              <FormItem>
+                <FormLabel>Mobile Money Number (Airtel / MTN)</FormLabel>
+                <FormControl>
+                  <InputGroup class="overflow-hidden p-0">
+                    <InputGroupAddon class="border-r px-2 bg-muted">
+                      <InputGroupText>+256</InputGroupText>
+                    </InputGroupAddon>
+                    <InputGroupInput
+                        placeholder="712345678"
+                        v-bind="componentField"
+                        maxlength="9"
+                    />
+                  </InputGroup>
+                </FormControl>
+                <FormDescription>
+                  Enter your mobile money number without the country code
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+
+            <!-- Error Alert -->
+            <Alert v-if="subscriptionError" variant="destructive">
+              <AlertDescription>
+                {{ subscriptionError }}
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <div class="flex flex-col gap-2 px-5 pb-5">
+            <Button type="submit" :disabled="isSubmitting" class="w-full">
+              <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
+              <span v-if="isSubmitting">Processing...</span>
+              <span v-else>Pay Now UGX {{ totalCosts?.toLocaleString() }}</span>
+            </Button>
+            <Button type="button" variant="secondary" class="w-full" @click="currentStep = 'PLANS'" :disabled="isSubmitting">
+              Back to Plans
+            </Button>
+          </div>
+        </form>
+      </template>
+
+      <!-- Step 3: Payment Polling -->
+      <template v-else-if="currentStep === 'POLLING'">
+        <div class="flex flex-col items-center justify-center p-8 gap-5 min-h-[300px]">
+          <div v-if="pollingStatus === 'waiting'" class="flex flex-col items-center gap-4">
+            <div class="relative">
+              <div class="size-16 rounded-full border-4 border-muted animate-pulse" />
+              <Loader2 class="size-8 text-primary animate-spin absolute top-4 left-4" />
+            </div>
+            <div class="flex flex-col items-center gap-1 text-center">
+              <span class="font-semibold text-lg ibm-plex-serif">Waiting for Payment Confirmation</span>
+              <span class="text-sm text-muted-foreground max-w-sm">
+                A payment prompt has been sent to your phone. Please enter your PIN to complete the transaction.
+              </span>
+            </div>
+            <div class="flex flex-row items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 class="size-3 animate-spin" />
+              <span>Checking payment status...</span>
+            </div>
+          </div>
+
+          <div v-else-if="pollingStatus === 'success'" class="flex flex-col items-center gap-4">
+            <div class="size-16 rounded-full bg-green-100 dark:bg-green-900/30 grid place-items-center">
+              <CheckCircle2 class="size-8 text-green-600" />
+            </div>
+            <div class="flex flex-col items-center gap-1 text-center">
+              <span class="font-semibold text-lg ibm-plex-serif">Payment Successful!</span>
+              <span class="text-sm text-muted-foreground">
+                Your subscription is now active. Enjoy PractoCore!
+              </span>
+            </div>
+          </div>
+
+          <div v-else-if="pollingStatus === 'timeout'" class="flex flex-col items-center gap-4">
+            <div class="size-16 rounded-full bg-amber-100 dark:bg-amber-900/30 grid place-items-center">
+              <Clock class="size-8 text-amber-600" />
+            </div>
+            <div class="flex flex-col items-center gap-1 text-center">
+              <span class="font-semibold text-lg ibm-plex-serif">Payment Still Processing</span>
+              <span class="text-sm text-muted-foreground max-w-sm">
+                We haven't received a confirmation yet. Your dashboard will update automatically once the payment is confirmed.
+              </span>
+            </div>
+            <Button variant="secondary" class="w-full" @click="closeAndReset">Close</Button>
+          </div>
+        </div>
+      </template>
+    </template>
+  </DefineTemplate>
+
+  <!-- Desktop: Dialog -->
+  <Dialog v-if="$viewport.isGreaterThan('customxs')" v-model:open="isOpen">
+    <DialogTrigger as-child>
+      <slot />
+    </DialogTrigger>
+
+    <DialogContent class="p-0 gap-0 max-w-lg">
+      <ReuseTemplate />
+    </DialogContent>
+  </Dialog>
+
+  <!-- Mobile: Drawer -->
+  <Drawer v-else v-model:open="isOpen">
     <DrawerTrigger>
       <slot />
     </DrawerTrigger>
 
     <DrawerContent>
-      <div v-if="plansLoading" class="p-5 flex flex-col w-full items-center justify-center">
-        <Loader2 class="size-6 text-primary animate-spin" />
-      </div>
-
-      <template v-else>
-        <template v-if="currentStep === 'PLANS'">
-          <DrawerHeader>
-            <DrawerTitle>Subscribe to PractoCore</DrawerTitle>
-            <DrawerDescription>Choose a plan below to continue</DrawerDescription>
-          </DrawerHeader>
-
-          <div class="flex flex-col p-5 gap-2">
-            <div
-                class="p-3 flex text-sm flex-col bg-muted/50 border rounded-lg text-muted-foreground cursor-pointer transition-all"
-                @click="selectedOption = 'annually'"
-                :class="{ 'outline outline-2 outline-primary bg-primary/5': selectedOption === 'annually' }"
-            >
-              <div class="flex flex-row items-end justify-between">
-                <span class="text-lg font-semibold text-foreground ibm-plex-serif">Annual Plan</span>
-                <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatAnnually).toLocaleString() }} per month</span>
-              </div>
-              <span>UGX {{ (bestPlan?.perSeatAnnually * 12).toLocaleString() }} per year billed annually</span>
-            </div>
-
-            <div
-                class="p-3 text-sm flex flex-col bg-muted/50 border rounded-lg text-muted-foreground cursor-pointer transition-all"
-                @click="selectedOption = 'monthly'"
-                :class="{ 'outline outline-2 outline-primary bg-primary/5': selectedOption === 'monthly' }"
-            >
-              <div class="flex flex-row items-end justify-between">
-                <span class="text-lg font-semibold text-foreground ibm-plex-serif">Monthly Plan</span>
-                <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatMonthly).toLocaleString() }} per month</span>
-              </div>
-              <span>UGX {{ (bestPlan?.perSeatMonthly * 12).toLocaleString() }} per year billed monthly</span>
-            </div>
-          </div>
-
-          <DrawerFooter>
-            <Button @click="currentStep = 'PAY'">Continue to Payment</Button>
-            <DrawerClose as-child>
-              <Button variant="secondary" class="w-full">Cancel</Button>
-            </DrawerClose>
-          </DrawerFooter>
-        </template>
-
-        <template v-else-if="currentStep === 'PAY'">
-          <DrawerHeader>
-            <DrawerTitle>Pay Now Via Mobile Money</DrawerTitle>
-            <DrawerDescription>Enter your payment details to complete subscription</DrawerDescription>
-          </DrawerHeader>
-
-          <form @submit="onSubmit" class="flex flex-col gap-0">
-            <div class="flex flex-col p-5 w-full gap-6">
-              <div class="flex flex-col items-center justify-center gap-1">
-                <span class="text-sm text-muted-foreground">Total Amount</span>
-                <span class="font-semibold ibm-plex-serif text-3xl">UGX {{ totalCosts?.toLocaleString() }}</span>
-                <span class="text-xs text-muted-foreground">
-                  {{ units }} {{ units === 1 ? 'month' : 'months' }} • {{ selectedOption === 'annually' ? 'Annual' : 'Monthly' }} billing
-                </span>
-              </div>
-
-              <FormField v-slot="{ componentField }" name="units">
-                <FormItem>
-                  <FormLabel>Number of Months</FormLabel>
-                  <FormControl>
-                    <NumberField :min="1" v-model="units" v-bind="componentField">
-                      <NumberFieldContent>
-                        <NumberFieldDecrement />
-                        <NumberFieldInput />
-                        <NumberFieldIncrement />
-                      </NumberFieldContent>
-                    </NumberField>
-                  </FormControl>
-                  <FormDescription>
-                    How many months would you like to subscribe for?
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              </FormField>
-
-              <FormField v-slot="{ componentField }" name="phone">
-                <FormItem>
-                  <FormLabel>Mobile Money Number (Airtel / MTN)</FormLabel>
-                  <FormControl>
-                    <InputGroup class="overflow-hidden p-0">
-                      <InputGroupAddon class="border-r px-2 bg-muted">
-                        <InputGroupText>+256</InputGroupText>
-                      </InputGroupAddon>
-                      <InputGroupInput
-                          placeholder="712345678"
-                          v-bind="componentField"
-                          maxlength="9"
-                      />
-                    </InputGroup>
-                  </FormControl>
-                  <FormDescription>
-                    Enter your mobile money number without the country code
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              </FormField>
-
-              <!-- Error Alert -->
-              <Alert v-if="subscriptionError" variant="destructive">
-                <AlertDescription>
-                  {{ subscriptionError }}
-                </AlertDescription>
-              </Alert>
-
-              <!-- Success Alert -->
-              <Alert v-if="subscriptionSuccess" class="border-green-500 text-green-700 bg-green-50">
-                <AlertDescription>
-                  Payment initiated successfully! Please check your phone to complete the transaction.
-                </AlertDescription>
-              </Alert>
-            </div>
-
-            <DrawerFooter>
-              <Button type="submit" :disabled="isSubmitting">
-                <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-                <span v-if="isSubmitting">Processing...</span>
-                <span v-else>Pay Now UGX {{ totalCosts?.toLocaleString() }}</span>
-              </Button>
-              <Button type="button" variant="secondary" @click="currentStep = 'PLANS'" :disabled="isSubmitting">
-                Back to Plans
-              </Button>
-            </DrawerFooter>
-          </form>
-        </template>
-      </template>
+      <ReuseTemplate />
     </DrawerContent>
   </Drawer>
 </template>
 
 <script setup>
-import { getSubscriptionPlans, subscribeAsIndividual } from "~/services/subscriptions/index.ts";
+import { getSubscriptionPlans, getSubscriptionStatus, subscribeAsIndividual } from "~/services/subscriptions/index.ts";
 import { toast } from "vue-sonner";
-import { Loader2 } from 'lucide-vue-next';
+import { Loader2, CheckCircle2, Clock } from 'lucide-vue-next';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
+
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
+const billingStore = useBillingStore();
 
 const subscriptionPlans = ref(null);
 const plansLoading = ref(false);
 const isSubmitting = ref(false);
 const subscriptionError = ref('');
-const subscriptionSuccess = ref(false);
 const isOpen = ref(false);
 
-const currentStep = ref('PLANS'); // 'PLANS' || 'PAY'
+const currentStep = ref('PLANS'); // 'PLANS' | 'PAY' | 'POLLING'
+const pollingStatus = ref('waiting'); // 'waiting' | 'success' | 'timeout'
+const pollingSubscriptionId = ref(null);
+let pollingInterval = null;
+let pollingTimeout = null;
 
 const units = ref(1);
-const selectedOption = ref('monthly'); // 'monthly' || 'annually'
+const selectedOption = ref('monthly'); // 'monthly' | 'annually'
 
 const totalCosts = computed(() => {
   if (selectedOption.value === 'annually') {
@@ -169,6 +234,14 @@ const totalCosts = computed(() => {
 
 const bestPlan = computed(() => {
   return subscriptionPlans?.value?.items[0] || null;
+});
+
+const savingsPercentage = computed(() => {
+  if (!bestPlan.value) return 0;
+  const monthly = bestPlan.value.perSeatMonthly;
+  const annually = bestPlan.value.perSeatAnnually;
+  if (!monthly || !annually || monthly <= 0) return 0;
+  return Math.round(((monthly - annually) / monthly) * 100);
 });
 
 // Uganda phone number validation (9 digits after +256)
@@ -209,14 +282,67 @@ watch(units, (newValue) => {
   setFieldValue('units', newValue);
 });
 
+// Payment status polling
+const startPolling = (subscriptionId) => {
+  pollingSubscriptionId.value = subscriptionId;
+  pollingStatus.value = 'waiting';
+  currentStep.value = 'POLLING';
+
+  pollingInterval = setInterval(async () => {
+    try {
+      const status = await getSubscriptionStatus(subscriptionId);
+      if (status.paymentStatus === 'complete' && status.active) {
+        pollingStatus.value = 'success';
+        stopPolling();
+
+        toast.success("Payment confirmed!", {
+          description: "Your subscription is now active."
+        });
+
+        // Refresh billing data
+        await billingStore.reloadSubscriptionData();
+
+        // Auto-close after 2 seconds
+        setTimeout(() => {
+          closeAndReset();
+        }, 2000);
+      }
+    } catch (err) {
+      console.warn("Polling error:", err);
+    }
+  }, 5000);
+
+  // Timeout after 90 seconds
+  pollingTimeout = setTimeout(() => {
+    if (pollingStatus.value === 'waiting') {
+      pollingStatus.value = 'timeout';
+      stopPolling();
+    }
+  }, 90000);
+};
+
+const stopPolling = () => {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+  }
+  if (pollingTimeout) {
+    clearTimeout(pollingTimeout);
+    pollingTimeout = null;
+  }
+};
+
+const closeAndReset = () => {
+  stopPolling();
+  isOpen.value = false;
+};
+
 // Form submission handler
 const onSubmit = handleSubmit(async (values) => {
   isSubmitting.value = true;
   subscriptionError.value = '';
-  subscriptionSuccess.value = false;
 
   try {
-    // Construct full phone number with country code
     const fullPhoneNumber = `+256${values.phone}`;
 
     const response = await subscribeAsIndividual({
@@ -231,24 +357,17 @@ const onSubmit = handleSubmit(async (values) => {
     }
 
     const responseData = await response.json();
+    const subscriptionId = responseData.subscription?.id;
 
-    // Success handling
-    subscriptionSuccess.value = true;
-    toast.success("Payment initiated successfully!", {
-      description: "Please check your phone to complete the transaction."
-    });
-
-    // Close drawer after delay
-    setTimeout(() => {
-      resetForm();
-      currentStep.value = 'PLANS';
-      subscriptionSuccess.value = false;
-      isOpen.value = false;
-
-      // Reload page or refresh billing data
-      window.location.reload();
-    }, 3000);
-
+    if (subscriptionId) {
+      startPolling(subscriptionId);
+    } else {
+      // Fallback if no subscription ID returned
+      toast.success("Payment initiated!", {
+        description: "Please check your phone to complete the transaction."
+      });
+      setTimeout(() => closeAndReset(), 3000);
+    }
   } catch (error) {
     console.error('Subscription error:', error);
     subscriptionError.value = error instanceof Error
@@ -274,14 +393,20 @@ onMounted(async () => {
   plansLoading.value = false;
 });
 
-// Reset form when drawer closes
+// Cleanup on unmount
+onBeforeUnmount(() => {
+  stopPolling();
+});
+
+// Reset form when drawer/dialog closes
 watch(isOpen, (newValue) => {
   if (!newValue) {
     setTimeout(() => {
       resetForm();
       currentStep.value = 'PLANS';
       subscriptionError.value = '';
-      subscriptionSuccess.value = false;
+      pollingStatus.value = 'waiting';
+      stopPolling();
     }, 300);
   }
 });

@@ -244,8 +244,8 @@
             </div>
           </div>
 
-          <!-- Invite Members Step (for organization users) -->
-          <div v-if="currentStep === 3 && isOrganizationUser"
+          <!-- Invite Members Step (for organization admins only) -->
+          <div v-if="currentStep === 3 && isOrganizationAdmin"
                class="flex flex-col gap-6 p-5 animate-in fade-in duration-500">
             <div class="flex flex-col gap-2 text-center">
               <h2 class="text-2xl font-bold ibm-plex-serif">Invite Your Team</h2>
@@ -389,9 +389,9 @@ import {
 import {Cropper} from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import {
-  getSignedInUser, updateUser, getUserPreferences, updateUserPreferencesById, refreshUserData, pocketbase, SERVER_URL,
-  getOrganisation
+  getSignedInUser, updateUser, getUserPreferences, updateUserPreferencesById, refreshUserData, pocketbase, SERVER_URL
 } from '~/services/auth'
+import {checkIfUserIsAdmin} from '~/services/admin'
 import {toast} from 'vue-sonner'
 import InviteUser from '~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue'
 import ImportLawyers from '~/components/PageComponents/Organisation/Users/ImportLawyers/ImportLawyers.vue'
@@ -425,7 +425,6 @@ const userInitials = computed(() => {
   return (parts[0]?.[0] || 'U').toUpperCase()
 });
 
-const isOrganizationUser = computed(() => !!user.value?.organisation);
 const isOrganizationAdmin = ref(false);
 
 // Step management
@@ -618,8 +617,8 @@ const nextStep = async () => {
     await savePreferences()
   }
 
-  // Skip invite step if not organization user
-  if (currentStep.value === 3 && !isOrganizationUser.value) {
+  // Skip invite step if not organization admin
+  if (currentStep.value === 3 && !isOrganizationAdmin.value) {
     currentStep.value = finalStep.value
     return
   }
@@ -631,8 +630,8 @@ const nextStep = async () => {
 
 const previousStep = () => {
   if (currentStep.value > 0) {
-    // Skip invite step when going back if not organization user
-    if (currentStep.value === finalStep.value && !isOrganizationUser.value) {
+    // Skip invite step when going back if not organization admin
+    if (currentStep.value === finalStep.value && !isOrganizationAdmin.value) {
       currentStep.value = 3
       return
     }
@@ -686,11 +685,8 @@ onMounted(async () => {
 
     console.log(user?.value);
     if (user?.value?.organisation) {
-      const organisation = await getOrganisation(user?.value?.organisation);
-      console.log(organisation);
-      if (organisation) {
-        isOrganizationAdmin.value = organisation?.admins?.includes(user?.value?.id);
-      }
+      const result = await checkIfUserIsAdmin();
+      isOrganizationAdmin.value = result?.isAdmin ?? false;
     }
 
 

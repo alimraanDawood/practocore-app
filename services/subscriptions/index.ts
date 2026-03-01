@@ -26,14 +26,14 @@ export async function getSubscriptionPlans(page: number, perPage: number, option
 }
 
 export async function getSubscriptionStatus(subscriptionId: string) {
-    const endpoint = `${SERVER_URL}/api/individual/${subscriptionId}/subscriptions-status`
+    const endpoint = `${SERVER_URL}/api/individual/${subscriptionId}/subscription-status`
     return await fetch(endpoint, {
         method: "GET",
         headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": `Bearer ${pocketbase.authStore.token}`
         },
-    });
+    }).then(r => r.json());
 }
 
 export async function subscribeAsIndividual(options: IndividualSubscriptionOptions) {
