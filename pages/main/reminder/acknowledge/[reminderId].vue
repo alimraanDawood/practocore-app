@@ -83,7 +83,7 @@ const _acknowledgeReminder = async () => {
         <span
             class="font-semibold text-2xl ibm-plex-serif text-center">Acknowledge Receipt of Reminder</span>
         <span class="text-center">Escalation has been enabled for the deadline: <i
-            class="font-semibold">"{{ deadlineReminder?.expand?.deadline?.name }}"</i>. Failure to acknowledge this reminder within n hours of sending shall notify the supervisor in charge of this matter.</span>
+            class="font-semibold">"{{ deadlineReminder?.expand?.deadline?.name }}"</i>. Failure to acknowledge this reminder within 12 hours of sending shall notify the supervisor in charge of this matter.</span>
 
         <Button @click="_acknowledgeReminder" class="w-full">Acknowledge Reminder</Button>
 
