@@ -228,7 +228,7 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
             </Badge>
           </div>
 
-          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm text-muted-foreground">
+          <div class="flex flex-col gap-1 sm:gap-3 text-sm text-muted-foreground">
             <div class="flex flex-row items-center gap-1">
               <Mail class="size-3" />
               <span class="truncate">{{ invite.email }}</span>
