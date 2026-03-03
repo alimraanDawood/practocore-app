@@ -9,7 +9,9 @@
       <template v-if="currentStep === 'PLANS'">
         <div class="flex flex-col gap-1 px-5 pt-5">
           <h3 class="text-lg font-semibold ibm-plex-serif">Subscribe to PractoCore</h3>
-          <p class="text-sm text-muted-foreground">Choose a plan below to continue</p>
+          <p class="text-sm text-muted-foreground">
+            {{ isOrgSubscription ? 'Choose a billing cycle for your organisation' : 'Choose a plan below to continue' }}
+          </p>
         </div>
 
         <div class="flex flex-col lg:flex-row p-5 gap-3">
@@ -23,9 +25,9 @@
             </Badge>
             <div class="flex flex-row items-end justify-between gap-2">
               <span class="text-lg font-semibold text-foreground ibm-plex-serif">Annual Plan</span>
-              <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatAnnually)?.toLocaleString() }}/mo</span>
+              <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatAnnually)?.toLocaleString() }}/seat/mo</span>
             </div>
-            <span class="mt-1">UGX {{ (bestPlan?.perSeatAnnually * 12)?.toLocaleString() }} per year billed annually</span>
+            <span class="mt-1">UGX {{ (bestPlan?.perSeatAnnually * 12)?.toLocaleString() }} per seat per year</span>
           </div>
 
           <div
@@ -35,9 +37,9 @@
           >
             <div class="flex flex-row items-end justify-between gap-2">
               <span class="text-lg font-semibold text-foreground ibm-plex-serif">Monthly Plan</span>
-              <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatMonthly)?.toLocaleString() }}/mo</span>
+              <span class="font-semibold text-primary">UGX {{ (bestPlan?.perSeatMonthly)?.toLocaleString() }}/seat/mo</span>
             </div>
-            <span class="mt-1">UGX {{ (bestPlan?.perSeatMonthly * 12)?.toLocaleString() }} per year billed monthly</span>
+            <span class="mt-1">UGX {{ (bestPlan?.perSeatMonthly * 12)?.toLocaleString() }} per seat per year</span>
           </div>
         </div>
 
@@ -59,10 +61,38 @@
             <div class="flex flex-col items-center justify-center gap-1">
               <span class="text-sm text-muted-foreground">Total Amount</span>
               <span class="font-semibold ibm-plex-serif text-3xl">UGX {{ totalCosts?.toLocaleString() }}</span>
-              <span class="text-xs text-muted-foreground">
+              <span v-if="isOrgSubscription" class="text-xs text-muted-foreground text-center">
+                UGX {{ perSeatPrice?.toLocaleString() }}/seat/mo × {{ seats }} {{ seats === 1 ? 'seat' : 'seats' }} × {{ units }} {{ units === 1 ? 'month' : 'months' }}
+              </span>
+              <span v-else class="text-xs text-muted-foreground">
                 {{ units }} {{ units === 1 ? 'month' : 'months' }} • {{ selectedOption === 'annually' ? 'Annual' : 'Monthly' }} billing
               </span>
             </div>
+
+            <!-- Seats field (organisation only) -->
+            <FormField v-if="isOrgSubscription" v-slot="{ componentField }" name="seats">
+              <FormItem>
+                <div class="flex flex-row w-full items-center justify-between">
+                  <FormLabel>Number of Seats</FormLabel>
+                  <span class="text-xs text-muted-foreground">
+                    Min: {{ minSeats }} (current members)
+                  </span>
+                </div>
+                <FormControl>
+                  <NumberField :min="minSeats" v-model="seats" v-bind="componentField">
+                    <NumberFieldContent>
+                      <NumberFieldDecrement />
+                      <NumberFieldInput />
+                      <NumberFieldIncrement />
+                    </NumberFieldContent>
+                  </NumberField>
+                </FormControl>
+                <FormDescription>
+                  How many seats does your organisation need? You can purchase extra seats for future members.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
             <FormField v-slot="{ componentField }" name="units">
               <FormItem>
@@ -192,14 +222,15 @@
       <slot />
     </DrawerTrigger>
 
-    <DrawerContent>
+    <DrawerContent class="flex flex-col max-h-[90vh] overflow-y-scroll">
       <ReuseTemplate />
     </DrawerContent>
   </Drawer>
 </template>
 
 <script setup>
-import { getSubscriptionPlans, getSubscriptionStatus, subscribeAsIndividual } from "~/services/subscriptions/index.ts";
+import { getSubscriptionPlans, getSubscriptionStatus, subscribeAsIndividual, subscribeAsOrganisation } from "~/services/subscriptions/index.ts";
+import { getSignedInUser } from "~/services/auth";
 import { toast } from "vue-sonner";
 import { Loader2, CheckCircle2, Clock } from 'lucide-vue-next';
 import { useForm } from 'vee-validate';
@@ -208,6 +239,19 @@ import * as z from 'zod';
 
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 const billingStore = useBillingStore();
+const organisationStore = useOrganisationStore();
+
+// Determine if this is an org subscription
+const user = getSignedInUser();
+const isOrgSubscription = computed(() => !!user?.organisation);
+const orgId = computed(() => user?.organisation || '');
+
+// Minimum seats = current active members (at least 2 for org)
+const minSeats = computed(() => {
+  const activeSeats = organisationStore.organisation?.active_seats || 0;
+  const memberCount = organisationStore.organisation?.users?.length || 0;
+  return Math.max(activeSeats, memberCount, 2);
+});
 
 const subscriptionPlans = ref(null);
 const plansLoading = ref(false);
@@ -222,18 +266,42 @@ let pollingInterval = null;
 let pollingTimeout = null;
 
 const units = ref(1);
+const seats = ref(2);
 const selectedOption = ref('monthly'); // 'monthly' | 'annually'
 
-const totalCosts = computed(() => {
-  if (selectedOption.value === 'annually') {
-    return units.value * bestPlan?.value?.perSeatAnnually;
-  } else {
-    return units.value * bestPlan?.value?.perSeatMonthly;
+// Initialize seats to minSeats when org data loads
+watch(minSeats, (newMin) => {
+  if (seats.value < newMin) {
+    seats.value = newMin;
   }
+}, { immediate: true });
+
+const perSeatPrice = computed(() => {
+  if (selectedOption.value === 'annually') {
+    return bestPlan?.value?.perSeatAnnually || 0;
+  }
+  return bestPlan?.value?.perSeatMonthly || 0;
+});
+
+const totalCosts = computed(() => {
+  const price = perSeatPrice.value;
+  const seatCount = isOrgSubscription.value ? seats.value : 1;
+  if (selectedOption.value === 'annually') {
+    return price * seatCount * units.value * 12;
+  }
+  return price * seatCount * units.value;
 });
 
 const bestPlan = computed(() => {
-  return subscriptionPlans?.value?.items[0] || null;
+  if (!subscriptionPlans?.value?.items?.length) return null;
+
+  if (isOrgSubscription.value) {
+    // Only show the Team plan for orgs — trial plans cannot be reselected
+    return subscriptionPlans.value.items.find(sp => sp.name === 'Team') || subscriptionPlans.value.items[0];
+  }
+
+  // Only show the Solo plan for individuals
+  return subscriptionPlans.value.items.find(sp => sp.name === 'Solo') || subscriptionPlans.value.items[0];
 });
 
 const savingsPercentage = computed(() => {
@@ -247,32 +315,50 @@ const savingsPercentage = computed(() => {
 // Uganda phone number validation (9 digits after +256)
 const ugandaPhoneRegex = /^[7][0-9]{8}$/;
 
-// Form validation schema
-const formSchema = toTypedSchema(z.object({
-  units: z.union([z.string(), z.number()])
-      .transform((val) => typeof val === 'string' ? parseInt(val, 10) : val)
-      .pipe(
-          z.number({
-            required_error: "Number of months is required",
-            invalid_type_error: "Please enter a valid number"
-          })
-              .min(1, "Must subscribe for at least 1 month")
-              .int("Must be a whole number")
-      ),
+// Form validation schema — dynamic based on subscription type
+const formSchema = computed(() => {
+  const baseSchema = {
+    units: z.union([z.string(), z.number()])
+        .transform((val) => typeof val === 'string' ? parseInt(val, 10) : val)
+        .pipe(
+            z.number({
+              required_error: "Number of months is required",
+              invalid_type_error: "Please enter a valid number"
+            })
+                .min(1, "Must subscribe for at least 1 month")
+                .int("Must be a whole number")
+        ),
 
-  phone: z.string({
-    required_error: "Phone number is required"
-  })
-      .min(9, "Phone number must be 9 digits")
-      .max(9, "Phone number must be 9 digits")
-      .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
-}));
+    phone: z.string({
+      required_error: "Phone number is required"
+    })
+        .min(9, "Phone number must be 9 digits")
+        .max(9, "Phone number must be 9 digits")
+        .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
+  };
+
+  if (isOrgSubscription.value) {
+    baseSchema.seats = z.union([z.string(), z.number()])
+        .transform((val) => typeof val === 'string' ? parseInt(val, 10) : val)
+        .pipe(
+            z.number({
+              required_error: "Number of seats is required",
+              invalid_type_error: "Please enter a valid number"
+            })
+                .min(minSeats.value, `Must have at least ${minSeats.value} seats (current members)`)
+                .int("Must be a whole number")
+        );
+  }
+
+  return toTypedSchema(z.object(baseSchema));
+});
 
 // Initialize form
 const { handleSubmit, resetForm, setFieldValue } = useForm({
   validationSchema: formSchema,
   initialValues: {
     units: 1,
+    seats: minSeats.value || 2,
     phone: ''
   }
 });
@@ -280,6 +366,11 @@ const { handleSubmit, resetForm, setFieldValue } = useForm({
 // Watch units ref and sync with form
 watch(units, (newValue) => {
   setFieldValue('units', newValue);
+});
+
+// Watch seats ref and sync with form
+watch(seats, (newValue) => {
+  setFieldValue('seats', newValue);
 });
 
 // Payment status polling
@@ -344,12 +435,24 @@ const onSubmit = handleSubmit(async (values) => {
 
   try {
     const fullPhoneNumber = `+256${values.phone}`;
+    let response;
 
-    const response = await subscribeAsIndividual({
-      units: values.units,
-      annual: selectedOption.value === 'annually',
-      phone: fullPhoneNumber
-    });
+    if (isOrgSubscription.value) {
+      // Organisation subscription
+      response = await subscribeAsOrganisation(orgId.value, {
+        seats: values.seats || seats.value,
+        units: values.units,
+        annual: selectedOption.value === 'annually',
+        phone: fullPhoneNumber
+      });
+    } else {
+      // Individual subscription
+      response = await subscribeAsIndividual({
+        units: values.units,
+        annual: selectedOption.value === 'annually',
+        phone: fullPhoneNumber
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -391,6 +494,11 @@ onMounted(async () => {
     toast.error("Failed to load subscription plans!");
   }
   plansLoading.value = false;
+
+  // Ensure org data is loaded for seat count
+  if (isOrgSubscription.value && orgId.value) {
+    await organisationStore.fetchOrganisation(orgId.value);
+  }
 });
 
 // Cleanup on unmount
@@ -406,6 +514,7 @@ watch(isOpen, (newValue) => {
       currentStep.value = 'PLANS';
       subscriptionError.value = '';
       pollingStatus.value = 'waiting';
+      seats.value = minSeats.value || 2;
       stopPolling();
     }, 300);
   }

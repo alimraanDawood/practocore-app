@@ -9,6 +9,13 @@ interface IndividualSubscriptionOptions {
     phone: string;
 }
 
+interface OrganisationSubscriptionOptions {
+    seats: number;
+    units: number;
+    annual: boolean;
+    phone: string;
+}
+
 export async function getSubscription(subscriptionId: string, options: Object) {
     return pocketbase.collection('Subscriptions').getOne(subscriptionId, options);
 }
@@ -38,6 +45,18 @@ export async function getSubscriptionStatus(subscriptionId: string) {
 
 export async function subscribeAsIndividual(options: IndividualSubscriptionOptions) {
     const endpoint = `${SERVER_URL}/api/individual/subscribe`
+    return await fetch(endpoint, {
+        method: "POST",
+        body: JSON.stringify(options),
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        },
+    });
+}
+
+export async function subscribeAsOrganisation(orgId: string, options: OrganisationSubscriptionOptions) {
+    const endpoint = `${SERVER_URL}/api/organisations/${orgId}/subscribe`
     return await fetch(endpoint, {
         method: "POST",
         body: JSON.stringify(options),

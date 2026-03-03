@@ -104,14 +104,14 @@ const currentDateDeadlines = computed(() => {
 })
 
 onMounted(async () => {
-  const fetched = await getAllDeadlines({ filter: 'completed = false' });
+  const fetched = await getAllDeadlines({ filter: "status = 'pending'" });
   deadlines.value = fetched.map((d: any) => ({ ...d, color: getAccentById(d.id) }));
 
   subscribeToDeadlines(reloadDeadlines)
 });
 
 const reloadDeadlines = async () => {
-  const fetched = await getAllDeadlines({ filter: 'completed = false' });
+  const fetched = await getAllDeadlines({ filter: "status = 'pending'" });
   deadlines.value = fetched.map((d: any) => ({ ...d, color: getAccentById(d.id) }));
 }
 

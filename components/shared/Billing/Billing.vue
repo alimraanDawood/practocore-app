@@ -31,9 +31,14 @@
               </div>
 
               <div class="flex lg:flex-col flex-row justify-between w-full lg:w-fit lg:justify-start items-center lg:items-end gap-1">
-                <span class="text-lg lg:text-2xl font-bold ibm-plex-serif">
-                  UGX {{ activeSubscription?.expand?.plan?.perSeatMonthly?.toLocaleString() || '0' }}
-                </span>
+                <div class="flex flex-col items-end">
+                  <span class="text-lg lg:text-2xl font-bold ibm-plex-serif">
+                    UGX {{ activeSubscription?.amount?.toLocaleString() || '0' }}
+                  </span>
+                  <span v-if="activeSubscription?.type === 'organisation'" class="text-xs text-muted-foreground">
+                    UGX {{ activeSubscription?.expand?.plan?.perSeatMonthly?.toLocaleString() }}/seat/mo × {{ activeSubscription.seats }} seats
+                  </span>
+                </div>
                 <span class="text-xs text-muted-foreground">
                   {{ activeSubscription.seats }} {{ activeSubscription.seats === 1 ? 'seat' : 'seats' }}
                 </span>

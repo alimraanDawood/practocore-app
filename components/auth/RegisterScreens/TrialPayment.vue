@@ -4,12 +4,15 @@
     <div class="flex flex-col items-center py-8 gap-3">
       <Badge variant="secondary" class="mb-2">Trial Offer</Badge>
       <span class="text-muted-foreground text-sm">Try PractoCore</span>
-      <span class="text-center text-5xl font-bold ibm-plex-serif">UGX {{ ( accType === 'ORG' ? 50000 : 10000 ).toLocaleString() }} </span>
+      <span class="text-center text-5xl font-bold ibm-plex-serif">UGX {{ trialAmount.toLocaleString() }} </span>
       <div class="flex flex-row items-center gap-2">
         <span class="text-muted-foreground text-sm">1 Month</span>
         <div class="size-1 bg-muted-foreground rounded-full"></div>
         <span class="text-muted-foreground text-sm">Billed Once</span>
       </div>
+      <p v-if="accType === 'ORG'" class="text-xs text-muted-foreground text-center max-w-sm">
+        Flat trial fee • seats are computed automatically based on members you onboard
+      </p>
       <p class="text-xs text-muted-foreground text-center max-w-sm mt-2">
         Full access to all features. No commitment. Cancel anytime.
       </p>
@@ -66,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
@@ -82,6 +85,13 @@ const props = defineProps(['accType'])
 // State
 const isSubmitting = ref(false);
 const errorMessage = ref('');
+
+// Trial amounts are fixed:
+// - Organisation: flat 50,000 UGX regardless of seats (seats computed dynamically from actual members)
+// - Individual: 10,000 UGX
+const trialAmount = computed(() => {
+  return props.accType === 'ORG' ? 50000 : 10000;
+});
 
 // Uganda phone number validation (9 digits after +256)
 const ugandaPhoneRegex = /^[7][0-9]{8}$/;
@@ -116,9 +126,9 @@ const onSubmit = handleSubmit(async (values) => {
     // Small delay to show loading state (optional)
     await new Promise(resolve => setTimeout(resolve, 300));
     if(props.accType === 'IND') {
-      umTrackRevenue("individual-trial-signup", 10000, "UGX")
+      umTrackRevenue("individual-trial-signup", trialAmount.value, "UGX")
     } else {
-      umTrackRevenue("organisation-trial-signup", 50000, "UGX")
+      umTrackRevenue("organisation-trial-signup", trialAmount.value, "UGX")
     }
 
     // Emit the complete event with the full phone number
