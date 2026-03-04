@@ -427,10 +427,10 @@ onBeforeUnmount(() => {
 const goBackOrHome = () => {
   if (window.history.state.back) {
     // There is history, so go back
-    router.back()
+    useRouter().back()
   } else {
     // No history (direct entry), go to main page
-    router.push('/')
+    useRouter().push('/')
   }
 }
 </script>
