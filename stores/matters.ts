@@ -277,8 +277,6 @@ export const useMattersStore = defineStore('matters', {
       const unsubscribeFn = await subscribeToMatters(async (data: any) => {
         const { action, record } = data
 
-        toast.success("Something changed in matters. Refreshing data...");
-
         const expandedRecord = await getMatter(record.id, {});
 
         // Handle subscription events optimistically
