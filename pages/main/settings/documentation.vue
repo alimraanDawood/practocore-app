@@ -262,13 +262,13 @@
             <h2 class="font-semibold">Need more help?</h2>
             <p class="text-sm text-muted-foreground">Our support team is available Monday to Friday, 8 am – 6 pm EAT.</p>
             <div class="flex flex-row gap-2 flex-wrap">
-              <a href="mailto:support@practocore.com">
+              <a href="mailto:contact@fiika.dev">
                 <Button variant="outline" size="sm">
                   <Mail class="size-4 mr-2" />
                   Email support
                 </Button>
               </a>
-              <a href="https://wa.me/256700000000" target="_blank">
+              <a href="https://wa.me/256791843512" target="_blank">
                 <Button variant="outline" size="sm">
                   <MessageCircle class="size-4 mr-2" />
                   WhatsApp

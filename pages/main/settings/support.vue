@@ -19,7 +19,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
             <!-- WhatsApp -->
-            <a href="https://wa.me/256700000000" target="_blank"
+            <a href="https://wa.me/256791843512" target="_blank"
                class="flex flex-col gap-3 p-5 border rounded-xl hover:bg-muted/50 transition-colors group">
               <div class="flex flex-row items-center gap-3">
                 <div class="size-10 rounded-full bg-green-500/10 grid place-items-center shrink-0">
@@ -32,7 +32,7 @@
                 <ExternalLink class="size-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <div class="flex flex-col gap-0.5">
-                <span class="text-sm font-medium">+256 700 000 000</span>
+                <span class="text-sm font-medium">+256 791 843 512</span>
                 <span class="text-xs text-muted-foreground">Mon – Fri, 8 am – 6 pm EAT</span>
               </div>
             </a>
@@ -51,7 +51,7 @@
                 <ExternalLink class="size-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <div class="flex flex-col gap-0.5">
-                <span class="text-sm font-medium">support@practocore.com</span>
+                <span class="text-sm font-medium">contact@fiika.dev</span>
                 <span class="text-xs text-muted-foreground">For billing, accounts &amp; technical issues</span>
               </div>
             </a>
@@ -70,7 +70,7 @@
                 <ExternalLink class="size-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <div class="flex flex-col gap-0.5">
-                <span class="text-sm font-medium">sales@practocore.com</span>
+                <span class="text-sm font-medium">sales@fiika.dev</span>
                 <span class="text-xs text-muted-foreground">Custom templates &amp; enterprise plans</span>
               </div>
             </a>

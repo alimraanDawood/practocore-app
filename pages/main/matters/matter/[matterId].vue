@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col w-full xs:hidden">
     <div class="flex flex-row w-full items-center justify-between p-3 gap-3 border-b">
-      <Button @click="$router.go(-1)" size="icon" variant="outline">
+      <Button @click="goBackOrHome" size="icon" variant="outline">
         <ArrowLeft class="size-4"/>
       </Button>
 
@@ -423,4 +423,14 @@ onBeforeUnmount(() => {
   unsubscribeToAllDeadlines();
   subscribedDeadlineIds.value.clear();
 });
+
+const goBackOrHome = () => {
+  if (window.history.state.back) {
+    // There is history, so go back
+    router.back()
+  } else {
+    // No history (direct entry), go to main page
+    router.push('/')
+  }
+}
 </script>
