@@ -19,7 +19,7 @@
         <Transition mode="out-in" :name="direction === 'forward' ? 'slide-left' : 'slide-right'" class="max-w-sm">
           <AccountType class="max-w-sm p-3" v-if="currentStep === RegistrationSteps.ACC_TYPE" :account-type="registrationData?.type" @complete="accountTypeRegistComplete" />
           <OrganisationRegister class="max-w-sm p-3" :organisation-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.ORG_REGIST" @complete="organisationRegistComplete" />
-          <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />
+<!--          <FirmDetailsRegister class="max-w-sm p-3" :firm-details-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.FIRM_DETAILS_REGIST" @complete="firmDetailsRegistComplete" />-->
           <PrimaryContactRegister class="max-w-sm p-3" :primary-contact-data="registrationData.organisation" v-else-if="currentStep === RegistrationSteps.PRIMARY_CONTACT_REGIST" @complete="primaryContactRegistComplete" />
           <AdminRegister :inviteRef="organisationRef" class="max-w-sm p-3" :admin-data="registrationData.user" v-else-if="currentStep === RegistrationSteps.ADMIN_REGIST" @complete="adminRegistComplete" @google="adminRegistGoogle" />
           <CreatingAccount class="max-w-sm p-3" v-else-if="currentStep === RegistrationSteps.CREATING" />
@@ -291,7 +291,7 @@ const accountTypeRegistComplete = (val: 'ORG' | 'IND') => {
 
 const organisationRegistComplete = (val: any) => { // Consider more specific type for val
   registrationData.organisation = { ...registrationData.organisation, ...val };
-  goToStep(RegistrationSteps.FIRM_DETAILS_REGIST);
+  goToStep(RegistrationSteps.PRIMARY_CONTACT_REGIST);
 }
 
 const firmDetailsRegistComplete = (val: any) => { // Consider more specific type for val
