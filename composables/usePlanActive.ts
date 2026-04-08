@@ -17,6 +17,7 @@ export default function () {
             // 2. Refresh from server
             const { subscription } = await getActiveSubscription();
             if (subscription) {
+                console.log("Loaded from server!");
                 activePlan.value = subscription
                 // 3. Update cache for next time
                 localStorage.setItem('pb_active_subscription', JSON.stringify(subscription))
