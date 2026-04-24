@@ -24,17 +24,7 @@
         <FormItem>
           <FormLabel>Mobile Money Number (Airtel / MTN)</FormLabel>
           <FormControl>
-            <InputGroup class="overflow-hidden p-0">
-              <InputGroupAddon class="border-r px-2 bg-muted h-full">
-                <InputGroupText class="text-muted-foreground">+256</InputGroupText>
-              </InputGroupAddon>
-              <InputGroupInput
-                  placeholder="712345678"
-                  maxlength="9"
-                  v-bind="componentField"
-                  :disabled="isSubmitting"
-              />
-            </InputGroup>
+            <UgandaPhoneInput v-bind="componentField" :disabled="isSubmitting" />
           </FormControl>
           <FormDescription>
             Enter your mobile money number without the country code
@@ -50,13 +40,6 @@
           {{ errorMessage }}
         </AlertDescription>
       </Alert>
-
-      <!-- Submit Button -->
-      <Button type="submit" size="lg" :disabled="isSubmitting" class="w-full">
-        <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-        <span v-if="isSubmitting">Processing...</span>
-        <span v-else>Continue to Payment</span>
-      </Button>
 
       <!-- Terms -->
       <p class="text-xs text-muted-foreground text-center">
@@ -144,9 +127,10 @@ const onSubmit = handleSubmit(async (values) => {
   }
 });
 
-// Expose reset method for parent component
 defineExpose({
-  resetForm
+  resetForm,
+  triggerSubmit: () => onSubmit(),
+  isSubmitting,
 });
 </script>
 

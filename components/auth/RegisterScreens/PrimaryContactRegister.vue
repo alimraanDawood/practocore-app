@@ -1,17 +1,10 @@
 <script setup lang="ts">
-import { toTypedSchema } from '@vee-validate/zod'
-import { useForm } from 'vee-validate'
+import {toTypedSchema} from '@vee-validate/zod'
+import {useForm} from 'vee-validate'
 import * as z from 'zod'
-import { Button } from '@/components/ui/button'
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+import {Button} from '@/components/ui/button'
+import {FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,} from '@/components/ui/form'
+import {Input} from '@/components/ui/input'
 
 const props = defineProps(['primaryContactData'])
 const emits = defineEmits(['complete'])

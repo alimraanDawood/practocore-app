@@ -217,6 +217,19 @@ const calculate = (values: any) => {
   }
 };
 
+const canSubmit = computed(() =>
+  !!selectedTemplate.value && !sampleLoading.value && (formRef.value?.meta.valid ?? false)
+)
+
+const triggerSubmit = async () => {
+  const result = await formRef.value?.validate()
+  if (result?.valid) {
+    calculate(formRef.value?.values as any)
+  }
+}
+
+defineExpose({ triggerSubmit, canSubmit })
+
 watch(
   () => props.mode,
   async (mode) => {
@@ -374,12 +387,6 @@ watch(
           </FormField>
         </div>
 
-        <div class="flex justify-end">
-          <div class="flex w-full items-center justify-between gap-2">
-            <Button type="button" variant="outline" @click="emits('back')">Back</Button>
-            <Button type="submit" :disabled="!meta.valid || !selectedTemplate">Calculate Preview</Button>
-          </div>
-        </div>
       </form>
     </Form>
   </div>

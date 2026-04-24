@@ -25,14 +25,14 @@ const selectMode = (value: CreationMode) => {
     </div>
 
     <div class="grid md:grid-cols-2 gap-2 max-w-lg">
-      <button @click="selectMode('SCRATCH')" class="flex gap-4 disabled:opacity-50 flex-row items-start text-left p-3 border-2 bg-secondary/30 text-secondary-foreground rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': option === 'SCRATCH' }">
+      <button @click="selectMode('SCRATCH')" class="flex gap-4 disabled:opacity-50 flex-row items-start text-left p-3 border-2 bg-muted/30 text-muted-foreground rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': option === 'SCRATCH' }">
         <div class="flex flex-col w-full">
           <span class="text-lg font-semibold">Create a matter from scratch</span>
           <span class="text-sm text-muted-foreground">(for lawyers who want to see the mechanics)</span>
         </div>
       </button>
 
-      <button @click="selectMode('SAMPLE')" class="flex gap-4 disabled:opacity-50 flex-row items-start text-left p-3 border-2 bg-secondary/30 text-secondary-foreground rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': option === 'SAMPLE' }">
+      <button @click="selectMode('SAMPLE')" class="flex gap-4 disabled:opacity-50 flex-row items-start text-left p-3 border-2 bg-muted/30 text-muted-foreground rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': option === 'SAMPLE' }">
         <div class="flex flex-col w-full">
           <span class="text-lg font-semibold">Use a sample matter</span>
           <span class="text-sm text-muted-foreground">(pre-populated Ugandan commercial recovery suit — for lawyers who want to preview the product before committing their own data)</span>

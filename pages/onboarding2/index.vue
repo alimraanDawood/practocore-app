@@ -115,6 +115,57 @@
               </div>
             </div>
 
+            <!-- FIRM CONTACT STEP (ORG only) -->
+            <div v-else-if="currentStep === 'firm-contact'" class="flex flex-col flex-1 min-h-full p-6">
+              <div class="my-auto flex flex-col items-center gap-6 w-full">
+                <div class="flex flex-col items-center gap-2 text-center max-w-md">
+                  <div class="flex items-center justify-center size-16 rounded-full bg-primary/10">
+                    <Phone class="size-8 text-primary" />
+                  </div>
+                  <h2 class="text-2xl font-bold ibm-plex-serif">Primary contact details</h2>
+                  <p class="text-muted-foreground text-sm">
+                    This person will manage the firm's account and receive important notifications.
+                  </p>
+                </div>
+
+                <div class="flex flex-col gap-4 w-full max-w-sm">
+                  <p class="text-xs text-muted-foreground text-center -mb-1">Pre-filled from your account — change if needed.</p>
+
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium">Full name</label>
+                    <Input
+                      v-model="firmContact.fullName"
+                      type="text"
+                      placeholder="Amina Nakato"
+                      class="w-full"
+                      autocomplete="name"
+                    />
+                  </div>
+
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium">Email address</label>
+                    <Input
+                      v-model="firmContact.emailAddress"
+                      type="email"
+                      placeholder="amina@nakatolaw.co.ug"
+                      class="w-full"
+                      autocomplete="email"
+                    />
+                  </div>
+
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium">Phone number <span class="text-muted-foreground font-normal">(optional)</span></label>
+                    <UgandaPhoneInput
+                      :value="firmContact.phoneNumber"
+                      @input="(e: Event) => firmContact.phoneNumber = (e.target as HTMLInputElement).value"
+                      @keydown.enter="canProceed && nextStep()"
+                    />
+                    <p class="text-xs text-muted-foreground">For account verification and critical notifications</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- MATTER MODE STEP -->
             <div v-else-if="currentStep === 'matter-mode'" class="flex flex-col flex-1 min-h-full p-6">
               <div class="my-auto flex items-center justify-center">
@@ -225,6 +276,91 @@
               </div>
             </div>
 
+            <!-- REMINDERS STEP -->
+            <div v-else-if="currentStep === 'reminders'" class="flex flex-col flex-1 min-h-full p-6">
+              <div class="my-auto flex flex-col items-center gap-6 w-full">
+                <div class="flex flex-col items-center gap-2 text-center max-w-md">
+                  <div class="flex items-center justify-center size-16 rounded-full bg-primary/10">
+                    <Bell class="size-8 text-primary" />
+                  </div>
+                  <h2 class="text-2xl font-bold ibm-plex-serif">How should we remind you?</h2>
+                  <p class="text-muted-foreground text-sm">
+                    PractoCore sends deadline reminders 30, 14, 7, 3, and 1 day before each deadline.
+                    Choose when and how you want them.
+                  </p>
+                </div>
+
+                <div class="flex flex-col gap-3 w-full max-w-sm">
+                  <!-- Daily reminder time -->
+                  <div class="flex flex-col gap-3 p-4 rounded-lg border bg-card">
+                    <div class="flex items-center justify-between">
+                      <div class="flex flex-col gap-0.5">
+                        <p class="text-sm font-medium">Daily reminder time</p>
+                        <p class="text-xs text-muted-foreground">When you'd like to receive your morning summary</p>
+                      </div>
+                      <Input
+                        type="time"
+                        v-model="reminderPrefs.time"
+                        class="w-28 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Notification channels -->
+                  <div class="flex flex-col gap-1 p-4 rounded-lg border bg-card">
+                    <p class="text-sm font-medium mb-2">Notification channels</p>
+
+                    <div class="flex items-center justify-between py-2">
+                      <div class="flex flex-col gap-0.5">
+                        <p class="text-sm">Email</p>
+                        <p class="text-xs text-muted-foreground">Reminders sent to your inbox</p>
+                      </div>
+                      <Switch :model-value="reminderPrefs.email" @update:model-value="v => reminderPrefs.email = v" />
+                    </div>
+
+                    <Separator />
+
+                    <div class="flex items-center justify-between py-2">
+                      <div class="flex flex-col gap-0.5">
+                        <p class="text-sm">In-app</p>
+                        <p class="text-xs text-muted-foreground">Alerts inside PractoCore</p>
+                      </div>
+                      <Switch :model-value="reminderPrefs.app" @update:model-value="v => reminderPrefs.app = v" />
+                    </div>
+
+                    <Separator />
+
+                    <div class="flex items-center justify-between py-2">
+                      <div class="flex flex-col gap-0.5">
+                        <p class="text-sm">Push notifications</p>
+                        <p class="text-xs text-muted-foreground">Alerts on your device</p>
+                      </div>
+                      <Switch :model-value="reminderPrefs.push" @update:model-value="v => reminderPrefs.push = v" />
+                    </div>
+
+                    <Separator />
+
+                    <div class="flex flex-col gap-2 py-2">
+                      <div class="flex items-center justify-between">
+                        <div class="flex flex-col gap-0.5">
+                          <p class="text-sm">SMS</p>
+                          <p class="text-xs text-muted-foreground">Text messages to your phone</p>
+                        </div>
+                        <Switch :model-value="reminderPrefs.sms" @update:model-value="v => reminderPrefs.sms = v" />
+                      </div>
+                      <div v-if="reminderPrefs.sms" class="flex flex-col gap-1">
+                        <UgandaPhoneInput
+                          :value="reminderPrefs.phone"
+                          @input="(e: Event) => reminderPrefs.phone = (e.target as HTMLInputElement).value"
+                        />
+                        <p class="text-xs text-muted-foreground">Uganda number — 9 digits after +256</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- ACCOUNT CREATE STEP -->
             <div v-else-if="currentStep === 'account-create'" class="flex flex-col flex-1 min-h-full p-6">
               <div class="my-auto flex flex-col items-center gap-6 w-full">
@@ -323,6 +459,7 @@
             <div v-else-if="currentStep === 'trial-payment'" class="flex flex-col flex-1 min-h-full p-6">
               <div class="my-auto w-full max-w-sm mx-auto">
                 <TrialPayment
+                  ref="trialPaymentRef"
                   :acc-type="persona === 'ORG' ? 'ORG' : 'IND'"
                   @complete="onTrialPaymentComplete"
                 />
@@ -342,20 +479,6 @@
               </div>
             </div>
 
-            <!-- OTP STEP -->
-            <div v-else-if="currentStep === 'otp'" class="flex flex-col flex-1 min-h-full p-6">
-              <div class="my-auto flex flex-col w-full max-w-sm mx-auto gap-4">
-                <div class="flex flex-col gap-1 text-center">
-                  <h2 class="text-xl font-bold ibm-plex-serif">Check your inbox</h2>
-                  <p class="text-sm text-muted-foreground">
-                    We sent a 5-digit code to
-                    <span class="font-medium text-foreground">{{ accountValues.emailAddress }}</span>.
-                    Enter it below to verify your account.
-                  </p>
-                </div>
-                <OTP :otp-id="otpId" :user-id="userId" @complete="onOTPComplete" />
-              </div>
-            </div>
 
           </div>
         </Transition>
@@ -363,8 +486,8 @@
         <!-- MATTER FORM STEP (v-show preserves form state) -->
         <div v-show="currentStep === 'matter-form'" class="flex flex-col flex-1 p-6">
           <PageComponentsOnboardingSoloScratchMatter
+            ref="scratchMatterRef"
             :mode="creationMode"
-            @back="previousStep"
             @calculated="onCalculated"
           />
         </div>
@@ -377,7 +500,7 @@
       v-if="showFooterNav"
       class="flex w-full items-center justify-center px-4 py-3 border-t bg-background shrink-0"
     >
-      <div class="flex w-full max-w-3xl items-center gap-3">
+      <div class="flex w-full max-w-3xl items-center gap-3 lg:justify-start justify-between">
         <Button
           variant="outline"
           size="sm"
@@ -404,25 +527,27 @@
             "
           />
         </div>
+        <div class="flex flex-row gap-2 items-center">
+          <Button
+            v-if="canSkip"
+            type="button"
+            size="sm"
+            variant="outline"
+            @click="skipStep"
+          >
+            Skip
+          </Button>
 
-        <button
-          v-if="canSkip"
-          type="button"
-          class="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          @click="skipStep"
-        >
-          Skip
-        </button>
-
-        <Button
-          size="sm"
-          @click="nextStep"
-          :disabled="!canProceed"
-          class="shrink-0"
-        >
-          {{ footerNextLabel }}
-          <ArrowRight class="size-4 ml-1.5" />
-        </Button>
+          <Button
+            size="sm"
+            @click="nextStep"
+            :disabled="!canProceed"
+            class="shrink-0"
+          >
+            {{ footerNextLabel }}
+            <ArrowRight class="size-4 ml-1.5" />
+          </Button>
+        </div>
       </div>
     </div>
   </div>
@@ -432,18 +557,17 @@
 import { ref, computed, reactive } from 'vue'
 import {
   ArrowLeft, ArrowRight, Bell, Calendar, Building2,
-  Users, User, Loader2, UserPlus, Download, CheckCircle2,
+  Users, User, Loader2, UserPlus, Download, CheckCircle2, Phone,
 } from 'lucide-vue-next'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { toast } from 'vue-sonner'
-import { individualSignUp, organisationSignUp, signUpWithGoogle } from '~/services/auth'
+import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser } from '~/services/auth'
 import { pb } from '~/lib/pocketbase'
 import { createMatter } from '~/services/matters'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import OTP from '~/components/auth/RegisterScreens/OTP.vue'
 import TrialPayment from '~/components/auth/RegisterScreens/TrialPayment.vue'
 import InviteUser from '~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue'
 import ImportLawyers from '~/components/PageComponents/Organisation/Users/ImportLawyers/ImportLawyers.vue'
@@ -458,14 +582,15 @@ type Step =
   | 'persona'
   | 'join-info'
   | 'org-details'
+  | 'firm-contact'
   | 'matter-mode'
   | 'matter-form'
   | 'deadline-reveal'
   | 'invite-team'
   | 'account-create'
+  | 'reminders'
   | 'trial-payment'
   | 'creating'
-  | 'otp'
 
 // --- Flow state ---
 const persona = ref<Persona>('SOLO')
@@ -474,6 +599,12 @@ const currentStep = ref<Step>('account-create')
 
 // --- Org details (ORG only) ---
 const orgDetails = reactive({ firmName: '' })
+
+// --- Firm primary contact (ORG only) ---
+const firmContact = reactive({ fullName: '', emailAddress: '', phoneNumber: '' })
+
+// --- Reminder preferences ---
+const reminderPrefs = reactive({ time: '09:00', email: true, app: true, push: true, sms: false, phone: '' })
 
 // --- Matter result from ScratchMatter ---
 const calculatorResult = ref<{
@@ -486,9 +617,9 @@ const calculatorResult = ref<{
   fieldValues: Record<string, any>
 } | null>(null)
 
-// --- OTP / auth ---
-const otpId = ref('')
-const userId = ref('')
+// --- Child component refs (for footer-driven submission) ---
+const scratchMatterRef = ref()
+const trialPaymentRef = ref()
 
 // --- Google auth ---
 const isGoogleAuth = ref(false)
@@ -549,8 +680,8 @@ const stepsForPersona = computed<Step[]>(() => {
   switch (persona.value) {
     case 'ORG':
       return [
-        'account-create', 'persona', 'org-details', 'matter-mode', 'matter-form',
-        'deadline-reveal', 'invite-team', 'trial-payment', 'creating',
+        'account-create', 'persona', 'org-details', 'firm-contact', 'matter-mode', 'matter-form',
+        'deadline-reveal', 'reminders', 'trial-payment', 'creating', 'invite-team',
       ]
     case 'JOIN':
       return ['account-create', 'persona', 'join-info']
@@ -558,12 +689,10 @@ const stepsForPersona = computed<Step[]>(() => {
     default:
       return [
         'account-create', 'persona', 'matter-mode', 'matter-form',
-        'deadline-reveal', 'trial-payment', 'creating',
+        'deadline-reveal', 'reminders', 'trial-payment', 'creating',
       ]
   }
 })
-
-const stepIndex = computed(() => stepsForPersona.value.indexOf(currentStep.value))
 
 const progress = computed(() => {
   const steps = stepsForPersona.value
@@ -585,18 +714,25 @@ const visibleDeadlines = computed(() =>
 
 // --- Footer ---
 const showFooterNav = computed(() =>
-  !['matter-form', 'trial-payment', 'creating', 'otp', 'join-info'].includes(currentStep.value)
+  !['creating', 'join-info'].includes(currentStep.value)
 )
 
-const canGoBack = computed(() => stepIndex.value > 0)
+// --- Navigation history (drives Back button, respects skips) ---
+const stepHistory = ref<Step[]>([])
+
+const canGoBack = computed(() => stepHistory.value.length > 0)
 
 const canProceed = computed(() => {
   switch (currentStep.value) {
     case 'persona': return true
     case 'matter-mode': return !!creationMode.value
     case 'org-details': return !!orgDetails.firmName.trim()
+    case 'firm-contact': return !!firmContact.fullName.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firmContact.emailAddress)
     case 'deadline-reveal': return visibleDeadlines.value.length > 0
     case 'account-create': return accountMeta.value.valid && !isCreatingUser.value
+    case 'matter-form': return scratchMatterRef.value?.canSubmit ?? false
+    case 'trial-payment': return !(trialPaymentRef.value?.isSubmitting ?? false)
+    case 'reminders': return !reminderPrefs.sms || /^7[0-9]{8}$/.test(reminderPrefs.phone)
     default: return true
   }
 })
@@ -605,47 +741,62 @@ const footerNextLabel = computed(() => {
   switch (currentStep.value) {
     case 'deadline-reveal': return 'Looks right — set up my workspace'
     case 'account-create': return isCreatingUser.value ? 'Creating account…' : 'Continue'
+    case 'matter-form': return 'Calculate Preview'
+    case 'trial-payment': return (trialPaymentRef.value?.isSubmitting) ? 'Processing…' : 'Continue to Payment'
+    case 'invite-team': return invitesSentCount.value > 0 ? 'Go to app' : 'Skip for now'
     default: return 'Continue'
   }
 })
 
 // --- Navigation ---
 // Steps that can be skipped, and where they jump to
-const skipTargets: Partial<Record<Step, Step>> = {
-  'matter-mode': persona.value === 'SOLO' ? 'trial-payment' : 'invite-team',
-  'deadline-reveal': 'invite-team',
-  'invite-team': 'trial-payment',
-  // 'org-details': 'matter-mode',
-}
+const skipTargets = computed((): Partial<Record<Step, Step>> => ({
+  'matter-mode': 'reminders',
+  'matter-form': 'reminders',
+  'deadline-reveal': 'reminders',
+}))
 
 // --- Invite team (ORG only) ---
 const invitesSentCount = ref(0)
 const onInvited = () => { invitesSentCount.value++ }
 
-const canSkip = computed(() => currentStep.value in skipTargets)
+const canSkip = computed(() => currentStep.value in skipTargets.value)
 
 const skipStep = () => {
-  const target = skipTargets[currentStep.value]
-  if (target) currentStep.value = target
+  const target = skipTargets.value[currentStep.value]
+  if (target) {
+    stepHistory.value.push(currentStep.value)
+    currentStep.value = target as Step
+  }
 }
 
 const advanceStep = () => {
   const steps = stepsForPersona.value
   const index = steps.indexOf(currentStep.value)
   if (index < steps.length - 1) {
-    currentStep.value = steps[index + 1]
+    stepHistory.value.push(currentStep.value)
+    currentStep.value = steps[index + 1]!
   }
 }
 
 const previousStep = () => {
-  const steps = stepsForPersona.value
-  const index = steps.indexOf(currentStep.value)
-  if (index > 0) {
-    currentStep.value = steps[index - 1]
-  }
+  const prev = stepHistory.value.pop()
+  if (prev) currentStep.value = prev
 }
 
 const nextStep = async () => {
+  if (currentStep.value === 'invite-team') {
+    await navigateTo('/main')
+    return
+  }
+  if (currentStep.value === 'matter-form') {
+    await scratchMatterRef.value?.triggerSubmit()
+    return // navigation driven by @calculated → onCalculated
+  }
+  if (currentStep.value === 'trial-payment') {
+    await trialPaymentRef.value?.triggerSubmit()
+    return // navigation driven by @complete → onTrialPaymentComplete
+  }
   if (currentStep.value === 'account-create') {
     const result = await validateAccountForm()
     if (!result.valid) return
@@ -658,8 +809,10 @@ const nextStep = async () => {
         passwordConfirm: accountValues.confirmPassword,
         emailVisibility: true,
       })
-      await pb.collection('Users').authWithPassword(accountValues.emailAddress, accountValues.password)
+      await pb.collection('Users').authWithPassword(accountValues.emailAddress!, accountValues.password!)
       createdUserId.value = pb.authStore.record?.id ?? ''
+      firmContact.fullName = accountValues.fullName ?? ''
+      firmContact.emailAddress = accountValues.emailAddress ?? ''
       advanceStep()
     } catch (e: any) {
       const msg = e?.response?.data?.email?.message ?? e?.message ?? 'Failed to create account. That email may already be in use.'
@@ -702,9 +855,9 @@ const onTrialPaymentComplete = async (phone: string) => {
         firmName: orgDetails.firmName,
         firmEmailDomain: '',
         contact: {
-          fullName: accountValues.fullName,
-          emailAddress: accountValues.emailAddress,
-          phoneNumber: '',
+          fullName: firmContact.fullName,
+          emailAddress: firmContact.emailAddress,
+          phoneNumber: firmContact.phoneNumber,
         },
       }
       await organisationSignUp(payload)
@@ -712,7 +865,11 @@ const onTrialPaymentComplete = async (phone: string) => {
       await individualSignUp(payload)
     }
 
-    nextStep()
+    // Refresh auth record so pb.authStore.record reflects the organisation
+    // field that the backend just set during signup. InviteForm reads this.
+    await pb.collection('Users').authRefresh()
+
+    await saveMatterAndRedirect()
   } catch (e) {
     console.error(e)
     toast.error('Failed to set up your workspace. Please try again.')
@@ -722,6 +879,24 @@ const onTrialPaymentComplete = async (phone: string) => {
 
 // --- Shared: save matter + redirect (used by both email and Google paths) ---
 const saveMatterAndRedirect = async () => {
+  // Save reminder preferences (UserPreferences record created server-side during signup)
+  try {
+    const prefs = await getUserPreferences()
+    if (prefs?.id) {
+      await updateUserPreferencesById(prefs.id, {
+        reminder_time: reminderPrefs.time,
+        use_email_notifications: reminderPrefs.email,
+        use_app_notifications: reminderPrefs.app,
+        use_push_notifications: reminderPrefs.push,
+        use_sms_notifications: reminderPrefs.sms,
+      })
+      if (reminderPrefs.sms && reminderPrefs.phone)
+        await updateUser({ phone: `+256${reminderPrefs.phone}` })
+    }
+  } catch (e) {
+    console.error('Preferences save failed (non-fatal):', e)
+  }
+
   if (calculatorResult.value?.templateId) {
     try {
       await createMatter({
@@ -736,13 +911,14 @@ const saveMatterAndRedirect = async () => {
       console.error('Matter save failed (non-fatal):', e)
     }
   }
-  await navigateTo('/main')
+  if (persona.value === 'ORG') {
+    stepHistory.value = []  // disable Back from invite step — org setup is complete
+    currentStep.value = 'invite-team'
+  } else {
+    await navigateTo('/main')
+  }
 }
 
-// --- OTP complete → save matter → redirect (user already signed in) ---
-const onOTPComplete = async () => {
-  await saveMatterAndRedirect()
-}
 </script>
 
 <style scoped>
