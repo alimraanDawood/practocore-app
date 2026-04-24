@@ -20,6 +20,8 @@ const emits = defineEmits<{
     templateName: string;
     triggerDate: string;
     output: any;
+    templateId: string;
+    fieldValues: Record<string, any>;
   }): void;
 }>();
 
@@ -207,6 +209,8 @@ const calculate = (values: any) => {
       templateName: selectedTemplate.value?.name || 'Matter Template',
       triggerDate: values.fields?.date,
       output: generated,
+      templateId: selectedTemplate.value?.id || '',
+      fieldValues: values.fields || {},
     });
   } catch (error) {
     console.error('Failed to calculate deadlines:', error);
@@ -242,6 +246,7 @@ watch(
     </div>
 
     <Form
+      v-else
       ref="formRef"
       v-slot="{ values, setFieldValue, validate, meta }"
       as=""
@@ -249,7 +254,6 @@ watch(
       :initial-values="{ template: null, title: '', fields: {} }"
       :validation-schema="toTypedSchema(formSchema)"
       class="w-full"
-      :class="{ 'opacity-60 pointer-events-none': sampleLoading }"
     >
       <form
         class="w-full space-y-4 text-left"

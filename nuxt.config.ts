@@ -10,10 +10,23 @@ export default defineNuxtConfig({
     ssr: false,
 
     app: {
+        baseURL: './',
+        buildAssetsDir: 'assets',
         head: {
             meta: [
-                { name: 'viewport', content: 'width=device-width, initial-scale=1.0, viewport-fit=cover' }
-            ]
+                {
+                    name: 'viewport',
+                    content: 'initial-scale=1, width=device-width, height=device-height, viewport-fit=cover, user-scalable=no'
+                },
+                { name: 'format-detection', content: 'telephone=no' },
+                { name: 'msapplication-tap-highlight', content: 'no' }
+            ],
+        },
+    },
+
+    router: {
+        options: {
+            // hashMode: true
         }
     },
 
@@ -44,17 +57,6 @@ export default defineNuxtConfig({
         classSuffix: '',
     },
 
-    electron: {
-        disableDefaultOptions: true,
-        build: [
-            {
-                entry: 'electron/main.ts'
-            },
-            {
-                entry: 'electron/preload.ts',
-            }
-        ]
-    },
 
     shadcn: {
         /**
@@ -124,11 +126,12 @@ export default defineNuxtConfig({
         autoTrack: true,
         // proxy: 'cloak',
         // useDirective: true,
-        // ignoreLocalhost: true,
+        ignoreLocalhost: true,
         // excludeQueryParams: false,
         // domains: ['cool-site.app', 'my-space.site'],
         // customEndpoint: '/my-custom-endpoint',
         // enabled: false,
         // logErrors: true,
     },
+
 })

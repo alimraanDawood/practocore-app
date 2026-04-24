@@ -272,6 +272,23 @@
 
 @layer base {
 
+    html, body, #__nuxt {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* Prevents bounce scroll in some WebViews */
+    }
+
+    /* Use safe-area-insets for notches */
+    .header {
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .footer {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
     * {
         @apply border-border outline-ring/50;
     }

@@ -35,7 +35,7 @@ function resolveServerUrl(): string {
 
 // Shared PocketBase instance used across the entire app
 // This ensures the authStore is consistent in plugins, middleware, and services
-export const SERVER_URL = 'https://api.practocore.com'; // resolveServerUrl();
+export const SERVER_URL = 'http://10.34.0.232:8090'; // resolveServerUrl();
 export const pb = new PocketBase(SERVER_URL);
 
 // Disable auto cancellation (as per project requirements)
