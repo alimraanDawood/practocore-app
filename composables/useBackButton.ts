@@ -104,6 +104,8 @@ export const useBackButton = () => {
         return true
     }
 
+    const { goBackInTab } = useTabHistory()
+
     const handleBackButton = useDebounceFn(async () => {
         await triggerHaptic()
 
@@ -112,31 +114,30 @@ export const useBackButton = () => {
             return
         }
 
-        // Priority 2: Check current route
         const currentRoute = router.currentRoute.value
         const currentRouteName = currentRoute.name as string
 
-        // If on exit route, minimize the app (standard Android behavior)
         if (isExitRoute(currentRouteName)) {
             App.minimizeApp()
             return
         }
 
-        // Priority 3: Navigate back if possible
+        // Priority 2: Navigate back within the current tab's history stack
+        if (goBackInTab()) return
+
+        // Priority 3: Fall back to router history
         if (canNavigateBack()) {
             router.go(-1)
             return
         }
 
-        // Priority 4: If can't go back, go to main/home
         if (!isExitRoute(currentRouteName)) {
             router.push('/main')
             return
         }
 
-        // Fallback: Minimize app
         App.minimizeApp()
-    }, 150) // Short debounce to prevent double-taps but still feel responsive
+    }, 150)
 
     const setupBackButton = async () => {
         if (!Capacitor.isNativePlatform()) return

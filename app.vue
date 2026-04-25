@@ -1,15 +1,9 @@
 <template>
-<!--    <NuxtLayout>-->
-<!--      <NuxtLoadingIndicator :color="'#F9623AFF'"/>-->
-<!--      <Toaster/>-->
-<!--      <NuxtPage/>-->
-<!--    </NuxtLayout>-->
-
-  <ion-app>
     <NuxtLayout>
-      <ion-router-outlet />
+      <NuxtLoadingIndicator :color="'#F9623AFF'"/>
+      <Toaster/>
+      <NuxtPage/>
     </NuxtLayout>
-  </ion-app>
 </template>
 
 <script setup>
@@ -40,14 +34,9 @@ watch(() => colorMode.value, (newMode) => {
 
 async function updateSystemBars(mode) {
   try {
-    // DARK style = Light text (for dark backgrounds)
-    // LIGHT style = Dark text (for light backgrounds)
+    // Dark style = light icons; Light style = dark icons
     const style = mode === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light
-
-    await SafeArea.setSystemBarsStyle({ style: style })
-
-    // Optional: Sync the Navigation Bar (Android only)
-    // await SafeArea.setNavigationBarAppearance({ config: { navigationBarContent: style } })
+    await SafeArea.setSystemBarsStyle({ style })
   } catch (e) {
     console.error('Safe Area plugin error:', e)
   }

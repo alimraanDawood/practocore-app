@@ -28,6 +28,7 @@
     "@capacitor/preferences": "^8.0.0",
     "@capacitor/push-notifications": "^8.0.0",
     "@capacitor/splash-screen": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.2",
     "@capgo/capacitor-social-login": "^8.3.5",
     "@dagrejs/dagre": "^1.1.8",
     "@iconify-json/lucide": "^1.2.88",

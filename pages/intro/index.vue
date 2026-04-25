@@ -4,20 +4,21 @@ definePageMeta({
 })
 </script>
 <template>
-  <div class="flex flex-col md:items-center w-full h-full">
-    <div class="fixed top-4 right-4 z-20">
-      <SharedDarkModeSwitch />
-    </div>
-
-    <div class="flex flex-col text-foreground justify-center min-h-[65vh] z-10 p-5 gap-5 w-full md:max-w-lg md:px-8 md:gap-7">
+  <div class="flex flex-col md:items-center w-full h-dvh relative overflow-hidden">
+    <div class="flex flex-row justify-between items-center p-3 border-b">
       <div class="flex items-center gap-2">
         <img
             src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png"
             alt="PractoCore"
-            class="h-12 w-auto"
+            class="h-8 w-auto"
         />
-        <span class="text-2xl font-semibold ibm-plex-serif">PractoCore</span>
+        <span class="text-lg font-semibold ibm-plex-serif">PractoCore</span>
       </div>
+
+      <SharedDarkModeSwitch />
+    </div>
+
+    <div class="flex flex-col text-foreground justify-center min-h-[65vh] z-10 p-5 gap-5 w-full md:max-w-lg md:px-8 md:gap-7">
 
       <span class="text-3xl md:text-4xl font-semibold ibm-plex-serif text-foreground">Never miss a litigation deadline</span>
 

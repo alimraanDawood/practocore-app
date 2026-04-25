@@ -1,113 +1,45 @@
 <template>
   <div class="flex flex-row px-3 h-16 shrink-0 justify-around items-center border-t bg-background">
-    <NuxtLink to="/main">
-      <button
-          @click="triggerHaptic"
-          class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main' }">
-        <Home class="size-5"/>
-        <span>Home</span>
-      </button>
-    </NuxtLink>
-
-    <NuxtLink to="/main/matters">
-      <button
-          @click="triggerHaptic"
-          class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main-matters' }">
-        <Scale class="size-5"/>
-        <span>Matters</span>
-      </button>
-    </NuxtLink>
-
-    <NuxtLink to="/main/calendar">
-      <button
-          @click="triggerHaptic"
-          class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main-calendar' }">
-        <CalendarIcon class="size-5"/>
-        <span>Calendar</span>
-      </button>
-    </NuxtLink>
-
-    <NuxtLink v-if="authStore.isAdmin" to="/main/lawyers/">
-      <button
-          @click="triggerHaptic"
-          class="flex flex-col items-center disabled:opacity-50 text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main-lawyers' }">
-        <Users class="size-5"/>
-        <span>Lawyers</span>
-      </button>
-    </NuxtLink>
-
-    <Sheet v-if="false">
-      <SheetTrigger>
-        <button
-            class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-            :class="{ 'font-semibold text-primary': $route.name === 'main-settings' }">
-          <EllipsisVertical class="size-5"/>
-          <span>More</span>
-        </button>
-      </SheetTrigger>
-
-      <SheetContent side="bottom">
-        <SheetHeader>
-          <SheetTitle>More Options</SheetTitle>
-        </SheetHeader>
-
-        <div class="flex flex-col gap-1 p-3">
-          <SheetClose class="w-full">
-            <NuxtLink class="w-full" to="/main/organisation">
-              <Button class="flex flex-row w-full justify-start" variant="outline">
-                <Users />
-
-                Organisation Settings
-              </Button>
-            </NuxtLink>
-          </SheetClose>
-
-          <SheetClose class="w-full">
-            <NuxtLink class="w-full" to="/main/settings">
-              <Button class="flex flex-row w-full justify-start" variant="outline">
-                <Settings />
-
-                Profile Settings
-              </Button>
-            </NuxtLink>
-          </SheetClose>
-        </div>
-      </SheetContent>
-    </Sheet>
-
-    <NuxtLink to="/main/settings">
-      <button
-          @click="triggerHaptic"
-          class="flex flex-col items-center  text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px]"
-          :class="{ 'font-semibold text-primary': $route.name === 'main-settings' }">
-        <Settings class="size-5"/>
-        <span>Settings</span>
-      </button>
-    </NuxtLink>
+    <button
+        v-for="item in visibleTabs"
+        :key="item.tab"
+        @click="onTabClick(item.tab)"
+        class="flex flex-col items-center text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px] transition-colors"
+        :class="{ 'font-semibold text-primary': activeTab === item.tab }">
+      <component :is="item.icon" class="size-5" />
+      <span>{{ item.label }}</span>
+    </button>
   </div>
 </template>
 
-<script setup>
-import {Plus, Home, Settings, Scale, CalendarIcon, Users, ScrollText, EllipsisVertical} from 'lucide-vue-next';
-import { Capacitor } from "@capacitor/core";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
+<script setup lang="ts">
+import { Home, Settings, Scale, CalendarIcon, Users } from 'lucide-vue-next'
+import { Capacitor } from '@capacitor/core'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
-const authStore = useAuthStore();
+const authStore = useAuthStore()
+const { navigateToTab, activeTab } = useTabHistory()
 
-const triggerHaptic = async () => {
-  if (!Capacitor.isNativePlatform()) return
-  try {
-    await Haptics.impact({ style: ImpactStyle.Light })
-  } catch (e) {
-    console.warn("Haptics failed:", e)
+const allTabs = [
+  { tab: 'main',     label: 'Home',     icon: Home,         adminOnly: false },
+  { tab: 'matters',  label: 'Matters',  icon: Scale,        adminOnly: false },
+  { tab: 'calendar', label: 'Calendar', icon: CalendarIcon, adminOnly: false },
+  { tab: 'lawyers',  label: 'Lawyers',  icon: Users,        adminOnly: true  },
+  { tab: 'settings', label: 'Settings', icon: Settings,     adminOnly: false },
+]
+
+const visibleTabs = computed(() =>
+  allTabs.filter(t => !t.adminOnly || authStore.isAdmin)
+)
+
+const onTabClick = async (tab: string) => {
+  if (Capacitor.isNativePlatform()) {
+    try { await Haptics.impact({ style: ImpactStyle.Light }) } catch {}
   }
+  navigateToTab(tab)
 }
 
 onMounted(() => {
-  authStore.init();
-});
+  authStore.init()
+})
 </script>

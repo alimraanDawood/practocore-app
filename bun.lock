@@ -19,6 +19,7 @@
         "@capacitor/preferences": "^8.0.0",
         "@capacitor/push-notifications": "^8.0.0",
         "@capacitor/splash-screen": "^8.0.0",
+        "@capacitor/status-bar": "^8.0.2",
         "@capgo/capacitor-social-login": "^8.3.5",
         "@dagrejs/dagre": "^1.1.8",
         "@iconify-json/lucide": "^1.2.88",
@@ -198,6 +199,8 @@
     "@capacitor/push-notifications": ["@capacitor/push-notifications@8.0.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, ""],
 
     "@capacitor/splash-screen": ["@capacitor/splash-screen@8.0.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, ""],
+
+    "@capacitor/status-bar": ["@capacitor/status-bar@8.0.2", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-WXs8YB8B9eEaPZz+bcdY6t2nForF1FLoj/JU0Dl9RRgQnddnS98FEEyDooQhaY7wivr000j4+SC1FyeJkrFO7A=="],
 
     "@capgo/capacitor-social-login": ["@capgo/capacitor-social-login@8.3.5", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, ""],
 

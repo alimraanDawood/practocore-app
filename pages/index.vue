@@ -6,9 +6,11 @@
 
 <script setup lang="ts">
 import { Capacitor } from "@capacitor/core";
+import { Loader } from 'lucide-vue-next';
 
 const { $pb } = useNuxtApp();
 const { shouldShowIntro } = useIntro();
+const router = useRouter();
 
 definePageMeta({
   layout: 'blank'
@@ -19,18 +21,24 @@ async function routeMobile() {
   const showIntro = await shouldShowIntro(isAuthenticated);
 
   if (showIntro) {
-    navigateTo('/intro');
+    await navigateTo('/intro');
     return;
   }
 
-  navigateTo(isAuthenticated ? '/main' : '/auth/login');
+  await navigateTo(isAuthenticated ? '/main' : '/intro'); // also fixed your bug here
 }
 
-onMounted(() => {
+onNuxtReady(async () => {
+  await router.isReady();
+
+  console.log("Preparing redirection!");
+
   if (Capacitor.isNativePlatform()) {
-    routeMobile();
+    console.log("Redirecting mobile!");
+    await routeMobile();
   } else {
-    navigateTo('/main');
+    console.log("Redirecting desktop!");
+    await navigateTo('/main');
   }
 });
 </script>

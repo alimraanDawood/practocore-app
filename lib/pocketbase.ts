@@ -31,6 +31,7 @@ function resolveServerUrl(): string {
         return import.meta.env.VITE_POCKETBASE_URL || 'http://10.34.0.232:8090';
     }
     return 'https://api.practocore.com';
+    // return 'http://127.0.0.1:8090'
 }
 
 // Shared PocketBase instance used across the entire app
