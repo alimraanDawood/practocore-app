@@ -11,6 +11,7 @@ import {App} from '@capacitor/app';
 import {Toaster} from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { SafeArea, SystemBarsStyle } from '@capacitor-community/safe-area'
+import { StatusBar } from '@capacitor/status-bar'
 
 
 // Back button handling is auto-initialized by the composable
@@ -18,6 +19,9 @@ useBackButton();
 
 onMounted(async () => {
   console.log(await App.getLaunchUrl());
+  if (Capacitor.isNativePlatform()) {
+    await StatusBar.setOverlaysWebView({ overlay: false })
+  }
 });
 
 const router = useRouter();
