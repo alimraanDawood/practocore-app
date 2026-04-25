@@ -6,11 +6,22 @@
     <InputGroupInput
       placeholder="712345678"
       maxlength="9"
+      inputmode="numeric"
       v-bind="$attrs"
+      :model-value="modelValue"
+      @update:model-value="$emit('update:modelValue', $event)"
     />
   </InputGroup>
 </template>
 
 <script setup lang="ts">
 defineOptions({ inheritAttrs: false })
+
+defineProps<{
+  modelValue?: string
+}>()
+
+defineEmits<{
+  (e: 'update:modelValue', value: string): void
+}>()
 </script>

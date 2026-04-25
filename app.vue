@@ -1,9 +1,15 @@
 <template>
+<!--    <NuxtLayout>-->
+<!--      <NuxtLoadingIndicator :color="'#F9623AFF'"/>-->
+<!--      <Toaster/>-->
+<!--      <NuxtPage/>-->
+<!--    </NuxtLayout>-->
+
+  <ion-app>
     <NuxtLayout>
-      <NuxtLoadingIndicator :color="'#F9623AFF'"/>
-      <Toaster/>
-      <NuxtPage/>
+      <ion-router-outlet />
     </NuxtLayout>
+  </ion-app>
 </template>
 
 <script setup>

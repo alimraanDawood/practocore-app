@@ -55,37 +55,79 @@
             <!-- JOIN INFO STEP -->
             <div v-else-if="currentStep === 'join-info'" class="flex flex-col flex-1 min-h-full p-6">
               <div class="my-auto flex flex-col items-center gap-6 w-full">
-                <div class="flex flex-col items-center gap-3 text-center max-w-md">
-                  <div class="flex items-center justify-center size-16 rounded-full bg-primary/10">
-                    <Users class="size-8 text-primary" />
-                  </div>
-                  <h2 class="text-2xl font-bold ibm-plex-serif">Joining your firm's workspace</h2>
-                  <p class="text-muted-foreground">
-                    To join an existing law firm on PractoCore, you need an invitation from your firm's administrator.
-                  </p>
-                </div>
 
-                <div class="flex flex-col gap-3 w-full max-w-sm">
-                  <div class="flex flex-col gap-2 p-4 rounded-lg border bg-card">
-                    <p class="text-sm font-medium">Check your email</p>
-                    <p class="text-sm text-muted-foreground">
-                      Ask your firm administrator to send you an invite link. It arrives as an email with a direct link to join.
+                <!-- Code entry state -->
+                <template v-if="joinInfoState === 'enter-code'">
+                  <div class="flex flex-col items-center gap-2 text-center max-w-md">
+                    <div class="flex items-center justify-center size-16 rounded-full bg-primary/10">
+                      <Mail class="size-8 text-primary" />
+                    </div>
+                    <h2 class="text-2xl font-bold ibm-plex-serif">Join your firm's workspace</h2>
+                    <p class="text-muted-foreground text-sm">
+                      Check your email for an 8-character invite code from your firm administrator.
                     </p>
                   </div>
-                  <div class="flex flex-col gap-2 p-4 rounded-lg border bg-card">
-                    <p class="text-sm font-medium">Already have an invite link?</p>
-                    <p class="text-sm text-muted-foreground">
-                      Click the link in your email — it will take you directly to account setup.
+
+                  <div class="flex flex-col items-center gap-3 w-full max-w-sm">
+                    <label class="text-sm font-medium self-start">Invite code</label>
+                    <PinInput
+                      :model-value="inviteCode"
+                      @update:model-value="onInviteCodeChange"
+                      type="text"
+                      otp
+                      placeholder="·"
+                      class="justify-center"
+                      @keydown.enter="canProceed && nextStep()"
+                    >
+                      <PinInputGroup>
+                        <template :key="i" v-for="i in 8">
+                          <PinInputSlot :index="i - 1" />
+                          <template v-if="i === 4">
+                            <PinInputSeparator />
+                          </template>
+                        </template>
+                      </PinInputGroup>
+                    </PinInput>
+                    <p v-if="joinError" class="text-sm text-destructive text-center">{{ joinError }}</p>
+                    <p class="text-xs text-muted-foreground text-center">Uppercase letters and numbers only</p>
+                  </div>
+                </template>
+
+                <!-- Confirmed state -->
+                <template v-else-if="joinInfoState === 'confirmed' && inviteDetails">
+                  <div class="flex flex-col items-center gap-2 text-center max-w-md">
+                    <div class="flex items-center justify-center size-16 rounded-full bg-green-500/10">
+                      <CheckCircle2 class="size-8 text-green-500" />
+                    </div>
+                    <h2 class="text-2xl font-bold ibm-plex-serif">Invitation verified</h2>
+                    <p class="text-muted-foreground text-sm">
+                      Create your account to join the workspace below.
                     </p>
                   </div>
-                </div>
 
-                <div class="flex flex-col gap-2 w-full max-w-sm">
-                  <Button @click="navigateTo('/auth/login')" class="w-full">Go to Login</Button>
-                  <Button variant="outline" @click="navigateTo('/auth/invitation')" class="w-full">
-                    I have an invite link
-                  </Button>
-                </div>
+                  <div class="flex flex-col gap-3 w-full max-w-sm p-4 rounded-lg border bg-card">
+                    <div class="flex flex-col gap-0.5">
+                      <span class="text-xs text-muted-foreground uppercase tracking-wide">Firm</span>
+                      <span class="font-semibold">{{ inviteDetails.orgName }}</span>
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                      <span class="text-xs text-muted-foreground uppercase tracking-wide">Invited by</span>
+                      <span class="text-sm">{{ inviteDetails.inviterName }}</span>
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                      <span class="text-xs text-muted-foreground uppercase tracking-wide">For email</span>
+                      <span class="text-sm font-mono">{{ inviteDetails.email }}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    class="text-xs text-muted-foreground underline underline-offset-2"
+                    @click="joinInfoState = 'enter-code'; inviteDetails = null; inviteToken = ''"
+                  >
+                    Use a different code
+                  </button>
+                </template>
+
               </div>
             </div>
 
@@ -156,8 +198,7 @@
                   <div class="flex flex-col gap-1.5">
                     <label class="text-sm font-medium">Phone number <span class="text-muted-foreground font-normal">(optional)</span></label>
                     <UgandaPhoneInput
-                      :value="firmContact.phoneNumber"
-                      @input="(e: Event) => firmContact.phoneNumber = (e.target as HTMLInputElement).value"
+                      v-model="firmContact.phoneNumber"
                       @keydown.enter="canProceed && nextStep()"
                     />
                     <p class="text-xs text-muted-foreground">For account verification and critical notifications</p>
@@ -349,10 +390,7 @@
                         <Switch :model-value="reminderPrefs.sms" @update:model-value="v => reminderPrefs.sms = v" />
                       </div>
                       <div v-if="reminderPrefs.sms" class="flex flex-col gap-1">
-                        <UgandaPhoneInput
-                          :value="reminderPrefs.phone"
-                          @input="(e: Event) => reminderPrefs.phone = (e.target as HTMLInputElement).value"
-                        />
+                        <UgandaPhoneInput v-model="reminderPrefs.phone" />
                         <p class="text-xs text-muted-foreground">Uganda number — 9 digits after +256</p>
                       </div>
                     </div>
@@ -426,7 +464,7 @@
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="At least 8 characters" v-bind="componentField" autocomplete="new-password" />
+                        <AuthPasswordInput placeholder="At least 8 characters" :component-field="componentField" autocomplete="new-password" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -436,7 +474,7 @@
                     <FormItem>
                       <FormLabel>Confirm password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Re-enter your password" v-bind="componentField" autocomplete="new-password" />
+                        <AuthPasswordInput placeholder="Re-enter your password" :component-field="componentField" autocomplete="new-password" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -557,14 +595,14 @@
 import { ref, computed, reactive } from 'vue'
 import {
   ArrowLeft, ArrowRight, Bell, Calendar, Building2,
-  Users, User, Loader2, UserPlus, Download, CheckCircle2, Phone,
+  Users, User, Loader2, UserPlus, Download, CheckCircle2, Phone, Mail,
 } from 'lucide-vue-next'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { toast } from 'vue-sonner'
-import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser } from '~/services/auth'
-import { pb } from '~/lib/pocketbase'
+import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser, acceptInvite, getOrganisationInviteReference } from '~/services/auth'
+import { pb, SERVER_URL } from '~/lib/pocketbase'
 import { createMatter } from '~/services/matters'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -595,7 +633,7 @@ type Step =
 // --- Flow state ---
 const persona = ref<Persona>('SOLO')
 const creationMode = ref<CreationMode | ''>('')
-const currentStep = ref<Step>('account-create')
+const currentStep = ref<Step>('persona')
 
 // --- Org details (ORG only) ---
 const orgDetails = reactive({ firmName: '' })
@@ -680,15 +718,15 @@ const stepsForPersona = computed<Step[]>(() => {
   switch (persona.value) {
     case 'ORG':
       return [
-        'account-create', 'persona', 'org-details', 'firm-contact', 'matter-mode', 'matter-form',
+        'persona', 'account-create', 'org-details', 'firm-contact', 'matter-mode', 'matter-form',
         'deadline-reveal', 'reminders', 'trial-payment', 'creating', 'invite-team',
       ]
     case 'JOIN':
-      return ['account-create', 'persona', 'join-info']
+      return ['persona', 'join-info', 'account-create', 'reminders', 'creating']
     case 'SOLO':
     default:
       return [
-        'account-create', 'persona', 'matter-mode', 'matter-form',
+        'persona', 'account-create', 'matter-mode', 'matter-form',
         'deadline-reveal', 'reminders', 'trial-payment', 'creating',
       ]
   }
@@ -714,7 +752,7 @@ const visibleDeadlines = computed(() =>
 
 // --- Footer ---
 const showFooterNav = computed(() =>
-  !['creating', 'join-info'].includes(currentStep.value)
+  !['creating'].includes(currentStep.value)
 )
 
 // --- Navigation history (drives Back button, respects skips) ---
@@ -730,6 +768,9 @@ const canProceed = computed(() => {
     case 'firm-contact': return !!firmContact.fullName.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firmContact.emailAddress)
     case 'deadline-reveal': return visibleDeadlines.value.length > 0
     case 'account-create': return accountMeta.value.valid && !isCreatingUser.value
+    case 'join-info': return joinInfoState.value === 'confirmed'
+      ? true
+      : inviteCodeString.value.length === 8 && !isJoiningWorkspace.value
     case 'matter-form': return scratchMatterRef.value?.canSubmit ?? false
     case 'trial-payment': return !(trialPaymentRef.value?.isSubmitting ?? false)
     case 'reminders': return !reminderPrefs.sms || /^7[0-9]{8}$/.test(reminderPrefs.phone)
@@ -741,6 +782,9 @@ const footerNextLabel = computed(() => {
   switch (currentStep.value) {
     case 'deadline-reveal': return 'Looks right — set up my workspace'
     case 'account-create': return isCreatingUser.value ? 'Creating account…' : 'Continue'
+    case 'join-info': return joinInfoState.value === 'confirmed'
+      ? 'Create my account'
+      : isJoiningWorkspace.value ? 'Verifying…' : 'Verify code'
     case 'matter-form': return 'Calculate Preview'
     case 'trial-payment': return (trialPaymentRef.value?.isSubmitting) ? 'Processing…' : 'Continue to Payment'
     case 'invite-team': return invitesSentCount.value > 0 ? 'Go to app' : 'Skip for now'
@@ -755,6 +799,78 @@ const skipTargets = computed((): Partial<Record<Step, Step>> => ({
   'matter-form': 'reminders',
   'deadline-reveal': 'reminders',
 }))
+
+// --- Join workspace (JOIN persona) ---
+const inviteCode = ref<string[]>(Array(8).fill(''))
+const isJoiningWorkspace = ref(false)
+const joinError = ref('')
+const inviteToken = ref('')
+const inviteDetails = ref<{ orgName: string; inviterName: string; email: string } | null>(null)
+const joinInfoState = ref<'enter-code' | 'confirmed'>('enter-code')
+
+onMounted(async () => {
+  const ref = useRoute().query.ref as string | undefined
+  if (!ref) return
+  try {
+    const details = await getOrganisationInviteReference(ref)
+    if (details?.invite) {
+      persona.value = 'JOIN'
+      inviteToken.value = ref
+      inviteDetails.value = {
+        orgName: details.invite.organisation.name,
+        inviterName: details.invite.invitedBy.name,
+        email: details.invite.email,
+      }
+      joinInfoState.value = 'confirmed'
+      currentStep.value = 'join-info'
+    }
+  } catch (e) {
+    // Fall through — user can enter code manually
+  }
+})
+
+const onInviteCodeChange = (val: string[]) => {
+  inviteCode.value = val.map(c => c.replace(/[^A-Za-z0-9]/g, '').toUpperCase())
+}
+
+const inviteCodeString = computed(() => inviteCode.value.join(''))
+
+const joinWorkspace = async () => {
+  // If already confirmed, advance to account-create
+  if (joinInfoState.value === 'confirmed') {
+    advanceStep()
+    return
+  }
+
+  if (inviteCodeString.value.length !== 8 || isJoiningWorkspace.value) return
+  isJoiningWorkspace.value = true
+  joinError.value = ''
+  try {
+    // Step 1: resolve code → token
+    const res = await fetch(`${SERVER_URL}/api/invitations/get-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: inviteCodeString.value }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.message ?? 'Invalid code. Please check and try again.')
+    inviteToken.value = data.token
+
+    // Step 2: fetch invite details for confirmation card
+    const details = await getOrganisationInviteReference(data.token)
+    if (!details?.invite) throw new Error('Could not load invitation details.')
+    inviteDetails.value = {
+      orgName: details.invite.organisation.name,
+      inviterName: details.invite.invitedBy.name,
+      email: details.invite.email,
+    }
+    joinInfoState.value = 'confirmed'
+  } catch (e: any) {
+    joinError.value = e.message ?? 'Invalid code. Please check and try again.'
+  } finally {
+    isJoiningWorkspace.value = false
+  }
+}
 
 // --- Invite team (ORG only) ---
 const invitesSentCount = ref(0)
@@ -785,6 +901,10 @@ const previousStep = () => {
 }
 
 const nextStep = async () => {
+  if (currentStep.value === 'join-info') {
+    await joinWorkspace()
+    return
+  }
   if (currentStep.value === 'invite-team') {
     await navigateTo('/main')
     return
@@ -813,6 +933,7 @@ const nextStep = async () => {
       createdUserId.value = pb.authStore.record?.id ?? ''
       firmContact.fullName = accountValues.fullName ?? ''
       firmContact.emailAddress = accountValues.emailAddress ?? ''
+
       advanceStep()
     } catch (e: any) {
       const msg = e?.response?.data?.email?.message ?? e?.message ?? 'Failed to create account. That email may already be in use.'
@@ -822,7 +943,38 @@ const nextStep = async () => {
     }
     return
   }
+  if (currentStep.value === 'reminders' && persona.value === 'JOIN') {
+    await completeJoinSignup()
+    return
+  }
   advanceStep()
+}
+
+// --- JOIN flow completion ---
+const completeJoinSignup = async () => {
+  currentStep.value = 'creating'
+  try {
+    const prefs = await getUserPreferences()
+    if (prefs?.id) {
+      await updateUserPreferencesById(prefs.id, {
+        reminder_time: reminderPrefs.time,
+        use_email_notifications: reminderPrefs.email,
+        use_app_notifications: reminderPrefs.app,
+        use_push_notifications: reminderPrefs.push,
+        use_sms_notifications: reminderPrefs.sms,
+      })
+      if (reminderPrefs.sms && reminderPrefs.phone)
+        await updateUser({ phone: `+256${reminderPrefs.phone}` })
+    }
+  } catch (e) {
+    console.error('Preferences save failed (non-fatal):', e)
+  }
+  try {
+    await acceptInvite(inviteToken.value)
+  } catch (e: any) {
+    toast.error('Account created but failed to join workspace. Please contact your administrator.')
+  }
+  await navigateTo('/main')
 }
 
 // --- ScratchMatter event ---

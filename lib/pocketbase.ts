@@ -28,14 +28,14 @@ function resolveServerUrl(): string {
 
     // Android native: use the LAN IP injected at build time via the same env var
     if (getPlatform() === 'android') {
-        return import.meta.env.VITE_POCKETBASE_URL || 'http://10.0.2.2:8090';
+        return import.meta.env.VITE_POCKETBASE_URL || 'http://10.34.0.232:8090';
     }
     return 'https://api.practocore.com';
 }
 
 // Shared PocketBase instance used across the entire app
 // This ensures the authStore is consistent in plugins, middleware, and services
-export const SERVER_URL = 'http://127.0.0.1:8090'; // resolveServerUrl();
+export const SERVER_URL = resolveServerUrl();
 export const pb = new PocketBase(SERVER_URL);
 
 // Disable auto cancellation (as per project requirements)

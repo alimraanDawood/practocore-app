@@ -1,20 +1,24 @@
 import { initializePushNotifications } from '~/services/push-notifications';
 
+function isFullySetUp(pb: any): boolean {
+  // Only register for push notifications once the user has completed onboarding
+  // (i.e. they have an organisation assigned). During account creation the
+  // record exists but organisation is still null/empty.
+  return pb.authStore.isValid && !!pb.authStore.record?.organisation;
+}
+
 export default defineNuxtPlugin(async () => {
-  // Initialize push notifications after app is ready
-  // Only initialize if user is authenticated
   const { $pb } = useNuxtApp();
 
-  if ($pb.authStore.isValid) {
-    // Small delay to ensure app is fully loaded
+  if (isFullySetUp($pb)) {
     setTimeout(async () => {
       await initializePushNotifications();
     }, 1000);
   }
 
-  // Listen for auth changes to register/unregister
+  // Re-check on every auth state change (includes authRefresh after onboarding completes)
   $pb.authStore.onChange(() => {
-    if ($pb.authStore.isValid) {
+    if (isFullySetUp($pb)) {
       initializePushNotifications();
     }
   });

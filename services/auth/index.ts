@@ -1,6 +1,4 @@
 import {pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
-import { openUrl } from '@tauri-apps/plugin-opener';
-
 export { pocketbase, SERVER_URL };
 
 

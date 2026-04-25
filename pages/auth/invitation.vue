@@ -5,8 +5,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import {X, Minus, Maximize2, Minimize2, AlertCircle} from "lucide-vue-next";
 import {computed, ref} from "vue";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
-import {acceptInvite, getOrganisationInviteReference, getSignedInUser} from "~/services/auth";
+import {acceptInvite, rejectInvite, getOrganisationInviteReference, getSignedInUser} from "~/services/auth";
 import {toast} from "vue-sonner";
+import { pb } from '~/lib/pocketbase';
 
 definePageMeta({
   layout: 'blank',
@@ -56,14 +57,26 @@ const _acceptInvitation = async () => {
   loading.value = true;
   try {
     const result = await acceptInvite(query?.ref);
-
-    if(result) {
-      toast.success("Invitation accepted successfully!");
-      accepted.value = true;
+    if (result?.ok ?? result) {
+      await pb.collection('Users').authRefresh();
+      await navigateTo('/main');
+    } else {
+      toast.error('Could not accept invitation. It may have expired or already been used.');
     }
   } catch(e) {
     console.error(e);
     toast.error("Something went wrong!");
+  }
+  loading.value = false;
+}
+
+const _rejectInvitation = async () => {
+  loading.value = true;
+  try {
+    await rejectInvite(query?.ref);
+    await navigateTo('/main');
+  } catch (e) {
+    toast.error('Could not reject invitation.');
   }
   loading.value = false;
 }
@@ -95,7 +108,7 @@ const _acceptInvitation = async () => {
       </NuxtLink>
 
       <div class="flex flex-col w-full items-center">
-        <Button :disabled="loading" variant="destructive" class="w-full">Reject Invitation</Button>
+        <Button :disabled="loading" @click="_rejectInvitation" variant="destructive" class="w-full">Reject Invitation</Button>
         <div class="flex flex-row gap-1 justify-center bg-muted w-[95%] items-center rounded-b-lg p-1 border">
           <AlertCircle class="size-3" />
           <span class="text-xs text-muted-foreground">You wont be able to use this link to join again!</span>
@@ -110,7 +123,7 @@ const _acceptInvitation = async () => {
       <span class="font-semibold text-2xl ibm-plex-serif text-center">Invalid Invite Reference!</span>
       <span class="text-center">We were unable to verify your invitation. Please request for a valid invitation from your administrator to continue</span>
 
-      <Button class="w-full" variant="secondary">Go to Dashboard</Button>
+      <NuxtLink to="/main/"><Button class="w-full" variant="secondary">Go to Dashboard</Button></NuxtLink>
     </div>
 
     <div v-else-if="organisationRef && !isSignedIn" class="flex flex-col items-center p-5 justify-center h-full w-full gap-3">
@@ -123,7 +136,7 @@ const _acceptInvitation = async () => {
         <Button class="w-full" variant="secondary">I have no account. Create one</Button>
       </NuxtLink>
 
-      <NuxtLink :to="`/auth/login?ref=${query?.ref}`" class="w-full">
+      <NuxtLink :to="`/auth/login?next=${encodeURIComponent('/auth/invitation?ref=' + query?.ref)}`" class="w-full">
         <Button class="w-full">I have an account. Sign me in instead</Button>
       </NuxtLink>
 

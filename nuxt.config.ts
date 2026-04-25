@@ -18,8 +18,8 @@ export default defineNuxtConfig({
                     name: 'viewport',
                     content: 'initial-scale=1, width=device-width, height=device-height, viewport-fit=cover, user-scalable=no'
                 },
-                { name: 'format-detection', content: 'telephone=no' },
-                { name: 'msapplication-tap-highlight', content: 'no' }
+                {name: 'format-detection', content: 'telephone=no'},
+                {name: 'msapplication-tap-highlight', content: 'no'}
             ],
         },
     },
@@ -37,20 +37,21 @@ export default defineNuxtConfig({
     },
 
     modules: [
-      'shadcn-nuxt',
-      '@hypernym/nuxt-gsap',
-      '@nuxt/icon',
-      '@pinia/nuxt',
-      '@hypernym/nuxt-gsap',
-      '@vueuse/nuxt',
-      'nuxt-viewport',
-      'v-wave/nuxt',
-      // '@nuxtjs/tailwindcss',
-      '@nuxtjs/color-mode',
-      'nuxt-tiptap-editor',
-      // 'nuxt-electron'
-      '@sentry/nuxt/module',
-      'nuxt-umami'
+        'shadcn-nuxt',
+        '@hypernym/nuxt-gsap',
+        '@nuxt/icon',
+        '@pinia/nuxt',
+        '@hypernym/nuxt-gsap',
+        '@vueuse/nuxt',
+        'nuxt-viewport',
+        'v-wave/nuxt',
+        // '@nuxtjs/tailwindcss',
+        '@nuxtjs/color-mode',
+        'nuxt-tiptap-editor',
+        // 'nuxt-electron'
+        '@sentry/nuxt/module',
+        'nuxt-umami',
+        '@nuxtjs/ionic'
     ],
 
     colorMode: {
@@ -133,5 +134,11 @@ export default defineNuxtConfig({
         // enabled: false,
         // logErrors: true,
     },
+    ionic: {
+        css: {
+            core: false,
+            basic: false
+        }
+    }
 
 })
