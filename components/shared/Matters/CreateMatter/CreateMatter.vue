@@ -11,7 +11,7 @@
           template: { id: template?.id, fields: template?.template?.fields, triggerDatePrompt: '' },
           members: [],
         }"
-        class="h-full flex flex-col w-full h-full"
+        class="h-full flex flex-col w-full"
       >
         <Stepper
           class="flex flex-col w-full h-full"
@@ -54,11 +54,12 @@
                           : 'outline'
                       "
                       size="icon"
-                      class="z-10 rounded-full shrink-0"
+                      class="z-10 rounded-full shrink-0 size-11"
                       :class="[
                         state === 'active' &&
                           'ring-2 ring-ring ring-offset-2 ring-offset-background',
                       ]"
+                      :aria-label="`Step ${step.step}: ${step.title}`"
                       :disabled="state !== 'completed' && !meta.valid"
                     >
                       <Check v-if="state === 'completed'" class="size-5" />
@@ -85,7 +86,7 @@
 
             <div class="flex flex-col w-full h-full p-3 lg:p-5 overflow-y-hidden">
               <!-- Step Content -->
-              <div class="flex flex-col gap-4 h-full px-1 overflow-y-scroll">
+              <div class="flex flex-col gap-4 h-full px-1 overflow-y-auto">
                 <!-- STEP 1 -->
                 <template v-if="steps[stepIndex - 1]?.id === 'matter_details'">
                   <FormField v-slot="{ componentField }" name="name">
@@ -138,6 +139,7 @@
 
                   <FormField name="opposingCounsel" v-slot="{ componentField }">
                     <FormItem class="flex flex-col">
+                      <FormLabel>Opposing Counsel</FormLabel>
                       <FormControl>
                         <OpposingCounsel :modelValue="componentField.modelValue" @update:modelValue="v => setFieldValue('opposingCounsel', v)" />
                       </FormControl>
@@ -296,11 +298,13 @@
                   <Button
                     v-if="stepIndex === steps?.length"
                     :disabled="loading"
+                    :aria-busy="loading"
+                    :aria-label="loading ? 'Creating matter...' : 'Create Matter'"
                     size="sm"
                     type="submit"
                   >
                     <span v-if="!loading">Create Matter</span>
-                    <Loader class="animate-spin" v-else />
+                    <Loader class="animate-spin" v-else aria-hidden="true" />
                   </Button>
                 </div>
               </div>
@@ -357,19 +361,10 @@
 <script setup lang="ts">
 import * as z from "zod";
 import { toTypedSchema } from "@vee-validate/zod";
-import { useForm } from "vee-validate";
 import { computed, onMounted, ref, watch } from "vue";
 import { createMatter } from "~/services/matters";
-import { getTemplates } from "~/services/templates";
-import { cn } from "~/lib/utils";
-import { CalendarIcon, Check, Circle, Dot, Loader } from "lucide-vue-next";
+import { Check, Circle, Dot, Loader } from "lucide-vue-next";
 import { toast } from "vue-sonner";
-import { toDate } from "reka-ui/date";
-import {
-  CalendarDate,
-  DateFormatter,
-  parseDate,
-} from "@internationalized/date";
 import type { RecordModel } from "pocketbase";
 import { getSignedInUser } from "~/services/auth";
 
@@ -377,25 +372,14 @@ import CreateMatterParties from "./CreateMatterParties.vue";
 import PreviewMatter from "~/components/shared/Matters/CreateMatter/PreviewMatter.vue";
 import CourtSelector from "~/components/shared/Matters/CreateMatter/CourtSelector.vue";
 import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelector.vue";
-import PreviewRegistrarsAndClerks from "~/components/shared/Matters/CreateMatter/PreviewRegistrarsAndClerks.vue";
-import FirmSelector from "~/components/shared/Matters/CreateMatter/FirmSelector.vue";
 import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
 import {useBillingStore} from "~/stores/billing";
 
 const { hasPermission } = usePermissions();
 const billingStore = useBillingStore();
 
-definePageMeta({
-  viewport: {
-    breakpoints: {
-      customxs1: 480,
-    },
-  },
-});
-
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 
-const templates = ref<RecordModel[]>([]);
 const stepIndex = ref(1);
 
 const props = defineProps(["template", "noModal", "noStepper"]);
@@ -519,82 +503,8 @@ const buildStep3Schema = () => {
   });
 };
 
-const formSchema = computed(() => {
-  const step3Schema = buildStep3Schema();
-
-  if (step3Schema) {
-    return [
-      z.object({
-        template: z.object({
-          id: z.string(),
-          fields: z.array(z.any()),
-        }),
-      }),
-      z.object({
-        name: z
-          .string()
-          .min(3, "You need at least 3 characters for a valid name!"),
-        caseNumber: z.string().optional(),
-        personal: z.boolean().optional(),
-        // date: z.string().refine(v => v, { message: "A date is required." }),
-      }),
-      z.object({
-        members: z.array(z.any()).optional(),
-      }),
-      buildStep3Schema(),
-    ];
-  }
-
-  return [
-    z.object({
-      template: z.object({
-        id: z.string(),
-        fields: z.array(z.any()),
-        triggerDatePrompt: z.string(),
-      }),
-    }),
-    z.object({
-      name: z
-        .string()
-        .min(3, "You need at least 3 characters for a valid name!"),
-      date: z.string().refine((v) => v, { message: "A date is required." }),
-    }),
-    z.object({
-      members: z.array(z.any()).optional(),
-    }),
-  ];
-});
-
 const __formSchema = computed(() => {
-  const step3Schema = buildStep3Schema();
-
-  if (step3Schema) {
-    return {
-      "matter_type": z.object({
-        template: z.object({
-          id: z.string(),
-          fields: z.array(z.any()),
-          triggerDatePrompt: z.string(),
-        }),
-      }),
-      "matter_details": z.object({
-        name: z
-            .string()
-            .min(3, "You need at least 3 characters for a valid name!"),
-        caseNumber: z.string().optional(),
-        personal: z.boolean().optional(),
-        court: z.string().optional(),
-        judges: z.array(z.string()).optional(),
-        opposingCounsel: z.array(z.any()).optional(),
-        // date: z.string().refine(v => v, { message: "A date is required." }),
-      }),
-      "parties": z.object({}),
-      "members": z.object({
-        members: z.array(z.any()).optional(),
-      }),
-      "complete": buildStep3Schema(),
-    };
-  }
+  const fieldValuesSchema = buildStep3Schema();
 
   return {
     "matter_type": z.object({
@@ -613,26 +523,17 @@ const __formSchema = computed(() => {
       court: z.string().optional(),
       judges: z.array(z.string()).optional(),
       opposingCounsel: z.array(z.any()).optional(),
-      // date: z.string().refine(v => v, { message: "A date is required." }),
     }),
+    "parties": z.object({}),
     "members": z.object({
       members: z.array(z.any()).optional(),
     }),
+    "field_values": fieldValuesSchema,
   };
 });
 
-const df = new DateFormatter("en-US", { dateStyle: "long" });
-const placeholder = ref();
 const loading = ref(false);
 const open = ref(false);
-
-const value = computed({
-  get: () =>
-    formRef.value?.values?.fields?.date
-      ? parseDate(formRef.value.values?.fields?.date)
-      : undefined,
-  set: (val) => val,
-});
 
 // 🔹 Reset dynamic fields and parties if template changes
 watch(
@@ -808,7 +709,6 @@ const onSubmit = async (values: any) => {
     open.value = false;
   } catch (e) {
     toast.error("Unable to create matter at this time!");
-    console.error(e);
   } finally {
     loading.value = false;
     stepIndex.value = 1;
