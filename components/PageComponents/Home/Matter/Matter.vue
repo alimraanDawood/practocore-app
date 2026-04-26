@@ -1,6 +1,9 @@
 <template>
     <button
-        class="flex flex-col w-full text-left p-3 gap-3 bg-muted rounded-lg"
+        :class="[
+            'flex flex-col w-full text-left p-3 gap-3 rounded-lg',
+            urgency === 'overdue' ? 'bg-destructive/10' : 'bg-muted'
+        ]"
         @mouseenter="prefetchMatter(matter.id)"
         @touchstart="prefetchMatter(matter.id)"
         @focus="prefetchMatter(matter.id)"
@@ -12,14 +15,14 @@
         <div class="flex flex-col gap-2">
 
             <div class="flex flex-row items-center justify-between">
-                <span class="font-bold text-xs">Completion</span>
-
+                <span id="completion-label" class="font-bold text-xs">Completion</span>
                 <span class="font-bold text-xs">{{ deadlineCompletion }}%</span>
             </div>
 
             <Progress
                 class="h-1"
                 :model-value="deadlineCompletion"
+                aria-labelledby="completion-label"
             />
         </div>
 
@@ -45,7 +48,7 @@
 </template>
 
 <script setup>
-import { Clock, CheckCircle, CheckCircle2 } from 'lucide-vue-next';
+import { Clock, CheckCircle } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { usePrefetch } from '~/composables/usePrefetch';
@@ -62,6 +65,10 @@ const props = defineProps({
     accentIndex: {
         type: Number,
         required: true
+    },
+    urgency: {
+        type: String,
+        default: 'active'
     },
 });
 

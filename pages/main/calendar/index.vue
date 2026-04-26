@@ -1,7 +1,7 @@
 <template>
-  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-hidden border-x">
+  <div class="flex flex-col lg:flex-row w-full h-full overflow-hidden border-x">
     <!-- Main Calendar Area -->
-    <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-scroll">
+    <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-auto">
       <!-- Header with filters -->
       <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div class="flex flex-col">
@@ -10,22 +10,31 @@
         </div>
 
         <div class="flex flex-row gap-2 w-full sm:w-auto">
-          <Button @click="goToToday" variant="outline" size="sm">
+          <Button @click="goToToday" variant="outline" size="sm" class="h-11 sm:h-8">
             <CalendarClock class="size-4 mr-2" />
             Today
           </Button>
 
-          <div class="flex flex-row border rounded-md">
-            <Button @click="setFilter('all')" :variant="activeFilter === 'all' ? 'secondary' : 'ghost'"
-                    size="sm" class="rounded-r-none">
+          <div class="flex flex-row border rounded-md" role="group" aria-label="Filter deadlines">
+            <Button @click="setFilter('all')"
+                    :variant="activeFilter === 'all' ? 'secondary' : 'ghost'"
+                    :aria-pressed="activeFilter === 'all'"
+                    size="sm"
+                    class="rounded-r-none h-11 sm:h-8">
               All
             </Button>
-            <Button @click="setFilter('pending')" :variant="activeFilter === 'pending' ? 'secondary' : 'ghost'"
-                    size="sm" class="rounded-none">
+            <Button @click="setFilter('pending')"
+                    :variant="activeFilter === 'pending' ? 'secondary' : 'ghost'"
+                    :aria-pressed="activeFilter === 'pending'"
+                    size="sm"
+                    class="rounded-none h-11 sm:h-8">
               Pending
             </Button>
-            <Button @click="setFilter('fulfilled')" :variant="activeFilter === 'fulfilled' ? 'secondary' : 'ghost'"
-                    size="sm" class="rounded-l-none">
+            <Button @click="setFilter('fulfilled')"
+                    :variant="activeFilter === 'fulfilled' ? 'secondary' : 'ghost'"
+                    :aria-pressed="activeFilter === 'fulfilled'"
+                    size="sm"
+                    class="rounded-l-none h-11 sm:h-8">
               Completed
             </Button>
           </div>
@@ -34,8 +43,9 @@
 
       <!-- Search Bar -->
       <div class="relative w-full">
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input v-model="searchQuery" placeholder="Search deadlines..." class="pl-10" />
+        <label for="calendar-search" class="sr-only">Search deadlines</label>
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
+        <Input id="calendar-search" v-model="searchQuery" placeholder="Search deadlines…" class="pl-10" />
       </div>
 
       <!-- Calendar -->
@@ -64,28 +74,7 @@
           :key="deadline.id"
           :index="calendar.accentIndexFor(deadline.id)"
           :deadline="deadline">
-          <div class="flex text-left flex-row border p-3 gap-3 rounded-lg bg-muted hover:bg-muted/70 transition-colors">
-            <CalendarIcon class="size-4 shrink-0 mt-0.5" />
-
-            <div class="flex flex-col gap-1 flex-1">
-              <span class="font-semibold text-sm">{{ deadline.name }}</span>
-              <span class="text-xs text-muted-foreground">{{ deadline.expand?.matter?.name }}</span>
-              <span class="text-xs font-semibold">{{ dayjs(deadline.date).format("DD MMM YYYY") }}</span>
-
-              <Badge v-if="getDeadlineStatus(deadline) === 'pending'"
-                     class="w-fit">
-                <Clock class="size-3 mr-1" /> PENDING
-              </Badge>
-              <Badge v-else-if="getDeadlineStatus(deadline) === 'overdue'"
-                     class="w-fit">
-                <AlertCircle class="size-3 mr-1" /> OVERDUE
-              </Badge>
-              <Badge v-else-if="getDeadlineStatus(deadline) === 'fulfilled'"
-                     class="w-fit">
-                <CheckCircle class="size-3 mr-1" /> COMPLETED
-              </Badge>
-            </div>
-          </div>
+          <SharedDeadlineCalendarCard :deadline="deadline" variant="mobile" />
         </SharedDeadlineViewDeadline>
       </div>
     </div>
@@ -98,26 +87,19 @@
           <Badge variant="secondary">{{ currentDateDeadlines.length }}</Badge>
         </div>
 
-        <!-- Status breakdown -->
-        <div class="grid grid-cols-3 gap-2">
-          <div class="flex flex-col items-center p-2 bg-background border rounded">
-            <span class="text-xs text-muted-foreground">Pending</span>
-            <span class="text-lg font-bold">{{ statusCounts.pending }}</span>
-          </div>
-          <div class="flex flex-col items-center p-2 bg-background border rounded">
-            <span class="text-xs text-muted-foreground">Overdue</span>
-            <span class="text-lg font-bold">{{ statusCounts.overdue }}</span>
-          </div>
-          <div class="flex flex-col items-center p-2 bg-background border rounded">
-            <span class="text-xs text-muted-foreground">Done</span>
-            <span class="text-lg font-bold">{{ statusCounts.completed }}</span>
-          </div>
+        <!-- Status summary -->
+        <div class="flex flex-row gap-3 text-sm text-muted-foreground">
+          <span><span class="font-semibold text-foreground">{{ statusCounts.pending }}</span> pending</span>
+          <span aria-hidden="true">·</span>
+          <span><span class="font-semibold text-destructive">{{ statusCounts.overdue }}</span> overdue</span>
+          <span aria-hidden="true">·</span>
+          <span><span class="font-semibold text-foreground">{{ statusCounts.fulfilled }}</span> done</span>
         </div>
       </div>
 
       <!-- Deadlines list -->
-      <div class="flex flex-col flex-1 overflow-y-scroll p-4 gap-2 bg-background">
-        <div v-if="loading" class="flex flex-col gap-2">
+      <div class="flex flex-col flex-1 overflow-y-auto p-4 gap-2 bg-background">
+        <div v-if="loading" class="flex flex-col gap-2" aria-label="Loading deadlines" aria-busy="true">
           <div v-for="i in 3" :key="i" class="animate-pulse flex flex-col gap-2 p-3 border rounded-lg bg-background">
             <div class="h-4 bg-muted rounded w-3/4"></div>
             <div class="h-3 bg-muted rounded w-1/2"></div>
@@ -126,7 +108,7 @@
         </div>
 
         <div v-else-if="currentDateDeadlines.length === 0" class="text-center py-12 text-muted-foreground">
-          <CalendarOff class="size-12 mx-auto mb-2 opacity-50" />
+          <CalendarOff class="size-12 mx-auto mb-2 opacity-50" aria-hidden="true" />
           <p class="text-sm">No deadlines on this date</p>
           <p class="text-xs mt-1">Select another date or check your filters</p>
         </div>
@@ -137,48 +119,16 @@
           :key="deadline.id"
           :index="calendar.accentIndexFor(deadline.id)"
           :deadline="deadline">
-          <div class="flex flex-col p-3 border rounded-lg bg-muted hover:bg-muted/70 transition-colors cursor-pointer group">
-            <div class="flex flex-row items-start justify-between mb-2">
-              <div class="flex flex-col flex-1">
-                <span class="font-semibold text-sm">{{ deadline.name }}</span>
-                <span class="text-xs text-muted-foreground mt-0.5">{{ deadline.expand?.matter?.name || 'No matter' }}</span>
-              </div>
-              <div class="size-6 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <CalendarIcon class="size-3 text-white" />
-              </div>
-            </div>
-
-            <div class="flex flex-row items-center gap-2">
-              <Badge v-if="getDeadlineStatus(deadline) === 'pending'"
-                     class="text-xs">
-                <Clock class="size-3 mr-1" /> Pending
-              </Badge>
-              <Badge v-else-if="getDeadlineStatus(deadline) === 'overdue'"
-                     variant="destructive"
-                     class="text-xs">
-                <AlertCircle class="size-3 mr-1" /> Overdue
-              </Badge>
-              <Badge v-else-if="getDeadlineStatus(deadline) === 'completed'"
-                     class="text-xs">
-                <CheckCircle class="size-3 mr-1" /> Done
-              </Badge>
-
-              <span class="text-xs text-muted-foreground ml-auto">{{ getTimeInfo(deadline.date) }}</span>
-            </div>
-
-            <div v-if="deadline.description" class="text-xs text-muted-foreground mt-2 line-clamp-2">
-              {{ deadline.description }}
-            </div>
-          </div>
+          <SharedDeadlineCalendarCard :deadline="deadline" variant="desktop" />
         </SharedDeadlineViewDeadline>
       </div>
     </div>
 
-    <!-- Deadline Detail Sheet (for mobile) -->
+    <!-- Deadline Detail Sheet -->
     <Sheet v-model:open="selectedDeadline.open">
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>Deadline Details</SheetTitle>
+          <SheetTitle>{{ selectedDeadline.deadline?.name ?? 'Deadline Details' }}</SheetTitle>
         </SheetHeader>
         <SharedDeadlineViewDeadline
           @updated="() => { selectedDeadline.open = false; calendar.fetchDeadlines(true); }"
@@ -195,11 +145,7 @@
 import FeaturesCalendarMonthView from '@/components/features/calendar/MonthView.vue'
 import { Button } from '@/components/ui/button';
 import {
-  CalendarIcon,
   Search,
-  Clock,
-  CheckCircle,
-  AlertCircle,
   CalendarOff,
   CalendarClock
 } from 'lucide-vue-next';
@@ -221,7 +167,7 @@ definePageMeta({
 
 const calendar = useCalendarStore();
 const { deadlines, selectedDate, loading } = storeToRefs(calendar);
-const calendarRef = ref(null);
+const calendarRef = ref<{ goToday: () => void } | null>(null);
 
 const currentDate = computed({
   get: () => selectedDate.value,
@@ -242,23 +188,17 @@ const setFilter = (filter: 'all' | 'pending' | 'fulfilled') => {
   activeFilter.value = filter;
 };
 
-// Get deadline status
-const getDeadlineStatus = (deadline: any) => {
-  return deadline.status
-};
-
 // Filter deadlines based on active filter and search
 const filteredDeadlines = computed(() => {
   let filtered = deadlines.value;
+  const now = new Date();
 
-  // Apply status filter
   if (activeFilter.value === 'pending') {
-    filtered = filtered.filter(d => !(d.status === 'fulfilled') && new Date() <= new Date(d.date));
+    filtered = filtered.filter(d => d.status !== 'fulfilled' && now <= new Date(d.date));
   } else if (activeFilter.value === 'fulfilled') {
-    filtered = filtered.filter(d => (d.status === 'fulfilled'));
+    filtered = filtered.filter(d => d.status === 'fulfilled');
   }
 
-  // Apply search filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     filtered = filtered.filter(d =>
@@ -292,11 +232,11 @@ const currentDateDeadlines = computed(() => {
 
 // Status counts for selected date
 const statusCounts = computed(() => {
-  const deadlines = currentDateDeadlines.value;
+  const list = currentDateDeadlines.value;
   return {
-    pending: deadlines.filter(d => getDeadlineStatus(d) === 'pending').length,
-    overdue: deadlines.filter(d => getDeadlineStatus(d) === 'overdue').length,
-    completed: deadlines.filter(d => getDeadlineStatus(d) === 'completed').length,
+    pending: list.filter(d => d.status === 'pending').length,
+    overdue: list.filter(d => d.status === 'overdue').length,
+    fulfilled: list.filter(d => d.status === 'fulfilled').length,
   };
 });
 
@@ -319,39 +259,30 @@ const selectedDateFormatted = computed(() => {
   return dayjs(date).format('dddd, MMMM D, YYYY');
 });
 
-// Accent classes
-const accentClasses = (accentIndex: number) => {
-  const accentMap = [
-    'bg-accent-1/10 text-accent-1 border-accent-1',
-    'bg-accent-2/10 text-accent-2 border-accent-2',
-    'bg-accent-3/10 text-accent-3 border-accent-3',
-    'bg-accent-4/10 text-accent-4 border-accent-4'
-  ];
-  return accentMap[accentIndex % 4];
-};
-
-const badgeAccentClasses = (accentIndex: number, completed: boolean) => {
-  const accentMap = {
-    0: completed ? 'bg-accent-1/10 text-accent-1 border-2 border-accent-1' : 'bg-accent-1 !text-accents-foreground',
-    1: completed ? 'bg-accent-2/10 text-accent-2 border-2 border-accent-2' : 'bg-accent-2 !text-accents-foreground',
-    2: completed ? 'bg-accent-3/10 text-accent-3 border-2 border-accent-3' : 'bg-accent-3 !text-accents-foreground',
-    3: completed ? 'bg-accent-4/10 text-accent-4 border-2 border-accent-4' : 'bg-accent-4 !text-accents-foreground'
-  };
-  return accentMap[accentIndex % 4];
-};
-
-// Get time information
-const getTimeInfo = (date: string) => {
-  return dayjs(date).fromNow();
-};
-
-// Go to today
 const goToToday = () => {
   const today = new Date();
   currentDate.value = toISO(today);
-  // Trigger calendar to update to current month if needed
-  // The calendar component will handle this internally
+  calendarRef.value?.goToday();
 };
+
+const updateDate = (newDate: { date: Date }) => {
+  currentDate.value = toISO(newDate.date);
+};
+
+function onDayClick(iso: string) {
+  currentDate.value = iso;
+}
+
+function onEventClick(event: any) {
+  const deadline = deadlines.value.find(d => d.id === event.id);
+  if (deadline) {
+    selectedDeadline.value = {
+      index: calendar.accentIndexFor(deadline.id),
+      deadline: deadline,
+      open: true
+    };
+  }
+}
 
 // Utility functions
 function toISO(input: string | Date): string {
@@ -373,26 +304,6 @@ function toDate(input?: string | Date) {
   return d;
 }
 
-const updateDate = (newDate: { date: Date }) => {
-  currentDate.value = toISO(newDate.date);
-};
-
-function onDayClick(iso: string) {
-  currentDate.value = iso;
-}
-
-function onEventClick(event: any) {
-  const deadline = deadlines.value.find(d => d.id === event.id);
-  if (deadline) {
-    selectedDeadline.value = {
-      index: calendar.accentIndexFor(deadline.id),
-      deadline: deadline,
-      open: true
-    };
-  }
-}
-
-// Initialize
 onMounted(async () => {
   calendar.ensureSubscribed();
   await calendar.fetchDeadlines(false);

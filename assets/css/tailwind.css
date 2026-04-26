@@ -3,6 +3,9 @@
 
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* Safelist dynamic accent classes used in calendar event pills and deadline cards */
+@source inline("bg-accent-1 bg-accent-2 bg-accent-3 bg-accent-4 bg-accent-1/10 bg-accent-2/10 bg-accent-3/10 bg-accent-4/10 bg-accent-1/50 bg-accent-2/50 bg-accent-3/50 bg-accent-4/50 text-accent-1 text-accent-2 text-accent-3 text-accent-4 border-accent-1 border-accent-2 border-accent-3 border-accent-4");
 @import '@vue-flow/core/dist/style.css';
 @import '@vue-flow/core/dist/theme-default.css';
 
@@ -55,10 +58,10 @@
     --fluid-text-base: clamp(1rem, calc(1rem + 0.5 * (100vw - 20rem) / (120rem - 20rem)), 1.5rem);
     --fluid-spacing-sm: clamp(0.5rem, calc(0.5rem + 0.5 * (100vw - 20rem) / (120rem - 20rem)), 1rem);
     --fluid-spacing-lg: clamp(1.5rem, calc(1.5rem + 2 * (100vw - 20rem) / (120rem - 20rem)), 3.5rem);
-    --color-accent-success: #005B56;
-    --color-accent-error: #AB5D41;
-    --color-accent-warning: #9A954C;
-    --color-accent-info: #52004F;
+    --color-accent-success: oklch(0.38 0.08 184);
+    --color-accent-error: oklch(0.55 0.10 45);
+    --color-accent-warning: oklch(0.62 0.10 99);
+    --color-accent-info: oklch(0.27 0.14 324);
     --color-tertiary: var(--tertiary);
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -100,7 +103,7 @@
     --color-accent-2: var(--accent-2);
     --color-accent-3: var(--accent-3);
     --color-accent-4: var(--accent-4);
-    --color-accents-foreground: #ffffff;
+    --color-accents-foreground: oklch(0.99 0.005 93);
     --animate-accordion-down: accordion-down 0.2s ease-out;
     --animate-accordion-up: accordion-up 0.2s ease-out;
 
@@ -190,10 +193,10 @@
     --chart-3: oklch(0.88 0.03 91.64);
     --chart-4: oklch(0.88 0.04 298.21);
     --chart-5: oklch(0.56 0.13 41.94);
-    --accent-1: #52004f;
-    --accent-2: #9a954c;
-    --accent-3: #ab5d41;
-    --accent-4: #7daaa7;
+    --accent-1: oklch(0.27 0.14 324);
+    --accent-2: oklch(0.62 0.10 99);
+    --accent-3: oklch(0.55 0.10 45);
+    --accent-4: oklch(0.67 0.06 188);
 
     --sidebar: oklch(0.97 0.01 93.49);
     --sidebar-foreground: oklch(0.36 0.01 106.85);
@@ -264,10 +267,15 @@
     --shadow-xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 8px 10px -1px oklch(0.00 0 0 / 0.10);
     --shadow-2xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.25);
 
-    --accent-1: #dd89c4;
-    --accent-2: #9a954c;
-    --accent-3: #ab5d41;
-    --accent-4: #7daaa7;
+    --accent-1: oklch(0.72 0.13 328);
+    --accent-2: oklch(0.62 0.10 99);
+    --accent-3: oklch(0.55 0.10 45);
+    --accent-4: oklch(0.67 0.06 188);
+    --color-accent-success: oklch(0.65 0.10 184);
+    --color-accent-error: oklch(0.70 0.12 45);
+    --color-accent-warning: oklch(0.75 0.12 99);
+    --color-accent-info: oklch(0.65 0.14 324);
+    --color-accents-foreground: oklch(0.12 0.005 93);
 }
 
 @layer base {

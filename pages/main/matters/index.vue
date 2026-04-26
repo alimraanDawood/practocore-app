@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-hidden border-x">
+    <div class="flex flex-col w-full h-full overflow-y-hidden border-x">
         <div class="flex flex-col h-full w-full">
             <DefineSearchFilterTemplate>
                 <div class="flex flex-row items-center gap-2 w-full">
@@ -21,7 +21,7 @@
                                 <SortDesc v-else />
                             </Button>
 
-                            <Button class="flex lg:hidden" size="icon" variant="outline">
+                            <Button class="flex lg:hidden" size="icon" variant="outline" aria-label="Sort matters">
                                 <SortAsc v-if="sortLabel?.asc" />
                                 <SortDesc v-else />
                             </Button>
@@ -71,6 +71,51 @@
                 </div>
             </DefineSearchFilterTemplate>
 
+            <DefinePaginationTemplate>
+                <div v-if="(mattersStore?.totalItems / mattersStore?.perPage) > 1"
+                    class="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t">
+                    <div class="text-sm text-muted-foreground">
+                        Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
+                    </div>
+                    <nav aria-label="Matters pagination" class="flex flex-row items-center gap-2">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            @click="mattersStore.previousPage()"
+                            :disabled="mattersStore.page <= 1"
+                        >
+                            <ChevronLeft class="size-4" />
+                            Previous
+                        </Button>
+                        <div class="flex flex-row items-center gap-1">
+                            <template v-for="(pageNum, idx) in visiblePages" :key="idx">
+                                <span v-if="pageNum === -1" class="px-2 text-muted-foreground" aria-hidden="true">...</span>
+                                <Button
+                                    v-else
+                                    size="sm"
+                                    :variant="pageNum === mattersStore.page ? 'default' : 'ghost'"
+                                    @click="mattersStore.goToPage(pageNum)"
+                                    class="min-w-[2.75rem]"
+                                    :aria-label="`Page ${pageNum}`"
+                                    :aria-current="pageNum === mattersStore.page ? 'page' : undefined"
+                                >
+                                    {{ pageNum }}
+                                </Button>
+                            </template>
+                        </div>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            @click="mattersStore.nextPage()"
+                            :disabled="mattersStore.page >= matters.totalPages"
+                        >
+                            Next
+                            <ChevronRight class="size-4" />
+                        </Button>
+                    </nav>
+                </div>
+            </DefinePaginationTemplate>
+
             <div class="flex flex-col w-full h-full">
                 <div class="flex flex-row items-center p-3 border-b justify-between">
                     <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
@@ -89,6 +134,16 @@
                           </TabsList>
                         </Tabs>
 
+                        <Button
+                            v-if="matters?.items?.length > 0"
+                            size="sm"
+                            :variant="selection.active ? 'secondary' : 'outline'"
+                            @click="toggleSelectionMode"
+                        >
+                            <ListChecks class="size-4" />
+                            {{ selection.active ? 'Cancel' : 'Select' }}
+                        </Button>
+
                         <SharedMattersCreateMatter :no-stepper="true" @created="mattersStore.fetchMatters(true)">
                             <Button>
                                 <Plus /> Add Matter
@@ -101,148 +156,87 @@
                   <ReuseSearchFilterTemplate />
                 </div>
 
-
                 <XyzTransition mode="out-in" xyz="fade">
                     <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 gap-3 p-3">
-                        <div v-for="i in 12" class="rounded w-full aspect-video bg-muted-foreground/20 animate-pulse">
-                        </div>
+                        <div v-for="i in 12" :key="i" class="rounded w-full aspect-[4/3] bg-muted-foreground/20 animate-pulse" />
                     </div>
 
-                    <template v-else-if="matters !== null && matters?.items?.length > 0 ">
+                    <template v-else-if="matters !== null && matters?.items?.length > 0">
                         <div class="flex flex-col w-full h-full overflow-y-hidden">
                             <div
                                 v-if="displayMode === 'grid' || $viewport.isLessThan('customxs')"
+                                role="list"
+                                aria-label="Matters"
                                 class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 h-full gap-3 p-3 content-start overflow-y-scroll">
 
-                                <div :class="{ 'ring-2 ring-tertiary relative': selection.selected.find(p => p.id === matter.id) }" class="h-fit ring-1 ring-border rounded-lg"
-                                    v-for="(matter, index) in matters?.items">
+                                <div
+                                    v-for="(matter, index) in matters?.items"
+                                    :key="matter.id"
+                                    role="listitem"
+                                    :aria-selected="selection.active ? selectedIds.has(matter.id) : undefined"
+                                    :class="{
+                                        'ring-2 ring-tertiary relative': selectedIds.has(matter.id),
+                                        'ring-destructive/50': !selectedIds.has(matter.id) && matterUrgencies.get(matter.id) === 'overdue',
+                                    }"
+                                    class="h-fit ring-1 ring-border rounded-lg"
+                                    v-on-long-press="[(e) => activateSelectionWith(e, matter), { delay: 300, modifiers: { stop: true } }]"
+                                    @click="onMatterTap(matter)"
+                                >
                                     <PageComponentsHomeMatter
-                                        v-on-long-press="[(e) => { onLongPressCallbackDirective(e, matter) }, { delay: 300, onMouseUp: (duration, distance, isLongPress) => { if (!isLongPress) { onMatterTap(matter) } }, modifiers: { stop: true } }]"
-                                        :matter="matter" :accent-index="index" />
+                                        :matter="matter"
+                                        :accent-index="index"
+                                        :urgency="matterUrgencies.get(matter.id)"
+                                    />
 
-                                    <div v-if="selection.selected.find(p => p.id === matter.id)"
-                                        class="size-5 bg-tertiary grid place-items-center text-white absolute top-0 translate-y-[-50%] right-0 translate-x-[50%] rounded-full">
+                                    <div
+                                        v-if="selectedIds.has(matter.id)"
+                                        aria-hidden="true"
+                                        class="size-5 bg-tertiary grid place-items-center text-primary-foreground absolute top-0 translate-y-[-50%] right-0 translate-x-[50%] rounded-full">
                                         <Check class="size-3 stroke-3" />
                                     </div>
                                 </div>
-                              <div v-if="(mattersStore?.totalItems / mattersStore?.perPage) > 1" class=" flex flex-col sm:hidden items-center justify-between gap-3 p-3 border-t">
-                                <div class="text-sm text-muted-foreground">
-                                  Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
+
+                                <div class="col-span-full sm:hidden">
+                                    <ReusePaginationTemplate />
                                 </div>
-
-                                <div class="flex flex-row items-center gap-2">
-                                  <Button
-                                      size="sm"
-                                      variant="outline"
-                                      @click="mattersStore.previousPage()"
-                                      :disabled="mattersStore.page <= 1"
-                                  >
-                                    <ChevronLeft class="size-4" />
-                                    Previous
-                                  </Button>
-
-                                  <div class="flex flex-row items-center gap-1">
-                                    <template v-for="(pageNum, index) in visiblePages" :key="index">
-                                      <span v-if="pageNum === -1" class="px-2 text-muted-foreground">...</span>
-                                      <Button
-                                          v-else
-                                          size="sm"
-                                          :variant="pageNum === mattersStore.page ? 'default' : 'ghost'"
-                                          @click="mattersStore.goToPage(pageNum)"
-                                          class="!size-[32px]"
-                                      >
-                                        {{ pageNum }}
-                                      </Button>
-                                    </template>
-                                  </div>
-
-                                  <Button
-                                      size="sm"
-                                      variant="outline"
-                                      @click="mattersStore.nextPage()"
-                                      :disabled="mattersStore.page >= matters.totalPages"
-                                  >
-                                    Next
-                                    <ChevronRight class="size-4" />
-                                  </Button>
-                                </div>
-                              </div>
                             </div>
 
-                          <div v-else class="flex flex-col w-full h-full p-3">
-                            <SharedMattersMatterTable
-                              :columns="columns"
-                              :data="matters?.items || []"
-                              @selection-change="onTableSelectionChange"
-                            />
-                          </div>
+                            <div v-else class="flex flex-col w-full h-full p-3">
+                                <SharedMattersMatterTable
+                                    :columns="columns"
+                                    :data="matters?.items || []"
+                                    @selection-change="onTableSelectionChange"
+                                />
+                            </div>
 
-                            <!-- Pagination -->
-                            <div class="hidden sm:flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t">
-                                <div class="text-sm text-muted-foreground">
-                                    Showing {{ ((mattersStore.page - 1) * mattersStore.perPage) + 1 }} to {{ Math.min(mattersStore.page * mattersStore.perPage, matters.totalItems) }} of {{ matters.totalItems }} matters
-                                </div>
-
-                                <div class="flex flex-row items-center gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        @click="mattersStore.previousPage()"
-                                        :disabled="mattersStore.page <= 1"
-                                    >
-                                        <ChevronLeft class="size-4" />
-                                        Previous
-                                    </Button>
-
-                                    <div class="flex flex-row items-center gap-1">
-                                        <template v-for="(pageNum, index) in visiblePages" :key="index">
-                                            <span v-if="pageNum === -1" class="px-2 text-muted-foreground">...</span>
-                                            <Button
-                                                v-else
-                                                size="sm"
-                                                :variant="pageNum === mattersStore.page ? 'default' : 'ghost'"
-                                                @click="mattersStore.goToPage(pageNum)"
-                                                class="!size-[32px]"
-                                            >
-                                                {{ pageNum }}
-                                            </Button>
-                                        </template>
-                                    </div>
-
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        @click="mattersStore.nextPage()"
-                                        :disabled="mattersStore.page >= matters.totalPages"
-                                    >
-                                        Next
-                                        <ChevronRight class="size-4" />
-                                    </Button>
-                                </div>
+                            <div class="hidden sm:block">
+                                <ReusePaginationTemplate />
                             </div>
                         </div>
                     </template>
 
                     <div v-else-if="matters?.items?.length === 0"
-                        class="flex flex-col text-center h-full text-muted-foreground w-full items-center justify-center">
-                        <CircleX class="size-24 mb-2 opacity-50" />
-                        <span>You have no matters</span>
-                        <span>Click
-                          <div class="w-fit inline-block">
-                            <SharedMattersCreateMatter @created="mattersStore.fetchMatters(true)" class="w-fit">
-                                <button variant="link" class="!p-0 underline text-primary font-semibold">here</button>
+                        class="flex flex-col h-full w-full items-center justify-center">
+                        <div class="flex flex-col items-center gap-4 max-w-xs text-center">
+                            <Scale class="size-16 text-muted-foreground/40" />
+                            <div class="flex flex-col gap-1">
+                                <span class="font-semibold text-foreground">No matters yet</span>
+                                <span class="text-sm text-muted-foreground">Add your first matter to start tracking litigation deadlines.</span>
+                            </div>
+                            <SharedMattersCreateMatter @created="mattersStore.fetchMatters(true)">
+                                <Button>
+                                    <Plus class="size-4" />
+                                    Add your first matter
+                                </Button>
                             </SharedMattersCreateMatter>
-                          </div>
-
-                            to add a deadline matter
-                        </span>
+                        </div>
                     </div>
                 </XyzTransition>
             </div>
 
             <XyzTransition xyz="fade down">
                 <div v-if="selection.active"
-                    class="fixed p-3 w-full bottom-[4rem] lg:bottom-0 flex flex-col  items-center justify-center z-30">
+                    class="fixed p-3 w-full bottom-[4rem] lg:bottom-0 flex flex-col items-center justify-center z-30">
                     <div
                         class="bg-background p-3 rounded border shadow-sm space-x-2 justify-between flex flex-row w-full lg:max-w-md">
                         <div class="flex flex-row items-center text-xs gap-2">
@@ -254,12 +248,11 @@
                         </div>
 
                         <div class="flex flex-row gap-2 items-center">
-                            <Button size="sm" @click="selection.selected = matters.items" variant="secondary">Select
-                                All</Button>
+                            <Button size="sm" @click="selection.selected = matters.items" variant="secondary">Select All</Button>
 
                             <AlertDialog v-model:open="delete_open">
                                 <AlertDialogTrigger as-child>
-                                    <Button size="icon" variant="destructive">
+                                    <Button size="icon" variant="destructive" aria-label="Delete selected matters">
                                         <Trash />
                                     </Button>
                                 </AlertDialogTrigger>
@@ -277,7 +270,7 @@
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
-                            <Button size="icon" @click="resetSelection" variant="secondary">
+                            <Button size="icon" @click="resetSelection" variant="secondary" aria-label="Cancel selection">
                                 <X />
                             </Button>
                         </div>
@@ -290,15 +283,13 @@
 
 <script setup lang="ts">
 import { vOnLongPress } from '@vueuse/components'
-import { CircleX, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table,  Grid2X2} from 'lucide-vue-next';
+import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table, Grid2X2, ListChecks } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import {deleteMatter, getMatters, subscribeToMatters} from '~/services/matters';
+import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
 import { useMattersStore } from '@/stores/matters';
 import { useDashboardStore } from '~/stores/dashboard';
-import MatterTable from '~/components/shared/Matters/MatterTable/MatterTable.vue';
 import { columns } from '@/components/shared/Matters/MatterTable/columns';
-import {getSignedInUser} from "~/services/auth";
 import { Capacitor } from "@capacitor/core";
 import { Haptics } from "@capacitor/haptics";
 
@@ -316,36 +307,54 @@ definePageMeta({
 })
 
 const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();
-
-const longPressedDirective = shallowRef(false)
+const [DefinePaginationTemplate, ReusePaginationTemplate] = createReusableTemplate();
 
 const mattersStore = useMattersStore();
 const dashboardStore = useDashboardStore();
 const { result: matters, loading, sort, query, selection, activeTab } = storeToRefs(mattersStore);
 
-const setTab = (newVal : string) => {
-    activeTab.value = newVal;
-}
+const displayMode = useLocalStorage('matters-display-mode', 'grid')
 
-const displayMode = useLocalStorage('matters-display-mode', 'grid') // grid || table
+// Precomputed Set for O(1) selection lookups in template
+const selectedIds = computed(() => new Set(selection.value.selected.map((p: any) => p.id)));
 
-function onLongPressCallbackDirective(e: PointerEvent, matter: any) {
-    longPressedDirective.value = true
-    mattersStore.activateSelectionWith(matter);
-    triggerSelectionHaptic();
-}
-
-function resetDirective() {
-    longPressedDirective.value = false
-}
+// Precomputed urgency map to drive visual differentiation without per-render deadline scanning
+const matterUrgencies = computed(() => {
+    const map = new Map<string, 'overdue' | 'complete' | 'active'>();
+    const now = new Date();
+    for (const matter of matters.value?.items ?? []) {
+        const deadlines = matter?.expand?.deadlines;
+        if (!deadlines?.length) { map.set(matter.id, 'active'); continue; }
+        const hasOverdue = deadlines.some((d: any) => d.status === 'pending' && new Date(d.date) < now);
+        if (hasOverdue) { map.set(matter.id, 'overdue'); continue; }
+        map.set(matter.id, deadlines.every((d: any) => d.status === 'fulfilled') ? 'complete' : 'active');
+    }
+    return map;
+});
 
 const delete_open = ref(false);
+
+// Guards against click firing immediately after long-press activates selection
+let selectionJustActivated = false;
+
+function activateSelectionWith(e: PointerEvent, matter: any) {
+    selectionJustActivated = true;
+    mattersStore.activateSelectionWith(matter);
+    triggerSelectionHaptic();
+    setTimeout(() => { selectionJustActivated = false; }, 50);
+}
+
+const toggleSelectionMode = () => {
+    if (selection.value.active) {
+        resetSelection();
+    } else {
+        selection.value.active = true;
+    }
+}
 
 const resetSelection = () => {
     mattersStore.resetSelection();
 }
-
-const custom = ref(null);
 
 onMounted(async () => {
     await mattersStore.fetchMatters(false);
@@ -354,106 +363,75 @@ onMounted(async () => {
 
 const sortLabel = computed(() => {
     switch (sort.value) {
-        case 'created':
-            return { label: 'Created (Oldest)', asc: true };
-        case '-created':
-            return { label: 'Created (Newest)', asc: false };
-        case 'updated':
-            return { label: 'Updated (Oldest)', asc: true };
-        case '-updated':
-            return { label: 'Updated (Newest)', asc: false };
-        case 'name':
-            return { label: 'Name (A-Z)', asc: true };
-        case '-name':
-            return { label: 'Name (Z-A)', asc: false };
-        default:
-            return { label: 'Created (Newest)', asc: false };
+        case 'created':   return { label: 'Created (Oldest)', asc: true };
+        case '-created':  return { label: 'Created (Newest)', asc: false };
+        case 'updated':   return { label: 'Updated (Oldest)', asc: true };
+        case '-updated':  return { label: 'Updated (Newest)', asc: false };
+        case 'name':      return { label: 'Name (A-Z)', asc: true };
+        case '-name':     return { label: 'Name (Z-A)', asc: false };
+        default:          return { label: 'Created (Newest)', asc: false };
     }
 })
 
-// Calculate visible page numbers for pagination
 const visiblePages = computed(() => {
-    if (!matters.value || !matters.value.totalPages) return [];
+    if (!matters.value?.totalPages) return [];
 
     const totalPages = matters.value.totalPages;
     const currentPage = mattersStore.page;
-    const delta = 2; // Number of pages to show on each side of current page
-    const pages: number[] = [];
+    const delta = 2;
+    const pages: number[] = [1];
 
-    // Always show first page
-    pages.push(1);
-
-    // Calculate range around current page
     const rangeStart = Math.max(2, currentPage - delta);
     const rangeEnd = Math.min(totalPages - 1, currentPage + delta);
 
-    // Add ellipsis after first page if needed
-    if (rangeStart > 2) {
-        pages.push(-1); // -1 represents ellipsis
-    }
-
-    // Add pages in range
-    for (let i = rangeStart; i <= rangeEnd; i++) {
-        pages.push(i);
-    }
-
-    // Add ellipsis before last page if needed
-    if (rangeEnd < totalPages - 1) {
-        pages.push(-1);
-    }
-
-    // Always show last page if there's more than 1 page
-    if (totalPages > 1) {
-        pages.push(totalPages);
-    }
+    if (rangeStart > 2) pages.push(-1);
+    for (let i = rangeStart; i <= rangeEnd; i++) pages.push(i);
+    if (rangeEnd < totalPages - 1) pages.push(-1);
+    if (totalPages > 1) pages.push(totalPages);
 
     return pages;
 })
 
 watch(sort, () => {
-    mattersStore.page = 1; // Reset to first page when changing sort
+    mattersStore.page = 1;
     mattersStore.fetchMatters();
 });
 
 watch(activeTab, () => {
-    mattersStore.page = 1; // Reset to first page when changing tab
+    mattersStore.page = 1;
     mattersStore.fetchMatters();
-    console.log(activeTab.value);
 })
 
 watch(query, () => {
-    mattersStore.page = 1; // Reset to first page when searching
+    mattersStore.page = 1;
     mattersStore.fetchMatters();
 });
 
 const onTableSelectionChange = (selectedRows: any[]) => {
     if (selectedRows.length > 0) {
-        selection.value.active = true
-        selection.value.selected = selectedRows
+        selection.value.active = true;
+        selection.value.selected = selectedRows;
     } else {
-        selection.value.active = false
-        selection.value.selected = []
+        selection.value.active = false;
+        selection.value.selected = [];
     }
     triggerSelectionHaptic();
 }
 
 const onMatterTap = (matter: any) => {
+    if (selectionJustActivated) return;
+
     if (selection.value.active) {
-        const exists = selection.value.selected.find(p => p.id === matter.id);
-
+        const exists = selection.value.selected.find((p: any) => p.id === matter.id);
         if (exists) {
-            selection.value.selected = selection.value.selected.filter(p => p.id !== matter.id);
-
-            if (selection.value.selected.length === 0) {
-                selection.value.active = false;
-            }
+            selection.value.selected = selection.value.selected.filter((p: any) => p.id !== matter.id);
+            if (selection.value.selected.length === 0) selection.value.active = false;
         } else {
             selection.value.selected.push(matter);
         }
         triggerSelectionHaptic();
         return;
     }
-    console.log("Matter")
     useRouter().push(`/main/matters/matter/${matter.id}`);
 }
 
@@ -464,24 +442,19 @@ const deleteSelectedMatters = async () => {
     for (const matter of selection.value.selected) {
         try {
             await deleteMatter(matter.id);
-
-            // Show toast notification
             toast.success('Selected matters deleted successfully.');
         } catch (e) {
             console.error(e);
-            // toast.error('Failed to delete selected matters.');
         }
     }
 
     delete_open.value = false;
     loading.value = false;
 
-    // Refresh both matters list and dashboard statistics
     resetSelection();
     await Promise.all([
         mattersStore.fetchMatters(true),
         dashboardStore.fetchStatistics(true)
     ]);
 }
-
 </script>
