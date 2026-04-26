@@ -119,6 +119,51 @@ const { hasPermission } = usePermissions()
 const isUrgent = (matter: any) =>
   matter?.stats?.nextDeadlineDate &&
   dayjs(matter.stats.nextDeadlineDate).diff(dayjs(), 'day') < 5
+
+const pressingDeadlines = computed(() => {
+  if (!statistics.value?.matters) return []
+  return statistics.value.matters
+    .flatMap((m: any) =>
+      (m.deadlines || [])
+        .filter((d: any) => d.status === 'pending')
+        .map((d: any) => ({ ...d, matterName: m.name, matterId: m.id }))
+    )
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 7)
+})
+
+type Urgency = 'overdue' | 'critical' | 'warning' | 'normal'
+
+const deadlineUrgency = (date: string): Urgency => {
+  const days = dayjs(date).diff(dayjs(), 'day')
+  if (days < 0) return 'overdue'
+  if (days <= 2) return 'critical'
+  if (days <= 7) return 'warning'
+  return 'normal'
+}
+
+const deadlineCardClasses = (date: string) => {
+  const u = deadlineUrgency(date)
+  if (u === 'overdue') return 'bg-destructive/8 border-destructive/40'
+  if (u === 'critical') return 'bg-destructive/5 border-destructive/25'
+  if (u === 'warning') return 'bg-accent-warning/5 border-accent-warning/30'
+  return 'bg-muted border-border'
+}
+
+const deadlineNumberClass = (date: string) => {
+  const u = deadlineUrgency(date)
+  if (u === 'overdue' || u === 'critical') return 'text-destructive'
+  if (u === 'warning') return 'text-accent-warning'
+  return 'text-foreground'
+}
+
+const countdownDisplay = (date: string): { number: string; unit: string } => {
+  const days = dayjs(date).diff(dayjs(), 'day')
+  if (days < 0) return { number: String(Math.abs(days)), unit: Math.abs(days) === 1 ? 'day over' : 'days over' }
+  if (days === 0) return { number: 'Today', unit: '' }
+  if (days === 1) return { number: '1', unit: 'day' }
+  return { number: String(days), unit: 'days' }
+}
 </script>
 
 <template>
@@ -145,8 +190,8 @@ const isUrgent = (matter: any) =>
     </div>
 
     <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
-      <!-- Page header + stats row -->
-      <div class="flex flex-col gap-3.5 p-3 lg:p-5 lg:flex-row lg:items-center justify-between border-b">
+      <!-- Page header + stats row (desktop/tablet only) -->
+      <div class="hidden xs:flex flex-col gap-3.5 p-3 lg:p-5 lg:flex-row lg:items-center justify-between border-b">
         <div class="xs:flex flex-col hidden">
           <h1 class="text-xl lg:text-2xl font-semibold ibm-plex-serif">
             {{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0) }}
@@ -175,6 +220,54 @@ const isUrgent = (matter: any) =>
             >{{ statistics?.missedDeadlines ?? '—' }}</span>
             <span class="text-xs text-muted-foreground">Missed Deadlines</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Mobile pressing deadlines strip -->
+      <div class="xs:hidden border-b">
+        <div class="flex flex-row items-baseline gap-1.5 px-3 pt-3 pb-2">
+          <h2 class="text-sm font-semibold ibm-plex-sans">Next Up</h2>
+          <span v-if="!loading && pressingDeadlines.length > 0" class="text-xs text-muted-foreground">
+            {{ pressingDeadlines.length }} deadline{{ pressingDeadlines.length !== 1 ? 's' : '' }}
+          </span>
+        </div>
+
+        <!-- Loading skeletons -->
+        <div v-if="loading" class="flex flex-row gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3">
+          <div v-for="i in 3" :key="i" class="shrink-0 rounded-xl bg-muted animate-pulse border border-border" style="width: 152px; height: 116px;"></div>
+        </div>
+
+        <!-- Deadline cards -->
+        <div v-else-if="pressingDeadlines.length > 0" class="flex flex-row gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3" style="scroll-snap-type: x mandatory;">
+          <NuxtLink
+            v-for="dl in pressingDeadlines"
+            :key="dl.id"
+            :to="`/main/matters/matter/${dl.matterId}`"
+            class="flex flex-col justify-between shrink-0 rounded-xl border p-3 gap-2 active:opacity-80 transition-opacity duration-100"
+            :class="deadlineCardClasses(dl.date)"
+            style="width: 152px; min-height: 116px; scroll-snap-align: start;"
+          >
+            <div class="flex flex-col gap-0.5">
+              <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">{{ dl.matterName }}</span>
+              <span class="text-sm font-medium leading-snug line-clamp-2 text-foreground">{{ dl.name || 'Deadline' }}</span>
+            </div>
+            <div class="flex flex-col gap-0">
+              <div class="flex flex-row items-baseline gap-1">
+                <span class="text-2xl font-semibold tabular-nums leading-none ibm-plex-sans" :class="deadlineNumberClass(dl.date)">
+                  {{ countdownDisplay(dl.date).number }}
+                </span>
+                <span v-if="countdownDisplay(dl.date).unit" class="text-xs font-medium leading-none" :class="deadlineNumberClass(dl.date)">
+                  {{ countdownDisplay(dl.date).unit }}
+                </span>
+              </div>
+              <span class="text-[10px] text-muted-foreground mt-0.5">{{ dayjs(dl.date).format('MMM D, YYYY') }}</span>
+            </div>
+          </NuxtLink>
+        </div>
+
+        <!-- No deadlines state -->
+        <div v-else class="px-3 pb-3">
+          <p class="text-sm text-muted-foreground">No upcoming deadlines.</p>
         </div>
       </div>
 

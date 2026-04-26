@@ -1,19 +1,28 @@
 <template>
+  <!-- Mobile top bar (visible below xs breakpoint) -->
   <div class="flex flex-col w-full xs:hidden">
     <div class="flex flex-row w-full items-center justify-between p-3 gap-3 border-b">
-      <Button @click="goBackOrHome" size="icon" variant="outline">
+      <Button @click="goBackOrHome" size="icon" variant="outline" aria-label="Go back">
         <ArrowLeft class="size-4"/>
       </Button>
 
-      <div class="flex flex-row relative w-full">
-        <marquee class="text-lg font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name || "Matter not found" }}</marquee>
-        <div class="h-full w-5 absolute right-0 top-0 bg-gradient-to-l from-background to-transparent"></div>
+      <div class="flex flex-row relative w-full min-w-0">
+        <p
+          class="text-lg font-semibold ibm-plex-serif truncate"
+          :title="currentMatterOrApplication?.name || 'Matter not found'"
+        >
+          {{ currentMatterOrApplication?.name || "Matter not found" }}
+        </p>
       </div>
 
       <div class="flex flex-row gap-2 items-center">
         <SharedDarkModeSwitch/>
 
-        <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="matter">
+        <SharedMattersMemberManagement
+          v-if="isSupervisor && currentUser?.organisation !== ''"
+          @updated="reloadMatter"
+          :matter="matter"
+        >
           <SharedAvatarStack :members="matter?.expand?.members" :max-visible="3"/>
         </SharedMattersMemberManagement>
       </div>
@@ -27,14 +36,14 @@
   <div v-else-if="!(currentMatterOrApplication?.id)" class="flex flex-col w-full h-full items-center">
     <div class="flex flex-col w-full lg:flex-row items-center justify-center lg:w-[95vw] h-full lg:border-x lg:divide-x">
       <div class="flex flex-col text-center p-3 items-center gap-2 lg:gap-4 max-w-sm">
-        <XCircle class="size-32 text-muted-foreground mb-5" />
-        <span class="ibm-plex-serif text-2xl lg:text-3xl font-semibold">Matter Not Found!</span>
+        <XCircle class="size-32 text-muted-foreground mb-5" aria-hidden="true"/>
+        <span class="ibm-plex-serif text-2xl lg:text-3xl font-semibold">Matter Not Found</span>
         <span class="text-muted-foreground">The matter you're looking for doesn't exist or may have been deleted.</span>
 
         <div class="flex gap-2 items-center">
-          <Button variant="outline" @click="$router.go(-1)"><ChevronLeft /> Go Back</Button>
+          <Button variant="outline" @click="goBackOrHome"><ChevronLeft /> Go Back</Button>
 
-          <CreateMatter @created="m => $router.push(`/main/matters`)">
+          <CreateMatter @created="() => $router.push('/main/matters')">
             <Button><Plus /> Create a new matter</Button>
           </CreateMatter>
         </div>
@@ -52,20 +61,22 @@
         </div>
 
         <div class="flex flex-row flex-wrap w-full items-center gap-2 p-3">
-          <SharedMattersMemberManagement v-if="isSupervisor && getSignedInUser()?.organisation !== ''" @updated="reloadMatter" :matter="currentMatterOrApplication">
+          <SharedMattersMemberManagement
+            v-if="isSupervisor && currentUser?.organisation !== ''"
+            @updated="reloadMatter"
+            :matter="currentMatterOrApplication"
+          >
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
               Assigned Lawyers
-              <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">{{
-                  matter.expand.members.length
-                }}
+              <Badge v-if="matter?.expand?.members?.length > 0" variant="secondary">
+                {{ matter.expand.members.length }}
               </Badge>
             </Button>
           </SharedMattersMemberManagement>
 
           <SharedMattersOpposingCounselMatterOpposingCounsel @updated="reloadMatter" :matter="currentMatterOrApplication"/>
-
-          <SharedMattersCourtOfficersMatterCourtOfficers @updated="reloadMatter" :matter="currentMatterOrApplication" />
+          <SharedMattersCourtOfficersMatterCourtOfficers @updated="reloadMatter" :matter="currentMatterOrApplication"/>
 
           <div v-if="currentMatterOrApplication?.parties">
             <SharedMattersMatterParties :matter="currentMatterOrApplication"/>
@@ -76,18 +87,19 @@
           <div class="flex flex-row flex-wrap gap-1 items-center">
             <Tabs default-value="all" v-model="currentApplicationOption">
               <TabsList class="gap-2 items-center">
-                <TabsTrigger value="all">
-                  All
-                </TabsTrigger>
+                <TabsTrigger value="all">All</TabsTrigger>
 
-                <TabsTrigger v-for="application in matter?.expand?.applications" :value="application?.id">
+                <TabsTrigger
+                  v-for="application in matter?.expand?.applications"
+                  :key="application.id"
+                  :value="application.id"
+                >
                   {{ application.caseNumber }}
                 </TabsTrigger>
 
                 <SharedMattersCreateMatterCreateApplication :parent-matter="matter">
                   <Button size="sm">
                     <Plus />
-
                     Add Application
                   </Button>
                 </SharedMattersCreateMatterCreateApplication>
@@ -98,93 +110,109 @@
 
         <Separator />
 
-        <div v-if="matter?.expand?.events?.length > 0" class="lg:hidden">
-          <div class="flex flex-col p-3">
-            <div class="border text-left flex flex-col gap-1 bg-muted p-2 rounded-lg">
-              <span class="ibm-plex-serif font-semibold">{{ matter?.expand?.events?.at(0)?.input_prompt }} (and {{ matter?.expand?.events?.length - 1 }} other{{matter?.expand?.events?.length - 1 > 1 ? 's' : '' }})</span>
-
-              <Drawer>
-                <DrawerTrigger class="w-fit">
-                  <Button size="sm" variant="outline" class="w-fit">Manage Events</Button>
-                </DrawerTrigger>
-
-                <DrawerContent>
-                  <DialogHeader>
-                  </DialogHeader>
-                </DrawerContent>
-              </Drawer>
-            </div>
+        <!-- Mobile deadline summary (the desktop sidebar is hidden on mobile) -->
+        <div
+          v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
+          class="lg:hidden flex flex-col gap-3 p-3"
+        >
+          <div v-if="latestDeadline" class="border rounded-lg p-3 bg-muted flex flex-col gap-1">
+            <span class="text-sm font-semibold ibm-plex-serif">Upcoming Deadline</span>
+            <span
+              class="text-sm italic text-muted-foreground ibm-plex-serif"
+              v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
+            ></span>
           </div>
 
-          <Separator />
+          <div
+            v-if="missedDeadlines.length > 0"
+            class="border border-destructive/30 rounded-lg p-3 bg-destructive/5 flex flex-col gap-1"
+          >
+            <span class="text-sm font-semibold ibm-plex-serif">
+              {{ missedDeadlines.length }} Missed Deadline{{ missedDeadlines.length !== 1 ? 's' : '' }}
+            </span>
+            <template v-for="missed in missedDeadlines" :key="missed.id">
+              <span
+                class="text-sm italic text-muted-foreground ibm-plex-serif"
+                v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
+              ></span>
+            </template>
+          </div>
+
+          <div v-if="pendingEvents.length > 0">
+            <Drawer>
+              <DrawerTrigger as-child>
+                <Button size="sm" variant="outline" class="w-full">
+                  <CalendarIcon class="size-4"/>
+                  {{ pendingEvents.length }} Key Event{{ pendingEvents.length !== 1 ? 's' : '' }} Pending
+                </Button>
+              </DrawerTrigger>
+
+              <DrawerContent>
+                <div class="flex flex-col gap-4 p-4 pb-8">
+                  <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
+                  <div v-for="event in pendingEvents" :key="event.id" class="flex flex-col gap-2">
+                    <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
+                    <SharedEventsCompleteEvent @updated="reloadMatter" :event="event">
+                      <Button size="sm" class="w-fit">
+                        <CalendarIcon class="size-3"/>
+                        Set Date
+                      </Button>
+                    </SharedEventsCompleteEvent>
+                  </div>
+                </div>
+              </DrawerContent>
+            </Drawer>
+          </div>
         </div>
 
+        <Separator
+          class="lg:hidden"
+          v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
+        />
+
         <div class="flex flex-col w-full p-3">
-          <SharedMattersMatterTimeline @updated="reloadMatter" @deadline-selected="id => onEventClick({ id: id })"  :matter="matter" :application-filter="currentApplicationOption"/>
+          <SharedMattersMatterTimeline
+            @updated="reloadMatter"
+            :matter="matter"
+            :application-filter="currentApplicationOption"
+          />
         </div>
       </div>
 
+      <!-- Desktop sidebar -->
       <div class="hidden lg:flex flex-col max-w-sm w-full h-full gap-5 p-3">
         <div class="flex flex-col" v-if="latestDeadline">
           <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
           <span
-              class="text-sm italic text-muted-foreground ibm-plex-serif"
-              v-html="
-                latestDeadline.pending_prompt
-                  .replace(
-                    '<<date>>',
-                    `<b class='text-foreground'>${dayjs(latestDeadline.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).format('D MMM YYYY')}</b>`
-                  )
-                  .replace(
-                    '<<from_now>>',
-                    `<b class='text-foreground'>${dayjs(latestDeadline.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).fromNow()}</b>`
-                  )
-              "
+            class="text-sm italic text-muted-foreground ibm-plex-serif"
+            v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
           ></span>
         </div>
 
         <div class="flex flex-col" v-if="latestDeadline">
           <span class="text-lg font-semibold ibm-plex-serif">Missed Deadlines</span>
-          <span v-if="missedDeadlines.length > 0" v-for="deadline in missedDeadlines"
+          <template v-if="missedDeadlines.length > 0">
+            <span
+              v-for="missed in missedDeadlines"
+              :key="missed.id"
               class="text-sm italic text-muted-foreground ibm-plex-serif"
-              v-html="
-                deadline.overdue_prompt
-                  .replace(
-                    '<<date>>',
-                    `<b class='text-foreground'>${dayjs(deadline.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).format('D MMM YYYY')}</b>`
-                  )
-                  .replace(
-                    '<<from_now>>',
-                    `<b class='text-foreground'>${dayjs(deadline.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).fromNow()}</b>`
-                  )
-              "
-          ></span>
-
+              v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
+            ></span>
+          </template>
           <span class="text-sm text-muted-foreground mx-auto p-3" v-else>No Missed Deadlines</span>
         </div>
 
-        <div v-if="matter?.expand?.events?.filter(e => e.status === 'pending')?.length > 0" class="flex flex-col gap-5">
+        <div v-if="pendingEvents.length > 0" class="flex flex-col gap-5">
           <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
-
-
-          <div v-for="event in matter?.expand?.events?.filter(e => e.status === 'pending')" class="flex flex-col gap-3">
+          <div v-for="event in pendingEvents" :key="event.id" class="flex flex-col gap-3">
             <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
-            <SharedEventsCompleteEvent @updated="reloadMatter"  :event="event">
+            <SharedEventsCompleteEvent @updated="reloadMatter" :event="event">
               <Button size="sm" class="w-fit">
                 <CalendarIcon class="size-3"/>
                 Set Date
               </Button>
             </SharedEventsCompleteEvent>
           </div>
-
         </div>
       </div>
     </div>
@@ -198,187 +226,96 @@ import {
   Loader,
   CalendarIcon,
   XCircle,
-  Gavel,
-  CheckCircle,
-  Clock,
-  Bell,
-  Scale,
   ArrowLeft,
-  Proportions,
-  LogOut,
   Users,
-  MessageSquare
 } from 'lucide-vue-next';
 import {
   subscribeToDeadline,
   subscribeToMatter,
   unsubscribeToAllDeadlines,
   unsubscribeToDeadline,
-  unsubscribeToMatter
+  unsubscribeToMatter,
 } from '~/services/matters';
 import { useDebounceFn } from '@vueuse/core';
-import {useMattersStore} from '~/stores/matters';
+import { useMattersStore } from '~/stores/matters';
 import dayjs from 'dayjs';
-import {Calendar} from '@/components/ui/calendar_enhanced';
 import timezone from 'dayjs/plugin/timezone';
-import utc from 'dayjs/plugin/timezone';
-import relativeTime from "dayjs/plugin/relativeTime";
-import {toast} from 'vue-sonner';
-import AdjournDeadline from '~/components/shared/Deadline/AdjournDeadline/AdjournDeadline.vue';
-import {getSignedInUser, signOut} from "~/services/auth/index.js";
-import CreateMatter from "~/components/shared/Matters/CreateMatter/CreateMatter.vue";
-
-const mattersStore = useMattersStore();
-
-const viewDeadlineOpen = ref(false);
-const deadline = ref(null);
-const d_index = ref(0);
-
-const actionExpanded = ref(false);
-const query = useRoute().query;
-const showChat = ref(false);
-const mobileChatOpen = ref(false);
-
-const currentApplicationOption = ref("all");
-
-const currentMatterOrApplication = computed(() => {
-  return currentApplicationOption.value === "all" ? matter.value : matter.value?.expand?.applications?.find(ap => ap.id === currentApplicationOption.value);
-});
-
-const latestDeadline = computed(() => {
-  return currentMatterOrApplication?.value?.expand?.deadlines?.filter(d => d.status === 'pending')?.sort((a, b) => new Date(a.date) - new Date(b.date))?.at(0) || null;
-});
-
-const missedDeadlines = computed(() => {
-  return currentMatterOrApplication?.value?.expand?.deadlines?.filter(d => (new Date(d.date) < new Date() && d.status != "fulfilled"))?.sort((a, b) => new Date(a.date) - new Date(b.date)) || [];
-});
-
-const signOutUser = () => {
-  signOut();
-  window.location.reload();
-}
+import utc from 'dayjs/plugin/utc';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import { getSignedInUser } from '~/services/auth/index.js';
+import CreateMatter from '~/components/shared/Matters/CreateMatter/CreateMatter.vue';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(relativeTime);
 
-const selectedDeadline = ref(null);
-
-// Check if current user is a supervisor
-const isSupervisor = computed(() => {
-  const userId = getSignedInUser()?.id;
-  if (!userId || !matter.value) return false;
-  return matter.value.supervisors?.includes(userId) || false;
-});
-
-const toggleDeadlineView = (deadlineId) => {
-  console.log(deadlineId);
-  const _deadline = matter.value.expand.deadlines.find(d => d.id === deadlineId);
-
-  if (_deadline) {
-    deadline.value = _deadline;
-    d_index.value = matter.value.expand.deadlines?.indexOf(_deadline);
-    viewDeadlineOpen.value = true;
-  }
-}
-
-const onEventClick = (event) => {
-  selectedDeadline.value = matter?.value?.expand?.deadlines.filter(d => d.id === event.id).at(0) || null;
-}
-
-function toISO(input) {
-  const d = toDate(input)
-
-  if (d) {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
-
-  return '';
-}
-
-const updateDate = (date) => {
-  const deadlineMatch = matter?.value.expand?.deadlines?.filter((d) => {
-    return toISO(d.date) === toISO(date.date);
-  });
-
-  if (deadlineMatch.length > 0) {
-    selectedDeadline.value = deadlineMatch.at(0);
-  } else {
-    selectedDeadline.value = null;
-  }
-}
-
-function toDate(input) {
-  if (!input) return undefined
-  if (input instanceof Date) return new Date(input)
-  const d = new Date(input)
-  if (Number.isNaN(d.getTime())) return undefined
-  return d
-}
-
-
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'no-mobile-nav',
 });
 
-
+const mattersStore = useMattersStore();
+const currentApplicationOption = ref('all');
 const matter = ref(null);
 const isInitialLoad = ref(true);
-
-
-const mockEvents = computed(() => {
-  const accentMap = [
-    'accent-1',
-    'accent-2',
-    'accent-3',
-    'accent-4'
-  ];
-
-  return matter?.value?.expand?.deadlines?.map((d, accentIndex) => {
-    return {
-      id: d.id,
-      date: d.date,
-      title: d.name,
-      color: accentMap[accentIndex % 4],
-      completed: d.completed,
-      index: accentIndex
-    }
-  });
-})
-
-// Track which deadline IDs we are currently subscribed to
 const subscribedDeadlineIds = ref(new Set());
 
-// Debounced reload – collapses rapid bursts from multiple simultaneous
-// subscription events (matter update + several deadline updates) into a
-// single fetch that runs 300 ms after the last event fires.
+const currentUser = computed(() => getSignedInUser());
+
+const currentMatterOrApplication = computed(() => {
+  return currentApplicationOption.value === 'all'
+    ? matter.value
+    : matter.value?.expand?.applications?.find(ap => ap.id === currentApplicationOption.value);
+});
+
+const latestDeadline = computed(() => {
+  return currentMatterOrApplication.value?.expand?.deadlines
+    ?.filter(d => d.status === 'pending')
+    ?.sort((a, b) => new Date(a.date) - new Date(b.date))
+    ?.at(0) ?? null;
+});
+
+const missedDeadlines = computed(() => {
+  return currentMatterOrApplication.value?.expand?.deadlines
+    ?.filter(d => new Date(d.date) < new Date() && d.status !== 'fulfilled')
+    ?.sort((a, b) => new Date(a.date) - new Date(b.date)) ?? [];
+});
+
+const pendingEvents = computed(() => {
+  return matter.value?.expand?.events?.filter(e => e.status === 'pending') ?? [];
+});
+
+const isSupervisor = computed(() => {
+  const userId = currentUser.value?.id;
+  if (!userId || !matter.value) return false;
+  return matter.value.supervisors?.includes(userId) ?? false;
+});
+
+const formatDeadlinePrompt = (prompt, date) => {
+  if (!prompt) return '';
+  const tz = currentUser.value?.timezone;
+  const d = tz ? dayjs(date).tz(tz) : dayjs(date);
+  return prompt
+    .replace('<<date>>', `<b class="text-foreground">${d.format('D MMM YYYY')}</b>`)
+    .replace('<<from_now>>', `<b class="text-foreground">${d.fromNow()}</b>`);
+};
+
 const debouncedReloadMatter = useDebounceFn(async () => {
   try {
-    console.log("Matter updating! Forcing reload!");
     const matterId = useRoute().params.matterId;
-    // Force-bypass cache so we always get fresh data from the backend
     const fresh = await mattersStore.fetchMatter(matterId, {
       forceRefresh: true,
-      showLoading: false
+      showLoading: false,
     });
     matter.value = fresh;
-    console.log("Updated!");
-
-    // Re-subscribe to any deadlines that were added since the last load
     syncDeadlineSubscriptions();
   } catch (e) {
     console.error(e);
   }
 }, 300);
 
-// Keep deadline subscriptions in sync with the current matter.deadlines list
 const syncDeadlineSubscriptions = () => {
   const currentIds = new Set(matter.value?.deadlines ?? []);
 
-  // Subscribe to deadlines we haven't subscribed to yet
   for (const id of currentIds) {
     if (!subscribedDeadlineIds.value.has(id)) {
       subscribeToDeadline(id, debouncedReloadMatter);
@@ -386,7 +323,6 @@ const syncDeadlineSubscriptions = () => {
     }
   }
 
-  // Unsubscribe from deadlines that are no longer part of this matter
   for (const id of subscribedDeadlineIds.value) {
     if (!currentIds.has(id)) {
       unsubscribeToDeadline(id);
@@ -396,41 +332,31 @@ const syncDeadlineSubscriptions = () => {
 };
 
 onMounted(async () => {
-  const matterId = useRoute().params.matterId;
+  const { params } = useRoute();
 
-  // Use store's cached fetch - will show cached data instantly if available
-  matter.value = await mattersStore.fetchMatter(matterId, {
-    showLoading: isInitialLoad.value
+  matter.value = await mattersStore.fetchMatter(params.matterId, {
+    showLoading: isInitialLoad.value,
   });
 
   isInitialLoad.value = false;
 
-  // Subscribe to real-time updates for the matter itself
-  subscribeToMatter(matter?.value?.id, debouncedReloadMatter);
-
-  // Subscribe to all current deadlines (and keep them in sync on reload)
+  subscribeToMatter(matter.value?.id, debouncedReloadMatter);
   syncDeadlineSubscriptions();
-
-  if (query?.deadline) {
-    selectedDeadline.value = matter.value?.expand?.deadlines?.find(d => d.id === query.deadline);
-  }
 });
 
 const reloadMatter = debouncedReloadMatter;
 
 onBeforeUnmount(() => {
-  unsubscribeToMatter(matter?.value?.id);
+  unsubscribeToMatter(matter.value?.id);
   unsubscribeToAllDeadlines();
   subscribedDeadlineIds.value.clear();
 });
 
 const goBackOrHome = () => {
   if (window.history.state.back) {
-    // There is history, so go back
-    useRouter().back()
+    useRouter().back();
   } else {
-    // No history (direct entry), go to main page
-    useRouter().push('/')
+    useRouter().push('/');
   }
-}
+};
 </script>
