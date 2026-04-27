@@ -218,7 +218,7 @@
                     <div v-else-if="matters?.items?.length === 0"
                         class="flex flex-col h-full w-full items-center justify-center">
                         <div class="flex flex-col items-center gap-4 max-w-xs text-center">
-                            <Scale class="size-16 text-muted-foreground/40" />
+                            <Scale class="size-16 text-muted-foreground opacity-40" />
                             <div class="flex flex-col gap-1">
                                 <span class="font-semibold text-foreground">No matters yet</span>
                                 <span class="text-sm text-muted-foreground">Add your first matter to start tracking litigation deadlines.</span>

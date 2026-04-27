@@ -82,9 +82,6 @@
                       <PinInputGroup>
                         <template :key="i" v-for="i in 8">
                           <PinInputSlot :index="i - 1" />
-                          <template v-if="i === 4">
-                            <PinInputSeparator />
-                          </template>
                         </template>
                       </PinInputGroup>
                     </PinInput>

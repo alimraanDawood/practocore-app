@@ -1,375 +1,445 @@
 <template>
-  <div v-if="matter !== null" class="flex flex-col">
+  <!-- Loaded state -->
+  <div v-if="matter !== null" class="flex flex-col gap-4">
+
+    <!-- Filter bar -->
+    <div class="flex flex-row gap-1">
+      <button
+        v-for="tab in filterTabs"
+        :key="tab.value"
+        @click="activeFilter = tab.value"
+        class="flex flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150"
+        :class="activeFilter === tab.value
+          ? 'bg-foreground text-background'
+          : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
+      >
+        {{ tab.label }}
+        <span
+          class="text-xs rounded-md px-1 py-0.5 tabular-nums font-semibold leading-none"
+          :class="activeFilter === tab.value ? 'bg-background/20 text-background' : 'bg-muted text-muted-foreground'"
+        >{{ tab.count }}</span>
+      </button>
+    </div>
+
+    <!-- Timeline -->
     <div class="flex flex-col">
-      <!-- Trigger Date Node at the start -->
-      <div class="flex flex-row text-left group">
-        <div class="flex flex-col px-2 items-center">
-          <div
-              class="size-8 bg-primary/20 shrink-0 rounded-full grid place-items-center border-2 border-primary"
-          >
-            <CalendarIcon class="size-4 text-primary"/>
+
+      <!-- Trigger date node -->
+      <div class="flex flex-row">
+        <div class="flex flex-col items-center w-9 shrink-0">
+          <div class="size-7 bg-primary/15 rounded-full grid place-items-center border-2 border-primary shrink-0">
+            <CalendarIcon class="size-3 text-primary"/>
           </div>
-          <div class="w-1 h-full bg-primary"></div>
+          <div class="w-0.5 flex-1 min-h-5 bg-border mt-0.5"></div>
         </div>
+        <div class="flex flex-col py-1 pb-3 pl-2 gap-0.5">
+          <span class="text-sm font-semibold ibm-plex-serif leading-snug">{{ matter?.triggerDateName || 'Trigger Date' }}</span>
+          <span class="text-xs text-muted-foreground">
+            {{ dayjs(matter.triggerDate).format('D MMM YYYY') }}
+          </span>
+        </div>
+      </div>
 
-        <div class="flex flex-col w-full p-2 pb-8 gap-2">
-          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-            <div class="flex flex-col lg:flex-row lg:items-center gap-2">
-              <span class="font-semibold ibm-plex-serif">{{ matter?.triggerDateName || 'Trigger Date' }}</span>
-              <span class="text-sm text-muted-foreground">
-                {{
-                  dayjs(matter.triggerDate, {
-                    timezone: getSignedInUser()?.timezone,
-                  }).format("D MMM YYYY")
-                }}
-              </span>
-            </div>
-
-            <SharedMattersChangeTriggerDate v-if="isSupervisor && false" :matter="matter" @updated="emits('updated')">
-              <button class="rounded bg-primary/10 text-primary px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-primary/20 transition-colors">
-                <CalendarIcon class="size-3"/>
-                Change Date
-              </button>
-            </SharedMattersChangeTriggerDate>
+      <!-- Empty state: all caught up -->
+      <div
+        v-if="activeFilter === 'active' && filteredDeadlines.length === 0 && doneCount > 0"
+        class="flex flex-col items-start pl-2 py-4 gap-2"
+      >
+        <div class="flex flex-row items-center gap-2">
+          <div class="size-7 rounded-full bg-primary/10 grid place-items-center shrink-0">
+            <CheckCheck class="size-3.5 text-primary"/>
+          </div>
+          <div class="flex flex-col pl-2">
+            <span class="text-sm font-medium">All caught up</span>
+            <span class="text-xs text-muted-foreground">
+              {{ doneCount }} deadline{{ doneCount !== 1 ? 's' : '' }} completed
+              <button @click="activeFilter = 'done'" class="text-primary hover:underline ml-1">View</button>
+            </span>
           </div>
         </div>
       </div>
 
-      <div v-for="(deadline, index) in deadlines" :key="deadline.id" class="flex flex-row text-left hover:bg-muted/30 group">
-        <div class="flex flex-col px-2 items-center">
-          <div class="w-1 h-5 bg-muted group-first:opacity-0" :class="{ 'bg-primary': deadline.status === 'fulfilled' }"></div>
-          <div class="size-8 bg-muted shrink-0 rounded-full grid place-items-center" :class="{'bg-primary text-primary-foreground border-0': deadline.status === 'fulfilled'}">
-            <template v-if="deadline.collectionName === 'Deadlines'">
-              <CalendarCheck v-if="deadline.status === 'fulfilled'" class="size-4"/>
-              <CalendarClock v-else class="size-4"/>
-            </template>
-
-            <Asterisk v-else class="size-4"/>
+      <!-- Deadline items -->
+      <div
+        v-for="(deadline, index) in filteredDeadlines"
+        :key="deadline.id"
+        class="flex flex-row"
+      >
+        <!-- Left: connecting lines + status node -->
+        <div class="flex flex-col items-center w-9 shrink-0">
+          <div
+            class="w-0.5 h-5 shrink-0"
+            :class="lineClass(deadline)"
+          ></div>
+          <div
+            class="size-7 shrink-0 rounded-full grid place-items-center transition-colors duration-200"
+            :class="nodeClass(deadline)"
+          >
+            <component :is="nodeIconComponent(deadline)" class="size-3.5"/>
           </div>
           <div
-              class="w-1 h-full bg-muted group-last:opacity-0"
-              :class="{ 'bg-primary': deadline.status === 'fulfilled' }"
+            class="w-0.5 flex-1 min-h-4"
+            :class="index === filteredDeadlines.length - 1 ? 'opacity-0' : lineClass(deadline)"
           ></div>
         </div>
 
-        <div v-if="deadline.collectionName === 'Deadlines'" class="flex flex-col text-left w-full p-2 pb-8 gap-2">
-          <div class="flex flex-row items-center justify-between gap-2">
-            <div class="flex flex-col gap-1 flex-1">
-              <div v-if="deadline?.application" class="flex flex-row gap-2">
-                <Badge variant="outline">Application</Badge>
+        <!-- Right: compact row + expandable detail -->
+        <div class="flex flex-col flex-1 min-w-0 pl-2">
 
-                <Badge variant="secondary">{{ matter?.expand?.applications?.find(a => a.id === deadline?.application)?.type }}</Badge>
+          <!-- Clickable compact row -->
+          <button
+            class="flex flex-row items-center gap-2 py-1.5 w-full text-left rounded-lg hover:bg-muted/50 transition-colors duration-100 group -ml-1 pl-1 pr-1"
+            @click="toggleExpand(deadline.id)"
+          >
+            <div class="flex flex-col flex-1 min-w-0">
+              <!-- Application context -->
+              <div v-if="deadline.application" class="flex flex-row items-center gap-1 mb-0.5">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">App</span>
+                <span class="text-[10px] text-muted-foreground">·</span>
+                <span class="text-[10px] text-muted-foreground truncate">
+                  {{ matter?.expand?.applications?.find(a => a.id === deadline.application)?.type }}
+                </span>
               </div>
 
-              <button
-                  @click="$emit('deadlineSelected', deadline.id)"
-                  class="text-left w-fit font-semibold ibm-plex-serif underline hover:text-primary"
-              >
-                {{ deadline.name }}
-              </button>
-              <!-- Party Context Badge (if party-specific deadline) -->
-              <div v-if="deadline.party_context" class="flex items-center gap-1">
-                <Badge variant="outline" class="text-xs gap-1">
-                  <User class="size-3"/>
-                  {{ deadline.party_context.party_name }}
-                </Badge>
-                <Badge variant="secondary" class="text-xs">
-                  {{ formatPartyType(deadline.party_context.party_type) }}
-                </Badge>
+              <span
+                class="text-sm font-medium leading-snug truncate"
+                :class="deadline.status === 'fulfilled' ? 'text-muted-foreground' : 'text-foreground'"
+              >{{ deadline.name }}</span>
+
+              <div v-if="deadline.party_context" class="flex flex-row items-center gap-1 mt-0.5">
+                <User class="size-2.5 text-muted-foreground shrink-0"/>
+                <span class="text-[10px] text-muted-foreground truncate">{{ deadline.party_context.party_name }}</span>
               </div>
             </div>
-          </div>
 
-          <template v-if="!(deadline.status === 'fulfilled')">
-            <span
+            <!-- Date / urgency -->
+            <div class="flex flex-col items-end gap-0.5 shrink-0">
+              <span class="text-xs font-semibold tabular-nums" :class="urgencyTextClass(deadline)">
+                {{ deadlineDateDisplay(deadline) }}
+              </span>
+              <span class="text-[10px] text-muted-foreground">{{ dayjs(deadline.date).format('D MMM') }}</span>
+            </div>
+
+            <ChevronDown
+              class="size-3.5 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-all duration-150"
+              :class="isExpanded(deadline.id) ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <!-- Expanded detail -->
+          <div v-if="isExpanded(deadline.id)" class="flex flex-col gap-3 pb-5 pt-1 pr-1">
+
+            <!-- Fulfilled deadline -->
+            <template v-if="deadline.status === 'fulfilled'">
+              <p
+                v-if="deadline.fulfilled_prompt"
                 class="text-sm italic text-muted-foreground ibm-plex-serif"
-                v-html="
-                deadline.pending_prompt
-                  .replace(
-                    '<<date>>',
-                    `<b class='text-foreground'>${dayjs(deadline.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).format('D MMM YYYY')}</b>`
-                  )
-                  .replace(
-                    '<<from_now>>',
-                    `<b class='text-foreground'>${dayjs(deadline.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).fromNow()}</b>`
-                  )
-              "
-            ></span>
+                v-html="deadline.fulfilled_prompt.replace('<<date>>', `<b class='text-foreground'>${dayjs(deadline.date).format('D MMM YYYY')}</b>`)"
+              ></p>
+              <div class="flex flex-row gap-2 flex-wrap">
+                <SharedDeadlineCompleteDeadline @updated="emits('updated')" :deadline="deadline">
+                  <Button size="sm" variant="outline">
+                    <CalendarIcon class="size-3"/>
+                    {{ dayjs(deadline.date).format('D MMM YYYY') }}
+                  </Button>
+                </SharedDeadlineCompleteDeadline>
+              </div>
+            </template>
 
-            <div class="flex flex-col lg:flex-row gap-2 lg:items-center">
-              <span v-if="!deadline.disableFulfill" class="text-sm text-muted-foreground">{{
-                  deadline.input_prompt
-                }}</span>
+            <!-- Pending deadline (Deadlines collection) -->
+            <template v-else-if="deadline.collectionName === 'Deadlines'">
+              <p
+                v-if="deadline.pending_prompt"
+                class="text-sm italic text-muted-foreground ibm-plex-serif"
+                v-html="deadline.pending_prompt
+                  .replace('<<date>>', `<b class='text-foreground'>${dayjs(deadline.date).format('D MMM YYYY')}</b>`)
+                  .replace('<<from_now>>', `<b class='text-foreground'>${dayjs(deadline.date).fromNow()}</b>`)"
+              ></p>
 
-              <div class="flex flex-row items-center gap-2 flex-wrap">
+              <p v-if="deadline.input_prompt && !deadline.disableFulfill" class="text-sm text-muted-foreground">
+                {{ deadline.input_prompt }}
+              </p>
+
+              <div class="flex flex-row gap-2 flex-wrap">
                 <SharedDeadlineCompleteDeadline
-                    v-if="!deadline?.disableFulfill"
-                    @updated="emits('updated')"
-                    :deadline="deadline"
+                  v-if="!deadline.disableFulfill"
+                  @updated="emits('updated')"
+                  :deadline="deadline"
                 >
-                  <button
-                      class="border bg-muted px-2 p-1 flex flex-row items-center gap-1 text-xs w-fit"
-                  >
+                  <Button size="sm">
                     <CalendarIcon class="size-3"/>
                     Set Date
-                  </button>
+                  </Button>
                 </SharedDeadlineCompleteDeadline>
 
                 <AdjournDeadline @updated="emits('updated')" :deadline="deadline">
-                  <button
-                      class="rounded bg-secondary text-secondary-foreground px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit"
-                  >
-                    Adjourn Deadline
-                  </button>
+                  <Button size="sm" variant="outline">Adjourn</Button>
                 </AdjournDeadline>
               </div>
-            </div>
-          </template>
+            </template>
 
-          <div v-else class="flex flex-row flex-wrap gap-2">
-            <span
+            <!-- Event record (not a Deadline) -->
+            <template v-else>
+              <p
+                v-if="deadline.fulfilled_prompt"
                 class="text-sm italic text-muted-foreground ibm-plex-serif"
-                v-html="deadline.fulfilled_prompt.replace('<<date>>', ``)"
-            ></span>
+                v-html="deadline.fulfilled_prompt.replace('<<date>>', `<b class='text-foreground'>${dayjs(deadline.date).format('D MMM YYYY')}</b>`)"
+              ></p>
+              <div>
+                <SharedEventsCompleteEvent :event="deadline" @updated="emits('updated')">
+                  <Button size="sm">
+                    <CalendarIcon class="size-3"/>
+                    Set Date
+                  </Button>
+                </SharedEventsCompleteEvent>
+              </div>
+            </template>
 
-            <SharedDeadlineCompleteDeadline
-                @updated="emits('updated')"
-                :deadline="deadline"
-            >
-              <button
-                  @click="(e) => e.stopPropagation()"
-                  class="border bg-muted px-2 py-1 inline-flex items-center gap-1 text-xs align-baseline"
-              >
-                <CalendarIcon class="size-3"/>
-                {{
-                  dayjs(deadline.date, {utc: true}).format("D MMM YYYY")
-                }}
-              </button>
-            </SharedDeadlineCompleteDeadline>
-
-            <button
-                v-if="isSupervisor && false"
-                @click="handleResetDeadline(deadline)"
-                class="rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 px-2 p-1 flex flex-row items-center gap-1 text-xs font-semibold w-fit hover:bg-amber-500/20 transition-colors"
-            >
-              <RotateCcw class="size-3"/>
-              Reset
-            </button>
-          </div>
-
-          <div class="flex flex-col gap-2 mt-5">
+            <!-- Adjournment history -->
             <div
-                v-for="adjournment in deadline?.expand?.adjournments?.sort(
-                (a1, a2) => {
-                  return new Date(a1.from) - new Date(a2.from);
-                }
-              )"
-                class="flex flex-col gap-1 text-xs"
+              v-if="deadline.expand?.adjournments?.length > 0"
+              class="flex flex-col gap-2 border-t border-border/60 pt-2"
             >
               <div
-                  class="flex flex-row font-semibold ibm-plex-serif gap-2 items-center"
+                v-for="adj in [...(deadline.expand.adjournments)].sort((a, b) => new Date(a.from) - new Date(b.from))"
+                :key="adj.id"
+                class="flex flex-col gap-0.5"
               >
-                <div class="flex flex-row items-center gap-1">
-                  <CalendarSync class="size-4"/>
-                  <span>Adjournment</span>
+                <div class="flex flex-row items-center gap-1.5 text-xs font-medium text-foreground">
+                  <CalendarSync class="size-3 text-muted-foreground shrink-0"/>
+                  <span class="text-muted-foreground">Adjourned</span>
+                  <span>{{ dayjs(adj.from).format('D MMM YYYY') }}</span>
+                  <ArrowRight class="size-3 text-muted-foreground shrink-0"/>
+                  <span>{{ dayjs(adj.to).format('D MMM YYYY') }}</span>
                 </div>
-
-                <span>{{
-                    dayjs(adjournment.from, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).format("D MMM YYYY")
-                  }}</span>
-                <ArrowRight class="size-3"/>
-                <span>{{
-                    dayjs(adjournment.to, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).format("D MMM YYYY")
-                  }}</span>
+                <p v-if="adj.reason" class="text-xs text-muted-foreground pl-4">{{ adj.reason }}</p>
               </div>
-              <span class="text-muted-foreground">{{ adjournment.reason }}</span>
             </div>
-          </div>
 
-          <SharedDeadlineAssignees
-              @click="(e) => e.stopPropagation()"
-              v-if="matterMembers.length > 0"
+            <!-- Assignees -->
+            <SharedDeadlineAssignees
+              v-if="matterMembers.length > 0 && deadline.collectionName === 'Deadlines'"
               :deadline-id="deadline.id"
               :current-assignees="deadline.assignees || []"
               :matter-members="matterMembers"
               :is-supervisor="isSupervisor"
               @updated="handleAssigneesUpdated"
-          />
-        </div>
-
-        <div v-else class="flex flex-col text-left w-full p-2 pb-8 gap-2">
-          <button class="text-left w-fit font-semibold ibm-plex-serif underline">
-            <span v-html="deadline?.fulfilled_prompt.replace('<<date>>', `<b class='text-foreground'>${dayjs(deadline.date, {timezone: getSignedInUser()?.timezone,}).format('D MMM YYYY')}</b>`)"></span>
-          </button>
-
-          <div class="flex flex-row">
-            <SharedEventsCompleteEvent :event="deadline" @updated="emits('updated')">
-              <button
-                  class="border bg-muted px-2 p-1 flex flex-row items-center gap-1 text-xs w-fit"
-              >
-                <CalendarIcon class="size-3"/>
-                Set Date
-              </button>
-            </SharedEventsCompleteEvent>
+            />
           </div>
         </div>
       </div>
+
     </div>
   </div>
 
-  <div v-else class="flex flex-col w-full">
-    <div
-        v-for="i in 5"
-        class="flex flex-row text-left hover:bg-muted/30 group animate-pulse"
-    >
-      <div class="flex flex-col px-2 items-center">
-        <div class="w-1 h-5 bg-muted group-first:opacity-0"></div>
-
-        <div
-            class="size-8 bg-muted shrink-0 rounded-full grid place-items-center"
-        ></div>
-
-        <div class="w-1 h-full bg-muted group-last:opacity-0"></div>
-      </div>
-      <div class="flex flex-col gap-2 w-full">
-        <div class="bg-muted w-full h-5 rounded"></div>
-
-        <div class="bg-muted w-full h-10 rounded"></div>
-
-        <div class="flex flex-row gap-3">
-          <div class="bg-muted w-24 h-5 rounded"></div>
-          <div class="bg-muted w-24 h-5 rounded"></div>
+  <!-- Loading skeleton -->
+  <div v-else class="flex flex-col gap-4 animate-pulse">
+    <div class="flex flex-row gap-1">
+      <div v-for="i in 3" :key="i" class="h-8 w-20 bg-muted rounded-lg"></div>
+    </div>
+    <div class="flex flex-col">
+      <div v-for="i in 5" :key="i" class="flex flex-row gap-0">
+        <div class="flex flex-col items-center w-9 shrink-0">
+          <div class="w-0.5 h-5 bg-muted"></div>
+          <div class="size-7 bg-muted rounded-full shrink-0"></div>
+          <div class="w-0.5 h-10 bg-muted"></div>
         </div>
-
-        <div class="bg-muted w-full h-10 rounded"></div>
+        <div class="flex flex-col gap-1.5 flex-1 pl-2 py-2">
+          <div class="h-4 bg-muted rounded w-3/5"></div>
+          <div class="h-3 bg-muted rounded w-1/4"></div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import {computed} from "vue";
+import { computed, ref, watch } from "vue";
 import {
-  Check,
-  Circle,
-  Dot,
   CalendarIcon,
   CalendarClock,
   CalendarCheck,
   ArrowRight,
   CalendarSync,
-  RotateCcw,
   User,
   Asterisk,
-  Plus
+  AlertTriangle,
+  Clock,
+  ChevronDown,
+  CheckCheck,
 } from "lucide-vue-next";
-import {Badge} from "@/components/ui/badge";
+import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
+import { pb } from "~/lib/pocketbase";
+import { resetDeadline } from "~/services/matters";
+import { toast } from "vue-sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
-import {getSignedInUser} from "~/services/auth";
-import {pb} from "~/lib/pocketbase";
-import {resetDeadline} from "~/services/matters";
-import {toast} from "vue-sonner";
 
 dayjs.extend(relativeTime);
 
 const props = defineProps(["matter", "applicationFilter"]);
-const emits = defineEmits(["updated", "deadlineSelected"]);
+const emits = defineEmits(["updated"]);
 
-// Format party type for display
-const formatPartyType = (type) => {
-  const typeMap = {
-    individual: "Individual",
-    corporate: "Corporate",
-    government: "Government",
-    other: "Other",
-  };
+// ── Filter state ─────────────────────────────────────────────────────────────
+const activeFilter = ref("active");
 
-  return typeMap[type] || type;
+// ── Expand/collapse state ─────────────────────────────────────────────────────
+const expandedSet = ref(new Set());
+
+const toggleExpand = (id) => {
+  const next = new Set(expandedSet.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  expandedSet.value = next;
 };
 
-// Get all matter members (owner + members array)
+const isExpanded = (id) => expandedSet.value.has(id);
+
+// ── All deadlines (same logic, bug fixed: '1-1-1' → safe ISO fallback) ───────
+const allDeadlines = computed(() => {
+  const EPOCH = "1970-01-01";
+  if (props.applicationFilter === "all" || !props.applicationFilter) {
+    return [
+      ...(props?.matter?.expand?.deadlines || []),
+      ...(props?.matter?.expand?.events?.filter((e) => e.status === "fulfilled") || []),
+      ...(props?.matter?.expand?.applications?.flatMap((app) => app?.expand?.deadlines || []) || []),
+    ]
+      .filter((d) => d.status !== "unavailable")
+      .sort((a, b) => new Date(a.date || EPOCH) - new Date(b.date || EPOCH));
+  }
+  return (
+    props?.matter?.expand?.applications
+      ?.find((ap) => ap.id === props.applicationFilter)
+      ?.expand?.deadlines?.filter((d) => d.status !== "unavailable") ?? []
+  );
+});
+
+// ── Filtered view ─────────────────────────────────────────────────────────────
+const filteredDeadlines = computed(() => {
+  if (activeFilter.value === "active") return allDeadlines.value.filter((d) => d.status !== "fulfilled");
+  if (activeFilter.value === "done") return allDeadlines.value.filter((d) => d.status === "fulfilled");
+  return allDeadlines.value;
+});
+
+const activeCount = computed(() => allDeadlines.value.filter((d) => d.status !== "fulfilled").length);
+const doneCount = computed(() => allDeadlines.value.filter((d) => d.status === "fulfilled").length);
+
+const filterTabs = computed(() => [
+  { value: "active", label: "Active", count: activeCount.value },
+  { value: "all", label: "All", count: allDeadlines.value.length },
+  { value: "done", label: "Done", count: doneCount.value },
+]);
+
+// Default to "all" when all deadlines are completed
+watch(
+  () => props.matter,
+  () => {
+    if (props.matter && activeCount.value === 0 && doneCount.value > 0) {
+      activeFilter.value = "all";
+    }
+  },
+  { immediate: true }
+);
+
+// ── Urgency helpers ───────────────────────────────────────────────────────────
+const urgencyOf = (deadline) => {
+  if (deadline.status === "fulfilled") return "done";
+  const days = dayjs(deadline.date).diff(dayjs(), "day");
+  if (days < 0) return "overdue";
+  if (days <= 7) return "urgent";
+  return "pending";
+};
+
+const nodeClass = (deadline) => {
+  const u = urgencyOf(deadline);
+  if (u === "done") return "bg-primary text-primary-foreground";
+  if (u === "overdue") return "bg-destructive/10 border-2 border-destructive text-destructive";
+  if (u === "urgent") return "bg-accent-warning/10 border-2 border-accent-warning text-accent-warning";
+  return "bg-muted border-2 border-border text-muted-foreground";
+};
+
+const lineClass = (deadline) => {
+  const u = urgencyOf(deadline);
+  if (u === "done") return "bg-primary/60";
+  if (u === "overdue") return "bg-destructive/30";
+  return "bg-border";
+};
+
+const urgencyTextClass = (deadline) => {
+  const u = urgencyOf(deadline);
+  if (u === "overdue") return "text-destructive";
+  if (u === "urgent") return "text-accent-warning";
+  if (u === "done") return "text-muted-foreground";
+  return "text-foreground";
+};
+
+const nodeIconComponent = (deadline) => {
+  if (deadline.collectionName !== "Deadlines") return Asterisk;
+  if (deadline.status === "fulfilled") return CalendarCheck;
+  const u = urgencyOf(deadline);
+  if (u === "overdue") return AlertTriangle;
+  if (u === "urgent") return Clock;
+  return CalendarClock;
+};
+
+const deadlineDateDisplay = (deadline) => {
+  if (deadline.status === "fulfilled") return dayjs(deadline.date).format("D MMM YYYY");
+  const days = dayjs(deadline.date).diff(dayjs(), "day");
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "Due today";
+  if (days === 1) return "Tomorrow";
+  if (days <= 7) return `${days} days`;
+  return dayjs(deadline.date).fromNow();
+};
+
+// ── Matter members ────────────────────────────────────────────────────────────
 const matterMembers = computed(() => {
   if (!props.matter) return [];
-
   const members = [];
-  const memberIds = new Set();
-
-  // Add owner
+  const seen = new Set();
   if (props.matter.expand?.owner) {
     members.push(props.matter.expand.owner);
-    memberIds.add(props.matter.expand.owner.id);
+    seen.add(props.matter.expand.owner.id);
   }
-
-  // Add explicit members
-  if (props.matter.expand?.members) {
-    props.matter.expand.members.forEach((member) => {
-      if (!memberIds.has(member.id)) {
-        members.push(member);
-        memberIds.add(member.id);
-      }
-    });
-  }
-
+  (props.matter.expand?.members || []).forEach((m) => {
+    if (!seen.has(m.id)) {
+      members.push(m);
+      seen.add(m.id);
+    }
+  });
   return members;
 });
 
-const deadlines = computed(() => {
-  // const baseList = matter?.expand?.deadlines?.sort((d1, d2) => { return new Date(d1.date) - new Date(d2.date); })
-  if(props.applicationFilter === "all" || !props.applicationFilter) {
-    return ([...(props?.matter?.expand?.deadlines || []), ...(props?.matter?.expand?.events?.filter(e => e.status === 'fulfilled')), ...(props?.matter?.expand?.applications?.flatMap(application => application?.expand?.deadlines) || [])]).sort((d1, d2) => { return new Date(d1.date ? d1.date : '1-1-1') - new Date(d2.date ? d2.date : '1-1-1' ); }).filter(d => d.status !== "unavailable");
-  }
-
-  return props?.matter?.expand?.applications.find(ap => ap.id === props?.applicationFilter)?.expand?.deadlines?.filter(d => d.status !== "unavailable") || [];
-});
-
-// Check if current user is a supervisor
 const isSupervisor = computed(() => {
   const userId = pb.authStore.record?.id;
-
   if (!userId || !props.matter) return false;
-
   return props.matter.supervisors?.includes(userId) || false;
 });
 
-// Handle assignee updates
 function handleAssigneesUpdated() {
   emits("updated");
 }
 
-// Handle deadline reset
+// Kept for future use when reset is re-enabled
 async function handleResetDeadline(deadline) {
   const confirmed = confirm(
-      `Are you sure you want to reset "${deadline.name}" to its template-calculated date? This will also recalculate any dependent deadlines.`
+    `Reset "${deadline.name}" to its template-calculated date? Dependent deadlines will also recalculate.`
   );
-
   if (!confirmed) return;
-
   try {
     const result = await resetDeadline(deadline.id);
-
     if (result.error) {
       toast.error(result.error);
     } else {
-      const oldDate = new Date(result.oldDate).toLocaleDateString();
-      const newDate = new Date(result.newDate).toLocaleDateString();
-
-      toast.success("Deadline reset successfully!", {
-        description: `Changed from ${oldDate} to ${newDate}`,
+      toast.success("Deadline reset", {
+        description: `${new Date(result.oldDate).toLocaleDateString()} → ${new Date(result.newDate).toLocaleDateString()}`,
       });
       emits("updated");
     }
-  } catch (error) {
-    console.error("Error resetting deadline:", error);
+  } catch {
     toast.error("Failed to reset deadline");
   }
 }

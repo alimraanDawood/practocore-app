@@ -30,7 +30,7 @@ onMounted(async () => {
   await dashboard.init();
   if (!hasCompletedTour()) {
     await nextTick();
-    welcomeTourGuide.value?.startTourGuide();
+    // welcomeTourGuide.value?.startTourGuide();
   }
 });
 
@@ -169,7 +169,6 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
 <template>
   <div class="flex flex-col w-full h-full items-center overflow-hidden">
     <TourGuideManager ref="welcomeTourGuide" :steps="tourSteps" @complete="onTourComplete" @skip="onTourComplete"/>
-
     <!-- Mobile header (hidden on xs+) -->
     <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
       <div class="flex flex-col">
@@ -223,6 +222,13 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
         </div>
       </div>
 
+      <!-- Onboarding checklist -->
+      <SharedOnboardingChecklist
+        :matter-count="statistics?.matters?.length ?? 0"
+        :fulfilled-deadline-count="statistics?.completedDeadlines ?? 0"
+        :is-loaded="!loading"
+      />
+
       <!-- Mobile pressing deadlines strip -->
       <div class="xs:hidden border-b">
         <div class="flex flex-row items-baseline gap-1.5 px-3 pt-3 pb-2">
@@ -238,14 +244,14 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
         </div>
 
         <!-- Deadline cards -->
-        <div v-else-if="pressingDeadlines.length > 0" class="flex flex-row gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3" style="scroll-snap-type: x mandatory;">
+        <div v-else-if="pressingDeadlines.length > 0" class="flex flex-row gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3 " style="scroll-snap-type: x mandatory; scroll-padding-left: 16px;">
           <NuxtLink
             v-for="dl in pressingDeadlines"
             :key="dl.id"
             :to="`/main/matters/matter/${dl.matterId}`"
-            class="flex flex-col justify-between shrink-0 rounded-xl border p-3 gap-2 active:opacity-80 transition-opacity duration-100"
+            class="flex flex-col justify-between w-[65vw] shrink-0 rounded-xl border p-3 gap-2 active:opacity-80 transition-opacity duration-100"
             :class="deadlineCardClasses(dl.date)"
-            style="width: 152px; min-height: 116px; scroll-snap-align: start;"
+            style="min-height: 116px; scroll-snap-align: start;"
           >
             <div class="flex flex-col gap-0.5">
               <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">{{ dl.matterName }}</span>
