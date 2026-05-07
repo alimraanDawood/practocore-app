@@ -6,14 +6,16 @@ pocketbase.autoCancellation(false);
 interface IndividualSubscriptionOptions {
     units: number;
     annual: boolean;
-    phone: string;
+    phone?: string;
+    paymentMethod?: 'MOBILE_MONEY' | 'CARD';
 }
 
 interface OrganisationSubscriptionOptions {
     seats: number;
     units: number;
     annual: boolean;
-    phone: string;
+    phone?: string;
+    paymentMethod?: 'MOBILE_MONEY' | 'CARD';
 }
 
 export async function getSubscription(subscriptionId: string, options: Object) {
@@ -65,6 +67,15 @@ export async function subscribeAsOrganisation(orgId: string, options: Organisati
             "Authorization": `Bearer ${pocketbase.authStore.token}`
         },
     });
+}
+
+export async function getCardSession(subscriptionId: string): Promise<{ redirect_url: string | null }> {
+    const endpoint = `${SERVER_URL}/api/subscriptions/${subscriptionId}/card-session`
+    return await fetch(endpoint, {
+        headers: {
+            "Authorization": `Bearer ${pocketbase.authStore.token}`
+        }
+    }).then(r => r.json());
 }
 
 export async function getActiveSubscription() {

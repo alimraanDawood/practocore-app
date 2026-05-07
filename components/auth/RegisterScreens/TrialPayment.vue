@@ -20,7 +20,48 @@
 
     <!-- Form -->
     <form @submit="onSubmit" class="flex flex-col gap-6">
-      <FormField v-slot="{ componentField }" name="phone">
+      <!-- Payment method tabs -->
+      <div class="grid grid-cols-3 gap-2">
+        <button
+            type="button"
+            class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs transition-all cursor-pointer"
+            :class="paymentMethod === 'MOBILE_MONEY'
+              ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
+            @click="paymentMethod = 'MOBILE_MONEY'"
+        >
+          <Smartphone class="size-4" />
+          <span class="font-medium">Mobile Money</span>
+          <span class="text-[10px] opacity-70">Airtel / MTN</span>
+        </button>
+        <button
+            type="button"
+            class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs transition-all cursor-pointer"
+            :class="paymentMethod === 'CARD'
+              ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
+            @click="paymentMethod = 'CARD'"
+        >
+          <CreditCard class="size-4" />
+          <span class="font-medium">Card</span>
+          <span class="text-[10px] opacity-70">Visa / Mastercard</span>
+        </button>
+        <button
+            type="button"
+            class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs transition-all cursor-pointer"
+            :class="paymentMethod === 'MANUAL'
+              ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
+            @click="paymentMethod = 'MANUAL'"
+        >
+          <Receipt class="size-4" />
+          <span class="font-medium">Manual</span>
+          <span class="text-[10px] opacity-70">Pay via invoice</span>
+        </button>
+      </div>
+
+      <!-- Mobile Money: phone input -->
+      <FormField v-if="paymentMethod === 'MOBILE_MONEY'" v-slot="{ componentField }" name="phone">
         <FormItem>
           <FormLabel>Mobile Money Number (Airtel / MTN)</FormLabel>
           <FormControl>
@@ -32,6 +73,18 @@
           <FormMessage />
         </FormItem>
       </FormField>
+
+      <!-- Card: info callout -->
+      <div v-else-if="paymentMethod === 'CARD'" class="flex flex-row gap-3 p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
+        <Info class="size-4 mt-0.5 shrink-0 text-primary" />
+        <span>You'll be redirected to a secure card payment page after your account is set up.</span>
+      </div>
+
+      <!-- Manual: info callout -->
+      <div v-else class="flex flex-row gap-3 p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
+        <Info class="size-4 mt-0.5 shrink-0 text-primary" />
+        <span>Our team will contact you to arrange payment and activate your subscription.</span>
+      </div>
 
       <!-- Error Alert -->
       <Alert v-if="errorMessage" variant="destructive">
@@ -56,72 +109,58 @@ import { ref, computed } from 'vue';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
-import { Loader2, AlertCircle } from 'lucide-vue-next';
+import { AlertCircle, Smartphone, CreditCard, Receipt, Info } from 'lucide-vue-next';
 
-// Emits
 const emit = defineEmits<{
-  complete: [phoneNumber: string]
+  complete: [payload: { phone?: string; paymentMethod: 'MOBILE_MONEY' | 'CARD' | 'MANUAL' }]
 }>();
 
 const props = defineProps(['accType'])
 
-// State
 const isSubmitting = ref(false);
 const errorMessage = ref('');
+const paymentMethod = ref<'MOBILE_MONEY' | 'CARD' | 'MANUAL'>('MOBILE_MONEY');
 
-// Trial amounts are fixed:
-// - Organisation: flat 50,000 UGX regardless of seats (seats computed dynamically from actual members)
-// - Individual: 10,000 UGX
 const trialAmount = computed(() => {
   return props.accType === 'ORG' ? 50000 : 10000;
 });
 
-// Uganda phone number validation (9 digits after +256)
 const ugandaPhoneRegex = /^[7][0-9]{8}$/;
 
-// Form validation schema
-const formSchema = toTypedSchema(z.object({
-  phone: z.string({
-    required_error: "Phone number is required"
-  })
-      .min(9, "Phone number must be 9 digits")
-      .max(9, "Phone number must be 9 digits")
-      .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
-}));
+const formSchema = computed(() => toTypedSchema(z.object({
+  phone: paymentMethod.value === 'MOBILE_MONEY'
+      ? z.string({ required_error: "Phone number is required" })
+          .min(9, "Phone number must be 9 digits")
+          .max(9, "Phone number must be 9 digits")
+          .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
+      : z.string().optional()
+})));
 
-// Initialize form
 const { handleSubmit, resetForm } = useForm({
   validationSchema: formSchema,
-  initialValues: {
-    phone: ''
-  }
+  initialValues: { phone: '' }
 });
 
-// Form submission handler
 const onSubmit = handleSubmit(async (values) => {
   isSubmitting.value = true;
   errorMessage.value = '';
 
   try {
-    // Construct full phone number with country code
-    const fullPhoneNumber = `+256${values.phone}`;
-
-    // Small delay to show loading state (optional)
     await new Promise(resolve => setTimeout(resolve, 300));
-    if(props.accType === 'IND') {
+
+    if (props.accType === 'IND') {
       umTrackRevenue("individual-trial-signup", trialAmount.value, "UGX")
     } else {
       umTrackRevenue("organisation-trial-signup", trialAmount.value, "UGX")
     }
 
-    // Emit the complete event with the full phone number
-    emit('complete', fullPhoneNumber);
-
+    emit('complete', {
+      phone: values.phone ? `+256${values.phone}` : undefined,
+      paymentMethod: paymentMethod.value,
+    });
   } catch (error) {
     console.error('Form submission error:', error);
-    errorMessage.value = error instanceof Error
-        ? error.message
-        : 'An error occurred. Please try again.';
+    errorMessage.value = error instanceof Error ? error.message : 'An error occurred. Please try again.';
   } finally {
     isSubmitting.value = false;
   }
@@ -131,9 +170,6 @@ defineExpose({
   resetForm,
   triggerSubmit: () => onSubmit(),
   isSubmitting,
+  paymentMethod,
 });
 </script>
-
-<style scoped>
-/* Optional: Add any custom styles here */
-</style>

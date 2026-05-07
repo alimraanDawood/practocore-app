@@ -558,6 +558,13 @@ export enum PaymentRequestsStatusOptions {
 	"FAILED" = "FAILED",
 	"CANCELLED" = "CANCELLED",
 }
+
+export enum PaymentRequestsTypeOptions {
+	"MOBILE_MONEY" = "MOBILE_MONEY",
+	"CARD" = "CARD",
+	"MANUAL" = "MANUAL",
+}
+
 export type PaymentRequestsRecord<Tresponse = unknown> = {
 	TIN?: string
 	amount?: number
@@ -571,6 +578,7 @@ export type PaymentRequestsRecord<Tresponse = unknown> = {
 	retries?: number
 	status?: PaymentRequestsStatusOptions
 	subscription?: RecordIdString
+	type?: PaymentRequestsTypeOptions
 	updated: IsoAutoDateString
 }
 
@@ -706,6 +714,7 @@ export type SubscriptionsRecord<Tmeta = unknown> = {
 	meta?: null | Tmeta
 	mobileMoneyNumber?: string
 	organisation?: RecordIdString
+	paymentMethod?: PaymentRequestsTypeOptions
 	paymentStatus?: SubscriptionsPaymentStatusOptions
 	plan?: RecordIdString
 	reference?: string

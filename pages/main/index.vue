@@ -299,23 +299,23 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
               </DropdownMenu>
             </div>
 
-            <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics"
-                                       v-if="statistics?.matters?.length === 0">
-              <Button>
+<!--            <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics"-->
+<!--                                       v-if="statistics?.matters?.length === 0">-->
+<!--            </SharedMattersCreateMatter>-->
+              <Button data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" v-if="statistics?.matters?.length === 0">
                 <Plus aria-hidden="true"/>
                 Create Matter
               </Button>
-            </SharedMattersCreateMatter>
             <div class="flex flex-row items-center gap-2" v-else>
               <NuxtLink to="/main/matters">
                 <Button size="sm" variant="secondary">View All</Button>
               </NuxtLink>
 
-              <SharedMattersCreateMatter @created="reloadStatistics">
-                <Button data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter">
+<!--              <SharedMattersCreateMatter @created="reloadStatistics">-->
+<!--              </SharedMattersCreateMatter>-->
+                <Button @click="navigateTo('/main/matters/create?next=/main/matters')" data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter">
                   <Plus aria-hidden="true"/>
                 </Button>
-              </SharedMattersCreateMatter>
             </div>
           </div>
 
@@ -388,12 +388,12 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
                 <p class="font-semibold text-foreground">No matters yet</p>
                 <p class="text-sm text-muted-foreground">Create your first matter to start tracking litigation deadlines automatically.</p>
               </div>
-              <SharedMattersCreateMatter class="w-fit" @created="reloadStatistics">
-                <Button>
+                <Button @click="navigateTo('/main/matters/create?next=/main/matters')" class="w-fit">
                   <Plus class="size-4" aria-hidden="true"/>
                   Create Your First Matter
                 </Button>
-              </SharedMattersCreateMatter>
+<!--              <SharedMattersCreateMatter class="w-fit" @created="reloadStatistics">-->
+<!--              </SharedMattersCreateMatter>-->
             </div>
           </XyzTransition>
         </div>

@@ -1,6 +1,7 @@
 <template>
-  <div class="flex flex-col lg:flex-row w-full h-full overflow-hidden border-x">
-    <!-- Main Calendar Area -->
+  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
+
+  <!-- Main Calendar Area -->
     <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-auto">
       <!-- Header with filters -->
       <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">

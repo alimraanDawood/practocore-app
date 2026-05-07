@@ -52,8 +52,8 @@
       <!-- Step 2: Payment -->
       <template v-else-if="currentStep === 'PAY'">
         <div class="flex flex-col gap-1 px-5 pt-5">
-          <h3 class="text-lg font-semibold ibm-plex-serif">Pay Now Via Mobile Money</h3>
-          <p class="text-sm text-muted-foreground">Enter your payment details to complete subscription</p>
+          <h3 class="text-lg font-semibold ibm-plex-serif">Pay Now</h3>
+          <p class="text-sm text-muted-foreground">Choose a payment method to complete your subscription</p>
         </div>
 
         <form @submit="onSubmit" class="flex flex-col gap-0">
@@ -113,7 +113,39 @@
               </FormItem>
             </FormField>
 
-            <FormField v-slot="{ componentField }" name="phone">
+            <!-- Payment method selector -->
+            <div class="flex flex-col gap-2">
+              <span class="text-sm font-medium">Payment Method</span>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                    type="button"
+                    class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-sm transition-all cursor-pointer"
+                    :class="paymentMethod === 'MOBILE_MONEY'
+                      ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
+                    @click="paymentMethod = 'MOBILE_MONEY'"
+                >
+                  <Smartphone class="size-5" />
+                  <span class="font-medium">Mobile Money</span>
+                  <span class="text-xs">Airtel / MTN</span>
+                </button>
+                <button
+                    type="button"
+                    class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-sm transition-all cursor-pointer"
+                    :class="paymentMethod === 'CARD'
+                      ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
+                    @click="paymentMethod = 'CARD'"
+                >
+                  <CreditCard class="size-5" />
+                  <span class="font-medium">Card Payment</span>
+                  <span class="text-xs">Visa / Mastercard</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mobile Money: phone number -->
+            <FormField v-if="paymentMethod === 'MOBILE_MONEY'" v-slot="{ componentField }" name="phone">
               <FormItem>
                 <FormLabel>Mobile Money Number (Airtel / MTN)</FormLabel>
                 <FormControl>
@@ -135,6 +167,12 @@
               </FormItem>
             </FormField>
 
+            <!-- Card: info message -->
+            <div v-else class="flex flex-row gap-3 p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
+              <Info class="size-4 mt-0.5 shrink-0 text-primary" />
+              <span>You'll be redirected to a secure card payment page to complete your payment.</span>
+            </div>
+
             <!-- Error Alert -->
             <Alert v-if="subscriptionError" variant="destructive">
               <AlertDescription>
@@ -147,6 +185,7 @@
             <Button type="submit" :disabled="isSubmitting" class="w-full">
               <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
               <span v-if="isSubmitting">Processing...</span>
+              <span v-else-if="paymentMethod === 'CARD'">Pay with Card UGX {{ totalCosts?.toLocaleString() }}</span>
               <span v-else>Pay Now UGX {{ totalCosts?.toLocaleString() }}</span>
             </Button>
             <Button type="button" variant="secondary" class="w-full" @click="currentStep = 'PLANS'" :disabled="isSubmitting">
@@ -156,7 +195,42 @@
         </form>
       </template>
 
-      <!-- Step 3: Payment Polling -->
+      <!-- Step 3a: Redirecting to card payment -->
+      <template v-else-if="currentStep === 'REDIRECTING'">
+        <div class="flex flex-col items-center justify-center p-8 gap-5 min-h-[300px]">
+          <div v-if="redirectingStatus === 'waiting'" class="flex flex-col items-center gap-4">
+            <div class="relative">
+              <div class="size-16 rounded-full border-4 border-muted animate-pulse" />
+              <Loader2 class="size-8 text-primary animate-spin absolute top-4 left-4" />
+            </div>
+            <div class="flex flex-col items-center gap-1 text-center">
+              <span class="font-semibold text-lg ibm-plex-serif">Preparing Secure Payment</span>
+              <span class="text-sm text-muted-foreground max-w-sm">
+                Setting up your card payment session. You'll be redirected shortly.
+              </span>
+            </div>
+            <div class="flex flex-row items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 class="size-3 animate-spin" />
+              <span>Preparing secure payment...</span>
+            </div>
+          </div>
+
+          <div v-else-if="redirectingStatus === 'timeout'" class="flex flex-col items-center gap-4">
+            <div class="size-16 rounded-full bg-amber-100 dark:bg-amber-900/30 grid place-items-center">
+              <Clock class="size-8 text-amber-600" />
+            </div>
+            <div class="flex flex-col items-center gap-1 text-center">
+              <span class="font-semibold text-lg ibm-plex-serif">Session Unavailable</span>
+              <span class="text-sm text-muted-foreground max-w-sm">
+                We couldn't prepare your card payment session. Please try again.
+              </span>
+            </div>
+            <Button variant="secondary" class="w-full" @click="currentStep = 'PAY'; redirectingStatus = 'waiting'">Try Again</Button>
+          </div>
+        </div>
+      </template>
+
+      <!-- Step 3b: Mobile Money polling -->
       <template v-else-if="currentStep === 'POLLING'">
         <div class="flex flex-col items-center justify-center p-8 gap-5 min-h-[300px]">
           <div v-if="pollingStatus === 'waiting'" class="flex flex-col items-center gap-4">
@@ -229,10 +303,10 @@
 </template>
 
 <script setup>
-import { getSubscriptionPlans, getSubscriptionStatus, subscribeAsIndividual, subscribeAsOrganisation } from "~/services/subscriptions/index.ts";
+import { getSubscriptionPlans, getSubscriptionStatus, getCardSession, subscribeAsIndividual, subscribeAsOrganisation } from "~/services/subscriptions/index.ts";
 import { getSignedInUser } from "~/services/auth";
 import { toast } from "vue-sonner";
-import { Loader2, CheckCircle2, Clock } from 'lucide-vue-next';
+import { Loader2, CheckCircle2, Clock, Smartphone, CreditCard, Info } from 'lucide-vue-next';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
@@ -241,12 +315,10 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 const billingStore = useBillingStore();
 const organisationStore = useOrganisationStore();
 
-// Determine if this is an org subscription
 const user = getSignedInUser();
 const isOrgSubscription = computed(() => !!user?.organisation);
 const orgId = computed(() => user?.organisation || '');
 
-// Minimum seats = current active members (at least 2 for org)
 const minSeats = computed(() => {
   const activeSeats = organisationStore.organisation?.active_seats || 0;
   const memberCount = organisationStore.organisation?.users?.length || 0;
@@ -259,17 +331,21 @@ const isSubmitting = ref(false);
 const subscriptionError = ref('');
 const isOpen = ref(false);
 
-const currentStep = ref('PLANS'); // 'PLANS' | 'PAY' | 'POLLING'
+const currentStep = ref('PLANS'); // 'PLANS' | 'PAY' | 'REDIRECTING' | 'POLLING'
 const pollingStatus = ref('waiting'); // 'waiting' | 'success' | 'timeout'
+const redirectingStatus = ref('waiting'); // 'waiting' | 'timeout'
 const pollingSubscriptionId = ref(null);
+const paymentMethod = ref('MOBILE_MONEY'); // 'MOBILE_MONEY' | 'CARD'
+
 let pollingInterval = null;
 let pollingTimeout = null;
+let cardSessionInterval = null;
+let cardSessionTimeout = null;
 
 const units = ref(1);
 const seats = ref(2);
 const selectedOption = ref('monthly'); // 'monthly' | 'annually'
 
-// Initialize seats to minSeats when org data loads
 watch(minSeats, (newMin) => {
   if (seats.value < newMin) {
     seats.value = newMin;
@@ -296,11 +372,9 @@ const bestPlan = computed(() => {
   if (!subscriptionPlans?.value?.items?.length) return null;
 
   if (isOrgSubscription.value) {
-    // Only show the Team plan for orgs — trial plans cannot be reselected
     return subscriptionPlans.value.items.find(sp => sp.name === 'Team') || subscriptionPlans.value.items[0];
   }
 
-  // Only show the Solo plan for individuals
   return subscriptionPlans.value.items.find(sp => sp.name === 'Solo') || subscriptionPlans.value.items[0];
 });
 
@@ -312,10 +386,8 @@ const savingsPercentage = computed(() => {
   return Math.round(((monthly - annually) / monthly) * 100);
 });
 
-// Uganda phone number validation (9 digits after +256)
 const ugandaPhoneRegex = /^[7][0-9]{8}$/;
 
-// Form validation schema — dynamic based on subscription type
 const formSchema = computed(() => {
   const baseSchema = {
     units: z.union([z.string(), z.number()])
@@ -329,12 +401,14 @@ const formSchema = computed(() => {
                 .int("Must be a whole number")
         ),
 
-    phone: z.string({
-      required_error: "Phone number is required"
-    })
-        .min(9, "Phone number must be 9 digits")
-        .max(9, "Phone number must be 9 digits")
-        .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
+    phone: paymentMethod.value === 'MOBILE_MONEY'
+        ? z.string({
+            required_error: "Phone number is required"
+          })
+            .min(9, "Phone number must be 9 digits")
+            .max(9, "Phone number must be 9 digits")
+            .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
+        : z.string().optional()
   };
 
   if (isOrgSubscription.value) {
@@ -353,7 +427,6 @@ const formSchema = computed(() => {
   return toTypedSchema(z.object(baseSchema));
 });
 
-// Initialize form
 const { handleSubmit, resetForm, setFieldValue } = useForm({
   validationSchema: formSchema,
   initialValues: {
@@ -363,17 +436,15 @@ const { handleSubmit, resetForm, setFieldValue } = useForm({
   }
 });
 
-// Watch units ref and sync with form
 watch(units, (newValue) => {
   setFieldValue('units', newValue);
 });
 
-// Watch seats ref and sync with form
 watch(seats, (newValue) => {
   setFieldValue('seats', newValue);
 });
 
-// Payment status polling
+// Mobile money polling
 const startPolling = (subscriptionId) => {
   pollingSubscriptionId.value = subscriptionId;
   pollingStatus.value = 'waiting';
@@ -390,10 +461,8 @@ const startPolling = (subscriptionId) => {
           description: "Your subscription is now active."
         });
 
-        // Refresh billing data
         await billingStore.reloadSubscriptionData();
 
-        // Auto-close after 2 seconds
         setTimeout(() => {
           closeAndReset();
         }, 2000);
@@ -403,7 +472,6 @@ const startPolling = (subscriptionId) => {
     }
   }, 5000);
 
-  // Timeout after 90 seconds
   pollingTimeout = setTimeout(() => {
     if (pollingStatus.value === 'waiting') {
       pollingStatus.value = 'timeout';
@@ -423,34 +491,71 @@ const stopPolling = () => {
   }
 };
 
+// Card session polling — waits for redirect_url then navigates
+const startCardRedirect = (subscriptionId) => {
+  localStorage.setItem('pendingCardSubscriptionId', subscriptionId);
+  redirectingStatus.value = 'waiting';
+  currentStep.value = 'REDIRECTING';
+
+  cardSessionInterval = setInterval(async () => {
+    try {
+      const session = await getCardSession(subscriptionId);
+      if (session.redirect_url) {
+        stopCardRedirect();
+        window.location.href = session.redirect_url;
+      }
+    } catch (err) {
+      console.warn("Card session polling error:", err);
+    }
+  }, 2000);
+
+  cardSessionTimeout = setTimeout(() => {
+    if (redirectingStatus.value === 'waiting') {
+      redirectingStatus.value = 'timeout';
+      stopCardRedirect();
+    }
+  }, 30000);
+};
+
+const stopCardRedirect = () => {
+  if (cardSessionInterval) {
+    clearInterval(cardSessionInterval);
+    cardSessionInterval = null;
+  }
+  if (cardSessionTimeout) {
+    clearTimeout(cardSessionTimeout);
+    cardSessionTimeout = null;
+  }
+};
+
 const closeAndReset = () => {
   stopPolling();
+  stopCardRedirect();
   isOpen.value = false;
 };
 
-// Form submission handler
 const onSubmit = handleSubmit(async (values) => {
   isSubmitting.value = true;
   subscriptionError.value = '';
 
   try {
-    const fullPhoneNumber = `+256${values.phone}`;
+    const fullPhoneNumber = values.phone ? `+256${values.phone}` : undefined;
     let response;
 
     if (isOrgSubscription.value) {
-      // Organisation subscription
       response = await subscribeAsOrganisation(orgId.value, {
         seats: values.seats || seats.value,
         units: values.units,
         annual: selectedOption.value === 'annually',
-        phone: fullPhoneNumber
+        phone: fullPhoneNumber,
+        paymentMethod: paymentMethod.value
       });
     } else {
-      // Individual subscription
       response = await subscribeAsIndividual({
         units: values.units,
         annual: selectedOption.value === 'annually',
-        phone: fullPhoneNumber
+        phone: fullPhoneNumber,
+        paymentMethod: paymentMethod.value
       });
     }
 
@@ -462,14 +567,18 @@ const onSubmit = handleSubmit(async (values) => {
     const responseData = await response.json();
     const subscriptionId = responseData.subscription?.id;
 
-    if (subscriptionId) {
-      startPolling(subscriptionId);
-    } else {
-      // Fallback if no subscription ID returned
+    if (!subscriptionId) {
       toast.success("Payment initiated!", {
         description: "Please check your phone to complete the transaction."
       });
       setTimeout(() => closeAndReset(), 3000);
+      return;
+    }
+
+    if (paymentMethod.value === 'CARD') {
+      startCardRedirect(subscriptionId);
+    } else {
+      startPolling(subscriptionId);
     }
   } catch (error) {
     console.error('Subscription error:', error);
@@ -495,18 +604,16 @@ onMounted(async () => {
   }
   plansLoading.value = false;
 
-  // Ensure org data is loaded for seat count
   if (isOrgSubscription.value && orgId.value) {
     await organisationStore.fetchOrganisation(orgId.value);
   }
 });
 
-// Cleanup on unmount
 onBeforeUnmount(() => {
   stopPolling();
+  stopCardRedirect();
 });
 
-// Reset form when drawer/dialog closes
 watch(isOpen, (newValue) => {
   if (!newValue) {
     setTimeout(() => {
@@ -514,8 +621,11 @@ watch(isOpen, (newValue) => {
       currentStep.value = 'PLANS';
       subscriptionError.value = '';
       pollingStatus.value = 'waiting';
+      redirectingStatus.value = 'waiting';
+      paymentMethod.value = 'MOBILE_MONEY';
       seats.value = minSeats.value || 2;
       stopPolling();
+      stopCardRedirect();
     }, 300);
   }
 });

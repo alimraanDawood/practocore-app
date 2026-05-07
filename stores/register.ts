@@ -67,10 +67,11 @@ const STEPS_BY_PERSONA: Record<Persona, RegisterStep[]> = {
     ],
 }
 
-const SKIP_TARGETS: Partial<Record<RegisterStep, RegisterStep>> = {
+const SKIP_TARGETS: Partial<Record<RegisterStep, RegisterStep | string>> = {
     'matter-mode': 'reminders',
     'matter-form': 'reminders',
     'deadline-reveal': 'reminders',
+    'invite-team': '/main',
 }
 
 export const useRegisterStore = defineStore('register', {
@@ -109,8 +110,9 @@ export const useRegisterStore = defineStore('register', {
         // Team invite tracking (ORG only)
         invitesSentCount: 0,
 
-        // Mobile money phone captured from TrialPayment, consumed by StepCreating
+        // Trial payment details captured from TrialPayment, consumed by StepCreating
         mobileMoneyPhone: '',
+        trialPaymentMethod: 'MOBILE_MONEY' as 'MOBILE_MONEY' | 'CARD' | 'MANUAL',
 
         // Cached account form values — lets StepAccountCreate re-hydrate on back-nav
         accountFormValues: {
@@ -119,6 +121,9 @@ export const useRegisterStore = defineStore('register', {
             password: '',
             confirmPassword: '',
         },
+
+        // Step-specific submit handler — steps register here; layout calls it
+        stepNextAction: null as (() => Promise<void>) | null,
     }),
 
     getters: {
@@ -162,7 +167,8 @@ export const useRegisterStore = defineStore('register', {
 
         skipTargetPath(currentStep: RegisterStep): string | null {
             const target = SKIP_TARGETS[currentStep]
-            return target ? `/auth/register/${target}` : null
+            if (!target) return null
+            return target.startsWith('/') ? target : `/auth/register/${target}`
         },
 
         // Convenience: advance from a given step

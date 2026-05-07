@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'PractoCore',
   webDir: 'dist',
   server: {
-    url: 'http://localhost:3000',
+    url: 'http://192.168.100.12:3000',
     cleartext: true
   },
   plugins: {

@@ -34,10 +34,9 @@ const handleNext = async () => {
   await trialPaymentRef.value?.triggerSubmit()
 }
 
-const onTrialPaymentComplete = async (phone: string) => {
-  // Navigate to 'creating' — the heavy async work runs there
-  // Pass the mobile money phone via store so StepCreating can use it
-  store.mobileMoneyPhone = phone
+const onTrialPaymentComplete = async (payload: { phone?: string; paymentMethod: 'MOBILE_MONEY' | 'CARD' | 'MANUAL' }) => {
+  store.mobileMoneyPhone = payload.phone ?? ''
+  store.trialPaymentMethod = payload.paymentMethod
   await navigateTo('/auth/register/creating')
 }
 

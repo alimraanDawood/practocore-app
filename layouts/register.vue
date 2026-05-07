@@ -108,22 +108,11 @@ const showFooterNav = computed(() => currentStep.value !== 'creating')
 const canGoBack = computed(() => !!store.prevStepPath(currentStep.value))
 const canSkip = computed(() => !!store.skipTargetPath(currentStep.value))
 
-// Child step pages provide these — layout injects them
-// Defaults are safe fallbacks in case a step page doesn't provide them
 const canProceed = inject<Ref<boolean>>('stepCanProceed', ref(true))
 const footerNextLabel = inject<Ref<string>>('stepFooterLabel', ref('Continue'))
-const handleNextFromStep = inject<() => Promise<void> | void>(
-    'stepHandleNext',
-    async () => {
-      const next = store.nextStepPath(currentStep.value)
-      if (next) await navigateTo(next)
-    }
-)
 
 const handleBack = () => {
-  // const prev = store.prevStepPath(currentStep.value)
-  // if (prev) navigateTo(prev)
-  useRouter().back();
+  useRouter().back()
 }
 
 const handleSkip = () => {
@@ -131,5 +120,12 @@ const handleSkip = () => {
   if (target) navigateTo(target)
 }
 
-const handleNext = () => handleNextFromStep()
+const handleNext = async () => {
+  if (store.stepNextAction) {
+    await store.stepNextAction()
+  } else {
+    const next = store.nextStepPath(currentStep.value)
+    if (next) await navigateTo(next)
+  }
+}
 </script>

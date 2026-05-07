@@ -154,7 +154,7 @@ const accountSchema = z
     }
   })
 
-const { values, meta, validate } = useForm({
+const { values, handleSubmit } = useForm({
   validationSchema: toTypedSchema(accountSchema),
   // Re-hydrate from store so Back-nav doesn't wipe the form
   initialValues: {
@@ -165,7 +165,6 @@ const { values, meta, validate } = useForm({
   },
 })
 
-const canProceed = computed(() => meta.value.valid && !isCreatingUser.value)
 
 const onGoogleSignIn = async () => {
   isGoogleLoading.value = true
@@ -184,29 +183,22 @@ const onGoogleSignIn = async () => {
   }
 }
 
-const handleNext = async () => {
-  // Persist current form values to store (for back-nav re-hydration)
-  store.accountFormValues = { ...values }
-
-  const result = await validate()
-  if (!result.valid) return
-
+const onValidSubmit = handleSubmit(async (vals) => {
   isCreatingUser.value = true
   try {
     await pb.collection('Users').create({
-      name: values.fullName,
-      email: values.emailAddress,
-      password: values.password,
-      passwordConfirm: values.confirmPassword,
+      name: vals.fullName,
+      email: vals.emailAddress,
+      password: vals.password,
+      passwordConfirm: vals.confirmPassword,
       emailVisibility: true,
     })
 
-    await pb.collection('Users').authWithPassword(values.emailAddress!, values.password!)
+    await pb.collection('Users').authWithPassword(vals.emailAddress, vals.password)
     store.createdUserId = pb.authStore.record?.id || ''
 
-    // Pre-fill firm contact from account data
-    store.firmContact.fullName = values.fullName ?? ''
-    store.firmContact.emailAddress = values.emailAddress ?? ''
+    store.firmContact.fullName = vals.fullName ?? ''
+    store.firmContact.emailAddress = vals.emailAddress ?? ''
 
     await store.advance('account-create')
   } catch (e: any) {
@@ -218,13 +210,18 @@ const handleNext = async () => {
   } finally {
     isCreatingUser.value = false
   }
+})
+
+const handleNext = async () => {
+  store.accountFormValues = {
+    fullName: values.fullName ?? '',
+    emailAddress: values.emailAddress ?? '',
+    password: values.password ?? '',
+    confirmPassword: values.confirmPassword ?? '',
+  }
+  await onValidSubmit()
 }
 
-const footerLabel = computed(() =>
-  isCreatingUser.value ? 'Creating account…' : 'Continue'
-)
-
-provide('stepCanProceed', canProceed)
-provide('stepFooterLabel', footerLabel)
-provide('stepHandleNext', handleNext)
+onMounted(() => { store.stepNextAction = handleNext })
+onUnmounted(() => { store.stepNextAction = null })
 </script>
