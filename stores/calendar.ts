@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 import { getAllDeadlines, subscribeToDeadlines } from '~/services/matters';
+import { Capacitor } from '@capacitor/core';
+import { db } from '~/lib/db';
 
 // Cache duration in milliseconds (e.g., 1 minute)
 const CACHE_TTL = 60 * 1000;
@@ -20,6 +22,7 @@ export const useCalendarStore = defineStore('calendar', {
     loading: false as boolean,
     lastFetched: 0 as number,
     _subscribed: false as boolean,
+    _offlineFallback: false as boolean,
     selectedDate: toISO(new Date()) as string,
     colorMap: {} as Record<string, number>, // deadlineId -> 0..3
   }),
@@ -52,13 +55,35 @@ export const useCalendarStore = defineStore('calendar', {
         const list = await getAllDeadlines({ sort: 'date' });
         this.deadlines = list;
         this.lastFetched = Date.now();
+        this._offlineFallback = false;
+        if (Capacitor.isNativePlatform()) {
+          db.deadlines.clear().then(() =>
+            db.deadlines.bulkPut(list.map((d: any) => ({
+              deadlineId: d.id,
+              matterId: d.matter || '',
+              date: d.date || '',
+              data: d,
+            })))
+          ).catch(() => {});
+        }
         return list;
+      } catch (e) {
+        if (Capacitor.isNativePlatform()) {
+          const cached = await db.deadlines.toArray();
+          if (cached.length > 0) {
+            this.deadlines = cached.map((c) => c.data);
+            this._offlineFallback = true;
+            return this.deadlines;
+          }
+        }
+        throw e;
       } finally {
         this.loading = false;
       }
     },
     ensureSubscribed() {
       if (this._subscribed) return;
+      if (!useNetwork().isOnline.value) return;
       subscribeToDeadlines(async () => {
         const hadData = this.deadlines.length > 0;
         if (!hadData) this.loading = true;

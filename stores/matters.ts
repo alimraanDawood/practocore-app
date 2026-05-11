@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia';
 import { getMatters, getMatter, subscribeToMatters } from '~/services/matters';
 import {toast} from "vue-sonner";
+import { Capacitor } from '@capacitor/core';
+import { db } from '~/lib/db';
+import { pb } from '~/lib/pocketbase';
 
 // Cache duration in milliseconds - increased to 5 minutes for better performance
 const CACHE_TTL = 5 * 60 * 1000;
@@ -46,7 +49,8 @@ export const useMattersStore = defineStore('matters', {
     _subscribed: false as boolean,
     _lastQuery: '' as string,
     _lastSort: '' as string,
-    _lastActiveTab: 'all' as string
+    _lastActiveTab: 'all' as string,
+    _offlineFallback: false as boolean
   }),
   getters: {
     isStale(state) {
@@ -139,6 +143,7 @@ export const useMattersStore = defineStore('matters', {
         this._lastQuery = this.query;
         this._lastSort = this.sort;
         this._lastActiveTab = this.activeTab;
+        this._offlineFallback = false;
 
         // Update individual matter caches
         res.items?.forEach((matter: any) => {
@@ -148,9 +153,30 @@ export const useMattersStore = defineStore('matters', {
           }
         })
 
+        // Write-through to Dexie for offline access
+        if (Capacitor.isNativePlatform()) {
+          const fingerprint = `${this.page}-${this.perPage}-${this.sort}-${combinedFilter}-${this.activeTab}`;
+          db.mattersList.put({ fingerprint, data: res, fetchedAt: Date.now() }).catch(() => {});
+          const orgId = (pb as any).authStore?.record?.organisation || 'default';
+          db.matters.bulkPut(
+            res.items?.map((m: any) => ({ matterId: m.id, organisationId: orgId, data: m, fetchedAt: Date.now() })) ?? []
+          ).catch(() => {});
+        }
+
         return res;
       } catch (e) {
         console.error(e);
+        // Offline fallback: serve cached list snapshot from Dexie (native only)
+        if (Capacitor.isNativePlatform()) {
+          const fingerprint = `${this.page}-${this.perPage}-${this.sort}-${combinedFilter}-${this.activeTab}`;
+          const cached = await db.mattersList.get(fingerprint);
+          if (cached) {
+            this.result = cached.data;
+            this.lastFetched = cached.fetchedAt;
+            this._offlineFallback = true;
+            return cached.data;
+          }
+        }
         throw e;
       } finally {
         if (background) {
@@ -211,9 +237,19 @@ export const useMattersStore = defineStore('matters', {
         return matter
       } catch (error) {
         console.error('Error fetching matter:', error)
-        // If fetch fails but we have cached data, return it
+        // Return in-memory cache if available
         if (cached) {
+          this._offlineFallback = true;
           return cached
+        }
+        // Fall back to Dexie persistent cache (native only)
+        if (Capacitor.isNativePlatform()) {
+          const dexieCached = await db.matters.get(id);
+          if (dexieCached) {
+            this.matterCache[id] = { data: dexieCached.data, timestamp: dexieCached.fetchedAt };
+            this._offlineFallback = true;
+            return dexieCached.data;
+          }
         }
         throw error
       } finally {
@@ -272,7 +308,7 @@ export const useMattersStore = defineStore('matters', {
     },
     async ensureSubscribed() {
       if (this._subscribed) return;
-
+      if (!useNetwork().isOnline.value) return;
 
       const unsubscribeFn = await subscribeToMatters(async (data: any) => {
         const { action, record } = data

@@ -117,6 +117,7 @@ export default defineNuxtConfig({
         }
     },
     plugins: [
+        '~/plugins/network.client',
         '~/plugins/animxyz',
         '~/plugins/pocketbase.client',
     ],

@@ -1,5 +1,12 @@
 <template>
-  <form id="create-matter-page" @submit.prevent class="flex flex-col gap-6">
+  <div v-if="isOffline" class="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+    <WifiOff class="size-10 text-muted-foreground" />
+    <p class="font-semibold">No Internet Connection</p>
+    <p class="text-sm text-muted-foreground">Matter creation requires an internet connection to calculate deadlines.</p>
+    <Button variant="outline" @click="$router.back()">Go Back</Button>
+  </div>
+
+  <form v-else id="create-matter-page" @submit.prevent class="flex flex-col gap-6">
 
     <!-- STEP: Choose Matter Type -->
     <template v-if="store.currentStepId === 'matter_type'">
@@ -187,8 +194,11 @@ import * as z from 'zod'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import { toast } from 'vue-sonner'
+import { WifiOff } from 'lucide-vue-next'
 import { createMatter } from '~/services/matters'
 import { useCreateMatterStore } from '~/stores/createMatter'
+
+const { isOffline } = useNetwork()
 
 definePageMeta({ layout: 'create-matter' })
 

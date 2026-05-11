@@ -1,5 +1,6 @@
 <template>
   <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
+    <SharedOfflineBanner />
     <SharedDesktopTitleBar class="hidden xs:flex" />
 
     <SharedBillingExpiryBanner class="xs:hidden" />
@@ -29,6 +30,8 @@ import {getSignedInUser, signOut} from '~/services/auth';
 import {computed, ref, onMounted} from "vue";
 import { Capacitor } from '@capacitor/core';
 import {Vue3PullToRefresh} from "@amirafa/vue3-pull-to-refresh";
+
+useOfflineSync();
 const hours = new Date().getHours();
 
 const signOutUser = () => {

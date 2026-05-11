@@ -8,6 +8,8 @@ import {
   subscribeToTemplates,
   unsubscribeToTemplates
 } from '~/services/templates'
+import { Capacitor } from '@capacitor/core'
+import { db } from '~/lib/db'
 
 // Cache duration: 5 minutes for templates (relatively stable data)
 const CACHE_TTL = 5 * 60 * 1000
@@ -123,9 +125,24 @@ export const useTemplatesStore = defineStore('templates', {
           }
         })
 
+        if (Capacitor.isNativePlatform()) {
+          db.templates.clear().then(() =>
+            db.templates.bulkPut(result.map((t: any) => ({ templateId: t.id, data: t, fetchedAt: Date.now() })))
+          ).catch(() => {});
+        }
+
         return result
       } catch (error) {
         console.error('Failed to fetch all templates:', error)
+        if (Capacitor.isNativePlatform()) {
+          const cached = await db.templates.toArray();
+          if (cached.length > 0) {
+            const templates = cached.map((c) => c.data);
+            this.allTemplates = templates;
+            this.allTemplatesFetched = Date.now();
+            return templates;
+          }
+        }
         throw error
       } finally {
         this.loading = false
@@ -372,6 +389,7 @@ export const useTemplatesStore = defineStore('templates', {
     // Setup realtime subscription
     ensureSubscribed() {
       if (this._subscribed) return
+      if (!useNetwork().isOnline.value) return
 
       subscribeToTemplates((data: any) => {
         const { action, record } = data

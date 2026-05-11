@@ -9,7 +9,7 @@
     </CreateTemplate>
 
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
-        <DialogTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
+        <DialogTrigger :disabled="!usePlanActive()?.value?.active || useNetwork().isOffline.value" class="disabled:opacity-70">
             <slot />
         </DialogTrigger>
 
@@ -23,7 +23,7 @@
     </Dialog>
 
     <Sheet v-else v-model:open="open">
-        <SheetTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
+        <SheetTrigger :disabled="!usePlanActive()?.value?.active || useNetwork().isOffline.value" class="disabled:opacity-70">
             <slot />
         </SheetTrigger>
 

@@ -19,6 +19,7 @@ const hours = new Date().getHours();
 const dashboard = useDashboardStore();
 const mattersStore = useMattersStore();
 const {statistics, loading} = storeToRefs(dashboard);
+const { isOffline } = useNetwork();
 
 const welcomeMessage = computed(() => {
   if (hours < 12) return 'Good Morning';
@@ -302,7 +303,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
 <!--            <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics"-->
 <!--                                       v-if="statistics?.matters?.length === 0">-->
 <!--            </SharedMattersCreateMatter>-->
-              <Button data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" v-if="statistics?.matters?.length === 0">
+              <Button data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" v-if="statistics?.matters?.length === 0" :disabled="isOffline" :title="isOffline ? 'Requires internet connection' : undefined">
                 <Plus aria-hidden="true"/>
                 Create Matter
               </Button>
@@ -313,7 +314,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
 
 <!--              <SharedMattersCreateMatter @created="reloadStatistics">-->
 <!--              </SharedMattersCreateMatter>-->
-                <Button @click="navigateTo('/main/matters/create?next=/main/matters')" data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter">
+                <Button @click="navigateTo('/main/matters/create?next=/main/matters')" data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter" :disabled="isOffline" :title="isOffline ? 'Requires internet connection' : undefined">
                   <Plus aria-hidden="true"/>
                 </Button>
             </div>
@@ -388,7 +389,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
                 <p class="font-semibold text-foreground">No matters yet</p>
                 <p class="text-sm text-muted-foreground">Create your first matter to start tracking litigation deadlines automatically.</p>
               </div>
-                <Button @click="navigateTo('/main/matters/create?next=/main/matters')" class="w-fit">
+                <Button @click="navigateTo('/main/matters/create?next=/main/matters')" class="w-fit" :disabled="isOffline" :title="isOffline ? 'Requires internet connection' : undefined">
                   <Plus class="size-4" aria-hidden="true"/>
                   Create Your First Matter
                 </Button>

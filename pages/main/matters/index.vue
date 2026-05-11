@@ -118,7 +118,12 @@
 
             <div class="flex flex-col w-full h-full">
                 <div class="flex flex-row items-center p-3 border-b justify-between">
-                    <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
+                        <span v-if="_offlineFallback" class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <WifiOff class="size-3" /> Cached
+                        </span>
+                    </div>
 
                     <div class="flex flex-row gap-3 items-center">
                         <ReuseSearchFilterTemplate class="hidden lg:flex" />
@@ -144,7 +149,11 @@
                             {{ selection.active ? 'Cancel' : 'Select' }}
                         </Button>
 
-                        <Button @click="navigateTo('/main/matters/create?next=/main/matters')">
+                        <Button
+                            @click="navigateTo('/main/matters/create?next=/main/matters')"
+                            :disabled="isOffline"
+                            :title="isOffline ? 'Requires internet connection' : undefined"
+                        >
                             <Plus /> Add Matter
                         </Button>
                     </div>
@@ -262,7 +271,7 @@
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <Button @click="deleteSelectedMatters" variant="destructive">Delete</Button>
+                                        <Button @click="deleteSelectedMatters" variant="destructive" :disabled="isOffline">Delete</Button>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
@@ -279,7 +288,7 @@
 
 <script setup lang="ts">
 import { vOnLongPress } from '@vueuse/components'
-import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table, Grid2X2, ListChecks } from 'lucide-vue-next';
+import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table, Grid2X2, ListChecks, WifiOff } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
@@ -288,6 +297,9 @@ import { useDashboardStore } from '~/stores/dashboard';
 import { columns } from '@/components/shared/Matters/MatterTable/columns';
 import { Capacitor } from "@capacitor/core";
 import { Haptics } from "@capacitor/haptics";
+
+const { isOffline } = useNetwork();
+const { _offlineFallback } = storeToRefs(useMattersStore());
 
 const triggerSelectionHaptic = async () => {
   if (!Capacitor.isNativePlatform()) return

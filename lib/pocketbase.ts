@@ -27,11 +27,11 @@ function resolveServerUrl(): string {
     }
 
     // Android native: use the LAN IP injected at build time via the same env var
-    if (getPlatform() === 'android') {
-        return import.meta.env.VITE_POCKETBASE_URL || 'http://10.34.0.232:8090';
-    }
-    // return 'https://api.practocore.com';
-    return 'http://192.168.100.12:8090'
+    // if (getPlatform() === 'android') {
+    //     return import.meta.env.VITE_POCKETBASE_URL || 'http://192.168.100.12:8090';
+    // }
+    return 'https://api.practocore.com';
+    // return 'http://192.168.100.12:8090'
 }
 
 // Shared PocketBase instance used across the entire app
