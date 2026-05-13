@@ -66,6 +66,7 @@
     "json-logic-js": "^2.0.5",
     "lodash": "^4.17.23",
     "lucide-vue-next": "^0.522.0",
+    "marked": "^18.0.3",
     "nuxt": "^4.3.1",
     "nuxt-tiptap-editor": "^2.3.1",
     "nuxt-umami": "3.2.1",

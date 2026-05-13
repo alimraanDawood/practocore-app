@@ -217,6 +217,10 @@
       </div>
     </div>
   </div>
+  <!-- AI trigger scoped to this matter -->
+  <div v-if="!isInitialLoad && currentMatterOrApplication?.id" class="fixed bottom-4 right-4 z-20">
+    <SharedAITrigger :matter-id="route.params.matterId" />
+  </div>
 </template>
 
 <script setup>
@@ -253,6 +257,7 @@ definePageMeta({
   layout: 'no-mobile-nav',
 });
 
+const route = useRoute();
 const mattersStore = useMattersStore();
 const currentApplicationOption = ref('all');
 const matter = ref(null);

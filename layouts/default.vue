@@ -12,11 +12,16 @@
         </div>
       </div>
 
-      <div class="flex flex-col w-full items-center h-full overflow-hidden">
+      <div class="flex flex-col w-full items-center h-full overflow-hidden relative">
         <NuxtPage :transition="{
           name: 'page',
           mode: 'out-in'
         }" />
+
+        <div class="p-3 absolute bottom-0 right-0">
+          <SharedAITrigger />
+        </div>
+
       </div>
 
       <SharedMobileNavigation class="w-full xs:hidden" />

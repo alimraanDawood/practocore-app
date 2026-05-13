@@ -57,6 +57,7 @@
         "json-logic-js": "^2.0.5",
         "lodash": "^4.17.23",
         "lucide-vue-next": "^0.522.0",
+        "marked": "^18.0.3",
         "nuxt": "^4.3.1",
         "nuxt-tiptap-editor": "^2.3.1",
         "nuxt-umami": "3.2.1",
@@ -2035,6 +2036,8 @@
     "map-obj": ["map-obj@4.3.0", "", {}, ""],
 
     "markdown-it": ["markdown-it@14.1.1", "", { "dependencies": { "argparse": "^2.0.1", "entities": "^4.4.0", "linkify-it": "^5.0.0", "mdurl": "^2.0.0", "punycode.js": "^2.3.1", "uc.micro": "^2.1.0" }, "bin": "bin/markdown-it.mjs" }, ""],
+
+    "marked": ["marked@18.0.3", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-7VT90JOkDeaRWpfjOReRGPEKn0ecdARBkDGL+tT1wZY0efPPqkUxLUSmzy/C7TIylQYJC9STISEsCHrqb/7VIA=="],
 
     "matcher": ["matcher@3.0.0", "", { "dependencies": { "escape-string-regexp": "^4.0.0" } }, ""],
 
