@@ -71,6 +71,7 @@ export function sendAiMessage(
   messages: AiMessage[],
   context?: AiContext,
   conversationId?: string,
+  voiceMode?: boolean,
 ): Promise<AiResponse> {
   return aiPost('/api/practocore/ai/chat', {
     messages,
@@ -79,6 +80,7 @@ export function sendAiMessage(
     deadlineIds: context?.deadlineIds,
     userIds: context?.userIds,
     conversationId: conversationId ?? '',
+    voiceMode: voiceMode ?? false,
   });
 }
 
@@ -88,6 +90,7 @@ export function confirmAiProposal(
   context?: AiContext,
   conversationId?: string,
   conversationMessages?: ConvDisplayMessage[],
+  voiceMode?: boolean,
 ): Promise<AiResponse> {
   return aiPost('/api/practocore/ai/chat/confirm', {
     pendingMessages: proposal.pendingMessages ?? [],
@@ -100,6 +103,7 @@ export function confirmAiProposal(
     userIds: context?.userIds,
     conversationId: conversationId ?? '',
     conversationMessages: conversationMessages ?? [],
+    voiceMode: voiceMode ?? false,
   });
 }
 

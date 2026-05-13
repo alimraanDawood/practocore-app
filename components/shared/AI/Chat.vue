@@ -671,9 +671,15 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
                   <ArrowUpIcon class="size-4" />
                   <span class="sr-only">Send</span>
                 </InputGroupButton>
-                <InputGroupButton variant="default" class="rounded-full" size="icon-sm" disabled>
+                <InputGroupButton
+                  variant="default"
+                  class="rounded-full"
+                  size="icon-sm"
+                  title="Voice conversation"
+                  @click="navigateTo('/main/ai' + (conversationId ? '?conversation=' + conversationId : ''))"
+                >
                   <AudioLines class="size-4" />
-                  <span class="sr-only">Voice</span>
+                  <span class="sr-only">Voice conversation</span>
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
