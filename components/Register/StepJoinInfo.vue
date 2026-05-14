@@ -171,7 +171,14 @@ const footerLabel = computed(() => {
   return isVerifying.value ? 'Verifying…' : 'Verify code'
 })
 
-provide('stepCanProceed', canProceed)
-provide('stepFooterLabel', footerLabel)
-provide('stepHandleNext', handleNext)
+watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
+watch(footerLabel, v => { store.stepFooterLabel = v }, { immediate: true })
+onMounted(() => {
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>

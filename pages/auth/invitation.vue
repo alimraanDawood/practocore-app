@@ -44,9 +44,11 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 const organisationRef = ref(null);
 const accepted = ref(false);
 const loading = ref(false);
+const isLoading = ref(true);
 
 onMounted(async () => {
   organisationRef.value = await getOrganisationInviteReference(query?.ref);
+  isLoading.value = false;
 })
 
 const isSignedIn = computed(() => {
@@ -83,7 +85,13 @@ const _rejectInvitation = async () => {
 </script>
 <template>
   <DefineTemplate>
-    <div v-if="accepted" class="flex flex-col items-center p-5 justify-center h-full w-full gap-3">
+    <div v-if="isLoading" class="flex flex-col items-center p-5 justify-center h-full w-full gap-3">
+      <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
+      <div class="size-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <span class="text-muted-foreground text-sm">Verifying invitation…</span>
+    </div>
+
+    <div v-else-if="accepted" class="flex flex-col items-center p-5 justify-center h-full w-full gap-3">
       <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-16 mb-5" />
 
       <span class="font-semibold text-2xl ibm-plex-serif text-center">Invitation Accepted!</span>

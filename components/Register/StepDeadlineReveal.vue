@@ -80,9 +80,16 @@ const handleNext = async () => {
   await store.advance('deadline-reveal')
 }
 
-provide('stepCanProceed', canProceed)
-provide('stepFooterLabel', ref('Looks right — set up my workspace'))
-provide('stepHandleNext', handleNext)
+watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
+onMounted(() => {
+  store.stepFooterLabel = 'Looks right — set up my workspace'
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>
 
 <style scoped>

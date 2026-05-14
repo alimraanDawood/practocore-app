@@ -28,7 +28,14 @@ const onCalculated = (payload: CalculatorResult) => {
   navigateTo('/auth/register/deadline-reveal')
 }
 
-provide('stepCanProceed', canProceed)
-provide('stepFooterLabel', ref('Calculate Preview'))
-provide('stepHandleNext', handleNext)
+watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
+onMounted(() => {
+  store.stepFooterLabel = 'Calculate Preview'
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>

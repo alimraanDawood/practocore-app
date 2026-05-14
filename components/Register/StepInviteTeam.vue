@@ -74,8 +74,14 @@ const handleNext = async () => {
   await useRouter().push('/main')
 }
 
-// Invite step is always skippable / continuable
-provide('stepCanProceed', ref(true))
-provide('stepFooterLabel', footerLabel)
-provide('stepHandleNext', handleNext)
+watch(footerLabel, v => { store.stepFooterLabel = v }, { immediate: true })
+onMounted(() => {
+  store.stepCanProceed = true
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>

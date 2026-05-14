@@ -108,8 +108,8 @@ const showFooterNav = computed(() => currentStep.value !== 'creating')
 const canGoBack = computed(() => !!store.prevStepPath(currentStep.value))
 const canSkip = computed(() => !!store.skipTargetPath(currentStep.value))
 
-const canProceed = inject<Ref<boolean>>('stepCanProceed', ref(true))
-const footerNextLabel = inject<Ref<string>>('stepFooterLabel', ref('Continue'))
+const canProceed = computed(() => store.stepCanProceed)
+const footerNextLabel = computed(() => store.stepFooterLabel)
 
 const handleBack = () => {
   useRouter().back()
@@ -123,9 +123,9 @@ const handleSkip = () => {
 const handleNext = async () => {
   if (store.stepNextAction) {
     await store.stepNextAction()
-  } else {
-    const next = store.nextStepPath(currentStep.value)
-    if (next) await navigateTo(next)
+    return
   }
+  const next = store.nextStepPath(currentStep.value)
+  if (next) await navigateTo(next)
 }
 </script>

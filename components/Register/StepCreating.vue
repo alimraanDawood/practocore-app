@@ -31,10 +31,17 @@ import { getCardSession } from '~/services/subscriptions/index.ts'
 const store = useRegisterStore()
 const statusMessage = ref('Creating your account…')
 
-// No footer nav on this step — layout hides it automatically
-provide('stepCanProceed', ref(false))
-provide('stepFooterLabel', ref(''))
-provide('stepHandleNext', async () => {})
+// No footer nav on this step — layout hides it automatically (showFooterNav = false for 'creating')
+onMounted(() => {
+  store.stepCanProceed = false
+  store.stepFooterLabel = ''
+  store.stepNextAction = async () => {}
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 
 onMounted(async () => {
   try {

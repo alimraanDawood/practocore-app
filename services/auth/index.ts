@@ -204,7 +204,7 @@ export async function acceptInvite(token :  string) {
 
 export async function rejectInvite(token :  string) {
     return fetch(`${SERVER_URL}/api/invitations/reject/${token}`, {
-        method: "GET",
+        method: "POST",
         headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": `Bearer ${pocketbase.authStore.token}`

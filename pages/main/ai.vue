@@ -5,7 +5,6 @@ import {
   Volume2, VolumeX, ChevronLeft, Zap, Menu, Settings,
 } from 'lucide-vue-next';
 import type { VoiceEntry } from '~/composables/useSpeech';
-import { marked } from 'marked';
 import { getSignedInUser } from '~/services/auth';
 import {
   sendAiMessage, confirmAiProposal,
@@ -18,21 +17,25 @@ import { getOrganisationUsers } from '~/services/admin';
 
 definePageMeta({ layout: 'blank' });
 
-marked.use({ breaks: true, gfm: true });
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text) as string;
-}
-
 // ── Speech ────────────────────────────────────────────────────────────────────
 const {
-  isListening, isTranscribing, transcript, sttSupported, audioLevel, micError,
+  isListening, isTranscribing, transcript, audioLevel, micError,
   startListening, stopListening,
   isSpeaking, ttsSupported, speak, stopSpeaking,
   prefs: speechPrefs, savePrefs,
 } = useSpeech();
 
 const autoRead = ref(true);
+
+// ── Mode ──────────────────────────────────────────────────────────────────────
+const audioMode = ref(false);
+
+function exitAudioMode() {
+  stopListening();
+  stopSpeaking();
+  voiceState.value = 'idle';
+  audioMode.value = false;
+}
 
 // ── Chat state ────────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
@@ -59,25 +62,42 @@ const messagesEnd = ref<HTMLElement | null>(null);
 
 const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
 
+const lastAssistantText = computed(() => {
+  const msgs = messages.value.filter((m): m is AiMessage => m.role === 'assistant');
+  return msgs.at(-1)?.content ?? '';
+});
+
+const lastUserText = computed(() => {
+  const msgs = messages.value.filter((m): m is AiMessage => m.role === 'user');
+  return msgs.at(-1)?.content ?? '';
+});
+
 // ── Voice state machine ───────────────────────────────────────────────────────
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 const voiceState = ref<VoiceState>('idle');
 
-// Recording stopped → enter thinking (transcribing in progress)
 watch(isListening, (listening) => {
-  if (!listening && voiceState.value === 'listening') {
-    voiceState.value = 'thinking';
-  }
+  if (!listening && voiceState.value === 'listening') voiceState.value = 'thinking';
 });
 
-// Transcription done → send or fall back to idle
+const NOISE_TOKENS = new Set([
+  'uh', 'um', 'ah', 'oh', 'hmm', 'hm', 'mhm', 'mm', 'er', 'eh',
+  'okay', 'ok', 'yeah', 'yep', 'nope', 'hi', 'hey',
+]);
+
+function isUsableTranscript(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 3) return false;
+  const words = t.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 1 && NOISE_TOKENS.has(words[0]!)) return false;
+  return true;
+}
+
 watch(isTranscribing, (transcribing) => {
   if (!transcribing) {
-    if (transcript.value.trim()) {
-      sendMessage(transcript.value.trim());
-    } else {
-      voiceState.value = 'idle';
-    }
+    const t = transcript.value.trim();
+    if (t && isUsableTranscript(t)) sendMessage(t);
+    else voiceState.value = 'idle';
   }
 });
 
@@ -90,14 +110,38 @@ watch(micError, (err) => {
   if (err) voiceState.value = 'idle';
 });
 
+// ── Orb visual helpers ────────────────────────────────────────────────────────
+function barHeight(i: number): number {
+  if (!isListening.value) return 4;
+  const base = 4;
+  const wave = Math.abs(Math.sin((i + 1) * 0.9 + Date.now() / 200));
+  return Math.max(base, (audioLevel.value / 100) * 40 * wave + base);
+}
+
+function liveBarHeight(i: number): number {
+  const isActive = voiceState.value === 'listening' || voiceState.value === 'speaking';
+  if (!isActive) return 3;
+  const wave = Math.abs(Math.sin((i + 1) * 1.5 + Date.now() / 250));
+  return Math.max(3, (audioLevel.value / 100) * 12 * wave + 3);
+}
+
+const outerRingScale = computed(() => {
+  if (voiceState.value === 'listening') return 1 + (audioLevel.value / 100) * 0.6;
+  if (voiceState.value === 'speaking') return 1.3;
+  return 1;
+});
+const innerRingScale = computed(() => {
+  if (voiceState.value === 'listening') return 1 + (audioLevel.value / 100) * 0.35;
+  if (voiceState.value === 'speaking') return 1.15;
+  return 1;
+});
+
 // ── Voice settings panel ──────────────────────────────────────────────────────
 const voiceSettingsOpen = ref(false);
 const voices = ref<VoiceEntry[]>([]);
 const voicesLoading = ref(false);
 const testText = ref('The deadline for filing submissions is March 15th. Please review the matter urgently.');
 const testPlaying = ref(false);
-const sttTestTranscript = ref('');
-const sttTestRecording = ref(false);
 
 watch(voiceSettingsOpen, async (open) => {
   if (!open || voices.value.length > 0) return;
@@ -107,20 +151,17 @@ watch(voiceSettingsOpen, async (open) => {
     const res = await fetch(`${SERVER_URL}/api/practocore/ai/voices`, {
       headers: { 'Authorization': pb.authStore.token },
     });
-    if (res.ok) {
-      const data = await res.json();
-      voices.value = data.voices ?? [];
-    }
+    if (res.ok) voices.value = (await res.json()).voices ?? [];
   } catch {}
   voicesLoading.value = false;
 });
 
-async function testVoice(voiceId: string, voiceName: string) {
+async function testVoice(voiceId: string) {
   testPlaying.value = true;
-  const prevVoiceId = speechPrefs.value.voiceId;
+  const prev = speechPrefs.value.voiceId;
   speechPrefs.value.voiceId = voiceId;
   await speak(testText.value);
-  speechPrefs.value.voiceId = prevVoiceId;
+  speechPrefs.value.voiceId = prev;
   testPlaying.value = false;
 }
 
@@ -131,6 +172,15 @@ function selectVoice(voice: VoiceEntry) {
 }
 
 function toggleMic() {
+  if (!audioMode.value) {
+    audioMode.value = true;
+    if (!isListening.value) {
+      stopSpeaking();
+      voiceState.value = 'listening';
+      startListening();
+    }
+    return;
+  }
   if (isListening.value) {
     stopListening();
   } else {
@@ -171,7 +221,6 @@ async function loadConversation(id: string) {
   conversationId.value = conv.id;
   pendingProposal.value = null;
   sidebarOpen.value = false;
-  scrollToBottom();
 }
 
 function newChat() {
@@ -195,8 +244,8 @@ const groupedConversations = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
   const lastWeek = new Date(today); lastWeek.setDate(today.getDate() - 7);
-  const todayG: AiConversationSummary[] = [], yestG: AiConversationSummary[] = [];
-  const weekG: AiConversationSummary[] = [], olderG: AiConversationSummary[] = [];
+  const todayG: AiConversationSummary[] = [], yestG: AiConversationSummary[] = [],
+    weekG: AiConversationSummary[] = [], olderG: AiConversationSummary[] = [];
   for (const c of conversations.value) {
     const d = new Date(c.updated); d.setHours(0, 0, 0, 0);
     if (d >= today) todayG.push(c);
@@ -216,7 +265,6 @@ type ContextType = 'matter' | 'deadline' | 'user';
 interface ContextItem { type: ContextType; id: string; label: string; sublabel?: string }
 
 const selectedItems = ref<ContextItem[]>([]);
-const contextIcons: Record<ContextType, any> = { matter: Building2, deadline: Clock, user: User };
 
 function buildContext(): AiContext | undefined {
   if (!selectedItems.value.length) return undefined;
@@ -340,7 +388,6 @@ async function approveProposal() {
   messages.value.push({ role: 'tool-event', content: formatToolName(proposal.tool ?? ''), status: 'approved' });
   loading.value = true;
   voiceState.value = 'thinking';
-  scrollToBottom();
 
   const response = await confirmAiProposal(
     proposal, true, buildContext(),
@@ -366,7 +413,6 @@ async function approveProposal() {
     messages.value.push({ role: 'assistant', content: response.error ?? 'Something went wrong.' });
     voiceState.value = 'idle';
   }
-  scrollToBottom();
 }
 
 function formatToolName(tool: string): string {
@@ -392,15 +438,30 @@ const SUGGESTIONS = [
   'Who is assigned to a matter?',
 ];
 
+// ── Per-message TTS ───────────────────────────────────────────────────────────
+const speakingIdx = ref<number | null>(null);
+
+watch(isSpeaking, (speaking) => {
+  if (!speaking) speakingIdx.value = null;
+});
+
+function toggleSpeak(content: string, idx: number) {
+  if (speakingIdx.value === idx) {
+    stopSpeaking();
+  } else {
+    stopSpeaking();
+    speakingIdx.value = idx;
+    speak(content);
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 const route = useRoute();
 
 onMounted(async () => {
   refreshHistory();
-
   const convId = route.query.conversation as string | undefined;
   if (convId) await loadConversation(convId);
-
   const matterId = route.query.matter as string | undefined;
   if (matterId) selectedItems.value.push({ type: 'matter', id: matterId, label: 'Loading…' });
 });
@@ -409,16 +470,185 @@ onMounted(async () => {
 <template>
   <div class="flex h-dvh bg-background overflow-hidden">
 
-    <!-- Mobile sidebar overlay -->
-    <Transition name="sidebar-overlay">
-      <div
-        v-if="sidebarOpen"
-        class="fixed inset-0 z-30 bg-black/50 lg:hidden"
-        @click="sidebarOpen = false"
-      />
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         AUDIO MODE OVERLAY
+    ════════════════════════════════════════════════════════════════════════ -->
+    <Transition name="audio-mode">
+      <div v-if="audioMode" class="fixed inset-0 z-50 flex flex-col overflow-hidden" style="background: #07080f">
+
+        <!-- Gradient blob (Gemini-style aurora at bottom) -->
+        <div class="audio-bg-blob pointer-events-none" />
+
+        <!-- Proposal card (floating above controls) -->
+        <Transition name="fade">
+          <div v-if="pendingProposal" class="absolute bottom-36 left-4 right-4 z-10 border border-white/10 rounded-2xl p-4 bg-white/5 backdrop-blur-xl shadow-2xl">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="size-8 rounded-full bg-blue-500/20 text-blue-400 grid place-items-center shrink-0">
+                <Zap class="size-4" />
+              </div>
+              <div>
+                <p class="text-[11px] text-white/40 uppercase tracking-wide font-medium">Action Required</p>
+                <p class="font-semibold text-white leading-tight text-sm">{{ formatToolName(pendingProposal.tool ?? '') }}</p>
+              </div>
+            </div>
+            <p class="text-sm text-white/60 mb-3">{{ pendingProposal.description }}</p>
+            <ul v-if="proposalSummaryLines(pendingProposal.input).length" class="text-sm flex flex-col gap-1 mb-3 pl-3 border-l-2 border-blue-500/40 text-white/70">
+              <li v-for="line in proposalSummaryLines(pendingProposal.input)" :key="line">{{ line }}</li>
+            </ul>
+            <div class="flex gap-2">
+              <button class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-blue-500 text-white text-sm font-medium py-2 disabled:opacity-50" :disabled="proposalLoading" @click="approveProposal">
+                <Loader2 v-if="proposalLoading" class="size-3.5 animate-spin" /><Check v-else class="size-3.5" /> Approve
+              </button>
+              <button class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-white/10 text-white/80 text-sm font-medium py-2" :disabled="proposalLoading" @click="dismissProposal">
+                <X class="size-3.5" /> Dismiss
+              </button>
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Top bar -->
+        <div class="relative z-10 flex items-center justify-between px-5 pt-safe" style="padding-top: max(env(safe-area-inset-top), 1.25rem)">
+          <div class="flex items-center gap-2">
+            <!-- Live audio indicator bars -->
+            <div class="flex items-end gap-0.5" style="height: 16px">
+              <div
+                v-for="i in 4" :key="i"
+                class="w-0.5 rounded-full bg-white/60 transition-all duration-75 ease-out"
+                :style="{ height: `${liveBarHeight(i)}px` }"
+              />
+            </div>
+            <span class="text-white/70 text-sm font-medium tracking-wide">Live</span>
+          </div>
+          <button
+            class="size-9 rounded-xl bg-white/10 grid place-items-center backdrop-blur-sm"
+            title="Back to chat"
+            @click="exitAudioMode"
+          >
+            <MessageSquare class="size-4 text-white/70" />
+          </button>
+        </div>
+
+        <!-- Center — last exchange + orb -->
+        <div class="flex-1 flex flex-col items-center justify-center gap-8 px-8">
+
+          <!-- Last exchange text -->
+          <div class="w-full max-w-xs text-center space-y-3 min-h-[4rem] flex flex-col items-center justify-center">
+            <Transition name="fade">
+              <p v-if="voiceState === 'listening' && transcript" class="text-white text-xl font-medium leading-snug">{{ transcript }}</p>
+              <p v-else-if="voiceState === 'listening'" class="text-white/40 text-sm animate-pulse">Listening…</p>
+              <p v-else-if="voiceState === 'thinking'" class="text-white/40 text-sm">Thinking…</p>
+              <div v-else-if="lastAssistantText" class="space-y-2">
+                <p v-if="lastUserText" class="text-white/30 text-xs truncate">{{ lastUserText }}</p>
+                <p class="text-white/70 text-sm leading-relaxed line-clamp-4">{{ lastAssistantText }}</p>
+              </div>
+              <p v-else class="text-white/30 text-sm">Tap the mic and ask anything</p>
+            </Transition>
+          </div>
+
+          <!-- Orb -->
+          <div class="relative flex items-center justify-center size-40">
+            <div
+              class="absolute size-40 rounded-full transition-transform duration-75 ease-out"
+              :class="voiceState === 'idle' ? 'bg-blue-500/5' : 'bg-blue-500/10'"
+              :style="{ transform: `scale(${outerRingScale})` }"
+            />
+            <div
+              class="absolute size-40 rounded-full transition-transform duration-75 ease-out"
+              :class="voiceState === 'idle' ? 'bg-blue-500/8' : 'bg-blue-500/15'"
+              :style="{ transform: `scale(${innerRingScale})` }"
+            />
+            <div
+              class="relative z-10 size-28 rounded-full flex flex-col items-center justify-center shadow-2xl transition-all duration-300"
+              style="background: linear-gradient(135deg, #3b82f6, #6366f1); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.4)"
+              :class="{
+                'scale-105': voiceState === 'listening',
+                'animate-pulse': voiceState === 'speaking',
+              }"
+            >
+              <template v-if="voiceState === 'listening'">
+                <div class="flex items-end gap-1 h-10">
+                  <div
+                    v-for="i in 7" :key="i"
+                    class="w-1 bg-white rounded-full transition-all duration-75 ease-out"
+                    :style="{ height: `${barHeight(i)}px` }"
+                  />
+                </div>
+              </template>
+              <template v-else-if="voiceState === 'thinking'">
+                <Loader2 class="size-10 animate-spin text-white/90" />
+              </template>
+              <template v-else>
+                <Sparkles class="size-10 text-white/90" />
+              </template>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Bottom controls (Gemini-style pill row) -->
+        <div
+          class="relative z-10 flex items-center justify-center gap-3 px-6"
+          style="padding-bottom: max(env(safe-area-inset-bottom), 2rem)"
+        >
+          <!-- Context button -->
+          <button
+            class="size-14 rounded-full bg-white/10 backdrop-blur-sm grid place-items-center relative transition-colors hover:bg-white/20"
+            title="Add context"
+            @click="contextDrawerOpen = true"
+          >
+            <AtSign class="size-5 text-white/80" />
+            <div v-if="selectedItems.length" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-500 rounded-full text-[10px] text-white grid place-items-center font-semibold px-1">
+              {{ selectedItems.length }}
+            </div>
+          </button>
+
+          <!-- Stop speaking -->
+          <button
+            v-if="isSpeaking"
+            class="size-14 rounded-full bg-white/10 backdrop-blur-sm grid place-items-center transition-colors hover:bg-white/20"
+            title="Stop speaking"
+            @click="stopSpeaking"
+          >
+            <VolumeX class="size-5 text-white/80" />
+          </button>
+
+          <!-- Mic toggle -->
+          <button
+            class="size-14 rounded-full backdrop-blur-sm grid place-items-center transition-all"
+            :class="isListening
+              ? 'bg-white/20 ring-2 ring-white/30 scale-105'
+              : 'bg-white/10 hover:bg-white/20'"
+            :disabled="voiceState === 'thinking'"
+            @click="toggleMic"
+          >
+            <MicOff v-if="isListening" class="size-5 text-white" />
+            <Mic v-else class="size-5 text-white/80" />
+          </button>
+
+          <!-- Exit audio mode (red pill — primary exit action) -->
+          <button
+            class="h-14 px-7 rounded-full flex items-center justify-center shadow-lg transition-opacity hover:opacity-90"
+            style="background: #ef4444; box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4)"
+            title="End voice session"
+            @click="exitAudioMode"
+          >
+            <X class="size-5 text-white" />
+          </button>
+        </div>
+
+      </div>
     </Transition>
 
-    <!-- Sidebar -->
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         CHAT MODE
+    ════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Sidebar overlay (mobile) -->
+    <Transition name="sidebar-overlay">
+      <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-black/50 lg:hidden" @click="sidebarOpen = false" />
+    </Transition>
+
+    <!-- History sidebar -->
     <aside
       class="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-background border-r transition-transform duration-250 ease-in-out lg:static lg:translate-x-0"
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
@@ -432,105 +662,65 @@ onMounted(async () => {
           <X class="size-4" />
         </Button>
       </div>
-
       <div class="px-3 py-3 shrink-0">
         <Button variant="outline" class="w-full gap-2" @click="newChat">
-          <Plus class="size-4" />
-          New Conversation
+          <Plus class="size-4" /> New Conversation
         </Button>
       </div>
-
       <div class="flex-1 overflow-y-auto">
         <div v-if="historyLoading" class="flex justify-center py-8">
           <Loader2 class="size-4 animate-spin text-muted-foreground" />
         </div>
-
         <template v-else-if="groupedConversations.length > 0">
           <div v-for="group in groupedConversations" :key="group.label" class="mb-2">
-            <p class="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {{ group.label }}
-            </p>
+            <p class="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">{{ group.label }}</p>
             <button
-              v-for="conv in group.items"
-              :key="conv.id"
+              v-for="conv in group.items" :key="conv.id"
               class="group w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-start gap-2.5"
               :class="conversationId === conv.id ? 'bg-accent' : ''"
               @click="loadConversation(conv.id)"
             >
               <MessageSquare class="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
               <span class="flex-1 text-sm truncate leading-snug">{{ conv.title }}</span>
-              <button
-                class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
-                @click.stop="removeConversation(conv.id)"
-              >
+              <button class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0" @click.stop="removeConversation(conv.id)">
                 <Trash2 class="size-3.5" />
               </button>
             </button>
           </div>
         </template>
-
-        <p v-else class="px-3 py-8 text-sm text-muted-foreground text-center">
-          No conversations yet.
-        </p>
+        <p v-else class="px-3 py-8 text-sm text-muted-foreground text-center">No conversations yet.</p>
       </div>
     </aside>
 
-    <!-- Main -->
+    <!-- Main chat area -->
     <div class="flex flex-col flex-1 min-w-0">
 
       <!-- Header -->
       <header class="flex items-center gap-2 px-4 h-14 border-b shrink-0">
-        <Button size="icon-sm" variant="ghost" class="lg:hidden" @click="sidebarOpen = true">
-          <Menu class="size-4" />
-        </Button>
-        <Button size="icon-sm" variant="ghost" @click="navigateTo(-1 as any)">
-          <ChevronLeft class="size-4" />
-        </Button>
+        <Button size="icon-sm" variant="ghost" class="lg:hidden" @click="sidebarOpen = true"><Menu class="size-4" /></Button>
+        <Button size="icon-sm" variant="ghost" @click="navigateTo(-1 as any)"><ChevronLeft class="size-4" /></Button>
         <div class="flex items-center gap-2">
-          <div
-            class="size-7 bg-primary text-primary-foreground grid place-items-center rounded-full"
-            :class="isSpeaking ? 'animate-pulse' : ''"
-          >
+          <div class="size-7 bg-primary text-primary-foreground grid place-items-center rounded-full" :class="isSpeaking ? 'animate-pulse' : ''">
             <Sparkles class="size-3.5" />
           </div>
           <span class="font-semibold text-sm">PractoAI</span>
-          <span v-if="voiceState === 'listening'" class="text-xs text-primary animate-pulse">Listening…</span>
-          <span v-else-if="voiceState === 'thinking'" class="text-xs text-muted-foreground">Thinking…</span>
-          <span v-else-if="voiceState === 'speaking'" class="text-xs text-primary animate-pulse">Speaking…</span>
         </div>
         <div class="ml-auto flex items-center gap-1">
           <Button
-            v-if="ttsSupported"
-            size="icon-sm"
-            variant="ghost"
+            size="icon-sm" variant="ghost"
             :class="autoRead ? 'text-primary' : 'text-muted-foreground'"
-            :title="autoRead ? 'Auto-read on — click to turn off' : 'Auto-read off — click to turn on'"
+            :title="autoRead ? 'Auto-read on' : 'Auto-read off'"
             @click="autoRead = !autoRead; if (!autoRead) stopSpeaking()"
           >
-            <Volume2 v-if="autoRead" class="size-4" />
-            <VolumeX v-else class="size-4" />
+            <Volume2 v-if="autoRead" class="size-4" /><VolumeX v-else class="size-4" />
           </Button>
-          <Button
-            size="icon-sm"
-            :variant="isListening ? 'destructive' : 'ghost'"
-            :class="isListening ? 'animate-pulse' : 'text-muted-foreground'"
-            :title="isListening ? 'Stop recording' : 'Start voice input'"
-            @click="toggleMic"
-          >
-            <MicOff v-if="isListening" class="size-4" />
-            <Mic v-else class="size-4" />
-          </Button>
-          <Button size="icon-sm" variant="ghost" @click="newChat">
-            <Plus class="size-4" />
-          </Button>
-          <Button size="icon-sm" variant="ghost" title="Voice settings" @click="voiceSettingsOpen = true">
-            <Settings class="size-4" />
-          </Button>
+          <Button size="icon-sm" variant="ghost" @click="newChat"><Plus class="size-4" /></Button>
+          <Button size="icon-sm" variant="ghost" title="Voice settings" @click="voiceSettingsOpen = true"><Settings class="size-4" /></Button>
         </div>
       </header>
 
       <!-- Mic error banner -->
-      <Transition name="proposal">
+      <Transition name="fade">
         <div v-if="micError" class="shrink-0 px-4 py-2 bg-destructive/10 border-b border-destructive/20 flex items-center gap-2 text-sm text-destructive">
           <MicOff class="size-4 shrink-0" />
           <span class="flex-1">{{ micError }}</span>
@@ -538,120 +728,105 @@ onMounted(async () => {
         </div>
       </Transition>
 
-      <!-- Tool proposal — pinned under header -->
-      <Transition name="proposal">
-        <div v-if="pendingProposal" class="shrink-0 px-4 py-3 border-b bg-muted/30">
-          <div class="max-w-2xl mx-auto border rounded-xl p-4 bg-background shadow-sm">
-            <div class="flex items-center gap-3 mb-3">
-              <div class="size-9 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0">
+      <!-- Proposal banner (chat mode) -->
+      <Transition name="fade">
+        <div v-if="pendingProposal && !audioMode" class="shrink-0 px-4 py-3 border-b bg-muted/30">
+          <div class="max-w-lg mx-auto border rounded-xl p-4 bg-background shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="size-8 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0">
                 <Zap class="size-4" />
               </div>
               <div>
                 <p class="text-xs text-muted-foreground uppercase tracking-wide font-medium">Action Required</p>
-                <p class="font-semibold text-base leading-tight">{{ formatToolName(pendingProposal.tool ?? '') }}</p>
+                <p class="font-semibold leading-tight">{{ formatToolName(pendingProposal.tool ?? '') }}</p>
               </div>
             </div>
             <p class="text-sm text-muted-foreground mb-3">{{ pendingProposal.description }}</p>
-            <ul
-              v-if="proposalSummaryLines(pendingProposal.input).length"
-              class="text-sm text-foreground flex flex-col gap-1 mb-4 pl-3 border-l-2 border-primary/40"
-            >
+            <ul v-if="proposalSummaryLines(pendingProposal.input).length" class="text-sm flex flex-col gap-1 mb-3 pl-3 border-l-2 border-primary/40">
               <li v-for="line in proposalSummaryLines(pendingProposal.input)" :key="line">{{ line }}</li>
             </ul>
-            <div class="flex gap-3">
-              <Button class="flex-1 h-12 text-base gap-2" :disabled="proposalLoading" @click="approveProposal">
-                <Loader2 v-if="proposalLoading" class="size-4 animate-spin" />
-                <Check v-else class="size-4" />
-                Approve
+            <div class="flex gap-2">
+              <Button class="flex-1 gap-2" :disabled="proposalLoading" @click="approveProposal">
+                <Loader2 v-if="proposalLoading" class="size-4 animate-spin" /><Check v-else class="size-4" /> Approve
               </Button>
-              <Button variant="outline" class="flex-1 h-12 text-base gap-2" :disabled="proposalLoading" @click="dismissProposal">
-                <X class="size-4" />
-                Dismiss
+              <Button variant="outline" class="flex-1 gap-2" :disabled="proposalLoading" @click="dismissProposal">
+                <X class="size-4" /> Dismiss
               </Button>
             </div>
           </div>
         </div>
       </Transition>
 
-      <!-- Messages / empty state -->
+      <!-- Message thread -->
       <div class="flex-1 overflow-y-auto">
-        <div class="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4 min-h-full">
 
-          <template v-if="messages.length === 0 && !loading">
-            <div class="flex flex-col items-center justify-center flex-1 gap-8 py-12 text-center">
-              <div>
-                <div class="size-16 bg-primary text-primary-foreground grid place-items-center rounded-full mx-auto mb-4">
-                  <Sparkles class="size-7" />
-                </div>
-                <h1 class="text-2xl font-semibold">Hi {{ firstName }}!</h1>
-                <p class="text-muted-foreground mt-1">How can I help you today?</p>
-              </div>
-
-              <!-- Suggested prompts grid -->
-              <div class="grid grid-cols-2 gap-2 w-full max-w-md">
-                <Button
-                  v-for="s in SUGGESTIONS"
-                  :key="s"
-                  variant="outline"
-                  class="h-auto py-3 px-4 text-left text-sm leading-snug whitespace-normal justify-start"
-                  @click="sendMessage(s)"
-                >
-                  {{ s }}
-                </Button>
-              </div>
-
-              <!-- Big mic CTA -->
-              <div class="flex flex-col items-center gap-3 mt-2">
-                <p class="text-sm text-muted-foreground">— or tap to speak —</p>
-                <Button
-                  size="icon"
-                  class="size-20 rounded-full shadow-lg [&_svg]:size-8"
-                  :class="isListening ? 'animate-pulse ring-4 ring-primary/30' : ''"
-                  @click="toggleMic"
-                >
-                  <Mic />
-                </Button>
-              </div>
+        <!-- Empty state -->
+        <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full gap-6 px-6">
+          <div class="text-center">
+            <div class="size-16 bg-primary text-primary-foreground grid place-items-center rounded-full mx-auto mb-4">
+              <Sparkles class="size-8" />
             </div>
-          </template>
+            <p class="text-lg font-semibold">Hi {{ firstName }}</p>
+            <p class="text-muted-foreground text-sm mt-1">What can I help you with today?</p>
+          </div>
+          <div class="grid grid-cols-2 gap-2 w-full max-w-sm">
+            <button
+              v-for="s in SUGGESTIONS" :key="s"
+              class="text-left text-sm px-3 py-2.5 rounded-xl border border-border hover:bg-accent transition-colors leading-snug"
+              @click="sendMessage(s)"
+            >{{ s }}</button>
+          </div>
+        </div>
 
-          <!-- Messages -->
-          <template v-for="(msg, i) in messages" :key="i">
-            <div v-if="msg.role === 'tool-event'" class="flex justify-center">
-              <span
-                class="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border"
-                :class="msg.status === 'approved' ? 'bg-muted text-muted-foreground' : 'bg-muted/40 text-muted-foreground'"
+        <!-- Messages -->
+        <div v-else class="flex flex-col gap-4 px-4 py-4 max-w-2xl mx-auto w-full">
+          <template v-for="(msg, idx) in messages" :key="idx">
+
+            <!-- User -->
+            <div v-if="msg.role === 'user'" class="flex justify-end">
+              <div class="max-w-[80%] bg-muted rounded-2xl px-4 py-2.5 text-sm leading-relaxed">{{ msg.content }}</div>
+            </div>
+
+            <!-- Assistant -->
+            <div v-else-if="msg.role === 'assistant'" class="flex items-start gap-2.5 group/msg">
+              <div
+                class="size-7 bg-primary text-primary-foreground grid place-items-center rounded-full shrink-0 mt-0.5"
+                :class="speakingIdx === idx ? 'animate-pulse' : ''"
               >
-                <Check v-if="msg.status === 'approved'" class="size-3" />
-                <X v-else class="size-3" />
-                {{ msg.status === 'approved' ? 'Approved' : 'Dismissed' }}: {{ msg.content }}
-              </span>
+                <Sparkles class="size-3.5" />
+              </div>
+              <div class="flex flex-col gap-1 flex-1 min-w-0">
+                <div class="text-sm leading-relaxed whitespace-pre-wrap">{{ msg.content }}</div>
+                <button
+                  class="self-start flex items-center gap-1 text-muted-foreground/50 hover:text-muted-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100"
+                  :class="speakingIdx === idx ? '!opacity-100 !text-primary' : ''"
+                  @click="toggleSpeak(msg.content, idx)"
+                >
+                  <VolumeX v-if="speakingIdx === idx" class="size-3.5" />
+                  <Volume2 v-else class="size-3.5" />
+                </button>
+              </div>
             </div>
-            <div v-else-if="msg.role === 'user'" class="flex justify-end">
-              <div class="max-w-[80%] bg-muted text-foreground rounded-2xl px-4 py-2.5 text-base">
+
+            <!-- Tool event -->
+            <div v-else-if="msg.role === 'tool-event'" class="flex justify-center">
+              <div class="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-full border border-border">
+                <Check v-if="(msg as ToolEvent).status === 'approved'" class="size-3 text-green-500" />
+                <X v-else class="size-3 text-destructive" />
                 {{ msg.content }}
+                <span class="text-muted-foreground/60">· {{ (msg as ToolEvent).status }}</span>
               </div>
             </div>
-            <div v-else class="flex items-start gap-3">
-              <div
-                class="size-8 bg-primary text-primary-foreground grid place-items-center rounded-full shrink-0 mt-0.5"
-                :class="isSpeaking && i === messages.length - 1 ? 'animate-pulse' : ''"
-              >
-                <Sparkles class="size-4" />
-              </div>
-              <div
-                class="flex-1 bg-background border rounded-2xl px-4 py-3 text-base prose prose-base dark:prose-invert prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 max-w-none"
-                v-html="renderMarkdown(msg.content)"
-              />
-            </div>
+
           </template>
 
-          <div v-if="loading" class="flex items-start gap-3">
-            <div class="size-8 bg-primary text-primary-foreground grid place-items-center rounded-full shrink-0 animate-pulse">
-              <Sparkles class="size-4" />
+          <!-- Thinking dots -->
+          <div v-if="loading" class="flex items-start gap-2.5">
+            <div class="size-7 bg-primary text-primary-foreground grid place-items-center rounded-full shrink-0 mt-0.5">
+              <Sparkles class="size-3.5" />
             </div>
-            <div class="bg-background border rounded-2xl px-4 py-3">
-              <Loader2 class="size-5 animate-spin text-muted-foreground" />
+            <div class="flex items-center gap-1 h-7 pt-1">
+              <div v-for="i in 3" :key="i" class="size-1.5 bg-muted-foreground/50 rounded-full animate-bounce" :style="{ animationDelay: `${(i - 1) * 0.15}s` }" />
             </div>
           </div>
 
@@ -659,46 +834,38 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Input dock -->
-      <div class="shrink-0 border-t px-4 py-3 bg-background">
-        <div class="max-w-2xl mx-auto flex flex-col gap-2">
+      <!-- Input area -->
+      <div class="shrink-0 border-t px-4 py-3">
 
-          <!-- Context badges -->
-          <div v-if="selectedItems.length > 0" class="flex flex-wrap gap-1.5">
-            <Badge
-              v-for="item in selectedItems"
-              :key="item.id"
-              variant="secondary"
-              class="flex items-center gap-1 pr-1 text-sm py-1"
-            >
-              <component :is="contextIcons[item.type]" class="size-3.5 shrink-0" />
-              <span class="max-w-[160px] truncate">{{ item.label }}</span>
-              <button
-                class="ml-1 text-muted-foreground hover:text-foreground transition-colors"
-                @click="selectedItems = selectedItems.filter(i => i.id !== item.id)"
-              >
-                <X class="size-3" />
-              </button>
-            </Badge>
-          </div>
+        <!-- Context chips -->
+        <div v-if="selectedItems.length" class="flex flex-wrap gap-1.5 mb-2">
+          <button
+            v-for="item in selectedItems" :key="item.id"
+            class="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+            @click="toggleItem(item)"
+          >
+            <Building2 v-if="item.type === 'matter'" class="size-3" />
+            <Clock v-else-if="item.type === 'deadline'" class="size-3" />
+            <User v-else class="size-3" />
+            {{ item.label }}
+            <X class="size-3 ml-0.5" />
+          </button>
+        </div>
 
-          <InputGroup>
-            <InputGroupAddon align="block-start">
+        <div class="flex items-end gap-2">
+          <InputGroup class="flex-1">
+            <InputGroupTextarea v-model="inputText" placeholder="Message PractoAI…" @keydown="handleKeydown" />
+            <InputGroupAddon align="block-end" class="flex items-center gap-1 pb-1 pr-1">
+              <!-- Context -->
               <Drawer v-model:open="contextDrawerOpen">
                 <DrawerTrigger as-child>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    :class="selectedItems.length > 0 ? 'border-primary/50 text-primary' : ''"
-                  >
-                    <AtSign class="size-4" />
-                    Add Context
-                    <Badge v-if="selectedItems.length > 0" variant="secondary" class="ml-1 text-xs px-1">
+                  <Button size="icon-sm" variant="ghost" class="rounded-full shrink-0 relative" title="Add context">
+                    <AtSign class="size-3.5" />
+                    <span v-if="selectedItems.length" class="absolute -top-0.5 -right-0.5 size-3.5 bg-primary rounded-full text-[9px] text-primary-foreground grid place-items-center font-semibold">
                       {{ selectedItems.length }}
-                    </Badge>
+                    </span>
                   </Button>
                 </DrawerTrigger>
-
                 <DrawerContent class="flex flex-col max-h-[75vh]">
                   <div class="flex flex-col h-full min-h-0">
                     <div class="px-4 pt-4 pb-2 border-b shrink-0">
@@ -710,41 +877,24 @@ onMounted(async () => {
                         <TabsTrigger value="deadline" class="text-xs gap-1.5"><Clock class="size-3" /> Deadlines</TabsTrigger>
                         <TabsTrigger value="user" class="text-xs gap-1.5"><User class="size-3" /> Users</TabsTrigger>
                       </TabsList>
-                      <div v-if="contextLoading" class="flex items-center justify-center p-8">
-                        <Loader2 class="size-5 animate-spin text-muted-foreground" />
-                      </div>
+                      <div v-if="contextLoading" class="flex items-center justify-center p-8"><Loader2 class="size-5 animate-spin text-muted-foreground" /></div>
                       <template v-else>
                         <TabsContent value="matter" class="overflow-y-auto flex-1 mt-0 pb-8">
-                          <button
-                            v-for="m in filteredMatters" :key="m.id"
-                            class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0"
-                            :class="isSelected(m.id) ? 'bg-accent' : ''"
-                            @click="toggleItem({ type: 'matter', id: m.id, label: m.name, sublabel: m.caseNumber })"
-                          >
+                          <button v-for="m in filteredMatters" :key="m.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(m.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'matter', id: m.id, label: m.name, sublabel: m.caseNumber })">
                             <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium truncate">{{ m.name }}</span><span class="text-xs text-muted-foreground">{{ m.caseNumber }}</span></div>
                             <Check v-if="isSelected(m.id)" class="size-4 text-primary shrink-0" />
                           </button>
                           <p v-if="!filteredMatters.length" class="px-4 py-6 text-sm text-muted-foreground text-center">No matters found.</p>
                         </TabsContent>
                         <TabsContent value="deadline" class="overflow-y-auto flex-1 mt-0 pb-8">
-                          <button
-                            v-for="d in filteredDeadlines" :key="d.id"
-                            class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0"
-                            :class="isSelected(d.id) ? 'bg-accent' : ''"
-                            @click="toggleItem({ type: 'deadline', id: d.id, label: d.name, sublabel: d.matterName })"
-                          >
+                          <button v-for="d in filteredDeadlines" :key="d.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(d.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'deadline', id: d.id, label: d.name, sublabel: d.matterName })">
                             <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium truncate">{{ d.name }}</span><span class="text-xs text-muted-foreground truncate">{{ d.matterName }}</span></div>
                             <Check v-if="isSelected(d.id)" class="size-4 text-primary shrink-0" />
                           </button>
                           <p v-if="!filteredDeadlines.length" class="px-4 py-6 text-sm text-muted-foreground text-center">No pending deadlines found.</p>
                         </TabsContent>
                         <TabsContent value="user" class="overflow-y-auto flex-1 mt-0 pb-8">
-                          <button
-                            v-for="u in filteredUsers" :key="u.id"
-                            class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0"
-                            :class="isSelected(u.id) ? 'bg-accent' : ''"
-                            @click="toggleItem({ type: 'user', id: u.id, label: u.name, sublabel: u.role })"
-                          >
+                          <button v-for="u in filteredUsers" :key="u.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(u.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'user', id: u.id, label: u.name, sublabel: u.role })">
                             <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium">{{ u.name }}</span><span v-if="u.role" class="text-xs text-muted-foreground capitalize">{{ u.role }}</span></div>
                             <Check v-if="isSelected(u.id)" class="size-4 text-primary shrink-0" />
                           </button>
@@ -755,108 +905,34 @@ onMounted(async () => {
                   </div>
                 </DrawerContent>
               </Drawer>
-            </InputGroupAddon>
 
-            <InputGroupTextarea
-              v-model="inputText"
-              placeholder="Ask, search or chat…"
-              @keydown="handleKeydown"
-            />
-
-            <InputGroupAddon align="block-end" class="ml-auto flex justify-end items-center gap-1">
-              <Separator orientation="vertical" class="!h-4" />
-              <InputGroupButton
-                variant="default"
-                class="rounded-full"
+              <!-- Mic → enters audio mode -->
+              <Button
                 size="icon-sm"
+                variant="ghost"
+                class="rounded-full shrink-0"
+                title="Switch to voice mode"
+                @click="toggleMic"
+              >
+                <Mic class="size-3.5" />
+              </Button>
+
+              <!-- Send -->
+              <Button
+                size="icon-sm"
+                variant="default"
+                class="rounded-full shrink-0"
                 :disabled="!inputText.trim() || loading"
                 @click="sendTextInput"
               >
-                <ArrowUpIcon class="size-4" />
-                <span class="sr-only">Send</span>
-              </InputGroupButton>
-              <InputGroupButton
-                :variant="isListening ? 'destructive' : 'default'"
-                class="rounded-full"
-                size="icon-sm"
-                :class="isListening ? 'animate-pulse' : ''"
-                :title="isListening ? 'Stop listening' : 'Speak to PractoAI'"
-                @click="toggleMic"
-              >
-                <MicOff v-if="isListening" class="size-4" />
-                <Mic v-else class="size-4" />
-                <span class="sr-only">{{ isListening ? 'Stop' : 'Speak' }}</span>
-              </InputGroupButton>
+                <ArrowUpIcon class="size-3.5" />
+              </Button>
             </InputGroupAddon>
           </InputGroup>
         </div>
       </div>
 
     </div>
-
-    <!-- STT fullscreen overlay (recording + transcribing) -->
-    <Transition name="stt-overlay">
-      <div
-        v-if="voiceState === 'listening' || voiceState === 'thinking'"
-        class="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center gap-8 px-8"
-        @click="isListening ? stopListening() : undefined"
-      >
-        <div class="flex flex-col items-center gap-6">
-          <!-- Audio level bars (listening only) -->
-          <div v-if="isListening" class="flex items-end gap-1.5 h-16">
-            <div
-              v-for="i in 7"
-              :key="i"
-              class="w-2 bg-primary rounded-full transition-all duration-75 ease-out"
-              :style="{
-                height: `${Math.max(6, audioLevel * (0.4 + 0.6 * Math.abs(Math.sin(i * 0.9))) )}px`,
-                opacity: audioLevel > 2 ? 1 : 0.3,
-              }"
-            />
-          </div>
-
-          <!-- Mic / spinner button -->
-          <div class="relative">
-            <div
-              v-if="isListening"
-              class="absolute inset-0 rounded-full animate-ping scale-150 bg-primary/20"
-            />
-            <Button
-              size="icon"
-              class="relative size-24 rounded-full [&_svg]:size-10 shadow-xl pointer-events-none"
-              :variant="isTranscribing ? 'secondary' : 'default'"
-            >
-              <Loader2 v-if="isTranscribing" class="animate-spin" />
-              <Mic v-else />
-            </Button>
-          </div>
-        </div>
-
-        <div class="max-w-lg text-center">
-          <p v-if="isTranscribing" class="text-xl text-muted-foreground">Transcribing…</p>
-          <p
-            v-else
-            class="text-3xl font-medium leading-snug min-h-12"
-            :class="transcript ? 'text-foreground' : 'text-muted-foreground'"
-          >
-            {{ transcript || 'Listening…' }}
-          </p>
-        </div>
-
-        <p v-if="isListening" class="text-sm text-muted-foreground">Tap anywhere to stop</p>
-
-        <Button
-          v-if="isListening"
-          size="lg"
-          variant="outline"
-          class="h-14 px-8 text-base rounded-full gap-2"
-          @click.stop="stopListening"
-        >
-          <MicOff class="size-5" />
-          Stop
-        </Button>
-      </div>
-    </Transition>
 
     <!-- Voice settings sheet -->
     <Sheet v-model:open="voiceSettingsOpen">
@@ -865,88 +941,47 @@ onMounted(async () => {
           <Settings class="size-4 text-muted-foreground" />
           <span class="font-semibold text-sm">Voice Settings</span>
         </div>
-
         <div class="flex flex-col gap-6 px-4 py-5">
-
-          <!-- TTS Voice selector -->
           <div class="flex flex-col gap-3">
             <div>
               <p class="text-sm font-medium">Voice</p>
               <p class="text-xs text-muted-foreground mt-0.5">Select the ElevenLabs voice for AI responses</p>
             </div>
-
-            <div v-if="voicesLoading" class="flex justify-center py-6">
-              <Loader2 class="size-5 animate-spin text-muted-foreground" />
-            </div>
-
+            <div v-if="voicesLoading" class="flex justify-center py-6"><Loader2 class="size-5 animate-spin text-muted-foreground" /></div>
             <div v-else-if="voices.length > 0" class="flex flex-col gap-1.5">
               <button
-                v-for="v in voices"
-                :key="v.voice_id"
+                v-for="v in voices" :key="v.voice_id"
                 class="w-full text-left px-3 py-2.5 rounded-lg border transition-colors hover:bg-accent flex items-center justify-between gap-2"
                 :class="speechPrefs.voiceId === v.voice_id ? 'border-primary bg-primary/5' : 'border-border'"
                 @click="selectVoice(v)"
               >
                 <div class="flex items-center gap-2">
-                  <div
-                    class="size-7 rounded-full grid place-items-center shrink-0 text-xs font-semibold"
-                    :class="speechPrefs.voiceId === v.voice_id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
-                  >
-                    {{ v.name.charAt(0) }}
-                  </div>
+                  <div class="size-7 rounded-full grid place-items-center shrink-0 text-xs font-semibold" :class="speechPrefs.voiceId === v.voice_id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'">{{ v.name.charAt(0) }}</div>
                   <span class="text-sm font-medium">{{ v.name }}</span>
                 </div>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  class="shrink-0"
-                  :disabled="testPlaying"
-                  @click.stop="testVoice(v.voice_id, v.name)"
-                >
+                <Button size="icon-sm" variant="ghost" class="shrink-0" :disabled="testPlaying" @click.stop="testVoice(v.voice_id)">
                   <Volume2 v-if="!testPlaying || speechPrefs.voiceId !== v.voice_id" class="size-3.5" />
                   <Loader2 v-else class="size-3.5 animate-spin" />
                 </Button>
               </button>
             </div>
-
-            <p v-else class="text-sm text-muted-foreground text-center py-4">
-              Add your <code class="text-xs bg-muted px-1 rounded">ELEVENLABS_API_KEY</code> to the backend to load voices.
-            </p>
+            <p v-else class="text-sm text-muted-foreground text-center py-4">Add your <code class="text-xs bg-muted px-1 rounded">ELEVENLABS_API_KEY</code> to load voices.</p>
           </div>
-
-          <!-- Test text -->
           <div class="flex flex-col gap-2">
             <p class="text-sm font-medium">Test phrase</p>
             <InputGroupTextarea v-model="testText" class="text-sm" />
-            <Button
-              variant="outline"
-              size="sm"
-              class="gap-2"
-              :disabled="testPlaying || !speechPrefs.voiceId"
-              @click="testVoice(speechPrefs.voiceId, speechPrefs.voiceName)"
-            >
-              <Volume2 v-if="!testPlaying" class="size-4" />
-              <Loader2 v-else class="size-4 animate-spin" />
+            <Button variant="outline" size="sm" class="gap-2" :disabled="testPlaying || !speechPrefs.voiceId" @click="testVoice(speechPrefs.voiceId)">
+              <Volume2 v-if="!testPlaying" class="size-4" /><Loader2 v-else class="size-4 animate-spin" />
               {{ testPlaying ? 'Playing…' : 'Play test' }}
             </Button>
           </div>
-
-          <!-- Auto-read toggle -->
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-medium">Auto-read responses</p>
               <p class="text-xs text-muted-foreground mt-0.5">Read AI replies aloud automatically</p>
             </div>
-            <Button
-              size="sm"
-              :variant="autoRead ? 'default' : 'outline'"
-              @click="autoRead = !autoRead; if (!autoRead) stopSpeaking()"
-            >
-              {{ autoRead ? 'On' : 'Off' }}
-            </Button>
+            <Button size="sm" :variant="autoRead ? 'default' : 'outline'" @click="autoRead = !autoRead; if (!autoRead) stopSpeaking()">{{ autoRead ? 'On' : 'Off' }}</Button>
           </div>
-
-          <!-- Current voice info -->
           <div v-if="speechPrefs.voiceName" class="rounded-lg bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
             Active voice: <span class="font-medium text-foreground">{{ speechPrefs.voiceName }}</span>
           </div>
@@ -958,18 +993,36 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.proposal-enter-active,
-.proposal-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
-.proposal-enter-from,
-.proposal-leave-to { opacity: 0; transform: translateY(-8px); }
+/* Audio mode enter/leave */
+.audio-mode-enter-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.audio-mode-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
+.audio-mode-enter-from  { opacity: 0; transform: scale(0.97); }
+.audio-mode-leave-to    { opacity: 0; transform: scale(0.97); }
+
+/* Gemini-style gradient blob at the bottom of audio mode */
+.audio-bg-blob {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 55%;
+  background: radial-gradient(
+    ellipse 100% 80% at 50% 100%,
+    rgba(59, 130, 246, 0.28) 0%,
+    rgba(99, 102, 241, 0.18) 35%,
+    rgba(139, 92, 246, 0.08) 60%,
+    transparent 80%
+  );
+  filter: blur(2px);
+}
 
 .sidebar-overlay-enter-active,
 .sidebar-overlay-leave-active { transition: opacity 0.25s ease; }
 .sidebar-overlay-enter-from,
 .sidebar-overlay-leave-to { opacity: 0; }
 
-.stt-overlay-enter-active,
-.stt-overlay-leave-active { transition: opacity 0.2s ease; }
-.stt-overlay-enter-from,
-.stt-overlay-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.fade-enter-from,
+.fade-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

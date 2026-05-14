@@ -44,7 +44,14 @@ const footerLabel = computed(() =>
   isSubmitting.value ? 'Processing…' : 'Continue to Payment'
 )
 
-provide('stepCanProceed', canProceed)
-provide('stepFooterLabel', footerLabel)
-provide('stepHandleNext', handleNext)
+watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
+watch(footerLabel, v => { store.stepFooterLabel = v }, { immediate: true })
+onMounted(() => {
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>

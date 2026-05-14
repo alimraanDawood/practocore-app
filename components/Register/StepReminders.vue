@@ -108,7 +108,14 @@ const handleNext = async () => {
   await store.advance('reminders')
 }
 
-provide('stepCanProceed', canProceed)
-provide('stepFooterLabel', ref('Continue'))
-provide('stepHandleNext', handleNext)
+watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
+onMounted(() => {
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>

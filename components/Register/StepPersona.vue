@@ -17,10 +17,16 @@ import { useRegisterStore } from '~/stores/register'
 
 const store = useRegisterStore()
 
-// Persona step is always valid — user just picks a card
-provide('stepCanProceed', ref(true))
-provide('stepFooterLabel', ref('Continue'))
-provide('stepHandleNext', async () => {
-  await store.advance('persona')
+const handleNext = async () => { await store.advance('persona') }
+
+onMounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
 })
 </script>

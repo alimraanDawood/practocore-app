@@ -1,3 +1,5 @@
+import { VoiceRecorder } from 'capacitor-voice-recorder';
+import { Capacitor } from '@capacitor/core';
 import { pb, SERVER_URL } from '~/lib/pocketbase';
 
 const PREFS_KEY = 'practoai_speech_prefs';
@@ -14,8 +16,8 @@ export interface VoiceEntry {
 }
 
 const DEFAULT_PREFS: SpeechPrefs = {
-  voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel
-  voiceName: 'Rachel',
+  voiceId: 'AFpJHw6AxGC0nx0fpvpi',
+  voiceName: 'Dorothy',
 };
 
 export function useSpeech() {
@@ -33,26 +35,35 @@ export function useSpeech() {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs.value));
   }
 
-  // ── STT via MediaRecorder → ElevenLabs backend ───────────────────────────
+  // ── STT ───────────────────────────────────────────────────────────────────
   const isListening = ref(false);
   const isTranscribing = ref(false);
   const transcript = ref('');
   const sttSupported = ref(false);
-  const audioLevel = ref(0); // 0–100, live mic level while recording
+  const audioLevel = ref(0);
   const micError = ref('');
+  const isNative = ref(false);
 
+  // Web-only recording state
   let mediaRecorder: MediaRecorder | null = null;
   let audioChunks: Blob[] = [];
   let activeStream: MediaStream | null = null;
   let audioContext: AudioContext | null = null;
   let analyserNode: AnalyserNode | null = null;
   let levelFrame: number | null = null;
-  let interimRecognition: any = null; // Web Speech API for live interim display only
+  let interimRecognition: any = null;
 
-  onMounted(() => {
-    sttSupported.value = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  onMounted(async () => {
+    isNative.value = Capacitor.isNativePlatform();
+    if (isNative.value) {
+      const can = await VoiceRecorder.canDeviceVoiceRecord().catch(() => ({ value: false }));
+      sttSupported.value = can.value;
+    } else {
+      sttSupported.value = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+    }
   });
 
+  // ── Audio level meter (web only) ─────────────────────────────────────────
   function startLevelMeter(stream: MediaStream) {
     audioContext = new AudioContext();
     analyserNode = audioContext.createAnalyser();
@@ -76,11 +87,32 @@ export function useSpeech() {
     audioLevel.value = 0;
   }
 
+  // ── Start recording ───────────────────────────────────────────────────────
   async function startListening() {
     if (isListening.value) return;
     transcript.value = '';
     micError.value = '';
 
+    if (isNative.value) {
+      try {
+        const hasPerm = await VoiceRecorder.hasAudioRecordingPermission();
+        if (!hasPerm.value) {
+          const granted = await VoiceRecorder.requestAudioRecordingPermission();
+          if (!granted.value) {
+            micError.value = 'Microphone permission denied. Go to Settings → Apps → PractoCore → Permissions and enable Microphone.';
+            return;
+          }
+        }
+        await VoiceRecorder.startRecording();
+        isListening.value = true;
+      } catch (err: any) {
+        console.error('[STT] Native recording failed:', err);
+        micError.value = 'Could not access microphone.';
+      }
+      return;
+    }
+
+    // Web path
     if (!navigator.mediaDevices?.getUserMedia) {
       micError.value = 'Microphone requires a secure connection (HTTPS or localhost).';
       return;
@@ -120,7 +152,7 @@ export function useSpeech() {
       mediaRecorder.start();
       isListening.value = true;
 
-      // Web Speech API for live interim display (best-effort, not all browsers)
+      // Web Speech API for live interim display (best-effort)
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         try {
@@ -147,17 +179,49 @@ export function useSpeech() {
     }
   }
 
-  function stopListening() {
-    if (!isListening.value || !mediaRecorder) return;
+  // ── Stop recording ────────────────────────────────────────────────────────
+  async function stopListening() {
+    if (!isListening.value) return;
+
+    if (isNative.value) {
+      isListening.value = false;
+      isTranscribing.value = true;
+      try {
+        const result = await VoiceRecorder.stopRecording();
+        const { recordDataBase64, mimeType } = result.value;
+        if (recordDataBase64) {
+          const blob = base64ToBlob(recordDataBase64, mimeType);
+          transcript.value = await sendToElevenLabs(blob, mimeType);
+        }
+      } catch {
+        transcript.value = '';
+      } finally {
+        isTranscribing.value = false;
+      }
+      return;
+    }
+
+    // Web path
+    if (!mediaRecorder) return;
     if (interimRecognition) { try { interimRecognition.stop(); } catch {} interimRecognition = null; }
     mediaRecorder.stop();
     isListening.value = false;
     stopLevelMeter();
   }
 
-  async function sendToElevenLabs(blob: Blob): Promise<string> {
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function base64ToBlob(base64: string, mimeType: string): Blob {
+    const bytes = atob(base64);
+    const buffer = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+    return new Blob([buffer], { type: mimeType });
+  }
+
+  async function sendToElevenLabs(blob: Blob, mimeType?: string): Promise<string> {
     const form = new FormData();
-    form.append('audio', blob, 'recording.webm');
+    const isM4a = mimeType?.includes('mp4') || mimeType?.includes('aac') || mimeType?.includes('m4a');
+    form.append('audio', blob, isM4a ? 'recording.m4a' : 'recording.webm');
+    form.append('language', 'en');
     const res = await fetch(`${SERVER_URL}/api/practocore/ai/stt`, {
       method: 'POST',
       headers: { 'Authorization': pb.authStore.token },
@@ -180,6 +244,12 @@ export function useSpeech() {
     isSpeaking.value = false;
   }
 
+  function unlockAudio() {
+    if (typeof window === 'undefined') return;
+    const a = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+    a.play().catch(() => {});
+  }
+
   async function speak(text: string) {
     stopSpeaking();
     if (!text.trim()) return;
@@ -191,7 +261,9 @@ export function useSpeech() {
       .replace(/`{1,3}[\s\S]*?`{1,3}/g, '')
       .replace(/\[(.+?)\]\(.+?\)/g, '$1')
       .replace(/\n+/g, ' ')
-      .slice(0, 4000) // ElevenLabs limit
+      .replace(/\b v\. /g, ' versus ')
+      .replace(/\b v /g, ' versus ')
+      .slice(0, 4000)
       .trim();
 
     if (!clean) return;
@@ -220,8 +292,8 @@ export function useSpeech() {
     }
   }
 
-  onUnmounted(() => {
-    stopListening();
+  onUnmounted(async () => {
+    await stopListening();
     stopSpeaking();
     stopLevelMeter();
   });
@@ -231,7 +303,7 @@ export function useSpeech() {
     isListening, isTranscribing, transcript, sttSupported, audioLevel, micError,
     startListening, stopListening,
     // TTS
-    isSpeaking, ttsSupported, speak, stopSpeaking,
+    isSpeaking, ttsSupported, speak, stopSpeaking, unlockAudio,
     // Prefs
     prefs, savePrefs,
   };

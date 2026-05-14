@@ -222,6 +222,14 @@ const handleNext = async () => {
   await onValidSubmit()
 }
 
-onMounted(() => { store.stepNextAction = handleNext })
-onUnmounted(() => { store.stepNextAction = null })
+onMounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = handleNext
+})
+onUnmounted(() => {
+  store.stepCanProceed = true
+  store.stepFooterLabel = 'Continue'
+  store.stepNextAction = null
+})
 </script>

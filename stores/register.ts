@@ -122,7 +122,9 @@ export const useRegisterStore = defineStore('register', {
             confirmPassword: '',
         },
 
-        // Step-specific submit handler — steps register here; layout calls it
+        // Step UI state — steps write here; layout reads here
+        stepCanProceed: true as boolean,
+        stepFooterLabel: 'Continue' as string,
         stepNextAction: null as (() => Promise<void>) | null,
     }),
 
