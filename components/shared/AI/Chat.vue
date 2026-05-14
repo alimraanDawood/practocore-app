@@ -5,6 +5,9 @@ import {
   Building2, Clock, User, Zap,
   History, Plus, Trash2, MessageSquare, Settings,
 } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
+import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
+import { Sheet, SheetContent, SheetTrigger } from '~/components/ui/sheet';
 import type { VoiceEntry } from '~/composables/useSpeech';
 import { marked } from 'marked';
 import { getSignedInUser } from '~/services/auth';
@@ -25,6 +28,8 @@ function renderMarkdown(text: string): string {
 
 const props = defineProps<{ currentMatterId?: string }>();
 const open = defineModel<boolean>('open', { default: false });
+
+const isDesktop = useMediaQuery('(min-width: 1024px)');
 
 // ── Speech ────────────────────────────────────────────────────────────────────
 const {
@@ -561,16 +566,19 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
 </script>
 
 <template>
-  <Sheet v-model:open="open">
-    <SheetTrigger v-if="$slots.default" as-child>
+  <!-- Adaptive: Dialog on desktop, Sheet on mobile -->
+  <component :is="isDesktop ? Dialog : Sheet" v-model:open="open">
+    <component :is="isDesktop ? DialogTrigger : SheetTrigger" v-if="$slots.default" as-child>
       <slot />
-    </SheetTrigger>
+    </component>
 
-    <SheetContent
-      side="bottom"
-      class="flex flex-col p-0 gap-0 overflow-hidden"
+    <component
+      :is="isDesktop ? DialogContent : SheetContent"
+      :side="isDesktop ? undefined : 'bottom'"
+      :class="isDesktop
+        ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
+        : ['flex flex-col p-0 gap-0 overflow-hidden', (messages.length > 0 || audioMode) ? 'h-dvh' : 'h-auto']"
       :hideX="true"
-      :class="(messages.length > 0 || audioMode) ? 'h-dvh' : 'h-auto'"
       @escape-key-down="(e: Event) => { if (contextDrawerOpen) e.preventDefault(); }"
       @pointer-down-outside="(e: Event) => { if (contextDrawerOpen) e.preventDefault(); }"
     >
@@ -993,8 +1001,8 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
         </div>
       </div>
 
-    </SheetContent>
-  </Sheet>
+    </component>
+  </component>
 
   <!-- Voice settings sheet -->
   <Sheet v-model:open="voiceSettingsOpen">
