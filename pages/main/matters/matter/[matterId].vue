@@ -97,7 +97,7 @@
                   {{ application.caseNumber }}
                 </TabsTrigger>
 
-                <SharedMattersCreateMatterCreateApplication :parent-matter="matter">
+                <SharedMattersCreateMatterCreateApplication v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateApplications')" :parent-matter="matter">
                   <Button size="sm">
                     <Plus />
                     Add Application

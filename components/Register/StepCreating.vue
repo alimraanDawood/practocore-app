@@ -23,6 +23,7 @@ import {
   updateUserPreferencesById,
   updateUser,
   acceptInvite,
+  getSignedInUser,
 } from '~/services/auth'
 import { pb } from '~/lib/pocketbase'
 import { createMatter } from '~/services/matters'
@@ -36,11 +37,6 @@ onMounted(() => {
   store.stepCanProceed = false
   store.stepFooterLabel = ''
   store.stepNextAction = async () => {}
-})
-onUnmounted(() => {
-  store.stepCanProceed = true
-  store.stepFooterLabel = 'Continue'
-  store.stepNextAction = null
 })
 
 onMounted(async () => {
@@ -66,12 +62,16 @@ const runJoinFlow = async () => {
   await saveReminderPrefs()
 
   statusMessage.value = 'Joining workspace…'
-  try {
-    await acceptInvite(store.inviteToken)
-  } catch (e: any) {
-    toast.error('Account created but failed to join workspace. Please contact your administrator.')
+  if (getSignedInUser()) {
+    try {
+      await acceptInvite(store.inviteToken)
+    } catch (e: any) {
+      toast.error('Account created but failed to join workspace. Please contact your administrator.')
+    }
+    await navigateTo('/main')
+  } else {
+    await runSignupFlow()
   }
-  await navigateTo('/main')
 }
 
 // ─── SOLO / ORG signup flow ───────────────────────────────────────────────────
@@ -107,7 +107,11 @@ const runSignupFlow = async () => {
     }
     signupResult = await organisationSignUp(payload)
   } else {
-    signupResult = await individualSignUp(payload)
+    if(store.inviteToken) {
+      signupResult = await individualSignUp(payload, store.inviteToken);
+    } else {
+      signupResult = await individualSignUp(payload);
+    }
   }
 
   // Refresh auth so pb.authStore.record reflects the org field

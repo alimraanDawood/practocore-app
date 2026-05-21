@@ -577,7 +577,7 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
       :side="isDesktop ? undefined : 'bottom'"
       :class="isDesktop
         ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
-        : ['flex flex-col p-0 gap-0 overflow-hidden', (messages.length > 0 || audioMode) ? 'h-dvh' : 'h-auto']"
+        : ['flex flex-col p-0 gap-0 overflow-hidden', (messages.length > 0 || audioMode || historyOpen) ? 'h-dvh' : 'h-auto']"
       :hideX="true"
       @escape-key-down="(e: Event) => { if (contextDrawerOpen) e.preventDefault(); }"
       @pointer-down-outside="(e: Event) => { if (contextDrawerOpen) e.preventDefault(); }"

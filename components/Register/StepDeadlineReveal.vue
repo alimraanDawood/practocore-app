@@ -85,11 +85,6 @@ onMounted(() => {
   store.stepFooterLabel = 'Looks right — set up my workspace'
   store.stepNextAction = handleNext
 })
-onUnmounted(() => {
-  store.stepCanProceed = true
-  store.stepFooterLabel = 'Continue'
-  store.stepNextAction = null
-})
 </script>
 
 <style scoped>

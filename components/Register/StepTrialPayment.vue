@@ -49,9 +49,4 @@ watch(footerLabel, v => { store.stepFooterLabel = v }, { immediate: true })
 onMounted(() => {
   store.stepNextAction = handleNext
 })
-onUnmounted(() => {
-  store.stepCanProceed = true
-  store.stepFooterLabel = 'Continue'
-  store.stepNextAction = null
-})
 </script>

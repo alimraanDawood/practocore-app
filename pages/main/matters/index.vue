@@ -150,6 +150,7 @@
                         </Button>
 
                         <Button
+                            v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters')"
                             @click="navigateTo('/main/matters/create?next=/main/matters')"
                             :disabled="isOffline"
                             :title="isOffline ? 'Requires internet connection' : undefined"
@@ -230,7 +231,7 @@
                                 <span class="font-semibold text-foreground">No matters yet</span>
                                 <span class="text-sm text-muted-foreground">Add your first matter to start tracking litigation deadlines.</span>
                             </div>
-                            <Button @click="navigateTo('/main/matters/create?next=/main/matters')">
+                            <Button v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')">
                                 <Plus class="size-4" />
                                 Add your first matter
                             </Button>

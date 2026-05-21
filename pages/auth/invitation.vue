@@ -140,7 +140,7 @@ const _rejectInvitation = async () => {
       <span class="font-semibold text-2xl ibm-plex-serif text-center">You are being invited to join an organisation</span>
       <span class="text-center"><b>{{ organisationRef?.invite?.invitedBy?.name }}</b> is inviting you to join <b>{{ organisationRef?.invite?.organisation?.name }}</b> on PractoCore.</span>
       <span class="text-center">We have noticed you are not currently signed in. To continue, you need to be registered to use PractoCore.</span>
-      <NuxtLink :to="`/auth/register?ref=${query?.ref}`" class="w-full">
+      <NuxtLink :to="`/auth/register/join-info?ref=${query?.ref}`" class="w-full">
         <Button class="w-full" variant="secondary">I have no account. Create one</Button>
       </NuxtLink>
 

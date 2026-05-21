@@ -184,6 +184,7 @@ const onGoogleSignIn = async () => {
 }
 
 const onValidSubmit = handleSubmit(async (vals) => {
+  console.log("Iran")
   isCreatingUser.value = true
   try {
     await pb.collection('Users').create({
@@ -226,10 +227,5 @@ onMounted(() => {
   store.stepCanProceed = true
   store.stepFooterLabel = 'Continue'
   store.stepNextAction = handleNext
-})
-onUnmounted(() => {
-  store.stepCanProceed = true
-  store.stepFooterLabel = 'Continue'
-  store.stepNextAction = null
 })
 </script>

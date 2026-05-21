@@ -77,9 +77,4 @@ onMounted(() => {
   store.stepFooterLabel = 'Continue'
   store.stepNextAction = handleNext
 })
-onUnmounted(() => {
-  store.stepCanProceed = true
-  store.stepFooterLabel = 'Continue'
-  store.stepNextAction = null
-})
 </script>

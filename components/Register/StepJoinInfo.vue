@@ -154,6 +154,7 @@ const verifyCode = async () => {
 }
 
 const handleNext = async () => {
+  console.log("Checking code")
   if (store.joinInfoState === 'confirmed') {
     await store.advance('join-info')
   } else {
@@ -175,10 +176,5 @@ watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
 watch(footerLabel, v => { store.stepFooterLabel = v }, { immediate: true })
 onMounted(() => {
   store.stepNextAction = handleNext
-})
-onUnmounted(() => {
-  store.stepCanProceed = true
-  store.stepFooterLabel = 'Continue'
-  store.stepNextAction = null
 })
 </script>
