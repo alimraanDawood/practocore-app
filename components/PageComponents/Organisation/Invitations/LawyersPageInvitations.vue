@@ -202,7 +202,7 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
         {{ searchQuery ? 'Try adjusting your search or filters' : 'Send invitations to grow your team' }}
       </p>
 
-      <div class="flex flex-col gap-2 w-full">
+      <div class="flex lg:flex-row flex-col gap-2 w-full lg:justify-center">
         <InviteUser @invited="emit('invited'); loadInvites()" v-if="!searchQuery">
           <Button class="xs:w-fit">
             <UserPlus class="size-4 mr-2" />
