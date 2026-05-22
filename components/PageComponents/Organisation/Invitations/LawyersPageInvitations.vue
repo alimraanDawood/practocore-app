@@ -10,6 +10,7 @@ import {
   Trash2,
   UserPlus,
   Calendar,
+  FileSpreadsheet,
 } from 'lucide-vue-next';
 import { getDirectInvites, subscribeToDirectInvites, resendInvite, revokeInvite } from '~/services/admin/index.js';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,6 +18,7 @@ import { toast } from 'vue-sonner';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import InviteUser from '~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue';
+import ImportLawyers from '../Users/ImportLawyers/ImportLawyers.vue';
 
 dayjs.extend(relativeTime);
 
@@ -199,12 +201,22 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
       <p class="text-sm text-muted-foreground mb-4">
         {{ searchQuery ? 'Try adjusting your search or filters' : 'Send invitations to grow your team' }}
       </p>
-      <InviteUser @invited="emit('invited'); loadInvites()" v-if="!searchQuery">
-        <Button class="xs:w-fit">
-          <UserPlus class="size-4 mr-2" />
-          Send Your First Invitation
-        </Button>
-      </InviteUser>
+
+      <div class="flex flex-col gap-2 w-full">
+        <InviteUser @invited="emit('invited'); loadInvites()" v-if="!searchQuery">
+          <Button class="xs:w-fit">
+            <UserPlus class="size-4 mr-2" />
+            Send Your First Invitation
+          </Button>
+        </InviteUser>
+  
+          <ImportLawyers @imported="onInvited" class="w-full">
+              <Button class="xs:w-fit w-full" variant="secondary">
+                <FileSpreadsheet class="size-4 mr-2" />
+                Import With Excel
+            </Button>
+          </ImportLawyers>
+      </div>
     </div>
 
     <!-- Invitations List -->

@@ -191,17 +191,16 @@ async function saveAssignees() {
     saving.value = true;
     await updateDeadlineAssignees(props.deadlineId, selectedAssignees.value);
 
-    toast({
-      title: 'Success',
+    toast('Success', {
       description: 'Deadline assignees updated successfully',
     });
+    
 
     emit('updated', selectedAssignees.value);
     sheetOpen.value = false;
   } catch (error) {
     console.error('Failed to update assignees:', error);
-    toast({
-      title: 'Error',
+    toast('Error', {
       description: 'Failed to update assignees. Please try again.',
       variant: 'destructive',
     });

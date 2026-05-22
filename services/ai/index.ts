@@ -26,10 +26,100 @@ export interface AiResponse {
   toolUseId?: string;
   input?: Record<string, any>;
   description?: string;
+  preview?: ProposalPreview;
   pendingMessages?: AiMessage[];
   // error field
   error?: string;
 }
+
+// ── Proposal preview ───────────────────────────────────────────────────────────
+// Backend-resolved, display-ready data attached to an approval proposal so the
+// permission card can show names/dates/diffs instead of raw IDs. Built by
+// `BuildProposalPreview` in practocore-backend/ai/preview.go — keep in sync.
+
+export interface UserRef {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+export interface DeadlineRef {
+  id: string;
+  name: string;
+  date?: string;
+  status?: string;
+  matterId?: string;
+  matterName?: string;
+}
+
+export interface MatterRef {
+  id: string;
+  name: string;
+  caseNumber?: string;
+}
+
+export interface NotificationRecipient extends UserRef {
+  // requested channels intersected with this recipient's notification preferences
+  effectiveChannels: string[];
+}
+
+export interface MatterChange {
+  label: string;
+  op: 'add' | 'remove' | 'set' | 'update';
+  before?: string;
+  after?: string;
+}
+
+export interface ReassignPreview {
+  kind: 'reassign';
+  deadline?: DeadlineRef;
+  currentAssignees?: UserRef[];
+  newAssignees: UserRef[];
+}
+export interface BulkReassignPreview {
+  kind: 'bulk_reassign';
+  fromUser?: UserRef;
+  toUser?: UserRef;
+  matter?: MatterRef;
+}
+export interface NotificationPreview {
+  kind: 'notification';
+  title: string;
+  body: string;
+  bodyHtml?: string;
+  channels: string[];
+  recipients: NotificationRecipient[];
+}
+export interface AdjournPreview {
+  kind: 'adjourn';
+  deadline?: DeadlineRef;
+  newDate: string;
+  reason?: string;
+  force?: boolean;
+}
+export interface FulfillPreview {
+  kind: 'fulfill';
+  deadline?: DeadlineRef;
+  fulfilledDate?: string;
+}
+export interface MatterEditPreview {
+  kind: 'matter_edit';
+  matter: MatterRef;
+  changes: MatterChange[];
+}
+export interface GenericPreview {
+  kind: 'generic';
+}
+
+export type ProposalPreview =
+  | ReassignPreview
+  | BulkReassignPreview
+  | NotificationPreview
+  | AdjournPreview
+  | FulfillPreview
+  | MatterEditPreview
+  | GenericPreview;
 
 export interface AiConversationSummary {
   id: string;

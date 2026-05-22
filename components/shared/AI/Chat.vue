@@ -2,12 +2,14 @@
 import {
   AtSign, ArrowUpIcon, Paperclip, Globe,
   Mic, MicOff, VolumeX, Volume2, X, Check, Loader2, Sparkles,
-  Building2, Clock, User, Zap,
+  Building2, Clock, User,
   History, Plus, Trash2, MessageSquare, Settings,
 } from 'lucide-vue-next';
 import { useMediaQuery } from '@vueuse/core';
 import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
 import { Sheet, SheetContent, SheetTrigger } from '~/components/ui/sheet';
+import ProposalCard from './ProposalCard.vue';
+import { initials } from './proposals/theme';
 import type { VoiceEntry } from '~/composables/useSpeech';
 import { marked } from 'marked';
 import { getSignedInUser } from '~/services/auth';
@@ -327,11 +329,28 @@ const selectedItems = ref<ContextItem[]>([]);
 
 watch(
   () => props.currentMatterId,
-  (id) => {
+  async (id) => {
     if (!id) return;
     const alreadyIn = selectedItems.value.some(i => i.type === 'matter' && i.id === id);
     if (alreadyIn) return;
     selectedItems.value.push({ type: 'matter', id, label: 'Loading…' });
+
+    // Resolve the matter name straight away rather than waiting for the
+    // context drawer to open and populate mattersList.
+    try {
+      const { pb } = await import('~/lib/pocketbase');
+      const matter = await pb.collection('Matters').getOne(id, { fields: 'id,name,caseNumber' });
+      const idx = selectedItems.value.findIndex(i => i.type === 'matter' && i.id === id);
+      if (idx >= 0) {
+        selectedItems.value[idx] = {
+          ...selectedItems.value[idx]!,
+          label: matter.name || 'Matter',
+          sublabel: matter.caseNumber,
+        };
+      }
+    } catch {
+      // Leave the placeholder; the drawer will resolve it if reopened.
+    }
   },
   { immediate: true },
 );
@@ -369,9 +388,41 @@ const contextDrawerOpen = ref(false);
 const contextTab = ref<ContextType>('matter');
 const contextSearch = ref('');
 
+// ── Android back button ─────────────────────────────────────────────────────
+// Audio mode and the context drawer are inline panels (not modal components),
+// so register them with the overlay stack to make the hardware back button
+// close them before closing the chat itself. The chat Dialog/Sheet registers
+// automatically via its wrapper, so these sit on top of it in the stack.
+const { register: registerOverlay, unregister: unregisterOverlay } = useOverlayStack();
+let audioModeOverlayId: number | null = null;
+let contextDrawerOverlayId: number | null = null;
+
+watch(audioMode, (on) => {
+  if (on && audioModeOverlayId === null) {
+    audioModeOverlayId = registerOverlay(() => exitAudioMode());
+  } else if (!on && audioModeOverlayId !== null) {
+    unregisterOverlay(audioModeOverlayId);
+    audioModeOverlayId = null;
+  }
+});
+
+watch(contextDrawerOpen, (on) => {
+  if (on && contextDrawerOverlayId === null) {
+    contextDrawerOverlayId = registerOverlay(() => { contextDrawerOpen.value = false; });
+  } else if (!on && contextDrawerOverlayId !== null) {
+    unregisterOverlay(contextDrawerOverlayId);
+    contextDrawerOverlayId = null;
+  }
+});
+
+onUnmounted(() => {
+  if (audioModeOverlayId !== null) unregisterOverlay(audioModeOverlayId);
+  if (contextDrawerOverlayId !== null) unregisterOverlay(contextDrawerOverlayId);
+});
+
 const mattersList = ref<{ id: string; name: string; caseNumber: string }[]>([]);
 const deadlinesList = ref<{ id: string; name: string; matterName: string }[]>([]);
-const usersList = ref<{ id: string; name: string; role: string }[]>([]);
+const usersList = ref<{ id: string; name: string; role: string; avatar?: string }[]>([]);
 const contextLoading = ref(false);
 
 watch(contextDrawerOpen, async (isOpen) => {
@@ -395,7 +446,7 @@ watch(contextDrawerOpen, async (isOpen) => {
     }));
 
     usersList.value = (usersRes.items ?? []).map((u: any) => ({
-      id: u.id, name: u.name, role: u.organisationRole ?? u.role ?? '',
+      id: u.id, name: u.name, role: u.organisationRole ?? u.role ?? '', avatar: u.avatar,
     }));
 
     selectedItems.value = selectedItems.value.map(item => {
@@ -546,23 +597,6 @@ async function approveProposal() {
 function formatToolName(tool: string): string {
   return tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
-
-function proposalSummaryLines(input: Record<string, any> | undefined): string[] {
-  if (!input) return [];
-  const labels: Record<string, string> = {
-    new_date: 'New date',
-    reason: 'Reason',
-    force: 'Force',
-    assignee_ids: 'Assignees',
-  };
-  return Object.entries(input)
-    .filter(([k]) => k !== 'deadline_id' && k !== 'matter_id')
-    .map(([k, v]) => {
-      const label = labels[k] ?? k.replace(/_/g, ' ');
-      const value = Array.isArray(v) ? `${v.length} user(s)` : String(v);
-      return `${label}: ${value}`;
-    });
-}
 </script>
 
 <template>
@@ -579,7 +613,7 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
         ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
         : ['flex flex-col p-0 gap-0 overflow-hidden', (messages.length > 0 || audioMode || historyOpen) ? 'h-dvh' : 'h-auto']"
       :hideX="true"
-      @escape-key-down="(e: Event) => { if (contextDrawerOpen) e.preventDefault(); }"
+      @escape-key-down="(e: Event) => { if (contextDrawerOpen) { e.preventDefault(); contextDrawerOpen = false; } }"
       @pointer-down-outside="(e: Event) => { if (contextDrawerOpen) e.preventDefault(); }"
     >
 
@@ -602,29 +636,15 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
 
           <!-- Proposal card -->
           <Transition name="fade">
-            <div v-if="pendingProposal" class="mx-4 mt-3 shrink-0 border rounded-xl p-4 bg-muted/40">
-              <div class="flex items-center gap-3 mb-2">
-                <div class="size-7 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0">
-                  <Zap class="size-3.5" />
-                </div>
-                <div>
-                  <p class="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Action Required</p>
-                  <p class="font-semibold leading-tight text-sm">{{ formatToolName(pendingProposal.tool ?? '') }}</p>
-                </div>
-              </div>
-              <p class="text-sm text-muted-foreground mb-3">{{ pendingProposal.description }}</p>
-              <ul v-if="proposalSummaryLines(pendingProposal.input).length" class="text-sm flex flex-col gap-1 mb-3 pl-3 border-l-2 border-primary/40 text-muted-foreground">
-                <li v-for="line in proposalSummaryLines(pendingProposal.input)" :key="line">{{ line }}</li>
-              </ul>
-              <div class="flex gap-2">
-                <Button size="sm" class="flex-1 gap-1.5" :disabled="proposalLoading" @click="approveProposal">
-                  <Loader2 v-if="proposalLoading" class="size-3.5 animate-spin" /><Check v-else class="size-3.5" /> Approve
-                </Button>
-                <Button size="sm" variant="outline" class="flex-1 gap-1.5" :disabled="proposalLoading" @click="dismissProposal">
-                  <X class="size-3.5" /> Dismiss
-                </Button>
-              </div>
-            </div>
+            <ProposalCard
+              v-if="pendingProposal"
+              :proposal="pendingProposal"
+              variant="panel"
+              :loading="proposalLoading"
+              class="mx-4 mt-3 shrink-0"
+              @approve="approveProposal"
+              @dismiss="dismissProposal"
+            />
           </Transition>
 
           <!-- Center — orb + contextual text -->
@@ -861,20 +881,14 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
               </div>
             </div>
 
-            <div v-if="pendingProposal" class="border rounded-lg p-3 flex flex-col gap-2 bg-muted/40">
-              <span class="text-sm font-semibold">{{ formatToolName(pendingProposal.tool ?? '') }}</span>
-              <p class="text-sm text-muted-foreground">{{ pendingProposal.description }}</p>
-              <ul v-if="proposalSummaryLines(pendingProposal.input).length" class="text-xs text-muted-foreground flex flex-col gap-0.5 pl-2 border-l-2 border-border">
-                <li v-for="line in proposalSummaryLines(pendingProposal.input)" :key="line">{{ line }}</li>
-              </ul>
-              <div class="flex gap-2">
-                <Button size="xs" :disabled="proposalLoading" @click="approveProposal">
-                  <Loader2 v-if="proposalLoading" class="size-3 animate-spin mr-1" />
-                  Approve
-                </Button>
-                <Button size="xs" variant="secondary" :disabled="proposalLoading" @click="dismissProposal">Dismiss</Button>
-              </div>
-            </div>
+            <ProposalCard
+              v-if="pendingProposal"
+              :proposal="pendingProposal"
+              variant="panel"
+              :loading="proposalLoading"
+              @approve="approveProposal"
+              @dismiss="dismissProposal"
+            />
 
             <div ref="messagesEnd" />
           </div>
@@ -898,64 +912,13 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
 
             <InputGroup>
               <InputGroupAddon align="block-start">
-                <Drawer v-model:open="contextDrawerOpen">
-                  <DrawerTrigger as-child>
-                    <Button size="sm" variant="outline" :class="selectedItems.length > 0 ? 'border-primary/50 text-primary' : ''">
-                      <AtSign class="size-4" />
-                      Add Context
-                      <Badge v-if="selectedItems.length > 0" variant="secondary" class="ml-1 text-xs px-1">
-                        {{ selectedItems.length }}
-                      </Badge>
-                    </Button>
-                  </DrawerTrigger>
-
-                  <DrawerContent class="flex flex-col max-h-[75vh]">
-                    <div class="flex flex-col h-full min-h-0">
-                      <div class="px-4 pt-4 pb-2 border-b shrink-0">
-                        <input v-model="contextSearch" placeholder="Search matters, deadlines, users…" class="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
-                      </div>
-                      <Tabs v-model="contextTab" class="flex flex-col flex-1 min-h-0">
-                        <TabsList class="shrink-0 px-4 py-2 justify-start gap-1 border-b bg-transparent h-auto rounded-none">
-                          <TabsTrigger value="matter" class="text-xs gap-1.5"><Building2 class="size-3" /> Matters</TabsTrigger>
-                          <TabsTrigger value="deadline" class="text-xs gap-1.5"><Clock class="size-3" /> Deadlines</TabsTrigger>
-                          <TabsTrigger value="user" class="text-xs gap-1.5"><User class="size-3" /> Users</TabsTrigger>
-                        </TabsList>
-                        <div v-if="contextLoading" class="flex items-center justify-center p-8">
-                          <Loader2 class="size-5 animate-spin text-muted-foreground" />
-                        </div>
-                        <template v-else>
-                          <TabsContent value="matter" class="overflow-y-auto flex-1 mt-0 pb-8">
-                            <template v-if="filteredMatters.length > 0">
-                              <button v-for="m in filteredMatters" :key="m.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(m.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'matter', id: m.id, label: m.name, sublabel: m.caseNumber })">
-                                <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium truncate">{{ m.name }}</span><span class="text-xs text-muted-foreground">{{ m.caseNumber }}</span></div>
-                                <Check v-if="isSelected(m.id)" class="size-4 text-primary shrink-0" />
-                              </button>
-                            </template>
-                            <p v-else class="px-4 py-6 text-sm text-muted-foreground text-center">No matters found.</p>
-                          </TabsContent>
-                          <TabsContent value="deadline" class="overflow-y-auto flex-1 mt-0 pb-8">
-                            <template v-if="filteredDeadlines.length > 0">
-                              <button v-for="d in filteredDeadlines" :key="d.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(d.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'deadline', id: d.id, label: d.name, sublabel: d.matterName })">
-                                <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium truncate">{{ d.name }}</span><span class="text-xs text-muted-foreground truncate">{{ d.matterName }}</span></div>
-                                <Check v-if="isSelected(d.id)" class="size-4 text-primary shrink-0" />
-                              </button>
-                            </template>
-                            <p v-else class="px-4 py-6 text-sm text-muted-foreground text-center">No pending deadlines found.</p>
-                          </TabsContent>
-                          <TabsContent value="user" class="overflow-y-auto flex-1 mt-0 pb-8">
-                            <template v-if="filteredUsers.length > 0">
-                              <button v-for="u in filteredUsers" :key="u.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(u.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'user', id: u.id, label: u.name, sublabel: u.role })">
-                                <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium">{{ u.name }}</span><span v-if="u.role" class="text-xs text-muted-foreground capitalize">{{ u.role }}</span></div>
-                                <Check v-if="isSelected(u.id)" class="size-4 text-primary shrink-0" />
-                              </button>
-                            </template>
-                            <p v-else class="px-4 py-6 text-sm text-muted-foreground text-center">No users found.</p>
-                          </TabsContent>
-                        </template>
-                      </Tabs>
-                    </div>
-                  </DrawerContent>
-                </Drawer>
+                <Button size="sm" variant="outline" :class="selectedItems.length > 0 ? 'border-primary/50 text-primary' : ''" @click="contextDrawerOpen = true">
+                  <AtSign class="size-4" />
+                  Add Context
+                  <Badge v-if="selectedItems.length > 0" variant="secondary" class="ml-1 text-xs px-1">
+                    {{ selectedItems.length }}
+                  </Badge>
+                </Button>
               </InputGroupAddon>
 
               <InputGroupTextarea
@@ -1000,6 +963,74 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
 
         </div>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+           CONTEXT PICKER — inline overlay (no nested modal,
+           so it can't leave the body with pointer-events: none)
+      ══════════════════════════════════════════════════════════ -->
+      <Transition name="context-panel">
+        <div v-if="contextDrawerOpen" class="absolute inset-0 flex flex-col justify-end" style="z-index: 30">
+          <!-- Backdrop -->
+          <div class="absolute inset-0 bg-black/40" @click="contextDrawerOpen = false" />
+
+          <!-- Panel -->
+          <div class="context-panel-sheet relative bg-background rounded-t-xl border-t shadow-xl flex flex-col max-h-[75vh] min-h-0">
+            <div class="flex items-center gap-2 px-4 py-3 border-b shrink-0">
+              <AtSign class="size-4 text-muted-foreground" />
+              <span class="font-semibold text-sm">Add Context</span>
+              <Button size="icon-sm" variant="ghost" class="ml-auto" @click="contextDrawerOpen = false">
+                <X class="size-4" />
+              </Button>
+            </div>
+            <div class="px-4 pt-3 pb-2 border-b shrink-0">
+              <input v-model="contextSearch" placeholder="Search matters, deadlines, lawyers…" class="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+            </div>
+            <Tabs v-model="contextTab" class="flex flex-col flex-1 min-h-0">
+              <TabsList class="shrink-0 px-4 py-2 justify-start gap-1 border-b bg-transparent h-auto rounded-none">
+                <TabsTrigger value="matter" class="text-xs gap-1.5 data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground dark:data-[state=active]:bg-secondary dark:data-[state=active]:text-secondary-foreground"><Building2 class="size-3" /> Matters</TabsTrigger>
+                <TabsTrigger value="deadline" class="text-xs gap-1.5 data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground dark:data-[state=active]:bg-secondary dark:data-[state=active]:text-secondary-foreground"><Clock class="size-3" /> Deadlines</TabsTrigger>
+                <TabsTrigger value="user" class="text-xs gap-1.5 data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground dark:data-[state=active]:bg-secondary dark:data-[state=active]:text-secondary-foreground"><User class="size-3" /> Lawyers</TabsTrigger>
+              </TabsList>
+              <div v-if="contextLoading" class="flex items-center justify-center p-8">
+                <Loader2 class="size-5 animate-spin text-muted-foreground" />
+              </div>
+              <template v-else>
+                <TabsContent value="matter" class="overflow-y-auto flex-1 mt-0 pb-8">
+                  <template v-if="filteredMatters.length > 0">
+                    <button v-for="m in filteredMatters" :key="m.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(m.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'matter', id: m.id, label: m.name, sublabel: m.caseNumber })">
+                      <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium truncate">{{ m.name }}</span><span class="text-xs text-muted-foreground">{{ m.caseNumber }}</span></div>
+                      <Check v-if="isSelected(m.id)" class="size-4 text-primary shrink-0" />
+                    </button>
+                  </template>
+                  <p v-else class="px-4 py-6 text-sm text-muted-foreground text-center">No matters found.</p>
+                </TabsContent>
+                <TabsContent value="deadline" class="overflow-y-auto flex-1 mt-0 pb-8">
+                  <template v-if="filteredDeadlines.length > 0">
+                    <button v-for="d in filteredDeadlines" :key="d.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(d.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'deadline', id: d.id, label: d.name, sublabel: d.matterName })">
+                      <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium truncate">{{ d.name }}</span><span class="text-xs text-muted-foreground truncate">{{ d.matterName }}</span></div>
+                      <Check v-if="isSelected(d.id)" class="size-4 text-primary shrink-0" />
+                    </button>
+                  </template>
+                  <p v-else class="px-4 py-6 text-sm text-muted-foreground text-center">No pending deadlines found.</p>
+                </TabsContent>
+                <TabsContent value="user" class="overflow-y-auto flex-1 mt-0 pb-8">
+                  <template v-if="filteredUsers.length > 0">
+                    <button v-for="u in filteredUsers" :key="u.id" class="w-full text-left px-4 py-3 hover:bg-accent transition-colors flex items-center gap-3 border-b last:border-0" :class="isSelected(u.id) ? 'bg-accent' : ''" @click="toggleItem({ type: 'user', id: u.id, label: u.name, sublabel: u.role })">
+                      <Avatar class="size-7 shrink-0">
+                        <AvatarImage :src="u.avatar ?? ''" :alt="u.name" />
+                        <AvatarFallback class="text-[10px] bg-primary text-primary-foreground">{{ initials(u.name) }}</AvatarFallback>
+                      </Avatar>
+                      <div class="flex flex-col flex-1 min-w-0"><span class="text-sm font-medium">{{ u.name }}</span><span v-if="u.role" class="text-xs text-muted-foreground capitalize">{{ u.role }}</span></div>
+                      <Check v-if="isSelected(u.id)" class="size-4 text-primary shrink-0" />
+                    </button>
+                  </template>
+                  <p v-else class="px-4 py-6 text-sm text-muted-foreground text-center">No lawyers found.</p>
+                </TabsContent>
+              </template>
+            </Tabs>
+          </div>
+        </div>
+      </Transition>
 
     </component>
   </component>
@@ -1063,6 +1094,16 @@ function proposalSummaryLines(input: Record<string, any> | undefined): string[] 
 .fade-leave-active { transition: opacity 0.18s ease; }
 .fade-enter-from,
 .fade-leave-to { opacity: 0; }
+
+/* Context picker overlay: fade the backdrop, slide the panel up */
+.context-panel-enter-active { transition: opacity 0.2s ease; }
+.context-panel-leave-active { transition: opacity 0.18s ease; }
+.context-panel-enter-from,
+.context-panel-leave-to { opacity: 0; }
+.context-panel-enter-active .context-panel-sheet { transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
+.context-panel-leave-active .context-panel-sheet { transition: transform 0.2s ease; }
+.context-panel-enter-from .context-panel-sheet,
+.context-panel-leave-to .context-panel-sheet { transform: translateY(100%); }
 
 .history-panel-enter-active,
 .history-panel-leave-active {

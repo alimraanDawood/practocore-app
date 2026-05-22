@@ -2,6 +2,27 @@
   <!-- Loaded state -->
   <div v-if="matter !== null" class="flex flex-col gap-4">
 
+    <!-- Unassigned deadlines alert (supervisors only) -->
+    <div
+      v-if="isSupervisor && unassignedDeadlines.length > 0"
+      class="flex flex-row items-start gap-2.5 rounded-lg border border-accent-warning/30 bg-accent-warning/5 p-3"
+    >
+      <UserX class="size-4 text-accent-warning shrink-0 mt-0.5"/>
+      <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+        <span class="text-sm font-semibold ibm-plex-serif leading-snug">
+          {{ unassignedDeadlines.length }} deadline{{ unassignedDeadlines.length !== 1 ? 's' : '' }}
+          need{{ unassignedDeadlines.length === 1 ? 's' : '' }} an assignee
+        </span>
+        <span class="text-xs text-muted-foreground">
+          Only assigned team members receive reminders. Assign someone so
+          {{ unassignedDeadlines.length === 1 ? "it isn't" : "they aren't" }} missed.
+        </span>
+      </div>
+      <Button size="sm" variant="outline" class="shrink-0" @click="reviewUnassigned">
+        Review
+      </Button>
+    </div>
+
     <!-- Filter bar -->
     <div class="flex flex-row gap-1">
       <button
@@ -109,6 +130,12 @@
               <div v-if="deadline.party_context" class="flex flex-row items-center gap-1 mt-0.5">
                 <User class="size-2.5 text-muted-foreground shrink-0"/>
                 <span class="text-[10px] text-muted-foreground truncate">{{ deadline.party_context.party_name }}</span>
+              </div>
+
+              <!-- Unassigned highlight (supervisors only) -->
+              <div v-if="isSupervisor && isUnassigned(deadline)" class="flex flex-row items-center gap-1 mt-0.5">
+                <UserX class="size-2.5 text-accent-warning shrink-0"/>
+                <span class="text-[10px] font-medium text-accent-warning">Unassigned</span>
               </div>
             </div>
 
@@ -267,6 +294,7 @@ import {
   Clock,
   ChevronDown,
   CheckCheck,
+  UserX,
 } from "lucide-vue-next";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
 import { pb } from "~/lib/pocketbase";
@@ -332,6 +360,24 @@ const filterTabs = computed(() => [
   { value: "all", label: "All", count: allDeadlines.value.length },
   { value: "done", label: "Done", count: doneCount.value },
 ]);
+
+// ── Unassigned deadlines (supervisor concern) ─────────────────────────────────
+// A deadline needs an assignee when it's an actionable (non-fulfilled) Deadline
+// record with no one assigned — only assignees receive reminders for it.
+const isUnassigned = (deadline) =>
+  deadline.collectionName === "Deadlines" &&
+  deadline.status !== "fulfilled" &&
+  (deadline.assignees?.length ?? 0) === 0;
+
+const unassignedDeadlines = computed(() => allDeadlines.value.filter(isUnassigned));
+
+// Banner CTA: surface every unassigned deadline so a supervisor can act on them.
+const reviewUnassigned = () => {
+  activeFilter.value = "active";
+  const next = new Set(expandedSet.value);
+  for (const d of unassignedDeadlines.value) next.add(d.id);
+  expandedSet.value = next;
+};
 
 // Default to "all" when all deadlines are completed
 watch(

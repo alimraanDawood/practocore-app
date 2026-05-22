@@ -220,6 +220,17 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
             >{{ statistics?.missedDeadlines ?? '—' }}</span>
             <span class="text-xs text-muted-foreground">Missed Deadlines</span>
           </div>
+
+          <div
+            class="flex flex-col p-3 border bg-background"
+            :class="{ 'border-amber-500': statistics?.unassignedDeadlines > 0 }"
+          >
+            <span
+              class="text-lg font-medium"
+              :class="{ 'text-amber-600 dark:text-amber-500': statistics?.unassignedDeadlines > 0 }"
+            >{{ statistics?.unassignedDeadlines ?? '—' }}</span>
+            <span class="text-xs text-muted-foreground">Unassigned</span>
+          </div>
         </div>
       </div>
 

@@ -254,7 +254,7 @@ const errorCount = computed(() => results.value.filter(r => r.status === 'error'
         </SheetDescription>
       </SheetHeader>
 
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto p-3">
         <ImportLawyersContent
           :step="step"
           :rows="rows"

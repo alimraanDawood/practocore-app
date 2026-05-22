@@ -3,6 +3,10 @@ import { Capacitor } from '@capacitor/core'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { onMounted, onUnmounted } from 'vue'
 import { useDebounceFn } from "@vueuse/core"
+import { toast } from 'vue-sonner'
+
+// TEMP DEBUG: set false to silence the on-screen back-button diagnostics.
+const DEBUG_BACK = false
 
 // Routes that should not be navigated back to
 const PROTECTED_ROUTES = [
@@ -34,47 +38,7 @@ export const useBackButton = () => {
         }
     }
 
-    const findOpenOverlay = (): Element | null => {
-        // Check for any open reka-ui/shadcn overlay components
-        // Priority: AlertDialog > Dialog > Sheet > Drawer > Popover > DropdownMenu
-        const selectors = [
-            '[data-slot="alert-dialog-content"][data-state="open"]',
-            '[data-slot="dialog-content"][data-state="open"]',
-            '[data-slot="sheet-content"]', // Sheet doesn't have data-state, check if exists in DOM
-            '[data-slot="drawer-content"][data-state="open"]',
-            '[role="dialog"][data-state="open"]',
-            '[data-radix-popper-content-wrapper]', // Popover/Dropdown menus
-        ]
-
-        for (const selector of selectors) {
-            const element = document.querySelector(selector)
-            if (element) return element
-        }
-
-        return null
-    }
-
-    const closeOverlay = (): boolean => {
-        const overlay = findOpenOverlay()
-        if (!overlay) return false
-
-        // Dispatch escape key event to close the overlay
-        const escEvent = new KeyboardEvent('keydown', {
-            key: 'Escape',
-            code: 'Escape',
-            keyCode: 27,
-            which: 27,
-            bubbles: true,
-            cancelable: true,
-            composed: true
-        })
-
-        // Try dispatching to the overlay first, then to document
-        overlay.dispatchEvent(escEvent)
-        document.dispatchEvent(escEvent)
-
-        return true
-    }
+    const { closeTop, stack } = useOverlayStack()
 
     const isProtectedRoute = (routeName: string | null | undefined): boolean => {
         if (!routeName) return false
@@ -107,15 +71,22 @@ export const useBackButton = () => {
     const { goBackInTab } = useTabHistory()
 
     const handleBackButton = useDebounceFn(async () => {
-        await triggerHaptic()
+        // await triggerHaptic()
 
-        // Priority 1: Close any open overlays (dialogs, sheets, drawers, etc.)
-        if (closeOverlay()) {
+        const overlayCount = stack.value.length
+        if (DEBUG_BACK) toast(`⬅️ back fired — overlays open: ${overlayCount}`)
+
+        // Priority 1: Close the topmost open overlay (dialog, sheet, drawer,
+        // popover, dropdown menu, or any custom panel registered with the stack).
+        if (closeTop()) {
+            if (DEBUG_BACK) toast(`✅ closed top overlay (had ${overlayCount})`)
             return
         }
 
         const currentRoute = router.currentRoute.value
         const currentRouteName = currentRoute.name as string
+
+        if (DEBUG_BACK) toast(`↪️ no overlay → navigating (route: ${currentRouteName})`)
 
         if (isExitRoute(currentRouteName)) {
             App.minimizeApp()
@@ -140,9 +111,13 @@ export const useBackButton = () => {
     }, 150)
 
     const setupBackButton = async () => {
-        if (!Capacitor.isNativePlatform()) return
+        if (!Capacitor.isNativePlatform()) {
+            if (DEBUG_BACK) toast('⚠️ back: not native platform — listener NOT registered')
+            return
+        }
 
         backButtonListener = await App.addListener('backButton', handleBackButton)
+        if (DEBUG_BACK) toast('🔌 back listener registered')
     }
 
     const cleanup = () => {

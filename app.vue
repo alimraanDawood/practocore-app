@@ -12,7 +12,7 @@ import {Toaster} from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { SafeArea, SystemBarsStyle } from '@capacitor-community/safe-area'
 import { StatusBar } from '@capacitor/status-bar'
-
+import { useBackButton } from './composables/useBackButton';
 
 // Back button handling is auto-initialized by the composable
 useBackButton();

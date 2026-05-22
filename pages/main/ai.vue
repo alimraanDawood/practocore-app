@@ -2,7 +2,7 @@
 import {
   Sparkles, Mic, MicOff, ArrowUpIcon, X, Check, Loader2,
   Plus, Trash2, MessageSquare, AtSign, Building2, Clock, User,
-  Volume2, VolumeX, ChevronLeft, Zap, Menu, Settings,
+  Volume2, VolumeX, ChevronLeft, Menu, Settings,
 } from 'lucide-vue-next';
 import type { VoiceEntry } from '~/composables/useSpeech';
 import { getSignedInUser } from '~/services/auth';
@@ -14,6 +14,7 @@ import {
 } from '~/services/ai';
 import { getMatters, getAllDeadlines } from '~/services/matters';
 import { getOrganisationUsers } from '~/services/admin';
+import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
 
 definePageMeta({ layout: 'blank' });
 
@@ -419,18 +420,6 @@ function formatToolName(tool: string): string {
   return tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function proposalSummaryLines(input: Record<string, any> | undefined): string[] {
-  if (!input) return [];
-  const labels: Record<string, string> = { new_date: 'New date', reason: 'Reason', force: 'Force', assignee_ids: 'Assignees' };
-  return Object.entries(input)
-    .filter(([k]) => k !== 'deadline_id' && k !== 'matter_id')
-    .map(([k, v]) => {
-      const label = labels[k] ?? k.replace(/_/g, ' ');
-      const value = Array.isArray(v) ? `${v.length} user(s)` : String(v);
-      return `${label}: ${value}`;
-    });
-}
-
 const SUGGESTIONS = [
   'What deadlines are due this week?',
   'Search for recent matters',
@@ -481,29 +470,15 @@ onMounted(async () => {
 
         <!-- Proposal card (floating above controls) -->
         <Transition name="fade">
-          <div v-if="pendingProposal" class="absolute bottom-36 left-4 right-4 z-10 border border-white/10 rounded-2xl p-4 bg-white/5 backdrop-blur-xl shadow-2xl">
-            <div class="flex items-center gap-3 mb-2">
-              <div class="size-8 rounded-full bg-blue-500/20 text-blue-400 grid place-items-center shrink-0">
-                <Zap class="size-4" />
-              </div>
-              <div>
-                <p class="text-[11px] text-white/40 uppercase tracking-wide font-medium">Action Required</p>
-                <p class="font-semibold text-white leading-tight text-sm">{{ formatToolName(pendingProposal.tool ?? '') }}</p>
-              </div>
-            </div>
-            <p class="text-sm text-white/60 mb-3">{{ pendingProposal.description }}</p>
-            <ul v-if="proposalSummaryLines(pendingProposal.input).length" class="text-sm flex flex-col gap-1 mb-3 pl-3 border-l-2 border-blue-500/40 text-white/70">
-              <li v-for="line in proposalSummaryLines(pendingProposal.input)" :key="line">{{ line }}</li>
-            </ul>
-            <div class="flex gap-2">
-              <button class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-blue-500 text-white text-sm font-medium py-2 disabled:opacity-50" :disabled="proposalLoading" @click="approveProposal">
-                <Loader2 v-if="proposalLoading" class="size-3.5 animate-spin" /><Check v-else class="size-3.5" /> Approve
-              </button>
-              <button class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-white/10 text-white/80 text-sm font-medium py-2" :disabled="proposalLoading" @click="dismissProposal">
-                <X class="size-3.5" /> Dismiss
-              </button>
-            </div>
-          </div>
+          <ProposalCard
+            v-if="pendingProposal"
+            :proposal="pendingProposal"
+            variant="glass"
+            :loading="proposalLoading"
+            class="absolute bottom-36 left-4 right-4 z-10"
+            @approve="approveProposal"
+            @dismiss="dismissProposal"
+          />
         </Transition>
 
         <!-- Top bar -->
@@ -731,29 +706,14 @@ onMounted(async () => {
       <!-- Proposal banner (chat mode) -->
       <Transition name="fade">
         <div v-if="pendingProposal && !audioMode" class="shrink-0 px-4 py-3 border-b bg-muted/30">
-          <div class="max-w-lg mx-auto border rounded-xl p-4 bg-background shadow-sm">
-            <div class="flex items-center gap-3 mb-2">
-              <div class="size-8 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0">
-                <Zap class="size-4" />
-              </div>
-              <div>
-                <p class="text-xs text-muted-foreground uppercase tracking-wide font-medium">Action Required</p>
-                <p class="font-semibold leading-tight">{{ formatToolName(pendingProposal.tool ?? '') }}</p>
-              </div>
-            </div>
-            <p class="text-sm text-muted-foreground mb-3">{{ pendingProposal.description }}</p>
-            <ul v-if="proposalSummaryLines(pendingProposal.input).length" class="text-sm flex flex-col gap-1 mb-3 pl-3 border-l-2 border-primary/40">
-              <li v-for="line in proposalSummaryLines(pendingProposal.input)" :key="line">{{ line }}</li>
-            </ul>
-            <div class="flex gap-2">
-              <Button class="flex-1 gap-2" :disabled="proposalLoading" @click="approveProposal">
-                <Loader2 v-if="proposalLoading" class="size-4 animate-spin" /><Check v-else class="size-4" /> Approve
-              </Button>
-              <Button variant="outline" class="flex-1 gap-2" :disabled="proposalLoading" @click="dismissProposal">
-                <X class="size-4" /> Dismiss
-              </Button>
-            </div>
-          </div>
+          <ProposalCard
+            :proposal="pendingProposal"
+            variant="panel"
+            :loading="proposalLoading"
+            class="max-w-lg mx-auto"
+            @approve="approveProposal"
+            @dismiss="dismissProposal"
+          />
         </div>
       </Transition>
 

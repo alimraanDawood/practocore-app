@@ -332,6 +332,12 @@ To run the complete PractoCore system locally:
 - Shadcn components have no prefix (e.g., `<Button>` not `<UiButton>`)
 - Dark mode is default - always test both modes
 
+### Nested Modals (Dialog / Sheet / Drawer / DropdownMenu)
+Modal layers lock the page via `document.body.style.pointerEvents = 'none'`. Nesting them wrong can leave that lock behind → the whole app becomes unclickable after closing.
+- **Within reka-ui** (Dialog ↔ AlertDialog ↔ DropdownMenu ↔ Popover): nesting is supported because they share one dismissable-layer stack. Follow the radix pattern — wrap the inner Dialog/AlertDialog *around* the menu trigger, and call `e.preventDefault()` on the `DropdownMenuItem`'s select so the closing menu doesn't also close the dialog.
+- **Do NOT nest the vaul-vue `Drawer` inside a reka-ui `Dialog`/`Sheet`** (different libraries, separate body-lock managers that race). If you need a drawer-style picker inside a dialog, use a reka-ui `Sheet side="bottom"` or an inline absolutely-positioned overlay panel (see the context picker / audio-mode overlay in `components/shared/AI/Chat.vue`).
+- A backstop plugin (`plugins/modal-body-lock-guard.client.ts`) auto-releases a stuck body lock when no modal is actually open. It's a safety net — still nest correctly.
+
 ### Type Safety
 - PocketBase types in `pocketbase-types.ts` (generated from PocketBase schema)
 - TypeScript strict mode enabled
