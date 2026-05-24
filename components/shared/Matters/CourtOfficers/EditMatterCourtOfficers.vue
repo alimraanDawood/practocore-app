@@ -1,6 +1,6 @@
 <template>
   <Sheet v-model:open="open">
-    <SheetTrigger as-child>
+    <SheetTrigger as-child :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-70">
       <slot />
     </SheetTrigger>
 

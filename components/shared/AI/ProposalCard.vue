@@ -64,7 +64,7 @@ const iconWrap = computed(() => glass.value
 
     <!-- Actions -->
     <div class="flex gap-2">
-      <Button size="sm" class="flex-1 gap-1.5" :disabled="loading" @click="$emit('approve')">
+      <Button size="sm" class="flex-1 gap-1.5" :disabled="loading || !usePlanActive()?.value?.active" @click="$emit('approve')">
         <Loader2 v-if="loading" class="size-3.5 animate-spin" />
         <Check v-else class="size-3.5" />
         Approve

@@ -6,6 +6,15 @@
     <Button variant="outline" @click="$router.back()">Go Back</Button>
   </div>
 
+  <div v-else-if="!isSubscriptionActive" class="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+    <Lock class="size-10 text-muted-foreground" />
+    <p class="font-semibold">Subscription expired</p>
+    <p class="text-sm text-muted-foreground">Renew your subscription to create new matters.</p>
+    <SharedBillingSubscribe>
+      <Button>Renew subscription</Button>
+    </SharedBillingSubscribe>
+  </div>
+
   <form v-else id="create-matter-page" @submit.prevent class="flex flex-col gap-6">
 
     <!-- STEP: Choose Matter Type -->
@@ -194,11 +203,13 @@ import * as z from 'zod'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import { toast } from 'vue-sonner'
-import { WifiOff } from 'lucide-vue-next'
+import { WifiOff, Lock } from 'lucide-vue-next'
 import { createMatter } from '~/services/matters'
 import { useCreateMatterStore } from '~/stores/createMatter'
 
 const { isOffline } = useNetwork()
+const activePlan = usePlanActive()
+const isSubscriptionActive = computed(() => activePlan.value?.active === true)
 
 definePageMeta({ layout: 'create-matter' })
 
@@ -360,6 +371,12 @@ const generateCaseNameFromParties = () => {
 
 // ─── Submission ───────────────────────────────────────────────────────────────
 const onSubmit = async () => {
+  // Backstop for direct navigation — the form is gated above, but the layout's
+  // submit button lives outside this page, so guard the action itself too.
+  if (!isSubscriptionActive.value) {
+    toast.error('Your subscription has expired. Renew to create matters.')
+    return
+  }
   store.loading = true
   try {
     const cleanedParties: Record<string, any[]> = {}

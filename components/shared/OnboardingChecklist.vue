@@ -9,10 +9,9 @@ const props = defineProps<{
 }>()
 
 // Plan & role
-const plan = usePlanActive()
-const { isAdmin, hasPermission } = usePermissions()
+const { isAdmin, hasPermission, isIndividual } = usePermissions()
 
-const isSolo = computed(() => plan.value?.type === 'individual')
+const isSolo = isIndividual
 const isTeamAdmin = computed(() => !isSolo.value && isAdmin.value)
 const canCreateMatters = computed(() => isSolo.value || hasPermission('canCreateMatters'))
 

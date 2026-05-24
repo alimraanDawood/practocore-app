@@ -1,4 +1,5 @@
 import { getUserPermissions, subscribeToPermissions } from "~/services/auth";
+import { pb } from "~/lib/pocketbase";
 
 interface UserPermissions {
     id?: string;
@@ -16,9 +17,16 @@ const error = ref<string | null>(null);
 let fetched = false;
 let subscribed = false;
 
+// An individual (solo) user has no organisation on their auth record. This is the
+// canonical signal the backend branches on (billing-status, get-user-permissions),
+// and unlike the active-subscription type it is available synchronously and never
+// races with async plan loading. Solo users implicitly have every permission.
+const isIndividual = () => !pb.authStore.record?.organisation;
+
 export const usePermissions = () => {
     const fetchPermissions = async () => {
-        if ((usePlanActive()?.value as any)?.type === "individual") {
+        // Solo users have no org permission record to fetch — they get everything.
+        if (isIndividual()) {
             return;
         }
 
@@ -46,13 +54,13 @@ export const usePermissions = () => {
         }
     };
 
-    // Auto-fetch in the background on first use
-    if (!fetched && !loading.value) {
+    // Auto-fetch in the background on first use (skipped for solo users)
+    if (!fetched && !loading.value && !isIndividual()) {
         fetchPermissions();
     }
 
     const hasPermission = (permission: string): boolean => {
-        if ((usePlanActive()?.value as any)?.type === "individual") return true;
+        if (isIndividual()) return true;
         if (!permissions.value) return false;
         if (permissions.value.isAdmin) return true;
         return permissions.value?.permissions?.includes(permission) === true;
@@ -60,6 +68,7 @@ export const usePermissions = () => {
 
     const isAdmin = computed(() => permissions.value?.isAdmin ?? false);
     const role = computed(() => permissions.value?.role ?? null);
+    const individual = computed(() => isIndividual());
 
     return {
         permissions,
@@ -68,6 +77,7 @@ export const usePermissions = () => {
         fetchPermissions,
         hasPermission,
         isAdmin,
+        isIndividual: individual,
         role,
     };
 };

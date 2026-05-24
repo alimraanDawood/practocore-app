@@ -46,8 +46,7 @@
           <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
             <div class="flex flex-col">
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
-              <p class="text-sm text-muted-foreground">Update your account settings. Set your preferred language and
-                timezone.</p>
+              <p class="text-sm text-muted-foreground">Manage your subscription and billing information.</p>
             </div>
 
             <Separator/>
@@ -62,7 +61,7 @@
 
 <script setup>
 import {ref, computed} from 'vue'
-import {ArrowLeft, Bell, UserCircle, CreditCard} from "lucide-vue-next";
+import {Bell, UserCircle, CreditCard} from "lucide-vue-next";
 import {getSignedInUser} from "~/services/auth";
 
 definePageMeta({

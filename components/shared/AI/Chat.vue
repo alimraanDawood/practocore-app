@@ -3,7 +3,7 @@ import {
   AtSign, ArrowUpIcon, Paperclip, Globe,
   Mic, MicOff, VolumeX, Volume2, X, Check, Loader2, Sparkles,
   Building2, Clock, User,
-  History, Plus, Trash2, MessageSquare, Settings,
+  History, Plus, Trash2, MessageSquare, Settings, Lock,
 } from 'lucide-vue-next';
 import { useMediaQuery } from '@vueuse/core';
 import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
@@ -134,6 +134,7 @@ watch(micError, () => {
 });
 
 function toggleMic() {
+  if (!isSubscriptionActive.value) return;
   if (!audioMode.value) {
     // Unlock audio synchronously on the user gesture before any async work
     unlockAudio();
@@ -239,7 +240,13 @@ const loading = ref(false);
 const messagesEnd = ref<HTMLElement | null>(null);
 
 const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
-const canSend = computed(() => inputText.value.trim().length > 0 && !loading.value);
+
+// PractoAI calls cost money, so chatting requires a live plan. Gates the input
+// (text + voice + send) and surfaces a quiet banner when the plan has lapsed.
+const activePlan = usePlanActive();
+const isSubscriptionActive = computed(() => activePlan.value?.active === true);
+
+const canSend = computed(() => inputText.value.trim().length > 0 && !loading.value && isSubscriptionActive.value);
 
 const lastAssistantText = computed(() => {
   const msgs = messages.value.filter((m): m is AiMessage => m.role === 'assistant');
@@ -503,7 +510,7 @@ function scrollToBottom() {
 
 async function send(voiceText?: string) {
   const text = voiceText ?? inputText.value.trim();
-  if (!text || loading.value) return;
+  if (!text || loading.value || !isSubscriptionActive.value) return;
 
   messages.value.push({ role: 'user', content: text });
   if (!voiceText) inputText.value = '';
@@ -546,6 +553,11 @@ function handleKeydown(e: KeyboardEvent) {
 
 function prefill(text: string) { inputText.value = text; }
 
+function goToBilling() {
+  open.value = false;
+  navigateTo('/main/settings/billing');
+}
+
 function dismissProposal() {
   if (pendingProposal.value) {
     messages.value.push({ role: 'tool-event', content: formatToolName(pendingProposal.value.tool ?? ''), status: 'rejected' });
@@ -557,6 +569,13 @@ const proposalLoading = ref(false);
 
 async function approveProposal() {
   if (!pendingProposal.value || proposalLoading.value) return;
+  // Approving applies matter changes (fulfill/adjourn/edit) — block when the
+  // subscription has lapsed. The proposal stays pending so it can be applied
+  // once the plan is renewed.
+  if (!isSubscriptionActive.value) {
+    messages.value.push({ role: 'assistant', content: 'Your subscription has expired. Renew your plan to apply changes.' });
+    return;
+  }
   proposalLoading.value = true;
   const proposal = pendingProposal.value;
   pendingProposal.value = null;
@@ -895,6 +914,15 @@ function formatToolName(tool: string): string {
 
           <!-- Input area -->
           <div class="shrink-0 px-4 py-3 border-t flex flex-col gap-2">
+            <!-- Subscription gate — quiet inline notice -->
+            <div v-if="!isSubscriptionActive" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Lock class="size-3 shrink-0" />
+              <span>
+                Chatting with PractoAI needs an active subscription.
+                <button class="underline font-medium hover:text-foreground" @click="goToBilling">Renew</button>
+              </span>
+            </div>
+
             <!-- Active context badges -->
             <div v-if="selectedItems.length > 0" class="flex flex-wrap gap-1">
               <Badge
@@ -923,7 +951,8 @@ function formatToolName(tool: string): string {
 
               <InputGroupTextarea
                 v-model="inputText"
-                placeholder="Ask, Search or Chat..."
+                :placeholder="isSubscriptionActive ? 'Ask, Search or Chat...' : 'Subscription required to chat'"
+                :disabled="!isSubscriptionActive"
                 @keydown="handleKeydown"
               />
 
@@ -952,6 +981,7 @@ function formatToolName(tool: string): string {
                   class="rounded-full"
                   size="icon-sm"
                   title="Voice conversation"
+                  :disabled="!isSubscriptionActive"
                   @click="toggleMic"
                 >
                   <Mic class="size-4" />

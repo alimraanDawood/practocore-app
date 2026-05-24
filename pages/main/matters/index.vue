@@ -150,10 +150,10 @@
                         </Button>
 
                         <Button
-                            v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters')"
+                            v-if="hasPermission('canCreateMatters')"
                             @click="navigateTo('/main/matters/create?next=/main/matters')"
-                            :disabled="isOffline"
-                            :title="isOffline ? 'Requires internet connection' : undefined"
+                            :disabled="!!createDisabledReason"
+                            :title="createDisabledReason"
                         >
                             <Plus /> Add Matter
                         </Button>
@@ -231,7 +231,7 @@
                                 <span class="font-semibold text-foreground">No matters yet</span>
                                 <span class="text-sm text-muted-foreground">Add your first matter to start tracking litigation deadlines.</span>
                             </div>
-                            <Button v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')">
+                            <Button v-if="hasPermission('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="!!createDisabledReason" :title="createDisabledReason">
                                 <Plus class="size-4" />
                                 Add your first matter
                             </Button>
@@ -301,6 +301,16 @@ import { Haptics } from "@capacitor/haptics";
 
 const { isOffline } = useNetwork();
 const { _offlineFallback } = storeToRefs(useMattersStore());
+const { hasPermission } = usePermissions();
+
+const activePlan = usePlanActive();
+// Why a button is blocked, or undefined when it's actionable. Drives both
+// :disabled and :title so an expired subscription makes creation inaccessible.
+const createDisabledReason = computed(() => {
+  if (isOffline.value) return 'Requires internet connection';
+  if (!activePlan.value?.active) return 'Your subscription has expired — renew to add matters';
+  return undefined;
+});
 
 const triggerSelectionHaptic = async () => {
   if (!Capacitor.isNativePlatform()) return

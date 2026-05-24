@@ -1,6 +1,6 @@
 <template>
     <Sheet v-model:open="open">
-        <SheetTrigger :disabled="useNetwork().isOffline.value" class="disabled:opacity-70">
+        <SheetTrigger :disabled="!usePlanActive()?.value?.active || useNetwork().isOffline.value" class="disabled:opacity-70">
             <slot />
         </SheetTrigger>
         

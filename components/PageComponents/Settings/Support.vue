@@ -13,7 +13,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
       <!-- WhatsApp -->
-      <a href="https://wa.me/256700000000" target="_blank"
+      <a href="https://wa.me/256791843512" target="_blank"
          class="flex flex-col gap-3 p-5 border rounded-xl hover:bg-muted/50 transition-colors group">
         <div class="flex flex-row items-center gap-3">
           <div class="size-10 rounded-full bg-green-500/10 grid place-items-center shrink-0">
@@ -26,13 +26,13 @@
           <ExternalLink class="size-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div class="flex flex-col gap-0.5">
-          <span class="text-sm font-medium">+256 700 000 000</span>
+          <span class="text-sm font-medium">+256 791 843 512</span>
           <span class="text-xs text-muted-foreground">Mon – Fri, 8 am – 6 pm EAT</span>
         </div>
       </a>
 
       <!-- Email support -->
-      <a href="mailto:support@practocore.com"
+      <a href="mailto:contact@fiika.dev"
          class="flex flex-col gap-3 p-5 border rounded-xl hover:bg-muted/50 transition-colors group">
         <div class="flex flex-row items-center gap-3">
           <div class="size-10 rounded-full bg-primary/10 grid place-items-center shrink-0">
@@ -45,13 +45,13 @@
           <ExternalLink class="size-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div class="flex flex-col gap-0.5">
-          <span class="text-sm font-medium">support@practocore.com</span>
-          <span class="text-xs text-muted-foreground">Billing, accounts &amp; technical issues</span>
+          <span class="text-sm font-medium">contact@fiika.dev</span>
+          <span class="text-xs text-muted-foreground">For billing, accounts &amp; technical issues</span>
         </div>
       </a>
 
       <!-- Sales / Onboarding -->
-      <a href="mailto:sales@practocore.com"
+      <a href="mailto:sales@fiika.dev"
          class="flex flex-col gap-3 p-5 border rounded-xl hover:bg-muted/50 transition-colors group">
         <div class="flex flex-row items-center gap-3">
           <div class="size-10 rounded-full bg-blue-500/10 grid place-items-center shrink-0">
@@ -64,7 +64,7 @@
           <ExternalLink class="size-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div class="flex flex-col gap-0.5">
-          <span class="text-sm font-medium">sales@practocore.com</span>
+          <span class="text-sm font-medium">sales@fiika.dev</span>
           <span class="text-xs text-muted-foreground">Custom templates &amp; enterprise plans</span>
         </div>
       </a>
@@ -119,7 +119,7 @@
           <AccordionContent class="text-sm text-muted-foreground pb-4">
             Yes. Go to <strong>Settings → Billing</strong> and click <strong>Manage Subscription</strong>.
             You can upgrade, downgrade, or add seats at any time. Changes take effect from the next billing
-            cycle. For enterprise or custom pricing, email sales@practocore.com.
+            cycle. For enterprise or custom pricing, email sales@fiika.dev.
           </AccordionContent>
         </AccordionItem>
 

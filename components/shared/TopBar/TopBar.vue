@@ -20,10 +20,10 @@
                   :class="{ '!border-primary font-medium': $route?.name === 'main-lawyers' }">Lawyers</button>
         </NuxtLink>
 
-<!--        <NuxtLink to="/main/templates">-->
-<!--            <button class="p-2 border-b-2 border-transparent"-->
-<!--                :class="{ '!border-primary font-medium': $route?.name?.toString()?.startsWith('main-templates') }">Templates</button>-->
-<!--        </NuxtLink>-->
+        <NuxtLink to="/main/settings">
+          <button class="p-2 border-b-2 border-transparent"
+                  :class="{ '!border-primary font-medium': $route?.name === 'main-settings' }">Settings</button>
+        </NuxtLink>
 
         <template>
           <NuxtLink v-if="getSignedInUser()?.organisation && authStore.isAdmin" to="/main/organisation">

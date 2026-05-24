@@ -97,7 +97,7 @@
                   {{ application.caseNumber }}
                 </TabsTrigger>
 
-                <SharedMattersCreateMatterCreateApplication v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateApplications')" :parent-matter="matter">
+                <SharedMattersCreateMatterCreateApplication v-if="hasPermission('canCreateApplications')" :parent-matter="matter">
                   <Button size="sm">
                     <Plus />
                     Add Application
@@ -265,6 +265,7 @@ const isInitialLoad = ref(true);
 const subscribedDeadlineIds = ref(new Set());
 
 const currentUser = computed(() => getSignedInUser());
+const { hasPermission } = usePermissions();
 
 const currentMatterOrApplication = computed(() => {
   return currentApplicationOption.value === 'all'
@@ -339,14 +340,23 @@ const syncDeadlineSubscriptions = () => {
 onMounted(async () => {
   const { params } = useRoute();
 
-  matter.value = await mattersStore.fetchMatter(params.matterId, {
-    showLoading: isInitialLoad.value,
-  });
+  try {
+    matter.value = await mattersStore.fetchMatter(params.matterId, {
+      showLoading: isInitialLoad.value,
+    });
+  } catch (e) {
+    // Genuine 403/404 (deleted or no access) — show the "Matter Not Found" state
+    // instead of hanging on the loader.
+    console.error(e);
+    matter.value = null;
+  } finally {
+    isInitialLoad.value = false;
+  }
 
-  isInitialLoad.value = false;
-
-  subscribeToMatter(matter.value?.id, debouncedReloadMatter);
-  syncDeadlineSubscriptions();
+  if (matter.value?.id) {
+    subscribeToMatter(matter.value.id, debouncedReloadMatter);
+    syncDeadlineSubscriptions();
+  }
 });
 
 const reloadMatter = debouncedReloadMatter;

@@ -13,13 +13,19 @@ export async function getMatters(page: number, perPage: number, options: { filte
     if (options.filter) params.set('filter', options.filter);
     if (options.sort) params.set('sort', options.sort);
 
-    return fetch(`${SERVER_URL}/api/practocore/matters?${params.toString()}`, {
+    const res = await fetch(`${SERVER_URL}/api/practocore/matters?${params.toString()}`, {
         method: 'GET',
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
         }
-    }).then((e) => e.json());
+    });
+    if (!res.ok) {
+        // Never let an error body (e.g. {error:'...'}) be treated as a matters list.
+        const body = await res.text().catch(() => '');
+        throw new Error(`getMatters failed (${res.status}): ${body}`);
+    }
+    return res.json();
 }
 
 export async function getAllDeadlines(options: Object) {
@@ -118,13 +124,19 @@ export function unsubscribeToMatter(matterId: string) {
 
 export async function getMatter(matterId: string, options: Object) {
     // Use optimized backend route that fetches everything in one request
-    return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}`, {
+    const res = await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}`, {
         method: 'GET',
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
         }
-    }).then((e) => e.json());
+    });
+    if (!res.ok) {
+        // Never let an error body (403/404/etc.) be cached as a matter — that poisons the store.
+        const body = await res.text().catch(() => '');
+        throw new Error(`getMatter failed (${res.status}): ${body}`);
+    }
+    return res.json();
 }
 
 export async function updateDeadline(deadlineId: string, options: Object) {

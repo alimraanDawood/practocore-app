@@ -1,9 +1,9 @@
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden items-center">
-    <div class="flex flex-col h-full lg:w-[90vw] w-full">
+    <div class="flex flex-col h-full lg:w-[95vw] w-full border-x">
       <div class="flex flex-col lg:flex-row w-full gap-3 h-full overflow-hidden">
         <!-- Desktop: Tabs Layout -->
-        <div class="hidden lg:flex flex-row bg-muted lg:bg-background p-1 rounded-lg w-fit items-center lg:items-start lg:flex-col lg:max-w-[150px] lg:w-full overflow-x-scroll overflow-y-hidden py-1 lg:h-full gap-3">
+        <div class="hidden lg:flex flex-row bg-muted lg:bg-muted rounded-lg border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[250px] lg:h-full gap-3">
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -25,7 +25,9 @@
               @click="activeTab = 'billing'">
             Billing
           </Button>
+
           <Separator class="my-1" />
+          
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -33,6 +35,7 @@
               @click="activeTab = 'documentation'"
           >Documentation
           </Button>
+          
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -43,7 +46,7 @@
         </div>
 
         <!-- Desktop: Tab Content -->
-        <div class="hidden lg:flex flex-col w-full h-full overflow-y-scroll">
+        <div class="hidden lg:flex flex-col w-full h-full overflow-y-scroll p-3">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
           <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
@@ -122,7 +125,7 @@
             </div>
           </div>
 
-          <div v-if="(getSignedInUser()?.organisation && authStore.isAdmin) || (!getSignedInUser()?.organisation && usePlanActive()?.value?.type === 'individual')" class="flex flex-col gap-2">
+          <div v-if="(getSignedInUser()?.organisation && authStore.isAdmin) || !getSignedInUser()?.organisation" class="flex flex-col gap-2">
             <span class="font-semibold">Advanced</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
               <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/billing')">

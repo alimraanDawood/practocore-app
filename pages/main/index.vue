@@ -117,6 +117,15 @@ const onTourComplete = () => {
 
 const { hasPermission } = usePermissions()
 
+const activePlan = usePlanActive();
+// Why matter creation is blocked, or undefined when it's actionable. Drives
+// both :disabled and :title so an expired subscription makes it inaccessible.
+const createDisabledReason = computed(() => {
+  if (isOffline.value) return 'Requires internet connection';
+  if (!activePlan.value?.active) return 'Your subscription has expired — renew to add matters';
+  return undefined;
+});
+
 const isUrgent = (matter: any) =>
   matter?.stats?.nextDeadlineDate &&
   dayjs(matter.stats.nextDeadlineDate).diff(dayjs(), 'day') < 5
@@ -314,7 +323,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
 <!--            <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics"-->
 <!--                                       v-if="statistics?.matters?.length === 0">-->
 <!--            </SharedMattersCreateMatter>-->
-              <Button v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters') || statistics?.matters?.length === 0" data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="isOffline" :title="isOffline ? 'Requires internet connection' : undefined">
+              <Button v-if="hasPermission('canCreateMatters') || statistics?.matters?.length === 0" data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="!!createDisabledReason" :title="createDisabledReason">
                 <Plus aria-hidden="true"/>
                 Create Matter
               </Button>
@@ -325,7 +334,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
 
 <!--              <SharedMattersCreateMatter @created="reloadStatistics">-->
 <!--              </SharedMattersCreateMatter>-->
-                <Button v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter" :disabled="isOffline" :title="isOffline ? 'Requires internet connection' : undefined">
+                <Button v-if="hasPermission('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter" :disabled="!!createDisabledReason" :title="createDisabledReason">
                   <Plus aria-hidden="true"/>
                 </Button>
             </div>
@@ -400,7 +409,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
                 <p class="font-semibold text-foreground">No matters yet</p>
                 <p class="text-sm text-muted-foreground">Create your first matter to start tracking litigation deadlines automatically.</p>
               </div>
-                <Button v-if="usePermissions().permissions?.value?.permissions?.includes('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" class="w-fit" :disabled="isOffline" :title="isOffline ? 'Requires internet connection' : undefined">
+                <Button v-if="hasPermission('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" class="w-fit" :disabled="!!createDisabledReason" :title="createDisabledReason">
                   <Plus class="size-4" aria-hidden="true"/>
                   Create Your First Matter
                 </Button>

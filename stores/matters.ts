@@ -220,6 +220,12 @@ export const useMattersStore = defineStore('matters', {
       try {
         const matter = await getMatter(id, {})
 
+        // Guard: never cache an error/unexpected payload as a matter. A bad entry here
+        // poisons the cache for the whole TTL and renders "Matter not found".
+        if (!matter || typeof matter !== 'object' || !matter.id) {
+          throw new Error('getMatter returned an unexpected payload')
+        }
+
         // Update cache
         this.matterCache[id] = {
           data: matter,
@@ -310,33 +316,11 @@ export const useMattersStore = defineStore('matters', {
       if (this._subscribed) return;
       if (!useNetwork().isOnline.value) return;
 
-      const unsubscribeFn = await subscribeToMatters(async (data: any) => {
-        const { action, record } = data
-
-        const expandedRecord = await getMatter(record.id, {});
-
-        // Handle subscription events optimistically
-
-        // for now we shall force a reload
+      await subscribeToMatters(async (_data: any) => {
+        // On any matter change, force a list reload. (Previously this also did a
+        // discarded getMatter() call, which is wasteful and — now that getMatter
+        // throws on non-2xx — could abort the callback before the reload ran.)
         this.fetchMatters(true);
-
-        // switch (action) {
-        //   case 'create':
-        //     this.addMatterOptimistic(expandedRecord);
-        //     break
-        //
-        //   case 'update':
-        //     this.updateMatterOptimistic(record.id, expandedRecord);
-        //     break
-        //
-        //   case 'delete':
-        //     this.removeMatterFromCache(record.id)
-        //     break
-        //
-        //   default:
-        //     // For unknown actions, do a background refresh
-        //     this.fetchMattersInBackground()
-        // }
       });
       this._subscribed = true;
     },
