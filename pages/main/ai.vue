@@ -22,7 +22,7 @@ definePageMeta({ layout: 'blank' });
 const {
   isListening, isTranscribing, transcript, audioLevel, micError,
   startListening, stopListening,
-  isSpeaking, ttsSupported, speak, stopSpeaking,
+  isSpeaking, ttsSupported, caption, speak, speakTimed, stopSpeaking,
   prefs: speechPrefs, savePrefs,
 } = useSpeech();
 
@@ -352,7 +352,7 @@ async function sendMessage(text: string) {
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
     }
-    if (autoRead.value && ttsSupported.value) speak(response.content ?? '');
+    if (autoRead.value && ttsSupported.value) (audioMode.value ? speakTimed : speak)(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -405,7 +405,7 @@ async function approveProposal() {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
     }
-    if (autoRead.value && ttsSupported.value) speak(response.content ?? '');
+    if (autoRead.value && ttsSupported.value) (audioMode.value ? speakTimed : speak)(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -512,6 +512,8 @@ onMounted(async () => {
               <p v-if="voiceState === 'listening' && transcript" class="text-white text-xl font-medium leading-snug">{{ transcript }}</p>
               <p v-else-if="voiceState === 'listening'" class="text-white/40 text-sm animate-pulse">Listening…</p>
               <p v-else-if="voiceState === 'thinking'" class="text-white/40 text-sm">Thinking…</p>
+              <p v-else-if="voiceState === 'speaking' && caption" class="text-white/90 text-base leading-relaxed line-clamp-5">{{ caption }}</p>
+              <p v-else-if="voiceState === 'speaking'" class="text-white/40 text-sm animate-pulse">Speaking…</p>
               <div v-else-if="lastAssistantText" class="space-y-2">
                 <p v-if="lastUserText" class="text-white/30 text-xs truncate">{{ lastUserText }}</p>
                 <p class="text-white/70 text-sm leading-relaxed line-clamp-4">{{ lastAssistantText }}</p>

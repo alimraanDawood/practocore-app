@@ -40,7 +40,7 @@ const isDesktop = useMediaQuery('(min-width: 1024px)');
 const {
   isListening, isTranscribing, transcript, audioLevel, micError,
   startListening, stopListening,
-  isSpeaking, ttsSupported, speak, stopSpeaking, unlockAudio,
+  isSpeaking, ttsSupported, caption, speak, speakTimed, stopSpeaking, unlockAudio,
   prefs: speechPrefs, savePrefs,
 } = useSpeech();
 
@@ -56,39 +56,15 @@ watch(open, (isOpen) => {
 });
 
 // ── Conversational loop ───────────────────────────────────────────────────────
-
-// Silence detection: after user starts speaking, auto-stop when silence persists
-let hasSpoken = false;
-let silenceTimer: ReturnType<typeof setTimeout> | null = null;
-
-function clearSilenceTimer() {
-  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-}
+// End-of-turn is detected server-side by AssemblyAI (it finalises the transcript
+// and stops the stream). We no longer run a client-side silence timer — it
+// competed with the model's turn detection and cut speakers off during pauses.
 
 watch(isListening, (listening) => {
   if (listening) {
-    hasSpoken = false;
-    clearSilenceTimer();
     voiceState.value = 'listening';
-  } else {
-    clearSilenceTimer();
-    if (voiceState.value === 'listening') voiceState.value = 'thinking';
-  }
-});
-
-// Level above which we count as intentional speech (filters ambient noise / soft background sounds)
-const SPEECH_THRESHOLD = 18;
-
-watch(audioLevel, (level) => {
-  if (!isListening.value || !audioMode.value) return;
-  if (level > SPEECH_THRESHOLD) {
-    hasSpoken = true;
-    clearSilenceTimer();
-  } else if (hasSpoken && !silenceTimer) {
-    silenceTimer = setTimeout(() => {
-      silenceTimer = null;
-      if (isListening.value) stopListening();
-    }, 1600);
+  } else if (voiceState.value === 'listening') {
+    voiceState.value = 'thinking';
   }
 });
 
@@ -132,7 +108,6 @@ watch(isSpeaking, (speaking) => {
 });
 
 watch(micError, () => {
-  clearSilenceTimer();
   voiceState.value = 'idle';
 });
 
@@ -149,7 +124,6 @@ function toggleMic() {
     return;
   }
   if (isListening.value) {
-    clearSilenceTimer();
     stopListening();
   } else {
     stopSpeaking();
@@ -158,7 +132,6 @@ function toggleMic() {
 }
 
 function exitAudioMode() {
-  clearSilenceTimer();
   stopListening();
   stopSpeaking();
   voiceState.value = 'idle';
@@ -697,7 +670,7 @@ async function send(voiceText?: string) {
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
     }
-    if (audioMode.value) speak(response.content ?? '');
+    if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -810,7 +783,7 @@ async function approveProposal() {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
     }
-    if (audioMode.value) speak(response.content ?? '');
+    if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
 
     // Tool-specific post-approval side effects. The backend's actionResult
@@ -935,6 +908,7 @@ function formatToolName(tool: string): string {
                 <p v-if="voiceState === 'listening' && transcript" key="t" class="text-foreground text-lg font-medium leading-snug">{{ transcript }}</p>
                 <p v-else-if="voiceState === 'listening'" key="l" class="text-primary text-sm font-medium animate-pulse">Listening…</p>
                 <p v-else-if="voiceState === 'thinking'" key="th" class="text-muted-foreground text-sm">Thinking…</p>
+                <p v-else-if="voiceState === 'speaking' && caption" key="spc" class="text-foreground text-sm leading-relaxed line-clamp-4">{{ caption }}</p>
                 <p v-else-if="voiceState === 'speaking'" key="sp" class="text-primary text-sm font-medium animate-pulse">Speaking…</p>
                 <div v-else-if="lastAssistantText" key="ex" class="space-y-1">
                   <p v-if="lastUserText" class="text-muted-foreground/60 text-xs truncate">{{ lastUserText }}</p>
