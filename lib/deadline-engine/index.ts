@@ -634,6 +634,90 @@ export class DeadlineEngine {
         return output;
     }
 
+    static generateFromDates(
+        template: DeadlineTemplate,
+        triggerDate: string,
+        providedDates: Record<string, string> = {},
+        fieldValues: Record<string, any> = {}
+    ): DeadlineEngineOutput {
+        const templateDeadlineIds = new Set(template.data.deadlines.map(d => d.id));
+        for (const id of Object.keys(providedDates)) {
+            if (!templateDeadlineIds.has(id)) {
+                throw new Error(`Provided date id "${id}" not found in template deadlines`);
+            }
+        }
+
+        let _triggerDate = new Date(triggerDate);
+
+        const { error: triggerError } = DeadlineEngine.validateDate(_triggerDate, template.data.triggerDateRules, template.data.holidays, template.data.deadDays);
+        if (triggerError) throw triggerError;
+
+        const { error: fieldError } = DeadlineEngine.validateFields(template, fieldValues);
+        if (fieldError) throw fieldError;
+
+        let output: DeadlineEngineOutput = {
+            triggerDate: DeadlineEngine.formatToDateString(_triggerDate),
+            deadlines: [],
+            events: [],
+            warnings: [],
+            fieldValues: fieldValues,
+            adjournments: [],
+            generatedAt: DeadlineEngine.formatToDateString(new Date()),
+            templateId: template.id,
+            templateVersion: template.version,
+            subProcesses: []
+        };
+
+        for (let event of template.data.events || []) {
+            output.events.push({ id: event.id, date: null, status: "pending" });
+        }
+
+        for (let deadline of template.data.deadlines) {
+            switch (deadline.type) {
+                case "offset":
+                    const rawProvided = providedDates[deadline.id];
+                    if (rawProvided !== undefined && rawProvided !== '') {
+                        const providedDate = new Date(rawProvided);
+                        if (isNaN(providedDate.getTime())) {
+                            throw new Error(`Provided date for "${deadline.id}" is not a valid date: "${rawProvided}"`);
+                        }
+                        const { valid, error: validErr } = DeadlineEngine.validateDate(
+                            providedDate,
+                            { allowHolidays: deadline.offset.dateRules.allowHolidays, allowWeekends: deadline.offset.dateRules.allowWeekends },
+                            template.data.holidays,
+                            template.data.deadDays ?? []
+                        );
+                        if (!valid && validErr) output.warnings.push(`${deadline.name}: ${validErr.message}`);
+                        output.deadlines.push({
+                            id: deadline.id,
+                            name: deadline.name,
+                            date: rawProvided,
+                            status: providedDate < _triggerDate ? "overdue" : "pending",
+                            dependency: deadline.dependency
+                        });
+                    } else {
+                        let computedDate = null;
+                        if (DeadlineEngine.resolveTargetDate(deadline?.dependency?.targetId, output)) {
+                            const d = DeadlineEngine.calculateOffsetDeadlineDate(deadline, template, output);
+                            computedDate = d ? DeadlineEngine.formatToDateString(d) : null;
+                        }
+                        output.deadlines.push({
+                            id: deadline.id,
+                            name: deadline.name,
+                            date: computedDate,
+                            status: computedDate ? (new Date(computedDate) < _triggerDate ? "overdue" : "pending") : "unavailable",
+                            dependency: deadline.dependency
+                        });
+                    }
+                    break;
+                default:
+                    throw new Error(`Unknown deadline type ${deadline.type}`);
+            }
+        }
+
+        return output;
+    }
+
     private static formatToDateString(d: Date): string {
         if (!d) {
             throw new Error("Invalid Date");

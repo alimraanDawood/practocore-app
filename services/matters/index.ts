@@ -64,10 +64,32 @@ export async function createMatter(options: {
     templateId: string,
     date: string,
     fieldValues: any[],
-    parties?: Record<string, any[]>,  // Party data organized by role ID
-    representing?: { role_id: string, party_member_ids: string[] }  // Representation data
+    parties?: Record<string, any[]>,
+    representing?: { role_id: string, party_member_ids: string[] }
 }) {
     return fetch(`${SERVER_URL}/api/practocore/create-matter`, {
+        method: 'POST',
+        body: JSON.stringify(options),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json());
+}
+
+export async function createMatterFromDates(options: {
+    name: string,
+    caseNumber: string,
+    personal: boolean,
+    members?: string[],
+    templateId: string,
+    date: string,
+    fieldValues: any[],
+    deadlineDates: Record<string, string>,
+    parties?: Record<string, any[]>,
+    representing?: { role_id: string, party_member_ids: string[] }
+}) {
+    return fetch(`${SERVER_URL}/api/practocore/create-matter-from-dates`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {

@@ -4,7 +4,9 @@ import {
   Mic, MicOff, VolumeX, Volume2, X, Check, Loader2, Sparkles,
   Building2, Clock, User,
   History, Plus, Trash2, MessageSquare, Settings, Lock,
+  FileText,
 } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
 import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
 import { Sheet, SheetContent, SheetTrigger } from '~/components/ui/sheet';
@@ -16,7 +18,8 @@ import { getSignedInUser } from '~/services/auth';
 import {
   sendAiMessage, confirmAiProposal,
   listConversations, getConversation, deleteConversation,
-  type AiMessage, type AiResponse, type AiContext, type AiConversationSummary,
+  type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
+  type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
   type ConvDisplayMessage,
 } from '~/services/ai';
 import { getMatters, getAllDeadlines } from '~/services/matters';
@@ -230,7 +233,10 @@ const convMessages = computed<ConvDisplayMessage[]>(() =>
   messages.value.map(m =>
     m.role === 'tool-event'
       ? { role: `tool-event:${m.status}`, content: m.content }
-      : { role: m.role, content: m.content },
+      // Persisted history is text-only: flatten any multimodal content to a
+      // string with bracketed placeholders for attachments. Keeps the
+      // conversation row small and the backend's messagesToConvMessages happy.
+      : { role: m.role, content: messageText(m.content) },
   ),
 );
 const conversationId = ref<string>('');
@@ -239,6 +245,112 @@ const inputText = ref('');
 const loading = ref(false);
 const messagesEnd = ref<HTMLElement | null>(null);
 
+// ── Attachments (PDF + images) ────────────────────────────────────────────────
+// Attached files ride along on the next send as image/document content blocks.
+// Sonnet 4.6 reads PDFs and images natively; the backend caps the total base64
+// payload at 30MB and rejects anything past that.
+interface Attachment {
+  id: string;
+  name: string;
+  /** MIME type — image/* or application/pdf. */
+  mime: string;
+  /** Raw byte size, for display + cap enforcement. */
+  size: number;
+  /** Base64 data with NO `data:` URI prefix — ready to embed in a content block. */
+  base64: string;
+  /** Full data URL retained for image thumbnails. */
+  dataUrl: string;
+}
+
+const attachments = ref<Attachment[]>([]);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+/** Per-file cap (10MB) — generous enough for multi-page PDFs and high-res photos. */
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Total cap across all attachments in one send (25MB raw ≈ 33MB base64). */
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+
+const totalAttachmentBytes = computed(() =>
+  attachments.value.reduce((sum, a) => sum + a.size, 0),
+);
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileToBase64(file: File): Promise<{ base64: string; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      // FileReader returns `data:<mime>;base64,<payload>` — strip the prefix so we
+      // can feed the raw payload to Anthropic's `source.data`.
+      const comma = dataUrl.indexOf(',');
+      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      resolve({ base64, dataUrl });
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+const ACCEPTED_IMAGE_TYPES: AiImageMediaType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+function isAcceptedMime(mime: string): boolean {
+  if (mime === 'application/pdf') return true;
+  return (ACCEPTED_IMAGE_TYPES as string[]).includes(mime);
+}
+
+async function addFiles(files: File[] | FileList) {
+  const list = Array.from(files);
+  for (const file of list) {
+    if (!isAcceptedMime(file.type)) {
+      toast('Unsupported file', { description: `${file.name} (${file.type || 'unknown type'}) — only PDFs and images.` });
+      continue;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast('File too large', { description: `${file.name} is ${formatBytes(file.size)}. Each file must be under ${formatBytes(MAX_FILE_BYTES)}.` });
+      continue;
+    }
+    if (totalAttachmentBytes.value + file.size > MAX_TOTAL_BYTES) {
+      toast('Attachment limit reached', { description: `Total attachment size must stay under ${formatBytes(MAX_TOTAL_BYTES)}.` });
+      continue;
+    }
+    try {
+      const { base64, dataUrl } = await fileToBase64(file);
+      attachments.value.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+        base64,
+        dataUrl,
+      });
+    } catch (err: any) {
+      toast('Could not read file', { description: file.name + (err?.message ? ` — ${err.message}` : '') });
+    }
+  }
+}
+
+async function onFilesChosen(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (!input.files || input.files.length === 0) return;
+  await addFiles(input.files);
+  // Reset so the same file can be re-selected after removal.
+  input.value = '';
+}
+
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter(a => a.id !== id);
+}
+
+function openFilePicker() {
+  if (!isSubscriptionActive.value) return;
+  fileInput.value?.click();
+}
+
 const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
 
 // PractoAI calls cost money, so chatting requires a live plan. Gates the input
@@ -246,16 +358,42 @@ const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 't
 const activePlan = usePlanActive();
 const isSubscriptionActive = computed(() => activePlan.value?.active === true);
 
-const canSend = computed(() => inputText.value.trim().length > 0 && !loading.value && isSubscriptionActive.value);
+const canSend = computed(() =>
+  (inputText.value.trim().length > 0 || attachments.value.length > 0)
+  && !loading.value
+  && isSubscriptionActive.value,
+);
+
+/** Flatten a message's content (string or content-block array) to a displayable
+ *  string. Image/document blocks render as bracketed placeholders so the empty
+ *  state, history preview, and persisted conversation rows have something
+ *  meaningful to show. */
+function messageText(content: AiMessage['content']): string {
+  if (typeof content === 'string') return content;
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === 'text') parts.push(block.text);
+    else if (block.type === 'image') parts.push('[image]');
+    else if (block.type === 'document') parts.push('[PDF]');
+  }
+  return parts.join(' ');
+}
+
+/** Return only the attachment blocks of a content array — used by the render
+ *  loop to show file chips/thumbnails above the text bubble. */
+function messageAttachments(content: AiMessage['content']): Array<AiImageBlock | AiDocumentBlock> {
+  if (typeof content === 'string') return [];
+  return content.filter((b): b is AiImageBlock | AiDocumentBlock => b.type === 'image' || b.type === 'document');
+}
 
 const lastAssistantText = computed(() => {
   const msgs = messages.value.filter((m): m is AiMessage => m.role === 'assistant');
-  return msgs.at(-1)?.content ?? '';
+  return messageText(msgs.at(-1)?.content ?? '');
 });
 
 const lastUserText = computed(() => {
   const msgs = messages.value.filter((m): m is AiMessage => m.role === 'user');
-  return msgs.at(-1)?.content ?? '';
+  return messageText(msgs.at(-1)?.content ?? '');
 });
 
 // ── History panel ─────────────────────────────────────────────────────────────
@@ -510,10 +648,35 @@ function scrollToBottom() {
 
 async function send(voiceText?: string) {
   const text = voiceText ?? inputText.value.trim();
-  if (!text || loading.value || !isSubscriptionActive.value) return;
+  const hasAttachments = !voiceText && attachments.value.length > 0;
+  // Allow attachments-only sends; voice path never carries attachments.
+  if (!text && !hasAttachments) return;
+  if (loading.value || !isSubscriptionActive.value) return;
 
-  messages.value.push({ role: 'user', content: text });
-  if (!voiceText) inputText.value = '';
+  // Build either a plain text turn (back-compat with persisted history) or a
+  // multimodal content-block array. Document/image blocks come first so the
+  // text reads as a caption to what's attached.
+  let userContent: string | AiContentBlock[];
+  if (hasAttachments) {
+    const blocks: AiContentBlock[] = [];
+    for (const a of attachments.value) {
+      if (a.mime === 'application/pdf') {
+        blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 } });
+      } else {
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 } });
+      }
+    }
+    blocks.push({ type: 'text', text: text || 'Help me create a matter from this.' });
+    userContent = blocks;
+  } else {
+    userContent = text;
+  }
+
+  messages.value.push({ role: 'user', content: userContent });
+  if (!voiceText) {
+    inputText.value = '';
+    if (hasAttachments) attachments.value = [];
+  }
   pendingProposal.value = null;
   loading.value = true;
   voiceState.value = 'thinking';
@@ -553,6 +716,31 @@ function handleKeydown(e: KeyboardEvent) {
 
 function prefill(text: string) { inputText.value = text; }
 
+// Imperative API for the useAiChat composable (entry points outside the chat,
+// e.g. the "Create with AI" card on the create-matter page, signal here to
+// seed text and/or attachments before the user hits send).
+defineExpose({
+  prefill,
+  addFiles,
+});
+
+// Watch the global open-request signal (written by useAiChat().open()).
+// When set, open this chat, drop the seed text into the input, run any
+// File objects through the same validation pipeline as the paperclip, then
+// clear the signal so the next open is independent.
+const aiChat = useAiChat();
+watch(() => aiChat.request.value?.requestedAt, async (ts) => {
+  if (!ts) return;
+  const req = aiChat.request.value;
+  if (!req) return;
+  open.value = true;
+  if (req.seedText) prefill(req.seedText);
+  if (req.seedAttachments && req.seedAttachments.length > 0) {
+    await addFiles(req.seedAttachments);
+  }
+  aiChat.consume();
+});
+
 function goToBilling() {
   open.value = false;
   navigateTo('/main/settings/billing');
@@ -563,6 +751,27 @@ function dismissProposal() {
     messages.value.push({ role: 'tool-event', content: formatToolName(pendingProposal.value.tool ?? ''), status: 'rejected' });
   }
   pendingProposal.value = null;
+}
+
+/** Hand off an AI-extracted matter draft to the manual create-matter form.
+ *  Stashes the draft + extracted fields in sessionStorage so the page can
+ *  hydrate its store on mount, then closes the chat and navigates over. */
+function handoffMatterDraft() {
+  const preview = pendingProposal.value?.preview;
+  if (preview?.kind !== 'create_matter') return;
+  try {
+    sessionStorage.setItem('practocore.matterDraft', JSON.stringify({
+      template: preview.template,
+      matter: preview.matter,
+      fields: preview.fields,
+    }));
+  } catch {
+    // sessionStorage can be unavailable (private browsing edge cases); navigate
+    // anyway — the user keeps a manual entry point.
+  }
+  pendingProposal.value = null;
+  open.value = false;
+  navigateTo('/main/matters/create');
 }
 
 const proposalLoading = ref(false);
@@ -603,6 +812,21 @@ async function approveProposal() {
     }
     if (audioMode.value) speak(response.content ?? '');
     else voiceState.value = 'idle';
+
+    // Tool-specific post-approval side effects. The backend's actionResult
+    // carries the executed write-tool's structured output — for create_matter_draft
+    // that's the new matter's id, which we use to close the chat and jump
+    // straight to its detail page (same destination as the manual create flow).
+    if (response.actionResult?.tool === 'create_matter_draft') {
+      const matterId = response.actionResult.data?.matterId;
+      if (matterId && typeof matterId === 'string') {
+        toast('Matter created', {
+          description: response.actionResult.data?.message ?? `Opening the new matter.`,
+        });
+        open.value = false;
+        navigateTo(`/main/matters/matter/${matterId}`);
+      }
+    }
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
     voiceState.value = 'idle';
@@ -663,6 +887,7 @@ function formatToolName(tool: string): string {
               class="mx-4 mt-3 shrink-0"
               @approve="approveProposal"
               @dismiss="dismissProposal"
+              @edit-manually="handoffMatterDraft"
             />
           </Transition>
 
@@ -866,8 +1091,28 @@ function formatToolName(tool: string): string {
                 </span>
               </div>
               <div v-else-if="msg.role === 'user'" class="flex justify-end">
-                <div class="max-w-[80%] bg-muted text-muted-foreground border rounded-lg px-3 py-2 text-sm whitespace-pre-wrap">
-                  {{ msg.content }}
+                <div class="flex flex-col items-end gap-1 max-w-[80%]">
+                  <!-- Attachment chips above the text bubble — only present on multimodal turns -->
+                  <div v-if="messageAttachments(msg.content).length > 0" class="flex flex-wrap gap-1 justify-end">
+                    <template v-for="(att, j) in messageAttachments(msg.content)" :key="j">
+                      <img
+                        v-if="att.type === 'image'"
+                        :src="`data:${att.source.media_type};base64,${att.source.data}`"
+                        :alt="`Attached image ${j + 1}`"
+                        class="size-16 rounded-md object-cover border"
+                      />
+                      <span v-else class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-background text-foreground">
+                        <FileText class="size-3 shrink-0" />
+                        PDF
+                      </span>
+                    </template>
+                  </div>
+                  <div
+                    v-if="messageText(msg.content)"
+                    class="bg-muted text-muted-foreground border rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
+                  >
+                    {{ messageText(msg.content) }}
+                  </div>
                 </div>
               </div>
               <div v-else class="flex items-start gap-2 group/msg">
@@ -877,12 +1122,12 @@ function formatToolName(tool: string): string {
                 <div class="flex flex-col gap-0.5 max-w-[80%]">
                   <div
                     class="bg-background border text-foreground rounded-lg px-3 py-2 text-sm prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none"
-                    v-html="renderMarkdown(msg.content)"
+                    v-html="renderMarkdown(messageText(msg.content))"
                   />
                   <button
                     class="self-start flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100 px-0.5"
                     :class="speakingIdx === i ? '!opacity-100 text-primary' : ''"
-                    @click="toggleSpeak(msg.content, i)"
+                    @click="toggleSpeak(messageText(msg.content), i)"
                   >
                     <VolumeX v-if="speakingIdx === i" class="size-3" />
                     <Volume2 v-else class="size-3" />
@@ -907,6 +1152,7 @@ function formatToolName(tool: string): string {
               :loading="proposalLoading"
               @approve="approveProposal"
               @dismiss="dismissProposal"
+              @edit-manually="handoffMatterDraft"
             />
 
             <div ref="messagesEnd" />
@@ -938,6 +1184,44 @@ function formatToolName(tool: string): string {
               </Badge>
             </div>
 
+            <!-- Pending attachments — chips shown above the input until the next send -->
+            <div v-if="attachments.length > 0" class="flex flex-wrap gap-1.5">
+              <div
+                v-for="att in attachments" :key="att.id"
+                class="flex items-center gap-1.5 rounded-md border bg-background pr-1 pl-1 py-1 text-xs"
+              >
+                <img
+                  v-if="att.mime.startsWith('image/')"
+                  :src="att.dataUrl"
+                  :alt="att.name"
+                  class="size-8 rounded object-cover shrink-0"
+                />
+                <FileText v-else class="size-4 text-muted-foreground shrink-0" />
+                <span class="max-w-[140px] truncate font-medium">{{ att.name }}</span>
+                <span class="text-muted-foreground">{{ formatBytes(att.size) }}</span>
+                <button
+                  class="ml-0.5 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  :aria-label="`Remove ${att.name}`"
+                  @click="removeAttachment(att.id)"
+                >
+                  <X class="size-3" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Hidden file input — the Paperclip button below triggers it.
+                 capture=\"environment\" opens the rear camera on Capacitor/Android
+                 from the OS picker, giving us "take a photo" support for free. -->
+            <input
+              ref="fileInput"
+              type="file"
+              multiple
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif"
+              capture="environment"
+              class="hidden"
+              @change="onFilesChosen"
+            />
+
             <InputGroup>
               <InputGroupAddon align="block-start">
                 <Button size="sm" variant="outline" :class="selectedItems.length > 0 ? 'border-primary/50 text-primary' : ''" @click="contextDrawerOpen = true">
@@ -957,8 +1241,15 @@ function formatToolName(tool: string): string {
               />
 
               <InputGroupAddon align="block-end">
-                <InputGroupButton variant="outline" size="icon-sm">
+                <InputGroupButton
+                  variant="outline"
+                  size="icon-sm"
+                  :disabled="!isSubscriptionActive"
+                  title="Attach a PDF or image"
+                  @click="openFilePicker"
+                >
                   <Paperclip class="size-4" />
+                  <span class="sr-only">Attach a PDF or image</span>
                 </InputGroupButton>
                 <InputGroupButton variant="outline" size="sm">
                   <Globe />

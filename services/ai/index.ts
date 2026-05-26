@@ -1,8 +1,47 @@
 import { pb, SERVER_URL } from '~/lib/pocketbase';
 
+// ── Message content blocks ─────────────────────────────────────────────────────
+// User messages can now carry image and PDF attachments alongside text. The shape
+// mirrors Anthropic's Messages API content blocks (and our Go `ContentBlock`
+// struct in practocore-backend/ai/anthropic.go) so the values pass through the
+// backend unchanged. The text-only `string` form is preserved for backward
+// compatibility with the existing chat history persistence.
+
+export type AiImageMediaType =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'image/gif';
+
+export interface AiTextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface AiImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: AiImageMediaType;
+    /** base64-encoded bytes, no `data:` URI prefix */
+    data: string;
+  };
+}
+
+export interface AiDocumentBlock {
+  type: 'document';
+  source: {
+    type: 'base64';
+    media_type: 'application/pdf';
+    data: string;
+  };
+}
+
+export type AiContentBlock = AiTextBlock | AiImageBlock | AiDocumentBlock;
+
 export interface AiMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | AiContentBlock[];
 }
 
 // Broader message type used for conversation persistence (includes tool-event roles).
@@ -17,6 +56,13 @@ export interface AiContext {
   userIds?: string[];
 }
 
+export interface AiActionResult {
+  /** Which write tool's result this carries (e.g. 'create_matter_draft'). */
+  tool: string;
+  /** The tool's structured output map (see ai/tools/*.go return values). */
+  data: Record<string, any>;
+}
+
 export interface AiResponse {
   type: 'text' | 'proposal' | 'error';
   content?: string;
@@ -28,6 +74,10 @@ export interface AiResponse {
   description?: string;
   preview?: ProposalPreview;
   pendingMessages?: AiMessage[];
+  // Set on the text reply that follows a successful confirm of a write-tool —
+  // lets the UI react (e.g. navigate to a newly created matter) without parsing
+  // the assistant's prose.
+  actionResult?: AiActionResult;
   // error field
   error?: string;
 }
@@ -108,6 +158,50 @@ export interface MatterEditPreview {
   matter: MatterRef;
   changes: MatterChange[];
 }
+
+export type FieldConfidence = 'high' | 'medium' | 'low';
+
+export interface ExtractedField {
+  id: string;
+  label: string;
+  value: any;
+  required: boolean;
+  confidence?: FieldConfidence;
+}
+
+export interface CreateMatterDraft {
+  name: string;
+  caseNumber?: string;
+  /** Trigger date (ISO YYYY-MM-DD); semantics set by template.triggerDatePrompt. */
+  date: string;
+  court?: string;
+  courtName?: string;
+  judges?: UserRef[];
+  opposingCounsel?: Array<Record<string, any>>;
+  parties?: Record<string, Array<Record<string, any>>>;
+  /** Map of role_id → role label, as declared in template.data.parties.roles[]. */
+  partyRoles?: Record<string, string>;
+  representing?: { role_id: string; party_member_ids: string[] } | null;
+  members?: UserRef[];
+  personal?: boolean;
+}
+
+export interface CreateMatterPreview {
+  kind: 'create_matter';
+  template: {
+    id: string;
+    name: string;
+    /** Human-readable description of what the trigger date represents. */
+    triggerDatePrompt?: string;
+    triggerDateName?: string;
+  };
+  matter: CreateMatterDraft;
+  fields: ExtractedField[];
+  /** Warnings the user should notice before approving (missing required fields,
+   *  unknown role IDs, model-supplied extraction notes). */
+  warnings: string[];
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -119,6 +213,7 @@ export type ProposalPreview =
   | AdjournPreview
   | FulfillPreview
   | MatterEditPreview
+  | CreateMatterPreview
   | GenericPreview;
 
 export interface AiConversationSummary {
