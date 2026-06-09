@@ -16,6 +16,7 @@
         <div class="p-4">
           <div class="flex flex-col w-full gap-6">
             <SharedBilling />
+            <SharedBillingAiCredits />
           </div>
         </div>
       </div>

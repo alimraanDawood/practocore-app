@@ -11,7 +11,9 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "gen:deadline-types": "go -C ../practocore-backend/deadlineengine run ./cmd/gents > services/deadline-v2/types.gen.ts",
+    "check:deadline-types": "bun run gen:deadline-types && git diff --exit-code services/deadline-v2/types.gen.ts"
   },
   "dependencies": {
     "@amirafa/vue3-pull-to-refresh": "^1.2.17",

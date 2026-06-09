@@ -45,6 +45,7 @@ import {Search, Check} from 'lucide-vue-next';
 import type {RecordModel} from 'pocketbase';
 import {getTemplates} from '~/services/templates';
 import {Loader} from "lucide-vue-next";
+import {normalizeTemplateRecord} from '~/utils/normalizeTemplate';
 
 const props = defineProps(['modelValue']);
 const emits = defineEmits(['update:modelValue', 'templateSelected']);
@@ -73,19 +74,16 @@ const requestTemplate = () => {
 };
 
 const selectTemplate = (template: RecordModel) => {
-  if (template?.template?.data?.fields) {
-    emits('update:modelValue', {
-      id: template.id,
-      fields: template?.template?.data?.fields,
-      triggerDatePrompt: template?.template?.data?.triggerDatePrompt,
-      partyConfig: template?.template?.data?.parties
-    });
-
-    emits('templateSelected', template);
-    return;
-  }
-
-  emits('templateSelected', template);
-  emits('update:modelValue', {id: template.id, fields: [], triggerDatePrompt: template?.template?.data?.triggerDatePrompt, partyConfig: template?.template?.data?.parties});
+  // Normalize to v1-compatible .data shape so all consumers work regardless of
+  // whether the stored blob is a v1 template or a v2-IR bundle.
+  const normalized = normalizeTemplateRecord(template)
+  const data = normalized?.template?.data
+  emits('templateSelected', normalized)
+  emits('update:modelValue', {
+    id: normalized.id,
+    fields: data?.fields ?? [],
+    triggerDatePrompt: data?.triggerDatePrompt ?? '',
+    partyConfig: data?.parties,
+  })
 }
 </script>

@@ -47,10 +47,24 @@ function fieldValueText(v: any): string {
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 }
+
+function hasValue(v: any): boolean {
+  if (v === null || v === undefined || v === '') return false;
+  if (Array.isArray(v)) return v.length > 0;
+  return true;
+}
+
+// Keep the card short: show fields that actually carry a value, plus any
+// required field (even when blank, so its "Required" flag and the matching
+// warning have context). Empty optional fields are noise here — they add rows
+// without telling the user anything to review.
+const visibleFields = computed(() =>
+  props.preview.fields.filter(f => f.required || hasValue(f.value)),
+);
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-3">
     <!-- Header: template + case title -->
     <div class="flex flex-col gap-1">
       <span
@@ -113,21 +127,21 @@ function fieldValueText(v: any): string {
       </div>
     </div>
 
-    <!-- Template fields — every field declared on the template, with confidence dot -->
-    <div v-if="preview.fields.length" class="flex flex-col gap-2 pl-5 border-l-2" :class="t.divider">
-      <div v-for="f in preview.fields" :key="f.id" class="flex items-start gap-2">
+    <!-- Template fields — compact single-line rows; empty optional fields hidden
+         (see visibleFields) so the card stays short. Confidence dot leads each row. -->
+    <div v-if="visibleFields.length" class="flex flex-col gap-1 pl-5 border-l-2" :class="t.divider">
+      <div v-for="f in visibleFields" :key="f.id" class="flex items-center gap-2 min-w-0">
         <span
-          class="size-2 rounded-full mt-1.5 shrink-0"
+          class="size-2 rounded-full shrink-0"
           :class="f.confidence ? confidenceTone[f.confidence] : 'bg-muted-foreground/30'"
           :title="f.confidence ? confidenceLabel[f.confidence] : 'No confidence rating'"
         />
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-1 flex-wrap">
-            <span class="text-[11px] uppercase tracking-wide" :class="t.subtle">{{ f.label }}</span>
-            <span v-if="f.required" class="text-[10px] uppercase tracking-wide text-red-500 font-medium">Required</span>
-          </div>
-          <p class="text-sm break-words" :class="t.strong">{{ fieldValueText(f.value) }}</p>
-        </div>
+        <span class="text-xs shrink-0 truncate max-w-[45%]" :class="t.subtle">{{ f.label }}</span>
+        <span
+          v-if="f.required && !hasValue(f.value)"
+          class="text-[10px] uppercase tracking-wide text-red-500 font-medium shrink-0"
+        >Required</span>
+        <span class="text-sm truncate flex-1 text-right" :class="t.strong">{{ fieldValueText(f.value) }}</span>
       </div>
     </div>
 

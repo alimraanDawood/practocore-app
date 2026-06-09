@@ -3,7 +3,7 @@
     <div class="flex flex-col h-full lg:w-[95vw] w-full border-x">
       <div class="flex flex-col lg:flex-row w-full gap-3 h-full overflow-hidden">
         <!-- Desktop: Tabs Layout -->
-        <div class="hidden lg:flex flex-row bg-muted lg:bg-muted rounded-lg border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[250px] lg:h-full gap-3">
+        <div class="hidden lg:flex flex-row bg-muted lg:bg-muted border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[250px] lg:h-full gap-3">
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -56,6 +56,8 @@
             </div>
             <Separator/>
             <SharedBilling />
+            <SharedBillingAiCredits />
+
           </div>
           <PageComponentsSettingsDocumentation v-if="activeTab === 'documentation'" />
           <PageComponentsSettingsSupport v-if="activeTab === 'support'" />

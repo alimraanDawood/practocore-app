@@ -3,8 +3,8 @@ import {
   AtSign, ArrowUpIcon, Paperclip, Globe,
   Mic, MicOff, VolumeX, Volume2, X, Check, Loader2, Sparkles,
   Building2, Clock, User,
-  History, Plus, Trash2, MessageSquare, Settings, Lock,
-  FileText,
+  History, Plus, Trash2, MessageSquare, Settings, Lock, Zap,
+  FileText, Briefcase, ArrowRight, Bell,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
@@ -24,6 +24,8 @@ import {
 } from '~/services/ai';
 import { getMatters, getAllDeadlines } from '~/services/matters';
 import { getOrganisationUsers } from '~/services/admin';
+import { useMattersStore } from '~/stores/matters';
+import AICreditGauge from './AICreditGauge.vue';
 
 marked.use({ breaks: true, gfm: true });
 
@@ -53,6 +55,12 @@ const voiceState = ref<VoiceState>('idle');
 // Close audio mode when the sheet closes
 watch(open, (isOpen) => {
   if (!isOpen && audioMode.value) exitAudioMode();
+  // Re-arm the credit gate on each open: if the user topped up (e.g. via Billing)
+  // the next send re-validates server-side instead of staying locked from a stale 402.
+  if (isOpen) {
+    creditBlocked.value = false;
+    refreshAiUsage();
+  }
 });
 
 // ── Conversational loop ───────────────────────────────────────────────────────
@@ -194,23 +202,33 @@ const innerRingScale = computed(() => {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
-type ChatMessage = AiMessage | ToolEvent;
+// UI-only message: a tappable card to open a just-created matter. Kept out of the
+// API/history payloads (it isn't an assistant/user turn) — see apiMessages/convMessages.
+type MatterCreated = { role: 'matter-created'; matterId: string; matterName?: string };
+type ReminderCreated = { role: 'reminder-created'; reminderTitle?: string };
+type ChatMessage = AiMessage | ToolEvent | MatterCreated | ReminderCreated;
 
 const messages = ref<ChatMessage[]>([]);
 
+// UI-only affordance roles never go to the model or the saved transcript.
+const UI_ONLY_ROLES = ['matter-created', 'reminder-created'];
+
 const apiMessages = computed(() =>
-  messages.value.filter((m): m is AiMessage => m.role !== 'tool-event'),
+  messages.value.filter((m): m is AiMessage => m.role !== 'tool-event' && !UI_ONLY_ROLES.includes(m.role)),
 );
 
 const convMessages = computed<ConvDisplayMessage[]>(() =>
-  messages.value.map(m =>
-    m.role === 'tool-event'
-      ? { role: `tool-event:${m.status}`, content: m.content }
-      // Persisted history is text-only: flatten any multimodal content to a
-      // string with bracketed placeholders for attachments. Keeps the
-      // conversation row small and the backend's messagesToConvMessages happy.
-      : { role: m.role, content: messageText(m.content) },
-  ),
+  messages.value
+    // UI-only affordance cards are not part of the saved transcript.
+    .filter((m): m is AiMessage | ToolEvent => !UI_ONLY_ROLES.includes(m.role))
+    .map(m =>
+      m.role === 'tool-event'
+        ? { role: `tool-event:${m.status}`, content: m.content }
+        // Persisted history is text-only: flatten any multimodal content to a
+        // string with bracketed placeholders for attachments. Keeps the
+        // conversation row small and the backend's messagesToConvMessages happy.
+        : { role: m.role, content: messageText(m.content) },
+    ),
 );
 const conversationId = ref<string>('');
 const pendingProposal = ref<AiResponse | null>(null);
@@ -320,7 +338,7 @@ function removeAttachment(id: string) {
 }
 
 function openFilePicker() {
-  if (!isSubscriptionActive.value) return;
+  if (!aiEnabled.value) return;
   fileInput.value?.click();
 }
 
@@ -331,10 +349,29 @@ const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 't
 const activePlan = usePlanActive();
 const isSubscriptionActive = computed(() => activePlan.value?.active === true);
 
+// AI credit gate (AI_CREDITS_STRATEGY.md §3). `creditBlocked` locks the composer
+// after a 402 (pool + overage + grace exhausted); `creditDegraded` is advisory —
+// AI still answers on the lighter model, so we only surface a banner.
+const creditBlocked = ref(false);
+const creditDegraded = ref(false);
+
+// Both a live plan and available credits are required to chat.
+const aiEnabled = computed(() => isSubscriptionActive.value && !creditBlocked.value);
+
+// Shared usage state powering the header gauge — refreshed after each round so
+// the credits tick up live as they're spent.
+const { refresh: refreshAiUsage } = useAiUsage();
+
+const composerPlaceholder = computed(() => {
+  if (!isSubscriptionActive.value) return 'Subscription required to chat';
+  if (creditBlocked.value) return 'AI credit limit reached';
+  return 'Ask, Search or Chat...';
+});
+
 const canSend = computed(() =>
   (inputText.value.trim().length > 0 || attachments.value.length > 0)
   && !loading.value
-  && isSubscriptionActive.value,
+  && aiEnabled.value,
 );
 
 /** Flatten a message's content (string or content-block array) to a displayable
@@ -624,7 +661,7 @@ async function send(voiceText?: string) {
   const hasAttachments = !voiceText && attachments.value.length > 0;
   // Allow attachments-only sends; voice path never carries attachments.
   if (!text && !hasAttachments) return;
-  if (loading.value || !isSubscriptionActive.value) return;
+  if (loading.value || !aiEnabled.value) return;
 
   // Build either a plain text turn (back-compat with persisted history) or a
   // multimodal content-block array. Document/image blocks come first so the
@@ -657,6 +694,12 @@ async function send(voiceText?: string) {
 
   const response = await sendAiMessage(apiMessages.value, buildContext(), conversationId.value || undefined);
   loading.value = false;
+
+  // Reflect the credit gate: a degraded reply still lands (lighter model); a
+  // blocked reply (402) locks the composer until the user tops up.
+  creditDegraded.value = !!response.degraded;
+  if (response.blocked) creditBlocked.value = true;
+  refreshAiUsage(); // this round just spent credits — tick the gauge
 
   if (response.type === 'text') {
     messages.value.push({ role: 'assistant', content: response.content ?? '' });
@@ -777,6 +820,9 @@ async function approveProposal() {
   loading.value = false;
   proposalLoading.value = false;
 
+  creditDegraded.value = !!response.degraded;
+  refreshAiUsage();
+
   if (response.type === 'text') {
     messages.value.push({ role: 'assistant', content: response.content ?? '' });
     if (response.conversationId) {
@@ -787,18 +833,28 @@ async function approveProposal() {
     else voiceState.value = 'idle';
 
     // Tool-specific post-approval side effects. The backend's actionResult
-    // carries the executed write-tool's structured output — for create_matter_draft
-    // that's the new matter's id, which we use to close the chat and jump
-    // straight to its detail page (same destination as the manual create flow).
+    // carries the executed write-tool's structured output. For create_matter_draft
+    // we DON'T force-navigate — the assistant's reply already confirms it, and we
+    // append a tappable card so the user opens the matter when they're ready. We
+    // also refresh the matters store so the new matter shows up in lists/caches.
     if (response.actionResult?.tool === 'create_matter_draft') {
       const matterId = response.actionResult.data?.matterId;
       if (matterId && typeof matterId === 'string') {
+        const matterName = response.actionResult.data?.name as string | undefined;
         toast('Matter created', {
-          description: response.actionResult.data?.message ?? `Opening the new matter.`,
+          description: matterName ? `"${matterName}" is ready.` : 'Your new matter is ready.',
         });
-        open.value = false;
-        navigateTo(`/main/matters/matter/${matterId}`);
+        messages.value.push({ role: 'matter-created', matterId, matterName });
+        // Refresh the list cache so the matter appears without a manual reload.
+        useMattersStore().fetchMatters(true).catch(() => {});
       }
+    } else if (response.actionResult?.tool === 'schedule_reminder' && response.actionResult.data?.success) {
+      const reminderTitle = response.actionResult.data?.title as string | undefined;
+      toast('Reminder scheduled', {
+        description: reminderTitle ? `"${reminderTitle}" is set.` : 'Your reminder is set.',
+      });
+      // No forced navigation — append a card so the user opens reminders when ready.
+      messages.value.push({ role: 'reminder-created', reminderTitle });
     }
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -808,6 +864,18 @@ async function approveProposal() {
     voiceState.value = 'idle';
   }
   scrollToBottom();
+}
+
+// User-initiated open of a just-created matter (from the in-chat card). Closes
+// the chat first so navigation lands on a clean matter page.
+function openMatter(matterId: string) {
+  open.value = false;
+  navigateTo(`/main/matters/matter/${matterId}`);
+}
+
+function openReminders() {
+  open.value = false;
+  navigateTo('/main/reminder');
 }
 
 function formatToolName(tool: string): string {
@@ -826,7 +894,7 @@ function formatToolName(tool: string): string {
       :is="isDesktop ? DialogContent : SheetContent"
       :side="isDesktop ? undefined : 'bottom'"
       :class="isDesktop
-        ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
+        ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
         : ['flex flex-col p-0 gap-0 overflow-hidden', (messages.length > 0 || audioMode || historyOpen) ? 'h-dvh' : 'h-auto']"
       :hideX="true"
       @escape-key-down="(e: Event) => { if (contextDrawerOpen) { e.preventDefault(); contextDrawerOpen = false; } }"
@@ -981,6 +1049,7 @@ function formatToolName(tool: string): string {
         </div>
         <span class="font-semibold text-sm">PractoAI</span>
         <div class="ml-auto flex items-center gap-1">
+          <AICreditGauge />
           <Button size="icon-sm" variant="ghost" :class="historyOpen ? 'text-primary' : ''" @click="historyOpen = !historyOpen">
             <History class="size-4" />
           </Button>
@@ -1064,6 +1133,41 @@ function formatToolName(tool: string): string {
                   {{ msg.status === 'approved' ? 'Approved' : 'Dismissed' }}: {{ msg.content }}
                 </span>
               </div>
+              <!-- Open-matter card: shown after the assistant confirms a creation,
+                   so the user opens it on their own terms (no forced navigation). -->
+              <div v-else-if="msg.role === 'matter-created'" class="flex">
+                <button
+                  type="button"
+                  class="group/open flex items-center gap-3 max-w-[80%] rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:bg-muted"
+                  @click="openMatter(msg.matterId)"
+                >
+                  <div class="size-8 rounded-md grid place-items-center shrink-0 bg-primary/10 text-primary">
+                    <Briefcase class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ msg.matterName || 'New matter' }}</p>
+                    <p class="text-xs text-muted-foreground">Open matter</p>
+                  </div>
+                  <ArrowRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-x-0.5" />
+                </button>
+              </div>
+              <!-- Open-reminders card: shown after the assistant confirms a reminder. -->
+              <div v-else-if="msg.role === 'reminder-created'" class="flex">
+                <button
+                  type="button"
+                  class="group/open flex items-center gap-3 max-w-[80%] rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:bg-muted"
+                  @click="openReminders()"
+                >
+                  <div class="size-8 rounded-md grid place-items-center shrink-0 bg-primary/10 text-primary">
+                    <Bell class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ msg.reminderTitle || 'Reminder set' }}</p>
+                    <p class="text-xs text-muted-foreground">Open reminders</p>
+                  </div>
+                  <ArrowRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-x-0.5" />
+                </button>
+              </div>
               <div v-else-if="msg.role === 'user'" class="flex justify-end">
                 <div class="flex flex-col items-end gap-1 max-w-[80%]">
                   <!-- Attachment chips above the text bubble — only present on multimodal turns -->
@@ -1118,16 +1222,18 @@ function formatToolName(tool: string): string {
                 <Loader2 class="size-4 animate-spin text-muted-foreground" />
               </div>
             </div>
-
-            <ProposalCard
-              v-if="pendingProposal"
-              :proposal="pendingProposal"
-              variant="panel"
-              :loading="proposalLoading"
-              @approve="approveProposal"
-              @dismiss="dismissProposal"
-              @edit-manually="handoffMatterDraft"
-            />
+            
+            <div class="max-w-[80%]">
+              <ProposalCard
+                v-if="pendingProposal"
+                :proposal="pendingProposal"
+                variant="panel"
+                :loading="proposalLoading"
+                @approve="approveProposal"
+                @dismiss="dismissProposal"
+                @edit-manually="handoffMatterDraft"
+              />
+            </div>
 
             <div ref="messagesEnd" />
           </div>
@@ -1140,6 +1246,26 @@ function formatToolName(tool: string): string {
               <span>
                 Chatting with PractoAI needs an active subscription.
                 <button class="underline font-medium hover:text-foreground" @click="goToBilling">Renew</button>
+              </span>
+            </div>
+
+            <!-- Credit gate — blocked (locked) -->
+            <div v-else-if="creditBlocked" class="flex items-center gap-1.5 text-xs text-destructive">
+              <Lock class="size-3 shrink-0" />
+              <span>
+                AI credit limit reached.
+                <button class="underline font-medium hover:opacity-80" @click="goToBilling">Top up</button>
+                to keep using AI.
+              </span>
+            </div>
+
+            <!-- Credit gate — degraded (lighter model, still usable) -->
+            <div v-else-if="creditDegraded" class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+              <Zap class="size-3 shrink-0" />
+              <span>
+                Pool used up — running on the lighter model.
+                <button class="underline font-medium hover:opacity-80" @click="goToBilling">Top up</button>
+                to restore full power.
               </span>
             </div>
 
@@ -1209,8 +1335,8 @@ function formatToolName(tool: string): string {
 
               <InputGroupTextarea
                 v-model="inputText"
-                :placeholder="isSubscriptionActive ? 'Ask, Search or Chat...' : 'Subscription required to chat'"
-                :disabled="!isSubscriptionActive"
+                :placeholder="composerPlaceholder"
+                :disabled="!aiEnabled"
                 @keydown="handleKeydown"
               />
 
@@ -1218,7 +1344,7 @@ function formatToolName(tool: string): string {
                 <InputGroupButton
                   variant="outline"
                   size="icon-sm"
-                  :disabled="!isSubscriptionActive"
+                  :disabled="!aiEnabled"
                   title="Attach a PDF or image"
                   @click="openFilePicker"
                 >
@@ -1246,7 +1372,7 @@ function formatToolName(tool: string): string {
                   class="rounded-full"
                   size="icon-sm"
                   title="Voice conversation"
-                  :disabled="!isSubscriptionActive"
+                  :disabled="!aiEnabled"
                   @click="toggleMic"
                 >
                   <Mic class="size-4" />

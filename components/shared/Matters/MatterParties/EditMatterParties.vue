@@ -22,7 +22,7 @@
           ref="partiesRef"
           v-model="_parties"
           v-model:representing="_representing"
-          :party-roles="matter?.partyConfig?.roles || []"
+          :party-roles="normalizePartyConfig(matter?.partyConfig).roles"
         />
       </div>
 
@@ -52,7 +52,8 @@
 import { ref, computed, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { LoaderIcon } from 'lucide-vue-next';
-import { updateMatter } from '~/services/matters';
+import { normalizePartyConfig } from '~/utils/normalizeTemplate';
+import { pb, SERVER_URL } from '~/lib/pocketbase';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '~/components/ui/sheet';
 import { Button } from '~/components/ui/button';
 
@@ -105,12 +106,14 @@ const saveParties = async () => {
   loading.value = true;
 
   try {
-    const result = await updateMatter(props.matter.id, {
-      parties: _parties.value,
-      representing: _representing.value,
+    const res = await fetch(`${SERVER_URL}/api/practocore/matters/${props.matter.id}/parties`, {
+      method: 'PUT',
+      headers: { 'Authorization': pb.authStore.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parties: _parties.value, representing: _representing.value }),
     });
+    const result = await res.json();
 
-    if (result?.id) {
+    if (res.ok && result?.id) {
       toast.success('Party details updated successfully!', {
         description: 'Matter parties have been updated',
       });

@@ -25,7 +25,9 @@
                 e.preventDefault();
                 validate();
 
-                if (stepIndex === steps.length && meta.valid) {
+                // Create once the required steps (template + timeline) are done,
+                // from any later (optional) step too.
+                if (stepIndex >= requiredSteps && meta.valid && isPartyStepValid) {
                   onSubmit(values);
                 }
               }
@@ -157,7 +159,7 @@
                       <SharedMattersCreateMatterTemplateSelector
                         v-bind="componentField"
 
-                        @template-selected="st => selectedTemplate = st"
+                        @template-selected="onTemplateSelected"
                       />
                       <FormMessage />
                     </FormItem>
@@ -182,7 +184,7 @@
                   </FormField>
                 </template>
 
-                <template v-if="steps[stepIndex - 1]?.id === 'parties' && selectedTemplate?.template?.data?.parties?.enabled">
+                <template v-if="steps[stepIndex - 1]?.id === 'parties' && hasParties">
                   <div class="space-y-2">
                     <h3 class="font-semibold text-sm">Add Parties</h3>
                     <p class="text-xs text-muted-foreground">
@@ -195,9 +197,7 @@
                     ref="partiesRef"
                     v-model="parties"
                     v-model:representing="representing"
-                    :party-roles="
-                      selectedTemplate?.template?.data?.parties?.roles || []
-                    "
+                    :party-roles="partyRoles"
                   />
                 </template>
 
@@ -286,17 +286,21 @@
                   Back
                 </Button>
                 <div class="flex items-center gap-3">
+                  <!-- Advance to the next (optional) step. Labelled to make clear the
+                       remaining steps are optional once the required ones are done. -->
                   <Button
                     v-if="stepIndex !== steps?.length"
+                    :variant="stepIndex >= requiredSteps ? 'outline' : 'default'"
                     :type="meta.valid && isPartyStepValid ? 'button' : 'submit'"
                     :disabled="isNextDisabled || !isPartyStepValid"
                     size="sm"
                     @click="meta.valid && isPartyStepValid && nextStep()"
                   >
-                    Next
+                    {{ stepIndex >= requiredSteps ? 'Add details' : 'Next' }}
                   </Button>
+                  <!-- Create as soon as the required steps (template + timeline) are done. -->
                   <Button
-                    v-if="stepIndex === steps?.length"
+                    v-if="stepIndex >= requiredSteps"
                     :disabled="loading"
                     :aria-busy="loading"
                     :aria-label="loading ? 'Creating matter...' : 'Create Matter'"
@@ -374,6 +378,7 @@ import CourtSelector from "~/components/shared/Matters/CreateMatter/CourtSelecto
 import JudgeSelector from "~/components/shared/Matters/CreateMatter/JudgeSelector.vue";
 import OpposingCounsel from "~/components/shared/Matters/CreateMatter/OpposingCounsel.vue";
 import {useBillingStore} from "~/stores/billing";
+import {useMattersStore} from "~/stores/matters";
 
 const { hasPermission } = usePermissions();
 const billingStore = useBillingStore();
@@ -401,46 +406,44 @@ const representing = ref<{
 
 const selectedTemplate = ref(null);
 
-// Computed steps - dynamically include party step if template has data.parties
+// Set the full selected template record (drives party config, courts, case-number
+// label). An explicit handler — not an inline `selectedTemplate = st` — so the ref
+// is reliably written regardless of template-compiler ref-assignment behaviour.
+function onTemplateSelected(t: any) {
+  selectedTemplate.value = t;
+}
+
+// Single reactive source of truth for party configuration, read from the selected
+// template record (DeadlineTemplates.template.data.parties).
+// After normalizeTemplateRecord, .data always exists regardless of v1/v2 storage shape.
+const partyConfig = computed(() => selectedTemplate.value?.template?.data?.parties ?? null);
+const hasParties = computed(() => partyConfig.value?.enabled === true);
+const partyRoles = computed(() => partyConfig.value?.roles ?? []);
+
+// Computed steps. The REQUIRED path is minimal — template + timeline (trigger
+// date + required fields). Everything else (matter details, parties, lawyers) is
+// optional and can be filled now or added later from the matter page. Required
+// steps come first; "Create Matter" becomes available as soon as they are done.
 const steps = computed(() => {
-  const hasPartyConfig = selectedTemplate?.value?.template?.data.parties?.enabled === true;
+  const hasPartyConfig = hasParties.value;
   const hasOrg = !!getSignedInUser()?.organisation;
 
-  if (hasOrg) {
-    if (hasPartyConfig) {
-      return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Add Parties", id: "parties" },
-        { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Choose Lawyers", id: "members" },
-        { step: 5, title: "Timeline", id: "field_values" },
-      ];
-    } else {
-      return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Choose Lawyers", id: "members" },
-        { step: 4, title: "Timeline", id: "field_values" },
-      ];
-    }
-  } else {
-
-    if (hasPartyConfig) {
-      return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Add Parties", id: "parties" },
-        { step: 3, title: "Matter Details", id: "matter_details" },
-        { step: 4, title: "Timeline", id: "field_values" },
-      ];
-    } else {
-      return [
-        { step: 1, title: "Choose Matter Type", id: 'matter_type' },
-        { step: 2, title: "Matter Details", id: "matter_details" },
-        { step: 3, title: "Timeline", id: "field_values" },
-      ];
-    }
+  const list: { title: string; id: string; required: boolean }[] = [
+    { title: "Choose Matter Type", id: "matter_type", required: true },
+    { title: "Timeline", id: "field_values", required: true },
+    { title: "Matter Details (optional)", id: "matter_details", required: false },
+  ];
+  if (hasPartyConfig) {
+    list.push({ title: "Add Parties (optional)", id: "parties", required: false });
   }
+  if (hasOrg) {
+    list.push({ title: "Choose Lawyers (optional)", id: "members", required: false });
+  }
+  return list.map((s, i) => ({ ...s, step: i + 1 }));
 });
+
+// Number of leading required steps; "Create Matter" is allowed from this step on.
+const requiredSteps = computed(() => steps.value.filter((s) => s.required).length);
 
 
 // Helper to get party step index
@@ -515,9 +518,9 @@ const __formSchema = computed(() => {
       }),
     }),
     "matter_details": z.object({
-      name: z
-          .string()
-          .min(3, "You need at least 3 characters for a valid name!"),
+      // Optional: a matter name is auto-derived on submit when left blank, so the
+      // user can create immediately and rename later.
+      name: z.string().optional(),
       caseNumber: z.string().optional(),
       personal: z.boolean().optional(),
       court: z.string().optional(),
@@ -562,7 +565,7 @@ watch(open, () => {
 // Helper to check if party step is valid
 const isPartyStepValid = computed(() => {
   if (stepIndex.value !== partyStepIndex.value) return true;
-  if (!selectedTemplate?.value?.template?.data.parties?.enabled) return true;
+  if (!hasParties.value) return true;
 
   return partiesRef.value?.isValid ?? false;
 });
@@ -571,10 +574,10 @@ const isPartyStepValid = computed(() => {
 // Uses the "side" field from party roles to determine order (first side v. second side)
 // Truncates with "and others" when there are too many parties
 const generateCaseNameFromParties = () => {
-  if (!selectedTemplate?.value?.template?.data.parties?.enabled) return '';
+  if (!hasParties.value) return '';
 
   const allParties = parties.value;
-  const partyRoles = selectedTemplate?.value?.template?.data.parties?.roles || [];
+  const roles = partyRoles.value;
 
   // Configuration for truncation
   const MAX_PARTIES_PER_SIDE = 2; // Show max 2 parties, then "and others"
@@ -585,7 +588,7 @@ const generateCaseNameFromParties = () => {
   const secondSideParties: string[] = [];
 
   // Iterate through all party roles to get their side configuration
-  for (const role of partyRoles) {
+  for (const role of roles) {
     const members = allParties[role.id] || [];
     const namedMembers = members.filter(m => m.name?.trim());
 
@@ -647,7 +650,7 @@ const generateCaseNameFromParties = () => {
 watch(
   parties,
   () => {
-    if (!selectedTemplate?.value?.template?.data?.parties?.enabled) return;
+    if (!hasParties.value) return;
 
     const generatedName = generateCaseNameFromParties();
     if (generatedName && formRef.value?.setFieldValue) {
@@ -675,8 +678,16 @@ const onSubmit = async (values: any) => {
     }
 
 
+    // Name is optional in the shrunk flow — derive a sensible default so the user
+    // can create immediately and rename later from the matter page.
+    const derivedName =
+      (values.name && values.name.trim()) ||
+      generateCaseNameFromParties() ||
+      (values.caseNumber && `Matter ${values.caseNumber}`) ||
+      `${selectedTemplate.value?.name || 'New matter'}${values.fields?.date ? ` — ${values.fields.date}` : ''}`;
+
     const result = await createMatter({
-      name: values.name,
+      name: derivedName,
       caseNumber: values.caseNumber?.toString() || '',
       personal: values.personal ? true : false,
       members: values.members ? values.members.map((m) => m?.id) : [],
@@ -688,17 +699,24 @@ const onSubmit = async (values: any) => {
       judges: values.judges || [],
       opposingCounsel: values.opposingCounsel || [],
       courtOfficers: values.courtOfficers || { registrars: [], clerks: [] },
-      // Include parties and representing if template has data.parties
-      ...(selectedTemplate?.value?.template?.data.parties?.enabled && {
+      // Include parties and representing if the template declares parties
+      ...(hasParties.value && {
         parties: cleanedParties,
         representing: representing.value,
       }),
     });
 
-    if (result) toast.success("Matter Created Successfully!");
+    // createMatter throws on a non-2xx response, so reaching here means success.
+    toast.success("Matter Created Successfully!");
     emits("created", result);
 
     umTrackEvent("created-matter", { result: result?.matter });
+
+    // Keep the matters list in sync — the store caches for 5 min and won't show
+    // the new matter on return without an explicit refresh.
+    const mattersStore = useMattersStore();
+    if (result?.matter) mattersStore.addMatterOptimistic(result.matter);
+    mattersStore.fetchMatters(true).catch(() => {});
 
 
     formRef.value?.resetForm();

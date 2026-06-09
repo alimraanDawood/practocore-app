@@ -1,48 +1,37 @@
 <template>
-  <div v-if="isOffline" class="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
-    <WifiOff class="size-10 text-muted-foreground" />
-    <p class="font-semibold">No Internet Connection</p>
-    <p class="text-sm text-muted-foreground">Matter creation requires an internet connection to calculate deadlines.</p>
-    <Button variant="outline" @click="$router.back()">Go Back</Button>
-  </div>
+  <!-- SUCCESS: Matter created -->
+  <div
+    v-if="store.isCreated"
+    class="flex flex-col items-center justify-center text-center gap-6 py-10 h-full"
+  >
+    <div class="grid place-items-center size-16 rounded-full bg-primary/10 text-primary">
+      <CircleCheckBig class="size-8" />
+    </div>
 
-  <div v-else-if="!isSubscriptionActive" class="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
-    <Lock class="size-10 text-muted-foreground" />
-    <p class="font-semibold">Subscription expired</p>
-    <p class="text-sm text-muted-foreground">Renew your subscription to create new matters.</p>
-    <SharedBillingSubscribe>
-      <Button>Renew subscription</Button>
-    </SharedBillingSubscribe>
+    <div class="flex flex-col gap-1.5 max-w-sm">
+      <h2 class="font-semibold text-xl ibm-plex-serif">Matter created</h2>
+      <p class="text-sm text-muted-foreground">
+        <span class="font-medium text-foreground">{{ store.createdMatter?.name || 'Your matter' }}</span>
+        is ready. Its deadlines have been calculated and added to your calendar.
+      </p>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs">
+      <Button class="w-full gap-1.5 flex-1" @click="store.openCreatedMatter">
+        <ArrowUpRight class="size-4" />
+        Open Matter
+      </Button>
+      <Button variant="outline" class="w-full flex-1 gap-1.5" @click="store.handleClose">
+        <ChevronLeft class="size-4" />
+        Go back
+      </Button>
+    </div>
   </div>
 
   <form v-else id="create-matter-page" @submit.prevent class="flex flex-col gap-6">
 
     <!-- STEP: Choose Matter Type -->
     <template v-if="store.currentStepId === 'matter_type'">
-      <!-- AI shortcut — extracts a matter draft from a document, photo, or pasted text.
-           Sits above the template list because that's the moment a lawyer who
-           already has the source paper would rather upload than retype. -->
-      <div
-        v-if="showAiCard"
-        class="rounded-lg border bg-muted/40 p-4 flex items-start gap-3"
-      >
-        <div class="size-8 rounded-full grid place-items-center bg-primary/10 text-primary dark:bg-secondary/30 dark:text-secondary-foreground shrink-0">
-          <Sparkles class="size-4" />
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="font-medium text-sm">Have a judgment, ruling, or filing?</p>
-          <p class="text-xs text-muted-foreground mt-0.5">
-            Upload a PDF, snap a photo, or paste in the details and PractoAI will extract a draft for you to review.
-          </p>
-        </div>
-        <div class="flex items-center gap-1 shrink-0">
-          <Button size="sm" @click="openAiForMatterCreation">Create with AI</Button>
-          <Button size="icon-sm" variant="ghost" :aria-label="'Dismiss AI suggestion'" @click="aiCardDismissed = true">
-            <X class="size-4" />
-          </Button>
-        </div>
-      </div>
-
       <div class="space-y-1">
         <h2 class="font-semibold text-lg ibm-plex-serif">Choose a matter type</h2>
         <p class="text-sm text-muted-foreground">Select the type of matter to set up the correct timeline and fields.</p>
@@ -166,25 +155,6 @@
         <p class="text-sm text-muted-foreground">Enter the key dates to calculate all deadlines for this matter.</p>
       </div>
 
-      <!-- Mode toggle -->
-      <div class="flex items-center gap-1 rounded-lg border p-1 bg-muted/40 self-start">
-        <button
-          type="button"
-          :class="['px-3 py-1.5 text-sm rounded-md transition-colors', store.mode === 'compute' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground']"
-          @click="store.mode = 'compute'"
-        >
-          Compute from trigger date
-        </button>
-        <button
-          type="button"
-          :class="['px-3 py-1.5 text-sm rounded-md transition-colors', store.mode === 'import' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground']"
-          @click="store.mode = 'import'"
-        >
-          Import known dates
-        </button>
-      </div>
-
-      <!-- Trigger date + template fields (shown in both modes) -->
       <div class="space-y-4">
         <FormField
           v-for="field in templateFields"
@@ -236,24 +206,6 @@
           </FormItem>
         </FormField>
       </div>
-
-      <!-- Import mode: interactive timeline preview with pinnable dates -->
-      <template v-if="store.mode === 'import'">
-        <div class="space-y-1 pt-2 border-t">
-          <p class="text-sm font-medium">Timeline preview</p>
-          <p class="text-xs text-muted-foreground">
-            Dates are computed from your trigger date. Click any deadline to pin it to a specific date — dependents cascade from pinned dates.
-          </p>
-        </div>
-        <SharedMattersCreateMatterImportDeadlinePreview
-          v-if="store.selectedTemplate?.template"
-          :template="store.selectedTemplate.template"
-          :trigger-date="values.fields?.date ?? ''"
-          :field-values="values.fields"
-          :model-value="store.deadlineDates"
-          @update:model-value="v => store.deadlineDates = v"
-        />
-      </template>
     </template>
 
   </form>
@@ -264,38 +216,17 @@ import * as z from 'zod'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import { toast } from 'vue-sonner'
-import { WifiOff, Lock, Sparkles, X } from 'lucide-vue-next'
-import { createMatter, createMatterFromDates } from '~/services/matters'
-import { getTemplate } from '~/services/templates'
+import { CircleCheckBig, ArrowUpRight, ChevronLeft } from 'lucide-vue-next'
+import { createMatter } from '~/services/matters'
 import { useCreateMatterStore } from '~/stores/createMatter'
-import { pb } from '~/lib/pocketbase'
-
-const { isOffline } = useNetwork()
-const activePlan = usePlanActive()
-const isSubscriptionActive = computed(() => activePlan.value?.active === true)
-
-// "Create with AI" entry — hidden once the user dismisses it or once they pick
-// a template (the prompt is most useful at the very start). Hidden entirely
-// for personal accounts because list_templates returns empty there and the
-// model can't help.
-const aiChat = useAiChat()
-const aiCardDismissed = ref(false)
-const hasOrg = computed(() => Boolean(pb.authStore.record?.organisation))
-const showAiCard = computed(() =>
-  !aiCardDismissed.value
-  && isSubscriptionActive.value
-  && hasOrg.value
-  && store.currentStepId === 'matter_type'
-  && !store.selectedTemplate,
-)
-
-function openAiForMatterCreation() {
-  aiChat.open({ seedText: 'Help me create a matter from this.' })
-}
+import { useMattersStore } from '~/stores/matters'
+import { useDashboardStore } from '~/stores/dashboard'
 
 definePageMeta({ layout: 'create-matter' })
 
 const store = useCreateMatterStore()
+const mattersStore = useMattersStore()
+const dashboardStore = useDashboardStore()
 const route = useRoute()
 
 // ─── Template ref (must stay in component scope) ──────────────────────────────
@@ -314,7 +245,6 @@ const templateFields = computed(() => {
     ...(data?.fields ?? []),
   ]
 })
-
 
 // ─── Form schema (per-step) ───────────────────────────────────────────────────
 const fieldValuesSchema = computed(() => {
@@ -454,12 +384,6 @@ const generateCaseNameFromParties = () => {
 
 // ─── Submission ───────────────────────────────────────────────────────────────
 const onSubmit = async () => {
-  // Backstop for direct navigation — the form is gated above, but the layout's
-  // submit button lives outside this page, so guard the action itself too.
-  if (!isSubscriptionActive.value) {
-    toast.error('Your subscription has expired. Renew to create matters.')
-    return
-  }
   store.loading = true
   try {
     const cleanedParties: Record<string, any[]> = {}
@@ -490,29 +414,20 @@ const onSubmit = async () => {
       payload.parties = cleanedParties
       payload.representing = store.representing
     }
+    const result = await createMatter(payload)
 
-    let result: any
-    if (store.mode === 'import') {
-      const filteredDates = Object.fromEntries(
-        Object.entries(store.deadlineDates).filter(([, v]) => v && v.trim() !== '')
-      )
-      result = await createMatterFromDates({ ...payload, deadlineDates: filteredDates })
-    } else {
-      result = await createMatter(payload)
-    }
-
-    if (result?.warnings?.length) {
-      for (const w of result.warnings) {
-        toast.warning(w)
-      }
-    }
-
-    if (result) toast.success('Matter created successfully!')
-
+    // createMatter throws on a non-2xx response, so reaching here means success.
     umTrackEvent('created-matter', { result: result?.matter })
 
-    const next = route.query.next as string | undefined
-    await navigateTo(next ?? '/main/matters')
+    // Refresh the matters store so the new matter is visible on return. The list
+    // page only does a cache-respecting fetch on mount (5-min TTL), so without
+    // this the freshly created matter would be missing until the cache expires.
+    if (result?.matter) mattersStore.addMatterOptimistic(result.matter)
+    mattersStore.fetchMatters(true).catch(() => {})
+    dashboardStore.fetchStatistics(true).catch(() => {})
+
+    // Show the success screen (Open Matter / Go back) instead of navigating away.
+    store.createdMatter = result?.matter ?? null
   } catch {
     toast.error('Unable to create matter at this time.')
   } finally {
@@ -520,97 +435,7 @@ const onSubmit = async () => {
   }
 }
 
-// ─── AI hand-off hydration ────────────────────────────────────────────────────
-// When the AI proposal's "Edit before creating" button is clicked, Chat.vue
-// stashes the extracted draft in sessionStorage and routes here. We read it
-// once on mount, pre-fill the template + form values, jump straight past the
-// matter-type step, and clear the key so a reload doesn't re-hydrate stale data.
-//
-// Failure modes are silent on purpose — the user still has a working blank form.
-async function hydrateFromAiDraft() {
-  let raw: string | null = null
-  try {
-    raw = sessionStorage.getItem('practocore.matterDraft')
-  } catch {
-    return
-  }
-  if (!raw) return
-  sessionStorage.removeItem('practocore.matterDraft')
-
-  let draft: any
-  try {
-    draft = JSON.parse(raw)
-  } catch {
-    return
-  }
-
-  const templateId = draft?.template?.id
-  if (!templateId) return
-
-  let tmpl: any
-  try {
-    tmpl = await getTemplate(templateId)
-  } catch {
-    toast('Could not load template', { description: 'The AI-suggested template is no longer available. Please pick one manually.' })
-    return
-  }
-
-  // Apply the template — drives the step list (parties step appears only if
-  // the template has parties.enabled) and unlocks dynamic field rendering.
-  store.onTemplateSelected(tmpl)
-  setFieldValue('template', tmpl)
-
-  // Build a flat `fields.<id>` object the field-values step renders against,
-  // including the `date` (trigger date) entry. Only set keys that have values
-  // so empty extractions don't overwrite the form's empty defaults.
-  const m = draft.matter ?? {}
-  const fields: Record<string, any> = {}
-  if (m.date) fields.date = m.date
-  if (Array.isArray(draft.fields)) {
-    for (const f of draft.fields) {
-      if (f?.id && f.value !== undefined && f.value !== null && f.value !== '') {
-        fields[f.id] = f.value
-      }
-    }
-  }
-
-  if (m.name) setFieldValue('name', m.name)
-  if (m.caseNumber) setFieldValue('caseNumber', m.caseNumber)
-  if (m.court) setFieldValue('court', m.court)
-  if (Array.isArray(m.judges) && m.judges.length) {
-    setFieldValue('judges', m.judges.map((j: any) => typeof j === 'string' ? j : j?.id).filter(Boolean))
-  }
-  if (Array.isArray(m.opposingCounsel) && m.opposingCounsel.length) {
-    setFieldValue('opposingCounsel', m.opposingCounsel)
-  }
-  if (Array.isArray(m.members) && m.members.length) {
-    setFieldValue('members', m.members)
-  }
-  if (Object.keys(fields).length > 0) {
-    setFieldValue('fields', fields)
-  }
-
-  // Parties + representing live on the store, not the form.
-  if (m.parties && typeof m.parties === 'object') {
-    store.parties = m.parties
-  }
-  if (m.representing) {
-    store.representing = m.representing
-  }
-
-  // Skip the now-pointless "Choose a matter type" step — land the user on the
-  // first step that still needs human input, usually parties or matter details.
-  if (store.stepIndex === 1 && store.steps.length > 1) {
-    store.stepIndex = 2
-  }
-
-  toast('Draft ready to review', { description: `Pre-filled from PractoAI's ${tmpl.name ?? 'extracted'} draft.` })
-}
-
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
-onMounted(() => {
-  store.registerSubmit(onSubmit)
-  hydrateFromAiDraft()
-})
+onMounted(() => store.registerSubmit(onSubmit))
 onUnmounted(() => store.reset())
 </script>

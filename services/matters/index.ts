@@ -67,14 +67,21 @@ export async function createMatter(options: {
     parties?: Record<string, any[]>,
     representing?: { role_id: string, party_member_ids: string[] }
 }) {
-    return fetch(`${SERVER_URL}/api/practocore/create-matter`, {
+    const res = await fetch(`${SERVER_URL}/api/de/v1/create-matter`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
         }
-    }).then((e) => e.json());
+    });
+    if (!res.ok) {
+        // Never let an error body ({error:'...'}) be treated as a created matter —
+        // otherwise callers report a false "success" and the matter is never created.
+        const body = await res.text().catch(() => '');
+        throw new Error(`createMatter failed (${res.status}): ${body}`);
+    }
+    return res.json();
 }
 
 export async function createMatterFromDates(options: {
@@ -89,7 +96,7 @@ export async function createMatterFromDates(options: {
     parties?: Record<string, any[]>,
     representing?: { role_id: string, party_member_ids: string[] }
 }) {
-    return fetch(`${SERVER_URL}/api/practocore/create-matter-from-dates`, {
+    return fetch(`${SERVER_URL}/api/de/v1/create-matter-from-dates`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {

@@ -109,14 +109,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Clock, Pin, X, Ban, AlertTriangle, CalendarIcon } from 'lucide-vue-next'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { CalendarDate, parseDate } from '@internationalized/date'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import { DeadlineEngine } from '~/lib/deadline-engine'
+import { previewLegacyFromDates, type LegacyPreviewOutput } from '~/services/deadline-v2'
 
 dayjs.extend(relativeTime)
 
@@ -134,21 +134,40 @@ const emit = defineEmits<{
 const openId = ref<string | null>(null)
 const engineError = ref<string | null>(null)
 
-const output = computed(() => {
-  if (!props.template || !props.triggerDate) return null
+// Computation happens on the backend (v2 engine), not in the browser. Debounced
+// so pinning/typing doesn't spam the endpoint. Pinned dates cascade server-side.
+const output = ref<LegacyPreviewOutput | null>(null)
+let timer: ReturnType<typeof setTimeout> | undefined
+
+async function run() {
+  if (!props.template || !props.triggerDate) {
+    output.value = null
+    return
+  }
   engineError.value = null
   try {
-    return DeadlineEngine.generateFromDates(
+    output.value = await previewLegacyFromDates(
       props.template,
       props.triggerDate,
-      props.modelValue,
+      props.modelValue ?? {},
       props.fieldValues ?? {}
     )
   } catch (e: any) {
-    engineError.value = e?.message ?? 'Engine error'
-    return null
+    engineError.value = e?.detail?.error ?? e?.message ?? 'Engine error'
+    output.value = null
   }
-})
+}
+
+watch(
+  () => [props.template, props.triggerDate, props.fieldValues, props.modelValue],
+  () => {
+    clearTimeout(timer)
+    timer = setTimeout(run, 300)
+  },
+  { deep: true, immediate: true }
+)
+
+onBeforeUnmount(() => clearTimeout(timer))
 
 const warnedIds = computed<Set<string>>(() => {
   const set = new Set<string>()

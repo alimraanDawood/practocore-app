@@ -15,6 +15,11 @@
                 :class="{ '!border-primary font-medium': $route?.name === 'main-calendar' }">Calendar</button>
         </NuxtLink>
 
+        <!-- <NuxtLink to="/main/reminder">
+            <button class="p-2 border-b-2 border-transparent"
+                :class="{ '!border-primary font-medium': $route?.name === 'main-reminder' }">Reminders</button>
+        </NuxtLink> -->
+
         <NuxtLink v-if="getSignedInUser()?.organisation && authStore.isAdmin" to="/main/lawyers">
           <button class="p-2 border-b-2 border-transparent"
                   :class="{ '!border-primary font-medium': $route?.name === 'main-lawyers' }">Lawyers</button>

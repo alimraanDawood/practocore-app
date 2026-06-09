@@ -1,3 +1,5 @@
+import { pb, SERVER_URL } from "~/lib/pocketbase"
+
 const INTELLIGENCE_URL = "https://intelligence.practocore.com"
 
 export interface SearchResultGroup {
@@ -50,6 +52,37 @@ export async function searchWithAI(
   }
 
   return response.json()
+}
+
+/**
+ * Local full-text search backed by the PocketBase FTS5 index
+ * (GET /api/practocore/search). Org/access scoping is enforced server-side.
+ * Returns the same shape as the AI search so the UI can render both modes
+ * identically.
+ */
+export async function searchLocal(
+  query: string,
+  opts: { limit?: number, scope?: string, signal?: AbortSignal } = {}
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q: query })
+  if (opts.limit) params.set("limit", String(opts.limit))
+  if (opts.scope) params.set("scope", opts.scope)
+
+  const res = await fetch(`${SERVER_URL}/api/practocore/search?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      // Custom endpoints expect the raw token (not a "Bearer" prefix).
+      "Authorization": pb.authStore.token,
+      "Content-Type": "application/json",
+    },
+    signal: opts.signal,
+  })
+
+  if (!res.ok) {
+    throw new Error(`Search service error: ${res.status}`)
+  }
+
+  return res.json()
 }
 
 export async function getAvailableModels(): Promise<{

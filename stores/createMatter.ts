@@ -10,8 +10,10 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
   const selectedTemplate = ref<any>(null)
   const parties = ref<Record<string, any[]>>({})
   const representing = ref<{ role_id: string; party_member_ids: string[] } | null>(null)
-  const mode = ref<'compute' | 'import'>('compute')
-  const deadlineDates = ref<Record<string, string>>({})
+
+  // Set once a matter is successfully created — drives the "Matter created" success
+  // screen (with Open Matter / Go back actions) instead of navigating away immediately.
+  const createdMatter = ref<any>(null)
 
   // Synced by the page component (depends on vee-validate form values + partiesRef)
   const canProceed = ref(true)
@@ -57,6 +59,7 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
     ]
   })
 
+  const isCreated = computed(() => !!createdMatter.value)
   const currentStep = computed(() => steps.value[stepIndex.value - 1])
   const currentStepId = computed(() => currentStep.value?.id ?? '')
   const isLastStep = computed(() => stepIndex.value === steps.value.length)
@@ -90,16 +93,21 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
     navigateTo(next ?? '/main/matters')
   }
 
+  // Open the matter that was just created (from the success screen).
+  const openCreatedMatter = () => {
+    if (!createdMatter.value?.id) return
+    navigateTo(`/main/matters/matter/${createdMatter.value.id}`)
+  }
+
   const reset = () => {
     stepIndex.value = 1
     loading.value = false
     selectedTemplate.value = null
     parties.value = {}
     representing.value = null
-    mode.value = 'compute'
-    deadlineDates.value = {}
     canProceed.value = true
     _submitFn.value = null
+    createdMatter.value = null
   }
 
   return {
@@ -108,9 +116,9 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
     selectedTemplate,
     parties,
     representing,
-    mode,
-    deadlineDates,
     canProceed,
+    createdMatter,
+    isCreated,
     steps,
     currentStep,
     currentStepId,
@@ -125,6 +133,7 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
     handleNext,
     handleBack,
     handleClose,
+    openCreatedMatter,
     reset,
   }
 })

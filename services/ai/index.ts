@@ -80,6 +80,12 @@ export interface AiResponse {
   actionResult?: AiActionResult;
   // error field
   error?: string;
+  // Set when the credit pool+overage is exhausted: the reply was forced onto the
+  // lighter model. The UI shows a "running on the lighter model" banner.
+  degraded?: boolean;
+  // Synthetic flag (HTTP 402): the credit limit was reached and AI is locked.
+  // Not sent by the server as JSON — aiPost sets it so callers can lock the UI.
+  blocked?: boolean;
 }
 
 // ── Proposal preview ───────────────────────────────────────────────────────────
@@ -202,6 +208,34 @@ export interface CreateMatterPreview {
   warnings: string[];
 }
 
+export interface ReminderTouchpoint {
+  /** Fire date (ISO YYYY-MM-DD). */
+  date: string;
+  daysBefore: number;
+  title: string;
+  body: string;
+  /** Delivery time-of-day, 24h HH:MM in the user's timezone; empty = user default. */
+  atTime?: string;
+  /** True when this touchpoint already lies in the past and will be skipped. */
+  past?: boolean;
+}
+export interface ReminderPreview {
+  kind: 'reminder';
+  /** 'personal' (no case) or 'case' (attached to a matter). */
+  scope: 'personal' | 'case';
+  /** Matter name, or "Personal" for standalone reminders. */
+  matter: string;
+  title: string;
+  mode: 'single' | 'series';
+  targetDate: string;
+  /** Requested time-of-day, 24h HH:MM in the user's timezone; empty = user default. */
+  atTime?: string;
+  channels: string[];
+  /** Who will be reminded. Empty = the current user (self). */
+  recipients?: UserRef[];
+  touchpoints: ReminderTouchpoint[];
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -214,6 +248,7 @@ export type ProposalPreview =
   | FulfillPreview
   | MatterEditPreview
   | CreateMatterPreview
+  | ReminderPreview
   | GenericPreview;
 
 export interface AiConversationSummary {
@@ -237,14 +272,25 @@ export interface AiConversationPage {
 
 async function aiPost(path: string, body: object): Promise<AiResponse> {
   try {
+    // Attach the caller's IANA timezone so server-side scheduling (e.g. reminders)
+    // honours the user's local wall-clock time, not the server's.
+    let timezone = '';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
     const res = await fetch(`${SERVER_URL}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': pb.authStore.token,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ timezone, ...body }),
     });
+    // 402 = AI credit limit reached (gate hard-block). Flag it so the chat
+    // surface can lock the composer and prompt a top-up rather than just erroring.
+    if (res.status === 402) {
+      let msg = 'AI credit limit reached. Top up to keep using AI.';
+      try { const j = await res.json(); if (j?.message) msg = j.message; } catch { /* noop */ }
+      return { type: 'error', error: msg, blocked: true };
+    }
     if (!res.ok) return { type: 'error', error: `Request failed (${res.status})` };
     return await res.json() as AiResponse;
   } catch (e: any) {
@@ -337,4 +383,60 @@ export async function renameConversation(id: string, title: string): Promise<boo
   } catch {
     return false;
   }
+}
+
+// ── AI credits / usage ──────────────────────────────────────────────────────
+// Mirrors practocore-backend/ai/usage_endpoint.go UsageResponse. The shared org
+// pool is the primary number (it's what gates access); your_used + per_seat_guide
+// are the member view; per_member is admin-only and may be omitted.
+
+export interface AiUsageMember {
+  userId: string;
+  name: string;
+  email: string;
+  used: number;
+}
+
+export interface AiUsage {
+  pool_total: number;
+  pool_used: number;
+  your_used: number;
+  seats: number;
+  per_seat_guide: number;
+  period_start: string;
+  period_end: string;
+  is_solo: boolean;
+  is_admin: boolean;
+  per_member?: AiUsageMember[];
+  // Enforcement view (mirrors the credit gate).
+  state: 'normal' | 'degraded' | 'blocked';
+  overage_balance: number; // prepaid overage credits left
+  hard_cap: number;        // burn level at which AI locks
+}
+
+export async function getAiUsage(): Promise<AiUsage> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/usage`, {
+    method: 'GET',
+    headers: { 'Authorization': pb.authStore.token },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to load AI usage (${res.status})`);
+  }
+  return res.json();
+}
+
+// topUpCredits adds overage credits to the caller's billing holder (org for a
+// team admin, else the solo user). `paid` records a purchased top-up vs a grant.
+// Returns the new overage balance. Admin-only server-side for teams.
+export async function topUpCredits(credits: number, paid = true): Promise<number> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/credits/topup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': pb.authStore.token },
+    body: JSON.stringify({ credits, paid }),
+  });
+  if (!res.ok) {
+    throw new Error(`Top-up failed (${res.status})`);
+  }
+  const j = await res.json();
+  return j?.overage_balance ?? 0;
 }

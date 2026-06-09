@@ -21,21 +21,29 @@
 <script setup>
 import { AlertTriangle } from "lucide-vue-next";
 import dayjs from "dayjs";
-import usePlanActive from "~/composables/usePlanActive";
+import usePlanActive, { useNextPlan } from "~/composables/usePlanActive";
 
 const _planData = usePlanActive();
 const planData = computed(() => _planData.value);
+const nextPlan = useNextPlan();
+const hasNext = computed(() => !!nextPlan.value);
 
 const daysRemaining = computed(() => {
   if (!planData.value?.endDate) return 0;
   return dayjs(planData.value.endDate).diff(dayjs(), 'day');
 });
 
+// "Expired" means the current term's window has actually passed — NOT merely that
+// it isn't the active term. A brand-new or unpaid trial is also not active, but it
+// is awaiting payment, not expired. Suppressed when a paid term is already queued.
 const isExpired = computed(() => {
-  return planData.value && !planData.value.active;
+  if (hasNext.value) return false;
+  if (!planData.value?.endDate) return false;
+  return dayjs(planData.value.endDate).isBefore(dayjs());
 });
 
 const isExpiringSoon = computed(() => {
+  if (hasNext.value) return false; // already covered by a queued term
   if (!planData.value?.active) return false;
   return daysRemaining.value >= 0 && daysRemaining.value <= 7;
 });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {CircleProgressBar} from 'vue3-m-circle-progress-bar';
-import {Info, Loader, CalendarIcon, Clock, XCircle, Plus, Bell, AlertTriangle} from 'lucide-vue-next';
+import {Info, Loader, CalendarIcon, Clock, XCircle, Plus, Bell, AlertTriangle, AlarmClock} from 'lucide-vue-next';
 import {getSignedInUser} from '~/services/auth';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -189,6 +189,12 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
       <div class="flex flex-row items-center gap-2">
         <SharedDarkModeSwitch/>
 
+        <SharedReminders>
+          <Button size="icon" variant="secondary" aria-label="Open reminders">
+            <AlarmClock aria-hidden="true" />
+          </Button>
+        </SharedReminders>
+
         <SharedNotifications>
           <Button size="icon" variant="secondary" aria-label="Open notifications">
             <Bell aria-hidden="true"/>
@@ -323,7 +329,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
 <!--            <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics"-->
 <!--                                       v-if="statistics?.matters?.length === 0">-->
 <!--            </SharedMattersCreateMatter>-->
-              <Button v-if="hasPermission('canCreateMatters') || statistics?.matters?.length === 0" data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="!!createDisabledReason" :title="createDisabledReason">
+              <Button v-if="hasPermission('canCreateMatters')" data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="!!createDisabledReason" :title="createDisabledReason">
                 <Plus aria-hidden="true"/>
                 Create Matter
               </Button>

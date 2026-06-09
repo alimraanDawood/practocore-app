@@ -97,7 +97,11 @@
                   {{ application.caseNumber }}
                 </TabsTrigger>
 
-                <SharedMattersCreateMatterCreateApplication v-if="hasPermission('canCreateApplications')" :parent-matter="matter">
+                <!-- Interlocutory applications are dropped pending the v2 SPAWN/toll
+                     decision (toll Q#1). The entry point is disabled (v-if="false")
+                     so nothing calls the removed create-application endpoint. The
+                     CreateApplication.vue component is left dormant for a future revisit. -->
+                <SharedMattersCreateMatterCreateApplication v-if="false" :parent-matter="matter">
                   <Button size="sm">
                     <Plus />
                     Add Application
