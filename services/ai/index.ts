@@ -45,9 +45,13 @@ export interface AiMessage {
 }
 
 // Broader message type used for conversation persistence (includes tool-event roles).
+// Assistant turns may carry the activity steps that produced them so the "Worked for
+// Ns" summary can be rehydrated when a saved conversation is reloaded.
 export interface ConvDisplayMessage {
   role: string;
   content: string;
+  steps?: AiStreamStep[];
+  durationMs?: number;
 }
 
 export interface AiContext {
@@ -315,6 +319,121 @@ export function sendAiMessage(
   });
 }
 
+// ── Streaming chat ─────────────────────────────────────────────────────────────
+// The chat endpoint streams activity steps (Server-Sent Events) while the tool loop
+// runs, then a terminal `result` frame carrying the same AiResponse the blocking
+// endpoint returns. We opt in with `Accept: text/event-stream`; the server falls back
+// to plain JSON for clients that don't (voice mode, native), and so do we below if the
+// response isn't actually an event stream.
+
+/** One activity step surfaced mid-turn, e.g. { label: "Searching matters", detail: "Sebbi v Kato" }. */
+export interface AiStreamStep {
+  id: number;
+  /** Underlying tool name ("" for synthetic bookend steps like "Assessing"/"Drafting"). */
+  tool: string;
+  label: string;
+  detail?: string;
+}
+
+interface SseFrame {
+  kind: 'step' | 'result';
+  step?: AiStreamStep;
+  response?: AiResponse;
+}
+
+/** Parse one SSE frame (its `data:` line(s)) into a typed frame, or null if malformed. */
+function parseSseFrame(raw: string): SseFrame | null {
+  const data = raw
+    .split('\n')
+    .filter(l => l.startsWith('data:'))
+    .map(l => l.slice(5).replace(/^ /, ''))
+    .join('\n');
+  if (!data) return null;
+  try {
+    return JSON.parse(data) as SseFrame;
+  } catch {
+    return null;
+  }
+}
+
+export function sendAiMessageStream(
+  messages: AiMessage[],
+  context: AiContext | undefined,
+  conversationId: string | undefined,
+  opts: { onStep?: (step: AiStreamStep) => void } = {},
+): Promise<AiResponse> {
+  return aiStreamPost(
+    '/api/practocore/ai/chat',
+    {
+      messages,
+      currentMatterId: context?.matterIds?.[0],
+      matterIds: context?.matterIds,
+      deadlineIds: context?.deadlineIds,
+      userIds: context?.userIds,
+      conversationId: conversationId ?? '',
+      voiceMode: false,
+    },
+    opts.onStep,
+  );
+}
+
+async function aiStreamPost(
+  path: string,
+  body: object,
+  onStep?: (step: AiStreamStep) => void,
+): Promise<AiResponse> {
+  try {
+    let timezone = '';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
+    const res = await fetch(`${SERVER_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        'Authorization': pb.authStore.token,
+      },
+      body: JSON.stringify({ timezone, ...body }),
+    });
+
+    // Credit gate / pre-flight errors arrive before the stream starts, as JSON.
+    if (res.status === 402) {
+      let msg = 'AI credit limit reached. Top up to keep using AI.';
+      try { const j = await res.json(); if (j?.message) msg = j.message; } catch { /* noop */ }
+      return { type: 'error', error: msg, blocked: true };
+    }
+    if (!res.ok) return { type: 'error', error: `Request failed (${res.status})` };
+
+    const ctype = res.headers.get('Content-Type') || '';
+    // Server (or a proxy) returned a single JSON object instead of a stream — read it plainly.
+    if (!ctype.includes('text/event-stream') || !res.body) {
+      return await res.json() as AiResponse;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result: AiResponse | null = null;
+
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE events are separated by a blank line.
+      let sep: number;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const frame = parseSseFrame(buffer.slice(0, sep));
+        buffer = buffer.slice(sep + 2);
+        if (!frame) continue;
+        if (frame.kind === 'step' && frame.step) onStep?.(frame.step);
+        else if (frame.kind === 'result' && frame.response) result = frame.response;
+      }
+    }
+    return result ?? { type: 'error', error: 'The response ended unexpectedly. Please try again.' };
+  } catch (e: any) {
+    return { type: 'error', error: e?.message ?? 'Network error' };
+  }
+}
+
 export function confirmAiProposal(
   proposal: AiResponse,
   approved: boolean,
@@ -336,6 +455,56 @@ export function confirmAiProposal(
     conversationMessages: conversationMessages ?? [],
     voiceMode: voiceMode ?? false,
   });
+}
+
+// ── Prompt improvement ────────────────────────────────────────────────────────
+// Takes the user's rough composer draft and rewrites it into a clearer, more
+// effective prompt that steers the assistant toward the right tools. Mirrors
+// practocore-backend/ai/improve_prompt.go. Runs on the lighter model and counts
+// against the same AI credit pool.
+
+export interface ImprovePromptResult {
+  /** The rewritten prompt, or the original on any soft failure. */
+  improved: string;
+  /** Set when the credit pool is exhausted (HTTP 402) so the UI can prompt a top-up. */
+  blocked?: boolean;
+  /** Set on a hard failure so the caller can surface a toast and leave the draft as-is. */
+  error?: string;
+}
+
+export async function improvePrompt(
+  prompt: string,
+  context?: AiContext,
+): Promise<ImprovePromptResult> {
+  try {
+    let timezone = '';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
+    const res = await fetch(`${SERVER_URL}/api/practocore/ai/improve-prompt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': pb.authStore.token,
+      },
+      body: JSON.stringify({
+        timezone,
+        prompt,
+        matterIds: context?.matterIds,
+        deadlineIds: context?.deadlineIds,
+        userIds: context?.userIds,
+      }),
+    });
+    if (res.status === 402) {
+      return { improved: prompt, blocked: true, error: 'AI credit limit reached. Top up to keep using AI.' };
+    }
+    if (!res.ok) return { improved: prompt, error: `Request failed (${res.status})` };
+    const j = await res.json() as { type: string; improved?: string; error?: string };
+    if (j.type === 'error' || !j.improved) {
+      return { improved: prompt, error: j.error || 'Couldn\'t enhance the prompt.' };
+    }
+    return { improved: j.improved };
+  } catch (e: any) {
+    return { improved: prompt, error: e?.message ?? 'Network error' };
+  }
 }
 
 // ── Conversation history ──────────────────────────────────────────────────────
