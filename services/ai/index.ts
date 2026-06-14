@@ -30,11 +30,21 @@ export interface AiImageBlock {
 
 export interface AiDocumentBlock {
   type: 'document';
-  source: {
-    type: 'base64';
-    media_type: 'application/pdf';
-    data: string;
-  };
+  source:
+    | {
+        type: 'base64';
+        media_type: 'application/pdf';
+        /** base64-encoded PDF bytes, no `data:` URI prefix */
+        data: string;
+      }
+    | {
+        // Plain-text documents (Markdown, .txt, source files). Anthropic reads a
+        // text document block natively; `data` is the RAW UTF-8 text, not base64.
+        // The backend forwards source.{type,media_type,data} verbatim.
+        type: 'text';
+        media_type: 'text/plain';
+        data: string;
+      };
 }
 
 export type AiContentBlock = AiTextBlock | AiImageBlock | AiDocumentBlock;
@@ -240,6 +250,37 @@ export interface ReminderPreview {
   touchpoints: ReminderTouchpoint[];
 }
 
+// One body section in the generate_document outline (no paragraph text — just the
+// shape, so the approval card stays compact). Mirrors previewGenerateDocument in
+// practocore-backend/ai/preview.go.
+export interface DocumentSectionOutline {
+  heading: string;
+  paragraphCount: number;
+  numbered: boolean;
+}
+export interface DocumentCourtHeading {
+  court: string;
+  division: string;
+  causeType: string;
+  causeNumber: string;
+  /** Flattened "NAMES — DESIGNATION" lines. */
+  parties: string[];
+}
+export interface GenerateDocumentPreview {
+  kind: 'generate_document';
+  /** Document kind: plaint, contract, letter, affidavit, ... */
+  docKind: string;
+  title: string;
+  date: string;
+  sections: DocumentSectionOutline[];
+  hasPrayer: boolean;
+  prayerCount?: number;
+  /** Present only for court documents. */
+  courtHeading?: DocumentCourtHeading;
+  /** The matter this will be filed under, if any. */
+  matter?: MatterRef;
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -253,6 +294,7 @@ export type ProposalPreview =
   | MatterEditPreview
   | CreateMatterPreview
   | ReminderPreview
+  | GenerateDocumentPreview
   | GenericPreview;
 
 export interface AiConversationSummary {

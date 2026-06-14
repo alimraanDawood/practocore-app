@@ -5,7 +5,7 @@ import {
   Building2, Clock, User,
   History, Plus, Trash2, MessageSquare, Settings, Lock, Zap,
   FileText, Briefcase, ArrowRight, Bell,
-  Search, BookOpen, ChevronRight, ChevronDown,
+  Search, BookOpen, ChevronRight, ChevronDown, Download, FileType2,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
@@ -207,16 +207,25 @@ type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 're
 // API/history payloads (it isn't an assistant/user turn) — see apiMessages/convMessages.
 type MatterCreated = { role: 'matter-created'; matterId: string; matterName?: string };
 type ReminderCreated = { role: 'reminder-created'; reminderTitle?: string };
+// UI-only card: a freshly generated .docx the user can download. Carries the
+// GeneratedDocuments row id so the card can fetch a file token on demand.
+type DocumentGenerated = {
+  role: 'document-generated';
+  documentId: string;
+  title?: string;
+  kind?: string;
+  filename?: string;
+};
 // Assistant turns optionally carry the activity steps that produced them (streamed
 // mid-turn) plus how long the work took, so the UI can show a collapsible
 // "Worked for Ns" summary. These UI-only fields are stripped before the API payload.
 type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean };
-type ChatMessage = DisplayAiMessage | ToolEvent | MatterCreated | ReminderCreated;
+type ChatMessage = DisplayAiMessage | ToolEvent | MatterCreated | ReminderCreated | DocumentGenerated;
 
 const messages = ref<ChatMessage[]>([]);
 
 // UI-only affordance roles never go to the model or the saved transcript.
-const UI_ONLY_ROLES = ['matter-created', 'reminder-created'];
+const UI_ONLY_ROLES = ['matter-created', 'reminder-created', 'document-generated'];
 
 const apiMessages = computed<AiMessage[]>(() =>
   messages.value
@@ -293,14 +302,18 @@ function formatDuration(ms: number): string {
 interface Attachment {
   id: string;
   name: string;
-  /** MIME type — image/* or application/pdf. */
+  /** MIME type — image/*, application/pdf, or a text/Markdown type. */
   mime: string;
   /** Raw byte size, for display + cap enforcement. */
   size: number;
-  /** Base64 data with NO `data:` URI prefix — ready to embed in a content block. */
-  base64: string;
-  /** Full data URL retained for image thumbnails. */
-  dataUrl: string;
+  /** 'binary' = image/PDF (base64); 'text' = Markdown/plain-text (raw UTF-8). */
+  kind: 'binary' | 'text';
+  /** Base64 data with NO `data:` URI prefix (binary kind only). */
+  base64?: string;
+  /** Full data URL retained for image thumbnails (binary kind only). */
+  dataUrl?: string;
+  /** Raw UTF-8 text (text kind only), sent as an Anthropic text document block. */
+  text?: string;
 }
 
 const attachments = ref<Attachment[]>([]);
@@ -339,16 +352,27 @@ function fileToBase64(file: File): Promise<{ base64: string; dataUrl: string }> 
 
 const ACCEPTED_IMAGE_TYPES: AiImageMediaType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-function isAcceptedMime(mime: string): boolean {
-  if (mime === 'application/pdf') return true;
-  return (ACCEPTED_IMAGE_TYPES as string[]).includes(mime);
+// Text/Markdown/source files. Browsers report an unreliable (often empty) MIME
+// for .md, so we also match on extension. Sent as Anthropic text document blocks.
+const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.text', '.csv', '.json', '.log', '.rtf'];
+function isTextFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  if (TEXT_EXTENSIONS.some(ext => name.endsWith(ext))) return true;
+  const t = file.type;
+  return t.startsWith('text/') || t === 'application/json' || t === 'application/markdown';
+}
+
+function isAcceptedFile(file: File): boolean {
+  return file.type === 'application/pdf'
+    || (ACCEPTED_IMAGE_TYPES as string[]).includes(file.type)
+    || isTextFile(file);
 }
 
 async function addFiles(files: File[] | FileList) {
   const list = Array.from(files);
   for (const file of list) {
-    if (!isAcceptedMime(file.type)) {
-      toast('Unsupported file', { description: `${file.name} (${file.type || 'unknown type'}) — only PDFs and images.` });
+    if (!isAcceptedFile(file)) {
+      toast('Unsupported file', { description: `${file.name} (${file.type || 'unknown type'}) — PDFs, images, and text/Markdown only.` });
       continue;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -359,16 +383,15 @@ async function addFiles(files: File[] | FileList) {
       toast('Attachment limit reached', { description: `Total attachment size must stay under ${formatBytes(MAX_TOTAL_BYTES)}.` });
       continue;
     }
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      const { base64, dataUrl } = await fileToBase64(file);
-      attachments.value.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: file.name,
-        mime: file.type,
-        size: file.size,
-        base64,
-        dataUrl,
-      });
+      if (isTextFile(file)) {
+        const text = await file.text();
+        attachments.value.push({ id, name: file.name, mime: file.type || 'text/markdown', size: file.size, kind: 'text', text });
+      } else {
+        const { base64, dataUrl } = await fileToBase64(file);
+        attachments.value.push({ id, name: file.name, mime: file.type, size: file.size, kind: 'binary', base64, dataUrl });
+      }
     } catch (err: any) {
       toast('Could not read file', { description: file.name + (err?.message ? ` — ${err.message}` : '') });
     }
@@ -434,7 +457,7 @@ function messageText(content: AiMessage['content']): string {
   for (const block of content) {
     if (block.type === 'text') parts.push(block.text);
     else if (block.type === 'image') parts.push('[image]');
-    else if (block.type === 'document') parts.push('[PDF]');
+    else if (block.type === 'document') parts.push(block.source?.type === 'text' ? '[document]' : '[PDF]');
   }
   return parts.join(' ');
 }
@@ -444,6 +467,11 @@ function messageText(content: AiMessage['content']): string {
 function messageAttachments(content: AiMessage['content']): Array<AiImageBlock | AiDocumentBlock> {
   if (typeof content === 'string') return [];
   return content.filter((b): b is AiImageBlock | AiDocumentBlock => b.type === 'image' || b.type === 'document');
+}
+
+/** Human label for a document attachment chip (text doc vs PDF). */
+function docLabel(att: AiDocumentBlock): string {
+  return att.source?.type === 'text' ? 'Document' : 'PDF';
 }
 
 const lastAssistantText = computed(() => {
@@ -769,10 +797,14 @@ async function send(voiceText?: string) {
   if (hasAttachments) {
     const blocks: AiContentBlock[] = [];
     for (const a of attachments.value) {
-      if (a.mime === 'application/pdf') {
-        blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 } });
+      if (a.kind === 'text') {
+        // Prefix the filename so the model knows the document's name/type.
+        const body = `# ${a.name}\n\n${a.text ?? ''}`;
+        blocks.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data: body } });
+      } else if (a.mime === 'application/pdf') {
+        blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 as string } });
       } else {
-        blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 } });
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 as string } });
       }
     }
     blocks.push({ type: 'text', text: text || 'Help me create a matter from this.' });
@@ -973,6 +1005,19 @@ async function approveProposal() {
       });
       // No forced navigation — append a card so the user opens reminders when ready.
       messages.value.push({ role: 'reminder-created', reminderTitle });
+    } else if (response.actionResult?.tool === 'generate_document' && response.actionResult.data?.success) {
+      const d = response.actionResult.data;
+      const title = d?.title as string | undefined;
+      toast('Document drafted', {
+        description: title ? `"${title}" is ready to download.` : 'Your document is ready to download.',
+      });
+      messages.value.push({
+        role: 'document-generated',
+        documentId: d?.documentId as string,
+        title,
+        kind: d?.kind as string | undefined,
+        filename: d?.filename as string | undefined,
+      });
     }
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -994,6 +1039,25 @@ function openMatter(matterId: string) {
 function openReminders() {
   open.value = false;
   navigateTo('/main/reminder');
+}
+
+// Download a just-generated document. Fetches the row by id (cheap, cached by the
+// SDK) so we don't have to thread the full record through the chat message, then
+// streams the .docx via a tokenised file URL.
+const downloadingDocId = ref<string | null>(null);
+async function downloadGeneratedDocument(documentId: string) {
+  if (!documentId) return;
+  downloadingDocId.value = documentId;
+  try {
+    const { pb } = await import('~/lib/pocketbase');
+    const { downloadDocument } = await import('~/services/documents');
+    const doc = await pb.collection('GeneratedDocuments').getOne(documentId);
+    await downloadDocument(doc as any);
+  } catch (e) {
+    toast('Could not download the document', { description: 'Please try again.' });
+  } finally {
+    downloadingDocId.value = null;
+  }
 }
 
 function formatToolName(tool: string): string {
@@ -1286,6 +1350,27 @@ function formatToolName(tool: string): string {
                   <ArrowRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-x-0.5" />
                 </button>
               </div>
+              <!-- Download card: shown after the assistant drafts a .docx document. -->
+              <div v-else-if="msg.role === 'document-generated'" class="flex">
+                <button
+                  type="button"
+                  class="group/open flex items-center gap-3 max-w-[80%] rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:bg-muted disabled:opacity-60"
+                  :disabled="downloadingDocId === msg.documentId"
+                  @click="downloadGeneratedDocument(msg.documentId)"
+                >
+                  <div class="size-8 rounded-md grid place-items-center shrink-0 bg-primary/10 text-primary">
+                    <FileType2 class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ msg.title || 'New document' }}</p>
+                    <p class="text-xs text-muted-foreground capitalize">
+                      {{ msg.kind ? `${msg.kind} · ` : '' }}Download .docx
+                    </p>
+                  </div>
+                  <Loader2 v-if="downloadingDocId === msg.documentId" class="size-4 shrink-0 text-muted-foreground animate-spin" />
+                  <Download v-else class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-y-0.5" />
+                </button>
+              </div>
               <div v-else-if="msg.role === 'user'" class="flex justify-end">
                 <div class="flex flex-col items-end gap-1 max-w-[80%]">
                   <!-- Attachment chips above the text bubble — only present on multimodal turns -->
@@ -1299,7 +1384,7 @@ function formatToolName(tool: string): string {
                       />
                       <span v-else class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-background text-foreground">
                         <FileText class="size-3 shrink-0" />
-                        PDF
+                        {{ docLabel(att as AiDocumentBlock) }}
                       </span>
                     </template>
                   </div>
@@ -1474,8 +1559,7 @@ function formatToolName(tool: string): string {
               ref="fileInput"
               type="file"
               multiple
-              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif"
-              capture="environment"
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log"
               class="hidden"
               @change="onFilesChosen"
             />

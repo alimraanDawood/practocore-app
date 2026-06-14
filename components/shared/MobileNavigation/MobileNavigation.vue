@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { Home, Settings, Scale, CalendarIcon, Users } from 'lucide-vue-next'
+import { Home, Settings, Scale, CalendarIcon, Users, FolderLock } from 'lucide-vue-next'
 import { Capacitor } from '@capacitor/core'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
@@ -24,6 +24,7 @@ const allTabs = [
   { tab: 'main',     label: 'Home',     icon: Home,         adminOnly: false },
   { tab: 'matters',  label: 'Matters',  icon: Scale,        adminOnly: false },
   { tab: 'calendar', label: 'Calendar', icon: CalendarIcon, adminOnly: false },
+  { tab: 'vault',    label: 'Vault',    icon: FolderLock,   adminOnly: false },
   { tab: 'lawyers',  label: 'Lawyers',  icon: Users,        adminOnly: true  },
   { tab: 'settings', label: 'Settings', icon: Settings,     adminOnly: false },
 ]

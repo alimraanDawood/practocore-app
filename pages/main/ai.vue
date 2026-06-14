@@ -683,6 +683,7 @@ onMounted(async () => {
           <span class="font-semibold text-sm">PractoAI</span>
         </div>
         <div class="ml-auto flex items-center gap-1">
+          <SharedDarkModeSwitch />
           <Button
             size="icon-sm" variant="ghost"
             :class="autoRead ? 'text-primary' : 'text-muted-foreground'"

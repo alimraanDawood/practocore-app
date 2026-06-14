@@ -181,6 +181,38 @@
             :application-filter="currentApplicationOption"
           />
         </div>
+
+        <!-- Case Documents — vault files scoped to this matter (upload + live ingestion) -->
+        <template v-if="matter?.id">
+          <Separator />
+          <div class="flex flex-col gap-3 p-3">
+            <div class="flex items-center gap-2">
+              <FolderLock class="size-4 text-muted-foreground" />
+              <span class="text-lg font-semibold ibm-plex-serif">Case Documents</span>
+            </div>
+            <p class="text-sm text-muted-foreground -mt-1">
+              Upload pleadings, correspondence and evidence. The AI reads them so it can answer questions and
+              draft with this case's facts.
+            </p>
+            <SharedVaultBrowser scope="matter" :scope-id="matter.id" root-label="Case Documents" />
+          </div>
+        </template>
+
+        <!-- Drafted Documents — AI-generated .docx work product scoped to this matter -->
+        <template v-if="matter?.id">
+          <Separator />
+          <div class="flex flex-col gap-3 p-3">
+            <div class="flex items-center gap-2">
+              <FileType2 class="size-4 text-muted-foreground" />
+              <span class="text-lg font-semibold ibm-plex-serif">Drafted Documents</span>
+            </div>
+            <p class="text-sm text-muted-foreground -mt-1">
+              Editable Word drafts the assistant produced for this case — plaints, letters, contracts and more.
+              Ask the assistant to draft one; approved drafts land here.
+            </p>
+            <SharedDocumentsBrowser :matter-id="matter.id" />
+          </div>
+        </template>
       </div>
 
       <!-- Desktop sidebar -->
@@ -236,6 +268,8 @@ import {
   XCircle,
   ArrowLeft,
   Users,
+  FolderLock,
+  FileType2,
 } from 'lucide-vue-next';
 import {
   subscribeToDeadline,
