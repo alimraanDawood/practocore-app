@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Loader2, Check, Clock, TriangleAlert } from 'lucide-vue-next';
+import { Loader2, Check, Clock, TriangleAlert, EyeOff } from 'lucide-vue-next';
 import type { VaultStatus } from '~/services/vault';
 
 // The live-progress affordance. Status transitions arrive over the realtime
@@ -22,6 +22,8 @@ const view = computed(() => {
       };
     case 'failed':
       return { label: 'Failed', icon: TriangleAlert, cls: 'text-destructive bg-destructive/10', spin: false };
+    case 'stored':
+      return { label: 'Not indexed', icon: EyeOff, cls: 'text-muted-foreground bg-muted', spin: false };
     default:
       return { label: props.status, icon: Clock, cls: 'text-muted-foreground bg-muted', spin: false };
   }

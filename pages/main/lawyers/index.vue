@@ -1,9 +1,9 @@
 <template>
-  <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-hidden border-x">
+  <div class="flex flex-col w-full h-full overflow-hidden border-x">
     <div class="flex flex-row gap-2 w-full p-3 justify-between">
       <div class="flex flex-col">
         <h1 class="text-2xl font-bold ibm-plex-serif">{{ currentTab === 'invitations' ? 'Invitations' : 'Team' }}</h1>
-        <p class="hidden lg:block text-sm text-muted-foreground">MMAKS Advocates</p>
+        <p class="hidden lg:block text-sm text-muted-foreground">{{}}</p>
       </div>
 
       <div class="flex flex-row gap-3">

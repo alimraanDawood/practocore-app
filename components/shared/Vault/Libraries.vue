@@ -1,38 +1,20 @@
 <script lang="ts" setup>
 import { Building2, Briefcase, ChevronRight, Loader2, Search } from 'lucide-vue-next';
-import { getSignedInUser } from '~/services/auth';
-import { getMatters } from '~/services/matters';
 import type { VaultScope } from '~/services/vault';
 
 // The top-level library chooser: a "Firm Library" (org scope) plus a card per
 // matter the user can access (matter scope). Selecting one emits the library so
 // the parent can mount <SharedVaultBrowser> for it. Shared by the standalone
-// page and the assistant panel.
+// page and the assistant panel. The matter list is shared with the global
+// sidebar via useVaultLibraries().
 const emit = defineEmits<{ select: [lib: { scope: VaultScope; scopeId: string; label: string }] }>();
 
-const user = computed(() => getSignedInUser());
-const orgId = computed(() => user.value?.organisation || '');
-
-interface MatterLite { id: string; name?: string; caseNumber?: string }
-const matters = ref<MatterLite[]>([]);
-const loading = ref(true);
+const { matters, loading, orgId, refresh } = useVaultLibraries();
 const query = ref('');
 
-onMounted(async () => {
-  const uid = user.value?.id;
-  if (!uid) { loading.value = false; return; }
-  try {
-    const res = await getMatters(1, 100, {
-      filter: `owner = "${uid}" || members ~ "${uid}" || supervisors ~ "${uid}"`,
-      sort: '-updated',
-    });
-    matters.value = (res?.items ?? []) as MatterLite[];
-  } catch {
-    // leave empty
-  } finally {
-    loading.value = false;
-  }
-});
+onMounted(() => { refresh(); });
+
+interface MatterLite { id: string; name?: string; caseNumber?: string }
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();

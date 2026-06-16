@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden items-center">
-    <div class="flex flex-col h-full lg:w-[95vw] w-full border-x">
+    <div class="flex flex-col h-full w-full border-x">
       <div class="flex flex-col lg:flex-row w-full gap-3 h-full overflow-hidden">
         <!-- Desktop: Tabs Layout -->
         <div class="hidden lg:flex flex-row bg-muted lg:bg-muted border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[250px] lg:h-full gap-3">

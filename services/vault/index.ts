@@ -14,8 +14,20 @@ import { pb, SERVER_URL } from '~/lib/pocketbase';
 
 export type VaultScope = 'matter' | 'org';
 
-// Mirrors ai/vault/collection.go status lifecycle.
-export type VaultStatus = 'pending' | 'processing' | 'ingested' | 'failed';
+// Mirrors ai/vault/collection.go status lifecycle. 'stored' = kept but AI
+// ingestion was deliberately turned off (not read into the knowledge base).
+export type VaultStatus = 'pending' | 'processing' | 'ingested' | 'failed' | 'stored';
+
+// Document classification offered at upload (mirrors ai/vault DocType* consts).
+export const VAULT_DOC_TYPES = [
+  { value: 'case_document', label: 'Case document' },
+  { value: 'court_transcript', label: 'Court transcript' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+export function docTypeLabel(value?: string): string {
+  return VAULT_DOC_TYPES.find((t) => t.value === value)?.label || 'Document';
+}
 
 export interface VaultFolder {
   id: string;
@@ -25,6 +37,9 @@ export interface VaultFolder {
   /** Parent folder id, or "" for a root folder. */
   parent: string;
   name: string;
+  /** Soft-delete flag — true means the folder is in the Trash. */
+  trashed?: boolean;
+  trashed_at?: string;
   created: string;
   updated: string;
 }
@@ -38,6 +53,10 @@ export interface VaultDocument {
   scope_id: string;
   /** Owning folder id, or "" for the library root. */
   folder: string;
+  /** Classification chosen at upload (case_document / court_transcript / other). */
+  doc_type?: string;
+  /** Whether the AI was asked to read + distil this document into the KB. */
+  ingest?: boolean;
   file: string;
   filename: string;
   mime: string;
@@ -45,9 +64,40 @@ export interface VaultDocument {
   facts_count: number;
   provider: string;
   error: string;
+  /** Soft-delete flag — true means the document is in the Trash. */
+  trashed?: boolean;
+  trashed_at?: string;
   created_by: string;
   created: string;
   updated: string;
+}
+
+// A normalized list entry (folder or document) for the unified explorer view, so
+// folders and documents can share one row/card component and one sort.
+export interface VaultEntry {
+  kind: 'folder' | 'doc';
+  id: string;
+  name: string;
+  /** ISO timestamp used for the "Modified" column / sorting. */
+  modified: string;
+  /** Direct child count (folders only). */
+  count?: number;
+  /** Folder path label, set in the flat search / trash views. */
+  path?: string;
+  /** Ingestion fields (documents only). */
+  status?: VaultStatus;
+  factsCount?: number;
+  mime?: string;
+  filename?: string;
+  failedError?: string;
+  /** Classification + AI-ingestion flag (documents only). */
+  docType?: string;
+  ingest?: boolean;
+  /** Soft-delete flag mirrored onto the entry for the Trash view. */
+  trashed?: boolean;
+  trashedAt?: string;
+  /** The underlying record. */
+  raw: VaultFolder | VaultDocument;
 }
 
 export interface Entitlements {
@@ -186,10 +236,56 @@ export function moveFolder(id: string, parent: string): Promise<VaultFolder> {
   });
 }
 
+/**
+ * Move a folder (and its whole subtree) to the Trash, or restore it. Soft-delete:
+ * the rows are hidden from the normal listing but kept for restore; distilled
+ * facts are retired only on a permanent {@link deleteFolder}.
+ */
+export function setFolderTrashed(id: string, trashed: boolean): Promise<VaultFolder> {
+  return vaultFetch(`/api/practocore/ai/vault/folders/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed }),
+  });
+}
+
+/** Permanently delete a folder and its subtree (retires the distilled facts). */
 export function deleteFolder(id: string): Promise<{ deleted: boolean }> {
   return vaultFetch(`/api/practocore/ai/vault/folders/${id}`, { method: 'DELETE' });
 }
 
+/** Move a document to another folder in the same library ("" = library root). */
+export function moveDocument(id: string, folder: string): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder }),
+  });
+}
+
+/** Move a document to the Trash, or restore it (soft-delete; see setFolderTrashed). */
+export function setDocumentTrashed(id: string, trashed: boolean): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed }),
+  });
+}
+
+/**
+ * Toggle AI ingestion for an existing document. Turning it on re-queues the
+ * document for distillation; turning it off retires the facts it produced and
+ * drops it back to "stored only".
+ */
+export function setDocumentIngest(id: string, ingest: boolean): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ingest }),
+  });
+}
+
+/** Permanently delete a document (retires the facts the AI distilled from it). */
 export function deleteDocument(id: string): Promise<{ deleted: boolean; memories_retired: number }> {
   return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, { method: 'DELETE' });
 }
@@ -210,7 +306,13 @@ export interface UploadResult {
  * its ingestion progress arrives over the realtime subscription.
  */
 export function uploadDocument(
-  input: { file: File; scope: VaultScope; scopeId: string; folder?: string },
+  input: {
+    file: File; scope: VaultScope; scopeId: string; folder?: string;
+    /** Classification slug (case_document / court_transcript / other). */
+    docType?: string;
+    /** Whether the AI should read + commit this document to the knowledge base. */
+    ingest?: boolean;
+  },
   onProgress?: (fraction: number) => void,
 ): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
@@ -219,6 +321,8 @@ export function uploadDocument(
     form.append('scope', input.scope);
     form.append('scope_id', input.scopeId);
     if (input.folder) form.append('folder', input.folder);
+    if (input.docType) form.append('doc_type', input.docType);
+    if (input.ingest !== undefined) form.append('ingest', String(input.ingest));
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${SERVER_URL}/api/practocore/ai/vault/upload`);

@@ -4,11 +4,26 @@ import { getEntitlements, type VaultScope } from '~/services/vault';
 
 // Self-contained vault workspace: entitlement gate → library chooser → browser.
 // Reused by the standalone /main/vault page and the assistant Vault panel.
-withDefaults(defineProps<{ heading?: boolean }>(), { heading: true });
+// In `url-state` mode the selected library lives in the URL (`?lib=<scope>:<id>`)
+// so the global sidebar's quick-clicks and deep links can drive it; otherwise it
+// stays in local state (used by the embedded assistant panel).
+const props = withDefaults(
+  defineProps<{ heading?: boolean; urlState?: boolean }>(),
+  { heading: true, urlState: false },
+);
+
+type Lib = { scope: VaultScope; scopeId: string; label: string };
+
+const route = useRoute();
+const router = useRouter();
+const { libraryQuery, parseLibraryQuery } = useVaultLibraries();
 
 const checking = ref(true);
 const enabled = ref(false);
-const selected = ref<{ scope: VaultScope; scopeId: string; label: string } | null>(null);
+const internal = ref<Lib | null>(null);
+
+const selected = computed<Lib | null>(() =>
+  props.urlState ? parseLibraryQuery(route.query.lib, route.query.libLabel) : internal.value);
 
 onMounted(async () => {
   try {
@@ -20,11 +35,19 @@ onMounted(async () => {
   }
 });
 
-function onSelect(lib: { scope: VaultScope; scopeId: string; label: string }) {
-  selected.value = lib;
+function onSelect(lib: Lib) {
+  if (props.urlState) router.push({ query: { ...route.query, ...libraryQuery(lib) } });
+  else internal.value = lib;
 }
 function back() {
-  selected.value = null;
+  if (props.urlState) {
+    const query = { ...route.query };
+    delete query.lib;
+    delete query.libLabel;
+    router.push({ query });
+  } else {
+    internal.value = null;
+  }
 }
 </script>
 
@@ -74,6 +97,7 @@ function back() {
         :scope="selected.scope"
         :scope-id="selected.scopeId"
         :root-label="selected.label"
+        :preview-behavior="urlState ? 'push' : 'overlay'"
         @disabled="enabled = false"
       />
     </template>

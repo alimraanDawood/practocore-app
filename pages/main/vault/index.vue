@@ -6,9 +6,9 @@
 </script>
 
 <template>
-  <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-auto border-x">
-    <div class="mx-auto w-full max-w-4xl px-4 py-6 sm:py-8">
-      <SharedVaultWorkspace />
+  <div class="flex flex-col w-full h-full overflow-y-auto border-x">
+    <div class="w-full px-4 py-6 sm:py-8">
+      <SharedVaultWorkspace url-state />
     </div>
   </div>
 </template>

@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
+    <div class="flex flex-col w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
         <div class="flex flex-col h-full w-full">
             <DefineSearchFilterTemplate>
                 <div class="flex flex-row items-center gap-2 w-full">
