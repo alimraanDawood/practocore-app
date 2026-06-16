@@ -651,18 +651,20 @@ onMounted(async () => {
         <template v-else-if="groupedConversations.length > 0">
           <div v-for="group in groupedConversations" :key="group.label" class="mb-2">
             <p class="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">{{ group.label }}</p>
-            <button
-              v-for="conv in group.items" :key="conv.id"
-              class="group w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-start gap-2.5"
-              :class="conversationId === conv.id ? 'bg-accent' : ''"
-              @click="loadConversation(conv.id)"
-            >
-              <MessageSquare class="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-              <span class="flex-1 text-sm truncate leading-snug">{{ conv.title }}</span>
+            <div class="flex flex-row gap-1 items-center">
+              <button
+                v-for="conv in group.items" :key="conv.id"
+                class="group w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-start gap-2.5"
+                :class="conversationId === conv.id ? 'bg-accent' : ''"
+                @click="loadConversation(conv.id)"
+              >
+                <MessageSquare class="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                <span class="flex-1 text-sm truncate leading-snug">{{ conv.title }}</span>
+              </button>
               <button class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0" @click.stop="removeConversation(conv.id)">
                 <Trash2 class="size-3.5" />
               </button>
-            </button>
+            </div>
           </div>
         </template>
         <p v-else class="px-3 py-8 text-sm text-muted-foreground text-center">No conversations yet.</p>

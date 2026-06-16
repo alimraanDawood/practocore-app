@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
+  <div class="flex flex-col lg:flex-row w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
 
   <!-- Main Calendar Area -->
     <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-auto">
@@ -39,6 +39,11 @@
               Completed
             </Button>
           </div>
+
+          <Button @click="addEventOpen = true" size="sm" class="h-11 sm:h-8 ml-auto sm:ml-0">
+            <Plus class="size-4 mr-1" />
+            Add Event
+          </Button>
         </div>
       </div>
 
@@ -62,12 +67,12 @@
       <div class="lg:hidden flex flex-col w-full gap-2">
         <div class="flex flex-row items-center justify-between">
           <h2 class="font-semibold">{{ selectedDateFormatted }}</h2>
-          <Badge variant="secondary">{{ currentDateDeadlines.length }} deadline(s)</Badge>
+          <Badge variant="secondary">{{ currentDateDeadlines.length + currentDateReminders.length }} item(s)</Badge>
         </div>
 
-        <div v-if="currentDateDeadlines.length === 0" class="text-center py-12 text-muted-foreground">
+        <div v-if="currentDateDeadlines.length === 0 && currentDateReminders.length === 0" class="text-center py-12 text-muted-foreground">
           <CalendarOff class="size-12 mx-auto mb-2 opacity-50" />
-          <p class="text-sm">No deadlines on this date</p>
+          <p class="text-sm">Nothing on this date</p>
         </div>
 
         <SharedDeadlineViewDeadline
@@ -77,6 +82,12 @@
           :deadline="deadline">
           <SharedDeadlineCalendarCard :deadline="deadline" variant="mobile" />
         </SharedDeadlineViewDeadline>
+
+        <SharedCalendarReminderCard
+          v-for="r in currentDateReminders"
+          :key="r.id"
+          :reminder="r"
+          @changed="calendar.fetchReminders()" />
       </div>
     </div>
 
@@ -108,22 +119,35 @@
           </div>
         </div>
 
-        <div v-else-if="currentDateDeadlines.length === 0" class="text-center py-12 text-muted-foreground">
+        <div v-else-if="currentDateDeadlines.length === 0 && currentDateReminders.length === 0" class="text-center py-12 text-muted-foreground">
           <CalendarOff class="size-12 mx-auto mb-2 opacity-50" aria-hidden="true" />
-          <p class="text-sm">No deadlines on this date</p>
-          <p class="text-xs mt-1">Select another date or check your filters</p>
+          <p class="text-sm">Nothing on this date</p>
+          <p class="text-xs mt-1">Add an event or check your filters</p>
         </div>
 
-        <SharedDeadlineViewDeadline
-          v-else
-          v-for="deadline in currentDateDeadlines"
-          :key="deadline.id"
-          :index="calendar.accentIndexFor(deadline.id)"
-          :deadline="deadline">
-          <SharedDeadlineCalendarCard :deadline="deadline" variant="desktop" />
-        </SharedDeadlineViewDeadline>
+        <template v-else>
+          <SharedDeadlineViewDeadline
+            v-for="deadline in currentDateDeadlines"
+            :key="deadline.id"
+            :index="calendar.accentIndexFor(deadline.id)"
+            :deadline="deadline">
+            <SharedDeadlineCalendarCard :deadline="deadline" variant="desktop" />
+          </SharedDeadlineViewDeadline>
+
+          <SharedCalendarReminderCard
+            v-for="r in currentDateReminders"
+            :key="r.id"
+            :reminder="r"
+            @changed="calendar.fetchReminders()" />
+        </template>
       </div>
     </div>
+
+    <!-- Add Event dialog -->
+    <SharedCalendarAddEventDialog
+      v-model:open="addEventOpen"
+      :default-date="currentDate"
+      @created="calendar.fetchReminders()" />
 
     <!-- Deadline Detail Sheet -->
     <Sheet v-model:open="selectedDeadline.open">
@@ -148,7 +172,8 @@ import { Button } from '@/components/ui/button';
 import {
   Search,
   CalendarOff,
-  CalendarClock
+  CalendarClock,
+  Plus
 } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { useCalendarStore } from '~/stores/calendar';
@@ -167,7 +192,8 @@ definePageMeta({
 });
 
 const calendar = useCalendarStore();
-const { deadlines, selectedDate, loading } = storeToRefs(calendar);
+const { deadlines, reminders, selectedDate, loading } = storeToRefs(calendar);
+const addEventOpen = ref(false);
 const calendarRef = ref<{ goToday: () => void } | null>(null);
 
 const currentDate = computed({
@@ -212,9 +238,32 @@ const filteredDeadlines = computed(() => {
   return filtered;
 });
 
-// Get events for calendar
+// Reminders the user can act on, filtered to match the active status filter and
+// search the same way deadlines are.
+const filteredReminders = computed(() => {
+  let list = reminders.value || [];
+  const now = new Date();
+
+  if (activeFilter.value === 'pending') {
+    list = list.filter(r => r.status !== 'done' && now <= new Date(r.targetDate));
+  } else if (activeFilter.value === 'fulfilled') {
+    list = list.filter(r => r.status === 'done');
+  }
+
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    list = list.filter(r =>
+      r.title?.toLowerCase().includes(query) ||
+      r.expand?.matter?.name?.toLowerCase().includes(query)
+    );
+  }
+
+  return list;
+});
+
+// Get events for calendar — deadlines + standalone reminder "events".
 const filteredEvents = computed(() => {
-  return filteredDeadlines.value.map((d) => {
+  const deadlineEvents = filteredDeadlines.value.map((d) => {
     const idx = (calendar.accentIndexFor(d.id) % 4) + 1;
     return {
       id: d.id,
@@ -222,13 +271,33 @@ const filteredEvents = computed(() => {
       title: d.name,
       color: `accent-${idx}`,
       completed: d.completed,
+      kind: 'deadline' as const,
     };
   });
+
+  const reminderEvents = filteredReminders.value.map((r) => {
+    const idx = (calendar.accentIndexFor(r.id) % 4) + 1;
+    return {
+      id: r.id,
+      date: r.targetDate,
+      title: r.title,
+      color: `accent-${idx}`,
+      completed: r.status === 'done',
+      kind: 'event' as const,
+    };
+  });
+
+  return [...deadlineEvents, ...reminderEvents];
 });
 
 // Current date deadlines
 const currentDateDeadlines = computed(() => {
   return filteredDeadlines.value.filter(d => toISO(d.date) === currentDate.value);
+});
+
+// Current date reminder events
+const currentDateReminders = computed(() => {
+  return filteredReminders.value.filter(r => toISO(r.targetDate) === currentDate.value);
 });
 
 // Status counts for selected date
@@ -307,6 +376,9 @@ function toDate(input?: string | Date) {
 
 onMounted(async () => {
   calendar.ensureSubscribed();
-  await calendar.fetchDeadlines(false);
+  await Promise.all([
+    calendar.fetchDeadlines(false),
+    calendar.fetchReminders(),
+  ]);
 });
 </script>

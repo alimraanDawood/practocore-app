@@ -3,7 +3,7 @@ import {
   Sparkles, Plus, MessageSquareText, History, Search, Globe,
   Loader2, Check, X, ChevronRight, ChevronDown, ArrowUpIcon, Trash2,
   Briefcase, FileText, BookOpen, AtSign, Paperclip, Building2, Clock, User,
-  CalendarClock, CircleAlert, ArrowRight,
+  CalendarClock, CircleAlert, ArrowRight, Scale,
   type LucideIcon,
 } from 'lucide-vue-next';
 import {marked} from 'marked';
@@ -13,19 +13,15 @@ import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
 import {initials} from '~/components/shared/AI/proposals/theme';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt,
-  listConversations, getConversation, deleteConversation,
+  getConversation, deleteConversation,
   type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
-  type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
+  type AiImageMediaType, type AiResponse, type AiContext,
   type ConvDisplayMessage, type AiStreamStep,
 } from '~/services/ai';
 import {getMatters, getAllDeadlines} from '~/services/matters';
 import {getOrganisationUsers} from '~/services/admin';
 
-definePageMeta({
-  layout: 'default-new'
-})
-
-// Renders inside the 'default-new' app-shell layout (global sidebar + header).
+// Uses the default app-shell layout (global sidebar + header).
 // Chat-specific controls (new chat, history) live in this page's own toolbar.
 
 marked.use({breaks: true, gfm: true});
@@ -338,8 +334,12 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
     if (response.conversationId) {
       const isNew = !conversationId.value;
       conversationId.value = response.conversationId;
-      if (isNew && historyLoaded.value) refreshHistory();
-      else if (!isNew && historyLoaded.value) {
+      if (isNew) {
+        // Reflect the freshly-created conversation in the URL (replace, so the
+        // empty-chat URL isn't pushed onto history) and pull it into the list.
+        router.replace({ query: { c: response.conversationId } });
+        if (historyLoaded.value) refreshHistory(true);
+      } else if (historyLoaded.value) {
         const idx = conversations.value.findIndex(c => c.id === response.conversationId);
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
@@ -616,19 +616,20 @@ async function enhancePrompt() {
 }
 
 // ── Conversation history (left rail) ────────────────────────────────────────
-const conversations = ref<AiConversationSummary[]>([]);
-const historyLoading = ref(false);
-const historyLoaded = ref(false);
+// The list lives in a shared composable so the global sidebar shows the same
+// recents; selection is URL-driven (`?c=<id>`) via the route watcher below.
+const { conversations, loading: historyLoading, loaded: historyLoaded, refresh } = useAssistantHistory();
+const router = useRouter();
+const route = useRoute();
 
-async function refreshHistory() {
-  historyLoading.value = true;
-  try {
-    const page = await listConversations(1, 30);
-    conversations.value = page?.items ?? [];
-    historyLoaded.value = true;
-  } finally {
-    historyLoading.value = false;
-  }
+function refreshHistory(force = false) {
+  return refresh(force);
+}
+
+// Navigate to a conversation by URL so the sidebar, deep links and the in-page
+// history all funnel through one source of truth (the route watcher).
+function selectConversation(id: string) {
+  router.push({ query: { c: id } });
 }
 
 async function loadConversation(id: string) {
@@ -669,10 +670,19 @@ function newChat() {
   pendingProposal.value = null;
   draft.value = '';
   activeSteps.value = [];
+  if (route.query.c) router.replace({ query: {} });
 }
 
-onMounted(() => {
-  refreshHistory();
+// URL is the single source of truth for which conversation is open: the sidebar,
+// deep links and the in-page history all set `?c=<id>`; this loads it.
+watch(() => route.query.c, (id) => {
+  if (typeof id === 'string' && id) loadConversation(id);
+}, { immediate: false });
+
+onMounted(async () => {
+  await refreshHistory();
+  const initial = route.query.c;
+  if (typeof initial === 'string' && initial) loadConversation(initial);
   loadHome();
 });
 </script>
@@ -713,7 +723,7 @@ onMounted(() => {
                 <button
                     class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                     :class="conversationId === conv.id ? 'bg-accent' : ''"
-                    @click="loadConversation(conv.id)">
+                    @click="selectConversation(conv.id)">
                   <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground"/>
                   <span class="truncate">{{ conv.title }}</span>
                 </button>
@@ -758,7 +768,7 @@ onMounted(() => {
                     <button
                         class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                         :class="conversationId === conv.id ? 'bg-accent' : ''"
-                        @click="loadConversation(conv.id)">
+                        @click="selectConversation(conv.id)">
                       <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground"/>
                       <span class="truncate">{{ conv.title }}</span>
                     </button>
@@ -796,7 +806,7 @@ onMounted(() => {
           <Loader2 class="size-4 animate-spin"/>
           Loading your day…
         </div>
-        <div v-else-if="deadlineGroups.length" class="rounded-xl border">
+        <div v-else-if="deadlineGroups.length" class="rounded-xl overflow-hidden border">
           <div class="flex items-center gap-2 border-b px-4 py-2.5">
             <CalendarClock class="size-4 text-muted-foreground"/>
             <span class="text-sm font-semibold">Needs you</span>
@@ -828,13 +838,19 @@ onMounted(() => {
 
         <!-- Recent matters -->
         <div v-if="!homeLoading && recentMatters.length" class="flex flex-col gap-1.5">
-          <p class="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Recent matters</p>
+          <div class="flex flex-row items-center justify-between">
+            <p class="font-medium ibm-plex-serif">Recent matters</p>
+
+            <NuxtLink to="/main/matters">
+              <Button size="xs" variant="secondary">View All</Button>
+            </NuxtLink>
+          </div>
           <div class="flex flex-col">
             <button v-for="m in recentMatters" :key="m.id"
-                    class="group/m flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent"
+                    class="group/m flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50"
                     @click="openMatter(m.id)">
-              <div class="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-                <Briefcase class="size-3.5"/>
+              <div class="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                <Scale class="size-3.5"/>
               </div>
               <div class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-sm font-medium">{{ m.name || 'Matter' }}</span>

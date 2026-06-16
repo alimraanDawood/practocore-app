@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 import { getAllDeadlines, subscribeToDeadlines } from '~/services/matters';
+import { getReminders, subscribeToReminders } from '~/services/reminders';
+import { getSignedInUser } from '~/services/auth';
 import { Capacitor } from '@capacitor/core';
 import { db } from '~/lib/db';
 
@@ -19,6 +21,7 @@ type CalendarEvent = {
 export const useCalendarStore = defineStore('calendar', {
   state: () => ({
     deadlines: [] as Deadline[],
+    reminders: [] as any[], // standalone calendar events (Reminders collection)
     loading: false as boolean,
     lastFetched: 0 as number,
     _subscribed: false as boolean,
@@ -81,6 +84,18 @@ export const useCalendarStore = defineStore('calendar', {
         this.loading = false;
       }
     },
+    async fetchReminders() {
+      const user = getSignedInUser();
+      if (!user?.id) return [];
+      try {
+        // Exclude cancelled reminders; keep pending + done so completed events show.
+        const list = await getReminders(user.id);
+        this.reminders = (list || []).filter((r: any) => r.status !== 'cancelled');
+        return this.reminders;
+      } catch {
+        return this.reminders;
+      }
+    },
     ensureSubscribed() {
       if (this._subscribed) return;
       if (!useNetwork().isOnline.value) return;
@@ -95,6 +110,7 @@ export const useCalendarStore = defineStore('calendar', {
           if (!hadData) this.loading = false;
         }
       });
+      subscribeToReminders(() => { this.fetchReminders(); });
       this._subscribed = true;
     },
     setSelectedDate(iso: string) {

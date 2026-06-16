@@ -8,7 +8,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Loader } from 'lucide-vue-next';
 
-const { $pb } = useNuxtApp();
+const { $pb, $viewport } = useNuxtApp();
 const { shouldShowIntro } = useIntro();
 const router = useRouter();
 
@@ -25,6 +25,8 @@ async function routeMobile() {
     return;
   }
 
+  // on desktop, we should route users to the assistant page and not the main page.
+
   await navigateTo(isAuthenticated ? '/main' : '/intro'); // also fixed your bug here
 }
 
@@ -37,8 +39,9 @@ onNuxtReady(async () => {
     console.log("Redirecting mobile!");
     await routeMobile();
   } else {
-    console.log("Redirecting desktop!");
-    await navigateTo('/main');
+    console.log("Redirecting desktop/web!");
+    const main = $viewport.isGreaterThan('tablet') ? '/main/assistant' : '/main' ;
+    await navigateTo(main);
   }
 });
 </script>

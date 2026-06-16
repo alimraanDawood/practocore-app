@@ -181,10 +181,7 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
     <TourGuideManager ref="welcomeTourGuide" :steps="tourSteps" @complete="onTourComplete" @skip="onTourComplete"/>
     <!-- Mobile header (hidden on xs+) -->
     <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
-      <div class="flex flex-col">
-        <span class="text-sm text-muted-foreground">{{ welcomeMessage }}</span>
-        <span class="font-medium">{{ getSignedInUser()?.name }}</span>
-      </div>
+      <SidebarTrigger />
 
       <div class="flex flex-row items-center gap-2">
         <SharedDarkModeSwitch/>
@@ -204,8 +201,12 @@ const countdownDisplay = (date: string): { number: string; unit: string } => {
       </div>
     </div>
 
-    <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
+    <div class="flex flex-col w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
       <!-- Page header + stats row (desktop/tablet only) -->
+      <div class="flex flex-col p-3 border-b lg:hidden">
+        <span class="text-sm text-muted-foreground">{{ welcomeMessage }}</span>
+        <span class="font-medium">{{ getSignedInUser()?.name }}</span>
+      </div>
       <div class="hidden xs:flex flex-col gap-3.5 p-3 lg:p-5 lg:flex-row lg:items-center justify-between border-b">
         <div class="xs:flex flex-col hidden">
           <h1 class="text-xl lg:text-2xl font-semibold ibm-plex-serif">

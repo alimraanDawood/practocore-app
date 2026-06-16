@@ -981,44 +981,6 @@ async function approveProposal() {
     }
     if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
-
-    // Tool-specific post-approval side effects. The backend's actionResult
-    // carries the executed write-tool's structured output. For create_matter_draft
-    // we DON'T force-navigate — the assistant's reply already confirms it, and we
-    // append a tappable card so the user opens the matter when they're ready. We
-    // also refresh the matters store so the new matter shows up in lists/caches.
-    if (response.actionResult?.tool === 'create_matter_draft') {
-      const matterId = response.actionResult.data?.matterId;
-      if (matterId && typeof matterId === 'string') {
-        const matterName = response.actionResult.data?.name as string | undefined;
-        toast('Matter created', {
-          description: matterName ? `"${matterName}" is ready.` : 'Your new matter is ready.',
-        });
-        messages.value.push({ role: 'matter-created', matterId, matterName });
-        // Refresh the list cache so the matter appears without a manual reload.
-        useMattersStore().fetchMatters(true).catch(() => {});
-      }
-    } else if (response.actionResult?.tool === 'schedule_reminder' && response.actionResult.data?.success) {
-      const reminderTitle = response.actionResult.data?.title as string | undefined;
-      toast('Reminder scheduled', {
-        description: reminderTitle ? `"${reminderTitle}" is set.` : 'Your reminder is set.',
-      });
-      // No forced navigation — append a card so the user opens reminders when ready.
-      messages.value.push({ role: 'reminder-created', reminderTitle });
-    } else if (response.actionResult?.tool === 'generate_document' && response.actionResult.data?.success) {
-      const d = response.actionResult.data;
-      const title = d?.title as string | undefined;
-      toast('Document drafted', {
-        description: title ? `"${title}" is ready to download.` : 'Your document is ready to download.',
-      });
-      messages.value.push({
-        role: 'document-generated',
-        documentId: d?.documentId as string,
-        title,
-        kind: d?.kind as string | undefined,
-        filename: d?.filename as string | undefined,
-      });
-    }
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
     voiceState.value = 'idle';
@@ -1026,7 +988,56 @@ async function approveProposal() {
     messages.value.push({ role: 'assistant', content: response.error ?? 'Something went wrong.' });
     voiceState.value = 'idle';
   }
+
+  // The executed write-tool's structured output (actionResult) is independent of
+  // the conversational reply type: the follow-up turn may come back as text OR as
+  // another approval proposal (e.g. the model chains into save_memory after a
+  // generate_document). Surface the action card regardless, or it gets silently
+  // dropped whenever the reply isn't plain text.
+  applyApprovedActionResult(response);
+
   scrollToBottom();
+}
+
+// Appends the in-chat card / toast for a successfully executed write-tool. Driven
+// purely by the backend's structured actionResult, so it works whether the
+// follow-up reply is text or another proposal. For create_matter_draft we DON'T
+// force-navigate — the reply already confirms it; we append a tappable card so the
+// user opens the matter when they're ready, and refresh the matters cache.
+function applyApprovedActionResult(response: AiResponse) {
+  const action = response.actionResult;
+  if (!action) return;
+
+  if (action.tool === 'create_matter_draft') {
+    const matterId = action.data?.matterId;
+    if (matterId && typeof matterId === 'string') {
+      const matterName = action.data?.name as string | undefined;
+      toast('Matter created', {
+        description: matterName ? `"${matterName}" is ready.` : 'Your new matter is ready.',
+      });
+      messages.value.push({ role: 'matter-created', matterId, matterName });
+      useMattersStore().fetchMatters(true).catch(() => {});
+    }
+  } else if (action.tool === 'schedule_reminder' && action.data?.success) {
+    const reminderTitle = action.data?.title as string | undefined;
+    toast('Reminder scheduled', {
+      description: reminderTitle ? `"${reminderTitle}" is set.` : 'Your reminder is set.',
+    });
+    messages.value.push({ role: 'reminder-created', reminderTitle });
+  } else if (action.tool === 'generate_document' && action.data?.success) {
+    const d = action.data;
+    const title = d?.title as string | undefined;
+    toast('Document drafted', {
+      description: title ? `"${title}" is ready to download.` : 'Your document is ready to download.',
+    });
+    messages.value.push({
+      role: 'document-generated',
+      documentId: d?.documentId as string,
+      title,
+      kind: d?.kind as string | undefined,
+      filename: d?.filename as string | undefined,
+    });
+  }
 }
 
 // User-initiated open of a just-created matter (from the in-chat card). Closes
