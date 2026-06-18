@@ -706,7 +706,7 @@ onMounted(() => { refreshHistory(); loadHome(); });
         <SidebarInset>
             <!-- Top bar -->
             <header class="flex h-14 shrink-0 items-center gap-2 border-b px-3">
-                <SidebarTrigger />
+                <SidebarTrigger class="lg:hidden" />
                 <div v-if="hasThread" class="flex items-center gap-2">
                     <div class="grid size-6 place-items-center rounded-full bg-primary text-primary-foreground">
                         <Sparkles class="size-3.5" />

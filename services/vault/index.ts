@@ -12,7 +12,9 @@ import { pb, SERVER_URL } from '~/lib/pocketbase';
 // server-side. Auth header is the raw token (no "Bearer" prefix), matching the
 // rest of the custom API surface.
 
-export type VaultScope = 'matter' | 'org';
+// 'vault' is a custom, membership-scoped vault (VAULTS_CUSTOM_STRATEGY.md); its
+// scope_id is the AiVaults id. matter/org are the original case/firm libraries.
+export type VaultScope = 'matter' | 'org' | 'vault';
 
 // Mirrors ai/vault/collection.go status lifecycle. 'stored' = kept but AI
 // ingestion was deliberately turned off (not read into the knowledge base).
@@ -108,8 +110,94 @@ export interface Entitlements {
   modelCeiling: string;
 }
 
+// ── Custom vaults (membership-scoped) ────────────────────────────────────────
+// Mirrors ai/vault/vaults.go. A custom vault is a named container with members;
+// its documents live in the same AiVaultDocuments/AiVaultFolders collections with
+// scope='vault', scope_id=<vault id>.
+
+export const VAULT_ROLES = ['owner', 'manager', 'contributor', 'viewer'] as const;
+export type VaultRole = (typeof VAULT_ROLES)[number];
+
+export const VAULT_CAPS = [
+  'query', 'add_files', 'remove_files', 'manage_folders',
+  'toggle_ai', 'invite', 'manage_permissions', 'delete_vault',
+] as const;
+export type VaultCap = (typeof VAULT_CAPS)[number];
+
+export interface Vault {
+  id: string;
+  collectionId?: string;
+  org: string;
+  name: string;
+  description: string;
+  owner: string;
+  created_by: string;
+  visibility: 'personal' | 'shared';
+  ai_read_default: boolean;
+  trashed?: boolean;
+  trashed_at?: string;
+  created: string;
+  updated: string;
+}
+
+export interface VaultMember {
+  id: string;
+  vault: string;
+  user: string;
+  org: string;
+  role: VaultRole;
+  /** Per-member capability overrides on top of the role preset. */
+  caps?: Record<string, boolean>;
+  status: 'invited' | 'active';
+  invited_by: string;
+  created: string;
+  updated: string;
+}
+
+// Role → default capability bundle (mirrors ai/vault/vaults.go RolePresets). The
+// owner is handled separately (always every capability).
+const ROLE_PRESETS: Record<string, Partial<Record<VaultCap, boolean>>> = {
+  manager: {
+    query: true, add_files: true, remove_files: true, manage_folders: true,
+    toggle_ai: true, invite: true, manage_permissions: true,
+  },
+  contributor: { query: true, add_files: true, remove_files: true, manage_folders: true },
+  viewer: { query: true },
+};
+
+/** Resolve a member's effective capabilities (role preset + per-member overrides). */
+export function effectiveCaps(role: string, overrides?: Record<string, boolean>): Record<VaultCap, boolean> {
+  const out = {} as Record<VaultCap, boolean>;
+  for (const c of VAULT_CAPS) out[c] = false;
+  if (role === 'owner') {
+    for (const c of VAULT_CAPS) out[c] = true;
+    return out;
+  }
+  Object.assign(out, ROLE_PRESETS[role] || {});
+  if (overrides) {
+    for (const [k, v] of Object.entries(overrides)) {
+      if (k === 'delete_vault') continue; // never grantable to a non-owner
+      if ((VAULT_CAPS as readonly string[]).includes(k)) out[k as VaultCap] = v;
+    }
+  }
+  return out;
+}
+
+export function hasCap(role: string, overrides: Record<string, boolean> | undefined, cap: VaultCap): boolean {
+  return !!effectiveCaps(role, overrides)[cap];
+}
+
+export const ROLE_LABELS: Record<VaultRole, string> = {
+  owner: 'Owner',
+  manager: 'Manager',
+  contributor: 'Contributor',
+  viewer: 'Viewer',
+};
+
 const DOCS = 'AiVaultDocuments';
 const FOLDERS = 'AiVaultFolders';
+const VAULTS = 'AiVaults';
+const MEMBERS = 'AiVaultMembers';
 
 function scopeFilter(scope: VaultScope, scopeId: string): string {
   return pb.filter('scope = {:scope} && scope_id = {:scopeId}', { scope, scopeId });
@@ -180,15 +268,17 @@ async function vaultFetch(path: string, init: RequestInit): Promise<any> {
     ...init,
     headers: { Authorization: pb.authStore.token, ...(init.headers || {}) },
   });
-  if (res.status === 403) {
-    throw new VaultDisabledError();
-  }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
       const j = await res.json();
       if (j?.message) msg = j.message;
     } catch { /* noop */ }
+    // A 403 is either "feature not enabled for this org" (entitlement) or a
+    // per-vault permission denial. Only the former should disable the surface.
+    if (res.status === 403 && /not enabled/i.test(msg)) {
+      throw new VaultDisabledError();
+    }
     throw new Error(msg);
   }
   return res.json().catch(() => ({}));
@@ -347,6 +437,90 @@ export function uploadDocument(
 }
 
 // ── Entitlements ────────────────────────────────────────────────────────────
+
+// ── Custom vault CRUD ────────────────────────────────────────────────────────
+
+/** List the custom vaults the current user is an active member of (read rule). */
+export function listVaults(): Promise<Vault[]> {
+  return pb.collection(VAULTS).getFullList<Vault>({
+    filter: pb.filter('trashed != true'),
+    sort: 'name',
+  });
+}
+
+/** Subscribe to the user's vault list for live add/rename/remove. */
+export async function subscribeVaults(cb: (action: string, record: Vault) => void): Promise<() => void> {
+  return pb.collection(VAULTS).subscribe<Vault>('*', (e) => cb(e.action, e.record));
+}
+
+export function createVault(input: {
+  name: string;
+  description?: string;
+  visibility?: 'personal' | 'shared';
+  ai_read_default?: boolean;
+}): Promise<Vault> {
+  return vaultFetch('/api/practocore/ai/vaults', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateVault(id: string, patch: {
+  name?: string;
+  description?: string;
+  visibility?: 'personal' | 'shared';
+  ai_read_default?: boolean;
+  trashed?: boolean;
+}): Promise<Vault> {
+  return vaultFetch(`/api/practocore/ai/vaults/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteVault(id: string): Promise<{ deleted: boolean }> {
+  return vaultFetch(`/api/practocore/ai/vaults/${id}`, { method: 'DELETE' });
+}
+
+// ── Membership ───────────────────────────────────────────────────────────────
+
+/** List members of a vault (read rule: co-members only). */
+export function listMembers(vaultId: string): Promise<VaultMember[]> {
+  return pb.collection(MEMBERS).getFullList<VaultMember>({
+    filter: pb.filter('vault = {:v}', { v: vaultId }),
+    sort: 'created',
+  });
+}
+
+export function inviteMember(vaultId: string, input: {
+  user?: string;
+  email?: string;
+  role: VaultRole;
+  caps?: Record<string, boolean>;
+}): Promise<VaultMember> {
+  return vaultFetch(`/api/practocore/ai/vaults/${vaultId}/members`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateMember(vaultId: string, memberId: string, patch: {
+  role?: VaultRole;
+  caps?: Record<string, boolean>;
+}): Promise<VaultMember> {
+  return vaultFetch(`/api/practocore/ai/vaults/${vaultId}/members/${memberId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function removeMember(vaultId: string, memberId: string): Promise<{ deleted: boolean }> {
+  return vaultFetch(`/api/practocore/ai/vaults/${vaultId}/members/${memberId}`, { method: 'DELETE' });
+}
 
 export async function getEntitlements(): Promise<Entitlements> {
   const res = await fetch(`${SERVER_URL}/api/practocore/ai/entitlements`, {

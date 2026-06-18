@@ -40,8 +40,7 @@ onNuxtReady(async () => {
     await routeMobile();
   } else {
     console.log("Redirecting desktop/web!");
-    const main = $viewport.isGreaterThan('tablet') ? '/main/assistant' : '/main' ;
-    await navigateTo(main);
+    await navigateTo("/main");
   }
 });
 </script>

@@ -5,7 +5,7 @@
 import {
   ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
   Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
-  type LucideIcon, Plus,
+  type LucideIcon, Plus, Workflow,
 } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
 import {useAuthStore} from '~/stores/auth';
@@ -52,17 +52,19 @@ interface NavLink {
   to: string;
   exact?: boolean;
   adminOnly?: boolean;
-  needsOrg?: boolean
+  needsOrg?: boolean;
+  beta?: boolean;
 }
 
 const hasOrg = computed(() => !!getSignedInUser()?.organisation);
 
 const appNav: NavLink[] = [
   // { label: 'Home', icon: Home, to: '/main', exact: true },
-  {label: 'Assistant', icon: MessageSquareText, to: '/main/assistant'},
+  {label: 'Assistant', icon: MessageSquareText, to: '/main', exact: true},
   {label: 'Matters', icon: Scale, to: '/main/matters'},
   {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
+  {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
   {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
   // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },
 ];
@@ -83,6 +85,9 @@ function isActive(item: NavLink): boolean {
   <div class="flex h-svh flex-col">
 
     <SidebarProvider class="min-h-0 flex-1 overflow-hidden">
+      <!-- Mobile/touch gestures: left-edge swipe opens the offcanvas sidebar,
+           swipe-back closes it, and navigation auto-closes it. -->
+      <LayoutSidebarMobileGestures />
       <!-- ── Sidebar ─────────────────────────────────────────────────── -->
       <Sidebar collapsible="icon">
         <SidebarHeader>
@@ -116,7 +121,7 @@ function isActive(item: NavLink): boolean {
               <SidebarMenuItem>
                 <SidebarMenuButton class="border" tooltip="New chat" @click="$router.push('/main/assistant')">
                   <Plus/>
-                  <span>Create</span>
+                  <span>New Chat</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -132,6 +137,12 @@ function isActive(item: NavLink): boolean {
                       <span>{{ item.label }}</span>
                     </NuxtLink>
                   </SidebarMenuButton>
+                  <SidebarMenuBadge
+                    v-if="item.beta"
+                    class="bg-primary/10 text-primary text-[10px] font-medium uppercase tracking-wide"
+                  >
+                    Beta
+                  </SidebarMenuBadge>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
@@ -243,7 +254,7 @@ function isActive(item: NavLink): boolean {
             <slot/>
           </div>
 
-          <SharedMobileNavigation class="w-full xs:hidden"/>
+<!--          <SharedMobileNavigation class="w-full xs:hidden"/>-->
         </div>
       </SidebarInset>
     </SidebarProvider>

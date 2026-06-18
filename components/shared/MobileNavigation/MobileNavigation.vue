@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed bottom-0 left-0 dark flex flex-row gap-6 p-3 justify-center">
+  <div class="dark flex flex-row gap-6 p-3 justify-center">
     <div class="flex flex-row w-fit p-3 gap-6 h-16 shrink-0 justify-around items-center border-t bg-background rounded-full iems-center">
       <button
           v-for="item in visibleTabs"

@@ -54,8 +54,8 @@ export function useVaultLibraries() {
     if (idx < 0) return null;
     const scope = lib.slice(0, idx);
     const scopeId = lib.slice(idx + 1);
-    if ((scope !== 'org' && scope !== 'matter') || !scopeId) return null;
-    const fallback = scope === 'org' ? 'Firm Library' : 'Matter';
+    if ((scope !== 'org' && scope !== 'matter' && scope !== 'vault') || !scopeId) return null;
+    const fallback = scope === 'org' ? 'Firm Library' : scope === 'vault' ? 'Vault' : 'Matter';
     return {
       scope,
       scopeId,

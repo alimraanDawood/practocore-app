@@ -712,7 +712,7 @@ const ingestingCount = computed(() =>
           <nav v-else
                class="hidden lg:flex min-w-0 flex-1 items-center gap-0.5 rounded-md border bg-muted/30 px-2 py-1 text-sm">
             <button
-                class="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium hover:bg-accent"
+                class="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium hover:bg-accent truncate"
                 :class="[
             currentFolder ? 'text-muted-foreground' : 'text-foreground',
             dropTarget === 'crumb:' ? 'bg-primary/10 ring-1 ring-primary' : '',
@@ -722,7 +722,7 @@ const ingestingCount = computed(() =>
                 @dragleave="dropTarget = null"
                 @drop.prevent="onCrumbDrop('')"
             >
-              <FolderLock class="size-3.5"/>
+              <FolderLock class="size-3.5 shrink-0"/>
               {{ rootLabel }}
             </button>
             <template v-for="(crumb, i) in trail" :key="crumb.id">

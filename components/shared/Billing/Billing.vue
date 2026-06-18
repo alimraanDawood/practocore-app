@@ -120,7 +120,7 @@
         </div>
 
         <!-- No Active Subscription -->
-        <div v-else class="flex flex-col border border-dashed rounded-lg p-8 items-center justify-center gap-4 text-center">
+        <div v-if="false" class="flex flex-col border border-dashed rounded-lg p-8 items-center justify-center gap-4 text-center">
           <div class="flex flex-col gap-2">
             <CreditCard class="size-12 text-muted-foreground mx-auto" />
             <h3 class="font-semibold text-lg">No Active Subscription</h3>

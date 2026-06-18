@@ -65,8 +65,8 @@
           <!-- Desktop event pills -->
           <div class="hidden lg:flex flex-col gap-1 mt-1 w-full">
             <template v-for="evt in visibleEvents(cell.date)" :key="evt.id">
-              <div class="text-[11px] px-1.5 py-0.5 rounded cursor-pointer truncate border overflow-visible relative"
-                   :class="`bg-${evt.color}/50 text-${evt.color} border-${evt.color}`"
+              <div class="text-[11px] px-1.5 py-0.5 rounded cursor-pointer truncate border overflow-visible font-semibold relative"
+                   :class="`bg-${evt.color} text-white border-${evt.color}`"
                    @click.stop="eventClicked(cell.date, evt)"
                    :aria-label="evt.title">
                 <div v-if="evt.completed"
