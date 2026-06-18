@@ -266,7 +266,7 @@
 
             <XyzTransition xyz="fade down">
                 <div v-if="selection.active"
-                    class="fixed p-3 w-full bottom-[4rem] lg:bottom-0 flex flex-col items-center justify-center z-30">
+                    class="fixed p-3 w-full lg:bottom-0 flex flex-col items-center justify-center z-30">
                     <div
                         class="bg-background p-3 rounded border shadow-sm space-x-2 justify-between flex flex-row w-full lg:max-w-md">
                         <div class="flex flex-row items-center text-xs gap-2">
