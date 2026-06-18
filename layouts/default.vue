@@ -119,7 +119,7 @@ function isActive(item: NavLink): boolean {
           <SidebarGroup>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton class="border" tooltip="New chat" @click="$router.push('/main/assistant')">
+                <SidebarMenuButton class="border" tooltip="New chat" @click="$router.push('/main')">
                   <Plus/>
                   <span>New Chat</span>
                 </SidebarMenuButton>
