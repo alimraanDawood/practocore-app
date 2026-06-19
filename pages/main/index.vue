@@ -1,439 +1,1165 @@
-<script setup lang="ts">
-import {CircleProgressBar} from 'vue3-m-circle-progress-bar';
-import {Info, Loader, CalendarIcon, Clock, XCircle, Plus, Bell, AlertTriangle} from 'lucide-vue-next';
+<script lang="ts" setup>
+import {
+  Sparkles, Plus, MessageSquareText, History, Search, Globe,
+  Loader2, Check, X, ChevronRight, ChevronDown, ArrowUpIcon, Trash2,
+  Briefcase, FileText, BookOpen, AtSign, Paperclip, Building2, Clock, User,
+  CalendarClock, CircleAlert, ArrowRight, Scale,
+  type LucideIcon,
+} from 'lucide-vue-next';
+import {marked} from 'marked';
+import {toast} from 'vue-sonner';
 import {getSignedInUser} from '~/services/auth';
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-import timezone from 'dayjs/plugin/timezone';
-import utc from 'dayjs/plugin/utc';
-import {storeToRefs} from 'pinia';
-import {useDashboardStore} from '~/stores/dashboard';
-import {useMattersStore} from '~/stores/matters';
-import {TourGuideManager, type TourGuideStep} from "v-tour-guide";
+import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
+import {initials} from '~/components/shared/AI/proposals/theme';
+import {
+  sendAiMessageStream, confirmAiProposal, improvePrompt,
+  getConversation, deleteConversation,
+  type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
+  type AiImageMediaType, type AiResponse, type AiContext,
+  type ConvDisplayMessage, type AiStreamStep,
+} from '~/services/ai';
+import {getMatters, getAllDeadlines} from '~/services/matters';
+import {getOrganisationUsers} from '~/services/admin';
 
-dayjs.extend(relativeTime);
-dayjs.extend(utc);
-dayjs.extend(timezone);
+// Uses the default app-shell layout (global sidebar + header).
+// Chat-specific controls (new chat, history) live in this page's own toolbar.
 
-const hours = new Date().getHours();
-const dashboard = useDashboardStore();
-const mattersStore = useMattersStore();
-const {statistics, loading} = storeToRefs(dashboard);
-const { isOffline } = useNetwork();
+marked.use({breaks: true, gfm: true});
 
-const welcomeMessage = computed(() => {
-  if (hours < 12) return 'Good Morning';
-  if (hours < 18) return 'Good Afternoon';
-  return 'Good Evening';
+function renderMarkdown(text: string): string {
+  return marked.parse(text) as string;
+}
+
+const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
+
+// ── Home summary (assigned to me) ───────────────────────────────────────────
+// The empty state doubles as a light "home": a stateful greeting, the deadlines
+// that need me soon, and my recently-touched matters. Scoped to the signed-in
+// user; scrolls away once a conversation starts.
+const uid = computed(() => getSignedInUser()?.id ?? '');
+const homeLoading = ref(false);
+
+interface HomeDeadline {
+  id: string;
+  name?: string;
+  date?: string;
+  status?: string;
+  matter?: string;
+  expand?: { matter?: { id: string; name?: string } }
+}
+
+interface HomeMatter {
+  id: string;
+  name?: string;
+  caseNumber?: string
+}
+
+const myDeadlines = ref<HomeDeadline[]>([]);
+const recentMatters = ref<HomeMatter[]>([]);
+
+function startOfTodayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+async function loadHome() {
+  const id = uid.value;
+  if (!id) return;
+  homeLoading.value = true;
+  try {
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + 7);
+    const horizonStr = `${horizon.toISOString().slice(0, 10)} 23:59:59`;
+    const [dls, matters] = await Promise.all([
+      getAllDeadlines({
+        filter: `assignees ~ "${id}" && (status = "pending" || status = "overdue") && date != "" && date <= "${horizonStr}"`,
+        sort: 'date',
+        expand: 'matter',
+        fields: 'id,name,date,status,matter,expand.matter.id,expand.matter.name',
+      }),
+      getMatters(1, 5, {
+        filter: `owner = "${id}" || members ~ "${id}" || supervisors ~ "${id}"`,
+        sort: '-updated',
+      }),
+    ]);
+    myDeadlines.value = (dls as HomeDeadline[]) ?? [];
+    recentMatters.value = (matters?.items ?? []) as HomeMatter[];
+  } catch {
+    // Leave empty — the greeting falls back to "all clear".
+  } finally {
+    homeLoading.value = false;
+  }
+}
+
+// Bucket assigned deadlines by urgency for the "Needs you" card.
+const buckets = computed(() => {
+  const today0 = startOfTodayMs();
+  const todayEnd = today0 + 86_400_000 - 1;
+  const overdue: HomeDeadline[] = [], today: HomeDeadline[] = [], week: HomeDeadline[] = [];
+  for (const d of myDeadlines.value) {
+    if (!d.date) continue;
+    const t = new Date(d.date).getTime();
+    if (t < today0) overdue.push(d);
+    else if (t <= todayEnd) today.push(d);
+    else week.push(d);
+  }
+  return {overdue, today, week};
 });
+
+const needsTodayCount = computed(() => buckets.value.overdue.length + buckets.value.today.length);
+const dueThisWeekCount = computed(() => myDeadlines.value.length);
+
+const greetingTime = computed(() => {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+});
+
+const greetingSummary = computed(() => {
+  const week = dueThisWeekCount.value;
+  if (!week) return 'you’re all clear this week.';
+  const parts = [`${week} deadline${week === 1 ? '' : 's'} this week`];
+  if (needsTodayCount.value) parts.push(`${needsTodayCount.value} need${needsTodayCount.value === 1 ? 's' : ''} you today`);
+  return `${parts.join(', ')}.`;
+});
+
+/** "Today" / "Tomorrow" / "in 3d" / "2d overdue" relative to the local day. */
+function dueLabel(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - startOfTodayMs()) / 86_400_000);
+  if (diff < 0) return `${-diff}d overdue`;
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  return `in ${diff}d`;
+}
+
+const deadlineGroups = computed(() => [
+  {key: 'overdue', label: 'Overdue', tone: 'text-destructive', items: buckets.value.overdue},
+  {key: 'today', label: 'Today', tone: 'text-amber-600 dark:text-amber-500', items: buckets.value.today},
+  {key: 'week', label: 'This week', tone: 'text-muted-foreground', items: buckets.value.week},
+].filter(g => g.items.length));
+
+const smartPrompts = [
+  'What’s on my plate today?',
+  'Summarise what changed in my matters this week',
+  'Which of my deadlines are most urgent?',
+];
+
+function matterIdOf(d: HomeDeadline): string | undefined {
+  return d.matter || d.expand?.matter?.id;
+}
+
+function openDeadline(d: HomeDeadline) {
+  const mid = matterIdOf(d);
+  if (mid) navigateTo(`/main/matters/matter/${mid}`);
+}
+
+function openMatter(id: string) {
+  navigateTo(`/main/matters/matter/${id}`);
+}
+
+/** Seed the composer with a prompt about a specific entity (user can edit before sending). */
+function askAbout(prompt: string) {
+  draft.value = prompt;
+}
+
+// ── Composer ────────────────────────────────────────────────────────────────
+const draft = ref('');
+
+// ── Chat engine ─────────────────────────────────────────────────────────────
+type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean };
+type ChatMessage = DisplayAiMessage | ToolEvent;
+
+const messages = ref<ChatMessage[]>([]);
+const conversationId = ref('');
+const pendingProposal = ref<AiResponse | null>(null);
+const loading = ref(false);
+const proposalLoading = ref(false);
+const messagesEnd = ref<HTMLElement | null>(null);
+
+// Live tool-activity steps streamed mid-turn; last one is in-flight (spinner).
+const activeSteps = ref<AiStreamStep[]>([]);
+const workStartedAt = ref(0);
+
+const hasThread = computed(() => messages.value.length > 0);
+
+// Only {role, content} turns are sent back to the model — drop tool-events + UI step metadata.
+const apiMessages = computed<AiMessage[]>(() =>
+    messages.value
+        .filter((m): m is DisplayAiMessage => m.role !== 'tool-event')
+        .map(m => ({role: m.role, content: m.content})),
+);
+
+const convMessages = computed<ConvDisplayMessage[]>(() =>
+    messages.value.map(m =>
+        m.role === 'tool-event'
+            ? {role: `tool-event:${m.status}`, content: m.content}
+            : {role: m.role, content: messageText(m.content)},
+    ),
+);
+
+/** Flatten string|content-block content to a displayable string (attachments → placeholders). */
+function messageText(content: AiMessage['content']): string {
+  if (typeof content === 'string') return content;
+  return content.map(b =>
+      b.type === 'text' ? b.text
+          : b.type === 'image' ? '[image]'
+              : b.source?.type === 'text' ? '[document]'
+                  : '[PDF]',
+  ).join(' ');
+}
+
+/** Human label for a document attachment chip (text doc vs PDF). */
+function docLabel(att: AiDocumentBlock): string {
+  return att.source?.type === 'text' ? 'Document' : 'PDF';
+}
+
+/** Just the attachment blocks of a content array — drives the chips above a user bubble. */
+function messageAttachments(content: AiMessage['content']): Array<AiImageBlock | AiDocumentBlock> {
+  if (typeof content === 'string') return [];
+  return content.filter((b): b is AiImageBlock | AiDocumentBlock => b.type === 'image' || b.type === 'document');
+}
+
+function buildContext(): AiContext | undefined {
+  if (selectedItems.value.length === 0) return undefined;
+  return {
+    matterIds: selectedItems.value.filter(i => i.type === 'matter').map(i => i.id),
+    deadlineIds: selectedItems.value.filter(i => i.type === 'deadline').map(i => i.id),
+    userIds: selectedItems.value.filter(i => i.type === 'user').map(i => i.id),
+  };
+}
+
+function scrollToBottom() {
+  nextTick(() => messagesEnd.value?.scrollIntoView({behavior: 'smooth'}));
+}
+
+function stepIcon(tool: string) {
+  switch (tool) {
+    case 'search_matters':
+    case 'search_procedure':
+    case 'find_applicable_procedure':
+      return Search;
+    case 'web_search':
+      return Globe;
+    case 'get_procedure_overview':
+    case 'get_procedure_step':
+    case 'get_procedure_citation':
+    case 'list_legal_knowledge':
+      return BookOpen;
+    case 'load_skill':
+    case 'list_skills':
+      return Sparkles;
+    case 'fetch_url':
+      return FileText;
+    case '':
+      return Sparkles;
+    default:
+      return Briefcase;
+  }
+}
+
+function formatDuration(ms: number): string {
+  const secs = Math.max(1, Math.round(ms / 1000));
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
+
+function formatToolName(tool: string): string {
+  return tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function send(explicit?: string) {
+  const text = (explicit ?? draft.value).trim();
+  const hasAttachments = !explicit && attachments.value.length > 0;
+  if ((!text && !hasAttachments) || loading.value) return;
+
+  // Plain text turn, or a multimodal content-block array (attachments first, text as caption).
+  let userContent: string | AiContentBlock[];
+  if (hasAttachments) {
+    const blocks: AiContentBlock[] = attachments.value.map(a => {
+      if (a.kind === 'text') {
+        // Prefix the filename so the model knows the document's name/type.
+        const body = `# ${a.name}\n\n${a.text ?? ''}`;
+        return {type: 'document', source: {type: 'text', media_type: 'text/plain', data: body}};
+      }
+      return a.mime === 'application/pdf'
+          ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: a.base64 as string}}
+          : {type: 'image', source: {type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 as string}};
+    });
+    blocks.push({type: 'text', text: text || 'Help me with this.'});
+    userContent = blocks;
+    attachments.value = [];
+  } else {
+    userContent = text;
+  }
+
+  messages.value.push({role: 'user', content: userContent});
+  draft.value = '';
+  pendingProposal.value = null;
+  loading.value = true;
+  activeSteps.value = [];
+  workStartedAt.value = Date.now();
+  scrollToBottom();
+
+  const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
+    onStep: (s) => {
+      activeSteps.value = [...activeSteps.value, s];
+      scrollToBottom();
+    },
+  });
+
+  const elapsedMs = Date.now() - workStartedAt.value;
+  const turnSteps = activeSteps.value.filter(s => s.tool);
+  activeSteps.value = [];
+  loading.value = false;
+
+  applyResponse(response, turnSteps, elapsedMs);
+  scrollToBottom();
+}
+
+function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], elapsedMs = 0) {
+  if (response.type === 'text') {
+    messages.value.push({
+      role: 'assistant',
+      content: response.content ?? '',
+      steps: turnSteps.length ? turnSteps : undefined,
+      durationMs: turnSteps.length ? elapsedMs : undefined,
+      stepsOpen: false,
+    });
+    if (response.conversationId) {
+      const isNew = !conversationId.value;
+      conversationId.value = response.conversationId;
+      if (isNew) {
+        // Reflect the freshly-created conversation in the URL (replace, so the
+        // empty-chat URL isn't pushed onto history) and pull it into the list.
+        router.replace({ query: { c: response.conversationId } });
+        if (historyLoaded.value) refreshHistory(true);
+      } else if (historyLoaded.value) {
+        const idx = conversations.value.findIndex(c => c.id === response.conversationId);
+        if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
+      }
+    }
+  } else if (response.type === 'proposal') {
+    pendingProposal.value = response;
+  } else {
+    messages.value.push({role: 'assistant', content: response.error ?? 'Something went wrong.'});
+  }
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+}
+
+// ── Proposals ───────────────────────────────────────────────────────────────
+function dismissProposal() {
+  if (pendingProposal.value) {
+    messages.value.push({
+      role: 'tool-event',
+      content: formatToolName(pendingProposal.value.tool ?? ''),
+      status: 'rejected'
+    });
+  }
+  pendingProposal.value = null;
+}
+
+async function approveProposal() {
+  if (!pendingProposal.value || proposalLoading.value) return;
+  proposalLoading.value = true;
+  const proposal = pendingProposal.value;
+  pendingProposal.value = null;
+
+  messages.value.push({role: 'tool-event', content: formatToolName(proposal.tool ?? ''), status: 'approved'});
+  loading.value = true;
+  scrollToBottom();
+
+  const response = await confirmAiProposal(
+      proposal, true, buildContext(),
+      conversationId.value || undefined,
+      convMessages.value,
+  );
+  loading.value = false;
+  proposalLoading.value = false;
+
+  applyResponse(response);
+  scrollToBottom();
+}
+
+// ── Attachments (PDF + images + text/Markdown) ──────────────────────────────
+// kind 'binary' = image/PDF (base64); kind 'text' = Markdown/plain-text/source
+// files, carried as raw UTF-8 in `text` and sent as an Anthropic text document.
+interface Attachment {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  kind: 'binary' | 'text';
+  base64?: string;
+  dataUrl?: string;
+  text?: string;
+}
+
+const attachments = ref<Attachment[]>([]);
+const fileInput = ref<HTMLInputElement | null>(null);
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES: AiImageMediaType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+// Text/Markdown/source files. Browsers report an unreliable (often empty) MIME for
+// .md, so we also match on extension. These are sent as text document blocks.
+const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.text', '.csv', '.json', '.log', '.rtf'];
+
+function isTextFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  if (TEXT_EXTENSIONS.some(ext => name.endsWith(ext))) return true;
+  const t = file.type;
+  return t.startsWith('text/') || t === 'application/json' || t === 'application/markdown';
+}
+
+const totalAttachmentBytes = computed(() => attachments.value.reduce((s, a) => s + a.size, 0));
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileToBase64(file: File): Promise<{ base64: string; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      const comma = dataUrl.indexOf(',');
+      resolve({base64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, dataUrl});
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function isAcceptedFile(file: File): boolean {
+  return file.type === 'application/pdf'
+      || (ACCEPTED_IMAGE_TYPES as string[]).includes(file.type)
+      || isTextFile(file);
+}
+
+async function addFiles(files: File[] | FileList) {
+  for (const file of Array.from(files)) {
+    if (!isAcceptedFile(file)) {
+      toast('Unsupported file', {description: `${file.name} — PDFs, images, and text/Markdown only.`});
+      continue;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast('File too large', {description: `${file.name} is ${formatBytes(file.size)}. Max ${formatBytes(MAX_FILE_BYTES)}.`});
+      continue;
+    }
+    if (totalAttachmentBytes.value + file.size > MAX_TOTAL_BYTES) {
+      toast('Attachment limit reached', {description: `Total must stay under ${formatBytes(MAX_TOTAL_BYTES)}.`});
+      continue;
+    }
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      if (isTextFile(file)) {
+        const text = await file.text();
+        attachments.value.push({
+          id,
+          name: file.name,
+          mime: file.type || 'text/markdown',
+          size: file.size,
+          kind: 'text',
+          text
+        });
+      } else {
+        const {base64, dataUrl} = await fileToBase64(file);
+        attachments.value.push({
+          id,
+          name: file.name,
+          mime: file.type,
+          size: file.size,
+          kind: 'binary',
+          base64,
+          dataUrl
+        });
+      }
+    } catch (err: any) {
+      toast('Could not read file', {description: file.name + (err?.message ? ` — ${err.message}` : '')});
+    }
+  }
+}
+
+async function onFilesChosen(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (!input.files?.length) return;
+  await addFiles(input.files);
+  input.value = '';
+}
+
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter(a => a.id !== id);
+}
+
+function openFilePicker() {
+  fileInput.value?.click();
+}
+
+// ── Context picker (matters / deadlines / lawyers) ──────────────────────────
+type ContextType = 'matter' | 'deadline' | 'user';
+
+interface ContextItem {
+  type: ContextType;
+  id: string;
+  label: string;
+  sublabel?: string
+}
+
+const selectedItems = ref<ContextItem[]>([]);
+const contextIcons: Record<ContextType, LucideIcon> = {matter: Building2, deadline: Clock, user: User};
+
+const contextDrawerOpen = ref(false);
+const contextTab = ref<ContextType>('matter');
+const contextSearch = ref('');
+const mattersList = ref<{ id: string; name: string; caseNumber: string }[]>([]);
+const deadlinesList = ref<{ id: string; name: string; matterName: string }[]>([]);
+const usersList = ref<{ id: string; name: string; role: string; avatar?: string }[]>([]);
+const contextLoading = ref(false);
+
+watch(contextDrawerOpen, async (isOpen) => {
+  if (!isOpen) {
+    contextSearch.value = '';
+    return;
+  }
+  if (mattersList.value.length > 0) return;
+  contextLoading.value = true;
+  try {
+    const [mattersRes, deadlinesRes, usersRes] = await Promise.all([
+      getMatters(1, 100, {sort: '-created'}),
+      getAllDeadlines({
+        sort: '-date',
+        filter: "status = 'pending'",
+        expand: 'matter',
+        fields: 'id,name,date,expand.matter.name'
+      }),
+      getOrganisationUsers(1, 100, {}),
+    ]);
+    mattersList.value = (mattersRes.items ?? []).map((m: any) => ({id: m.id, name: m.name, caseNumber: m.caseNumber}));
+    deadlinesList.value = (deadlinesRes ?? []).map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      matterName: d.expand?.matter?.name ?? ''
+    }));
+    usersList.value = (usersRes.items ?? []).map((u: any) => ({
+      id: u.id,
+      name: u.name,
+      role: u.organisationRole ?? u.role ?? '',
+      avatar: u.avatar
+    }));
+  } finally {
+    contextLoading.value = false;
+  }
+});
+
+const q = computed(() => contextSearch.value.toLowerCase());
+const filteredMatters = computed(() => q.value ? mattersList.value.filter(m => m.name.toLowerCase().includes(q.value) || m.caseNumber?.toLowerCase().includes(q.value)) : mattersList.value);
+const filteredDeadlines = computed(() => q.value ? deadlinesList.value.filter(d => d.name.toLowerCase().includes(q.value) || d.matterName.toLowerCase().includes(q.value)) : deadlinesList.value);
+const filteredUsers = computed(() => q.value ? usersList.value.filter(u => u.name.toLowerCase().includes(q.value)) : usersList.value);
+
+function isSelected(id: string) {
+  return selectedItems.value.some(i => i.id === id);
+}
+
+function toggleItem(item: ContextItem) {
+  const idx = selectedItems.value.findIndex(i => i.id === item.id);
+  if (idx >= 0) selectedItems.value.splice(idx, 1);
+  else selectedItems.value.push(item);
+}
+
+function removeItem(id: string) {
+  selectedItems.value = selectedItems.value.filter(i => i.id !== id);
+}
+
+// ── Prompt enhancement ──────────────────────────────────────────────────────
+const enhancing = ref(false);
+const canEnhance = computed(() => draft.value.trim().length > 0 && !enhancing.value && !loading.value);
+const canSend = computed(() => (draft.value.trim().length > 0 || attachments.value.length > 0) && !loading.value);
+
+async function enhancePrompt() {
+  const original = draft.value.trim();
+  if (!original || enhancing.value || loading.value) return;
+  enhancing.value = true;
+  try {
+    const result = await improvePrompt(original, buildContext());
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result.improved.trim() === original) {
+      toast('Prompt already looks clear — left it as is.');
+      return;
+    }
+    draft.value = result.improved;
+    toast('Prompt enhanced', {
+      action: {
+        label: 'Undo', onClick: () => {
+          draft.value = original;
+        }
+      }
+    });
+  } finally {
+    enhancing.value = false;
+  }
+}
+
+// ── Conversation history (left rail) ────────────────────────────────────────
+// The list lives in a shared composable so the global sidebar shows the same
+// recents; selection is URL-driven (`?c=<id>`) via the route watcher below.
+const { conversations, loading: historyLoading, loaded: historyLoaded, refresh } = useAssistantHistory();
+const router = useRouter();
+const route = useRoute();
+
+function refreshHistory(force = false) {
+  return refresh(force);
+}
+
+// Navigate to a conversation by URL so the sidebar, deep links and the in-page
+// history all funnel through one source of truth (the route watcher).
+function selectConversation(id: string) {
+  router.push({ query: { c: id } });
+}
+
+async function loadConversation(id: string) {
+  if (conversationId.value === id) return;
+  const conv = await getConversation(id);
+  if (!conv) return;
+  messages.value = (conv.messages ?? []).map((m): ChatMessage => {
+    if (m.role.startsWith('tool-event:')) {
+      const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
+      return {role: 'tool-event', content: m.content, status};
+    }
+    if (m.role === 'assistant' && m.steps?.length) {
+      return {
+        role: 'assistant',
+        content: m.content,
+        steps: m.steps,
+        durationMs: m.durationMs,
+        stepsOpen: false
+      } as DisplayAiMessage;
+    }
+    return m as AiMessage;
+  });
+  conversationId.value = conv.id;
+  pendingProposal.value = null;
+  scrollToBottom();
+}
+
+async function removeConversation(id: string) {
+  const ok = await deleteConversation(id);
+  if (!ok) return;
+  conversations.value = conversations.value.filter(c => c.id !== id);
+  if (conversationId.value === id) newChat();
+}
+
+function newChat() {
+  messages.value = [];
+  conversationId.value = '';
+  pendingProposal.value = null;
+  draft.value = '';
+  activeSteps.value = [];
+  if (route.query.c) router.replace({ query: {} });
+}
+
+// URL is the single source of truth for which conversation is open: the sidebar,
+// deep links and the in-page history all set `?c=<id>`; this loads it.
+watch(() => route.query.c, (id) => {
+  if (typeof id === 'string' && id) loadConversation(id);
+}, { immediate: false });
 
 onMounted(async () => {
-  await dashboard.init();
-  if (!hasCompletedTour()) {
-    await nextTick();
-    // welcomeTourGuide.value?.startTourGuide();
-  }
+  await refreshHistory();
+  const initial = route.query.c;
+  if (typeof initial === 'string' && initial) loadConversation(initial);
+  loadHome();
 });
-
-const reloadStatistics = async (newMatter?: any) => {
-  if (newMatter) {
-    const matterRecord = newMatter?.matter || newMatter;
-    if (matterRecord?.id) {
-      mattersStore.addMatterOptimistic(matterRecord);
-    } else {
-      mattersStore.fetchMattersInBackground();
-    }
-  } else {
-    mattersStore.fetchMattersInBackground();
-  }
-  await dashboard.fetchStatistics(true);
-}
-
-const welcomeTourGuide = ref<InstanceType<typeof TourGuideManager>>();
-
-const restartTour = () => {
-  welcomeTourGuide.value?.startTourGuide();
-}
-
-const TOUR_STORAGE_KEY = 'practocore_welcome_tour_completed';
-
-const hasCompletedTour = () => {
-  if (typeof window === 'undefined') return true;
-  return localStorage.getItem(TOUR_STORAGE_KEY) === 'true';
-}
-
-const markTourCompleted = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(TOUR_STORAGE_KEY, 'true');
-  }
-}
-
-const tooltipStyle = {
-  backgroundColor: "var(--color-background)",
-  textColor: "var(--color-foreground)",
-  buttonBackgroundColor: "var(--color-muted)",
-  buttonTextColor: "var(--color-muted-foreground)",
-  skipButtonColor: "var(--color-primary)",
-};
-
-const tourSteps: TourGuideStep[] = [
-  {
-    id: 'statistics',
-    target: 'statistics',
-    title: 'Your Dashboard at a Glance',
-    content: 'Track your progress here. See how many deadlines you\'ve completed, what\'s currently active, and if anything needs urgent attention.',
-    showAction: true,
-    tooltip: tooltipStyle
-  },
-  {
-    id: 'upcoming',
-    target: 'upcoming',
-    title: 'Stay Ahead of Your Deadlines',
-    content: 'Your most urgent matters appear here first. Click any matter to see all its deadlines and take action before time runs out.',
-    showAction: true,
-    tooltip: tooltipStyle
-  },
-  {
-    id: 'calendar',
-    target: 'calendar',
-    title: 'Plan Your Week',
-    content: 'Spot busy days at a glance. Dates with multiple deadlines are highlighted so you can plan ahead and avoid last-minute surprises.',
-    showAction: true,
-    tooltip: tooltipStyle
-  },
-  {
-    id: 'create-matter',
-    target: 'create-matter',
-    title: 'Ready to Get Started?',
-    content: 'Click here to create your first matter. PractoCore will automatically calculate all your deadlines based on your jurisdiction\'s rules.',
-    showAction: true,
-    tooltip: tooltipStyle
-  },
-]
-
-const onTourComplete = () => {
-  markTourCompleted();
-}
-
-const { hasPermission } = usePermissions()
-
-const activePlan = usePlanActive();
-// Why matter creation is blocked, or undefined when it's actionable. Drives
-// both :disabled and :title so an expired subscription makes it inaccessible.
-const createDisabledReason = computed(() => {
-  if (isOffline.value) return 'Requires internet connection';
-  if (!activePlan.value?.active) return 'Your subscription has expired — renew to add matters';
-  return undefined;
-});
-
-const isUrgent = (matter: any) =>
-  matter?.stats?.nextDeadlineDate &&
-  dayjs(matter.stats.nextDeadlineDate).diff(dayjs(), 'day') < 5
-
-const pressingDeadlines = computed(() => {
-  if (!statistics.value?.matters) return []
-  return statistics.value.matters
-    .flatMap((m: any) =>
-      (m.deadlines || [])
-        .filter((d: any) => d.status === 'pending')
-        .map((d: any) => ({ ...d, matterName: m.name, matterId: m.id }))
-    )
-    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 7)
-})
-
-type Urgency = 'overdue' | 'critical' | 'warning' | 'normal'
-
-const deadlineUrgency = (date: string): Urgency => {
-  const days = dayjs(date).diff(dayjs(), 'day')
-  if (days < 0) return 'overdue'
-  if (days <= 2) return 'critical'
-  if (days <= 7) return 'warning'
-  return 'normal'
-}
-
-const deadlineCardClasses = (date: string) => {
-  const u = deadlineUrgency(date)
-  if (u === 'overdue') return 'bg-destructive/8 border-destructive/40'
-  if (u === 'critical') return 'bg-destructive/5 border-destructive/25'
-  if (u === 'warning') return 'bg-accent-warning/5 border-accent-warning/30'
-  return 'bg-muted border-border'
-}
-
-const deadlineNumberClass = (date: string) => {
-  const u = deadlineUrgency(date)
-  if (u === 'overdue' || u === 'critical') return 'text-destructive'
-  if (u === 'warning') return 'text-accent-warning'
-  return 'text-foreground'
-}
-
-const countdownDisplay = (date: string): { number: string; unit: string } => {
-  const days = dayjs(date).diff(dayjs(), 'day')
-  if (days < 0) return { number: String(Math.abs(days)), unit: Math.abs(days) === 1 ? 'day over' : 'days over' }
-  if (days === 0) return { number: 'Today', unit: '' }
-  if (days === 1) return { number: '1', unit: 'day' }
-  return { number: String(days), unit: 'days' }
-}
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full items-center overflow-hidden">
-    <TourGuideManager ref="welcomeTourGuide" :steps="tourSteps" @complete="onTourComplete" @skip="onTourComplete"/>
-    <!-- Mobile header (hidden on xs+) -->
-    <div class="flex flex-row xs:hidden w-full items-center justify-between p-3 border-b">
-      <div class="flex flex-col">
-        <span class="text-sm text-muted-foreground">{{ welcomeMessage }}</span>
-        <span class="font-medium">{{ getSignedInUser()?.name }}</span>
+  <div class="relative flex h-full flex-col">
+    <!-- Chat toolbar — new chat + history (the global sidebar handles app nav) -->
+    <div class="lg:hidden flex h-12 shrink-0 items-center gap-2 border-b px-4">
+      <SidebarTrigger class="lg:hidden" />
+      <div v-if="hasThread" class="flex items-center gap-2">
+        <div class="grid size-6 place-items-center rounded-full bg-primary text-primary-foreground">
+          <Sparkles class="size-3.5"/>
+        </div>
+        <span class="text-sm font-semibold">PractoAI</span>
       </div>
+      <span v-else class="text-sm font-semibold">Assistant</span>
+      <div class="ml-auto flex items-center gap-1">
+        <!-- Conversation history -->
+        <Popover v-if="$viewport.isGreaterThan('tablet')">
+          <PopoverTrigger as-child>
+            <Button size="icon-sm" variant="ghost" title="Conversation history">
+              <History class="size-4"/>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" class="w-72 p-0">
+            <div class="flex items-center justify-between border-b px-3 py-2">
+              <span class="text-sm font-semibold">Recent chats</span>
+              <Button size="icon-sm" variant="ghost" title="New chat" @click="newChat">
+                <Plus class="size-4"/>
+              </Button>
+            </div>
+            <div v-if="historyLoading" class="flex justify-center py-6">
+              <Loader2 class="size-4 animate-spin text-muted-foreground"/>
+            </div>
+            <div v-else-if="conversations.length" class="max-h-80 overflow-y-auto py-1">
+              <div v-for="conv in conversations" :key="conv.id"
+                   class="group/conv flex items-center gap-1 px-1.5">
+                <button
+                    class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                    :class="conversationId === conv.id ? 'bg-accent' : ''"
+                    @click="selectConversation(conv.id)">
+                  <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground"/>
+                  <span class="truncate">{{ conv.title }}</span>
+                </button>
+                <button
+                    class="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/conv:opacity-100"
+                    title="Delete conversation" @click="removeConversation(conv.id)">
+                  <Trash2 class="size-3.5"/>
+                </button>
+              </div>
+            </div>
+            <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No conversations yet.</p>
+          </PopoverContent>
+        </Popover>
+        <Sheet v-else>
+          <SheetTrigger as-child>
+            <Button size="icon-sm" variant="secondary" title="Conversation history">
+              <History class="size-4"/>
+            </Button>
+          </SheetTrigger>
+          <SheetContent class="w-72 p-0">
+            <SheetHeader class="border-b">
+              <span class="text-sm font-semibold">Recent chats</span>
+            </SheetHeader>
 
-      <div class="flex flex-row items-center gap-2">
-        <SharedDarkModeSwitch/>
+            <div v-if="historyLoading" class="flex justify-center py-6">
+              <Loader2 class="size-4 animate-spin text-muted-foreground"/>
+            </div>
+            <div v-else-if="conversations.length" class="flex flex-col gap-2 max-h-80 overflow-y-auto py-1">
+              <div class="flex flex-row px-2">
+                <SheetClose class="w-full">
+                  <Button size="sm" variant="outline" class="w-full" title="New chat" @click="newChat">
+                    <Plus class="size-4"/>
+                    New Chat
+                  </Button>
+                </SheetClose>
+              </div>
 
-        <SharedNotifications>
-          <Button size="icon" variant="secondary" aria-label="Open notifications">
-            <Bell aria-hidden="true"/>
-          </Button>
-        </SharedNotifications>
-        <SharedProfile/>
+              <div class="flex flex-col gap-1">
+                <SheetClose v-for="conv in conversations" :key="conv.id" class="w-full">
+                  <div
+                      class="group/conv flex items-center gap-1 px-1.5">
+                    <button
+                        class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                        :class="conversationId === conv.id ? 'bg-accent' : ''"
+                        @click="selectConversation(conv.id)">
+                      <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground"/>
+                      <span class="truncate">{{ conv.title }}</span>
+                    </button>
+                  </div>
+                </SheetClose>
+              </div>
+            </div>
+            <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No conversations yet.</p>
+          </SheetContent>
+        </Sheet>
+        <Button size="sm" variant="outline" title="New chat" @click="newChat">
+          <Plus class="size-4"/>
+
+          New Chat
+        </Button>
       </div>
     </div>
 
-    <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
-      <!-- Page header + stats row (desktop/tablet only) -->
-      <div class="hidden xs:flex flex-col gap-3.5 p-3 lg:p-5 lg:flex-row lg:items-center justify-between border-b">
-        <div class="xs:flex flex-col hidden">
-          <h1 class="text-xl lg:text-2xl font-semibold ibm-plex-serif">
-            {{ welcomeMessage }}, {{ getSignedInUser().name.split(" ").at(0) }}
-          </h1>
-          <p class="text-sm text-muted-foreground">Welcome to PractoCore, Your Litigation Deadline Management Expert</p>
-        </div>
-
-        <div data-tour-guide="statistics" class="flex flex-col xs:grid xs:grid-cols-2 lg:flex lg:flex-row gap-3">
-          <div class="flex flex-col p-3 border bg-background">
-            <span class="text-lg font-medium">{{ statistics?.completedDeadlines ?? '—' }}</span>
-            <span class="text-xs text-muted-foreground">Completed Deadlines</span>
-          </div>
-
-          <div class="flex flex-col p-3 border bg-background">
-            <span class="text-lg font-medium">{{ statistics?.activeDeadlines ?? '—' }}</span>
-            <span class="text-xs text-muted-foreground">Active Deadlines</span>
-          </div>
-
-          <div
-            class="flex flex-col p-3 border bg-background"
-            :class="{ 'border-destructive': statistics?.missedDeadlines > 0 }"
-          >
-            <span
-              class="text-lg font-medium"
-              :class="{ 'text-destructive': statistics?.missedDeadlines > 0 }"
-            >{{ statistics?.missedDeadlines ?? '—' }}</span>
-            <span class="text-xs text-muted-foreground">Missed Deadlines</span>
-          </div>
-
-          <div
-            class="flex flex-col p-3 border bg-background"
-            :class="{ 'border-amber-500': statistics?.unassignedDeadlines > 0 }"
-          >
-            <span
-              class="text-lg font-medium"
-              :class="{ 'text-amber-600 dark:text-amber-500': statistics?.unassignedDeadlines > 0 }"
-            >{{ statistics?.unassignedDeadlines ?? '—' }}</span>
-            <span class="text-xs text-muted-foreground">Unassigned</span>
+    <!-- ░░ Scrollable content ░░ -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
+      <!-- Empty state — light "home" summary -->
+      <div v-if="!hasThread" class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-10">
+        <!-- Stateful greeting -->
+        <div class="flex items-center gap-3">
+          <div class="min-w-0">
+            <h1 class="text-lg font-semibold ibm-plex-serif leading-tight">{{ greetingTime }}, {{ firstName }}</h1>
+            <p class="text-sm text-muted-foreground">{{ greetingSummary }}</p>
           </div>
         </div>
-      </div>
 
-      <!-- Onboarding checklist -->
-      <SharedOnboardingChecklist
-        :matter-count="statistics?.matters?.length ?? 0"
-        :fulfilled-deadline-count="statistics?.completedDeadlines ?? 0"
-        :is-loaded="!loading"
-      />
-
-      <!-- Mobile pressing deadlines strip -->
-      <div class="xs:hidden border-b">
-        <div class="flex flex-row items-baseline gap-1.5 px-3 pt-3 pb-2">
-          <h2 class="text-sm font-semibold ibm-plex-sans">Next Up</h2>
-          <span v-if="!loading && pressingDeadlines.length > 0" class="text-xs text-muted-foreground">
-            {{ pressingDeadlines.length }} deadline{{ pressingDeadlines.length !== 1 ? 's' : '' }}
-          </span>
+        <!-- Needs you — assigned deadlines due soon -->
+        <div v-if="homeLoading"
+             class="flex items-center gap-2 rounded-xl border px-4 py-5 text-sm text-muted-foreground">
+          <Loader2 class="size-4 animate-spin"/>
+          Loading your day…
         </div>
-
-        <!-- Loading skeletons -->
-        <div v-if="loading" class="flex flex-row gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3">
-          <div v-for="i in 3" :key="i" class="shrink-0 rounded-xl bg-muted animate-pulse border border-border" style="width: 152px; height: 116px;"></div>
-        </div>
-
-        <!-- Deadline cards -->
-        <div v-else-if="pressingDeadlines.length > 0" class="flex flex-row gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3 " style="scroll-snap-type: x mandatory; scroll-padding-left: 16px;">
-          <NuxtLink
-            v-for="dl in pressingDeadlines"
-            :key="dl.id"
-            :to="`/main/matters/matter/${dl.matterId}`"
-            class="flex flex-col justify-between w-[65vw] shrink-0 rounded-xl border p-3 gap-2 active:opacity-80 transition-opacity duration-100"
-            :class="deadlineCardClasses(dl.date)"
-            style="min-height: 116px; scroll-snap-align: start;"
-          >
-            <div class="flex flex-col gap-0.5">
-              <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">{{ dl.matterName }}</span>
-              <span class="text-sm font-medium leading-snug line-clamp-2 text-foreground">{{ dl.name || 'Deadline' }}</span>
-            </div>
-            <div class="flex flex-col gap-0">
-              <div class="flex flex-row items-baseline gap-1">
-                <span class="text-2xl font-semibold tabular-nums leading-none ibm-plex-sans" :class="deadlineNumberClass(dl.date)">
-                  {{ countdownDisplay(dl.date).number }}
-                </span>
-                <span v-if="countdownDisplay(dl.date).unit" class="text-xs font-medium leading-none" :class="deadlineNumberClass(dl.date)">
-                  {{ countdownDisplay(dl.date).unit }}
-                </span>
+        <div v-else-if="deadlineGroups.length" class="rounded overflow-hidden border lg:bg-background bg-muted">
+          <div class="flex items-center gap-2 border-b px-4 py-2.5">
+            <CalendarClock class="size-4 text-muted-foreground"/>
+            <span class="text-sm font-semibold">Needs you</span>
+            <Badge variant="secondary" class="ml-auto px-1.5 text-xs">{{ dueThisWeekCount }}</Badge>
+          </div>
+          <div v-for="group in deadlineGroups" :key="group.key">
+            <p class="px-4 pt-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide" :class="group.tone">
+              {{ group.label }}
+            </p>
+            <button v-for="d in group.items" :key="d.id"
+                    class="group/dl flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-accent"
+                    @click="openDeadline(d)">
+              <CircleAlert v-if="group.key === 'overdue'" class="size-4 shrink-0 text-destructive"/>
+              <Clock v-else class="size-4 shrink-0 text-muted-foreground"/>
+              <div class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-sm font-medium">{{ d.name || 'Deadline' }}</span>
+                <span class="truncate text-xs text-muted-foreground">{{ d.expand?.matter?.name || 'Matter' }}</span>
               </div>
-              <span class="text-[10px] text-muted-foreground mt-0.5">{{ dayjs(dl.date).format('MMM D, YYYY') }}</span>
-            </div>
-          </NuxtLink>
-        </div>
-
-        <!-- No deadlines state -->
-        <div v-else class="px-3 pb-3">
-          <p class="text-sm text-muted-foreground">No upcoming deadlines.</p>
-        </div>
-      </div>
-
-      <!-- Main content grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-4 h-full">
-        <!-- Upcoming deadlines column -->
-        <div class="flex flex-col lg:col-span-3 border-r p-3 gap-3">
-          <div class="flex flex-row justify-between">
-            <div class="flex flex-row gap-1 items-center">
-              <h2 class="font-semibold ibm-plex-sans">Upcoming Deadlines</h2>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button size="icon" class="size-11" variant="ghost" aria-label="Help and tour options">
-                    <Info aria-hidden="true"/>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem @click="restartTour" class="cursor-pointer">
-                    Take a tour
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-<!--            <SharedMattersCreateMatter data-tour-guide="create-matter" @created="reloadStatistics"-->
-<!--                                       v-if="statistics?.matters?.length === 0">-->
-<!--            </SharedMattersCreateMatter>-->
-              <Button v-if="hasPermission('canCreateMatters') || statistics?.matters?.length === 0" data-tour-guide="create-matter" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="!!createDisabledReason" :title="createDisabledReason">
-                <Plus aria-hidden="true"/>
-                Create Matter
-              </Button>
-            <div class="flex flex-row items-center gap-2" v-else>
-              <NuxtLink to="/main/matters">
-                <Button size="sm" variant="secondary">View All</Button>
-              </NuxtLink>
-
-<!--              <SharedMattersCreateMatter @created="reloadStatistics">-->
-<!--              </SharedMattersCreateMatter>-->
-                <Button v-if="hasPermission('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" data-tour-guide="create-matter" size="icon-sm" aria-label="Create new matter" :disabled="!!createDisabledReason" :title="createDisabledReason">
-                  <Plus aria-hidden="true"/>
-                </Button>
-            </div>
+              <span class="shrink-0 text-xs font-medium" :class="group.tone">{{ dueLabel(d.date) }}</span>
+              <span
+                  class="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-primary group-hover/dl:opacity-100"
+                  title="Ask PractoAI about this"
+                  @click.stop="askAbout(`Tell me about the “${d.name}” deadline on ${d.expand?.matter?.name || 'this matter'} and what I need to do.`)">
+                                    <Sparkles class="size-3.5"/>
+                                </span>
+            </button>
           </div>
-
-          <XyzTransition data-tour-guide="upcoming" xyz="fade" mode="out-in">
-            <div v-if="loading"
-                 class="flex flex-col h-32 w-full bg-muted border rounded-xl place-items-center justify-center">
-              <Loader class="size-5 animate-spin" aria-hidden="true"/>
-              <span class="sr-only">Loading deadlines</span>
-            </div>
-
-            <div v-else-if="statistics?.matters?.length > 0"
-                 class="flex flex-col border bg-muted divide-y overflow-hidden rounded-xl">
-              <NuxtLink
-                v-for="matter in statistics?.matters"
-                :key="matter?.id"
-                :to="`/main/matters/matter/${matter?.id}`"
-                :aria-label="`View matter: ${matter?.name}`"
-              >
-                <div class="flex flex-col lg:flex-row lg:items-center h-full justify-between hover:bg-accent hover:text-primary transition-colors ease-out duration-150">
-                  <div class="flex flex-col p-3 w-full">
-                    <div class="flex flex-row gap-1 items-center">
-                      <span class="font-semibold text-sm text-muted-foreground">Matter</span>
-                      <div class="size-1 rounded-full bg-muted-foreground" aria-hidden="true"></div>
-                      <span class="font-semibold text-sm text-muted-foreground">{{ matter?.caseNumber }}</span>
-                    </div>
-                    <span class="font-medium text-lg">{{ matter?.name }}</span>
-                  </div>
-
-                  <div class="flex flex-col lg:flex-row h-full w-full lg:items-center">
-                    <div class="flex flex-col p-3 px-5 h-full justify-center">
-                      <span class="font-semibold text-sm text-muted-foreground">Events</span>
-                      <div class="flex flex-row gap-1 items-center">
-                        <CalendarIcon class="size-4" aria-hidden="true"/>
-                        <span class="font-medium text-sm">{{ matter?.stats?.upcoming }} events</span>
-                      </div>
-                    </div>
-
-                    <div class="flex flex-col p-3 px-5 h-full justify-center">
-                      <span class="font-semibold text-sm text-muted-foreground">Completion</span>
-                      <div v-if="matter?.stats?.completion > 0" class="flex flex-row gap-1 items-center">
-                        <CircleProgressBar :value="matter?.stats?.completion" :max="100" rounded
-                                           class="size-4" strokeWidth="10" aria-hidden="true"/>
-                        <span class="font-medium text-sm">{{ matter?.stats?.completion }}%</span>
-                      </div>
-                      <span v-else aria-label="No completion data">—</span>
-                    </div>
-
-                    <div class="flex flex-col p-3 px-5 h-full justify-center">
-                      <span class="font-semibold text-sm text-muted-foreground">Next Deadline</span>
-                      <div
-                        class="flex flex-row gap-1 items-center"
-                        :class="{ 'text-destructive font-semibold': isUrgent(matter) }"
-                      >
-                        <AlertTriangle v-if="isUrgent(matter)" class="size-4" aria-hidden="true"/>
-                        <Clock v-else class="size-4" aria-hidden="true"/>
-                        <span v-if="matter" class="font-medium text-sm">
-                          {{ dayjs(matter?.stats?.nextDeadlineDate).fromNow() }}
-                          <span v-if="isUrgent(matter)" class="sr-only">(urgent)</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </NuxtLink>
-            </div>
-
-            <div v-else class="flex flex-col w-full bg-muted border p-8 rounded-xl items-center gap-4 text-center">
-              <XCircle class="size-12 text-muted-foreground" aria-hidden="true"/>
-              <div class="flex flex-col gap-1">
-                <p class="font-semibold text-foreground">No matters yet</p>
-                <p class="text-sm text-muted-foreground">Create your first matter to start tracking litigation deadlines automatically.</p>
-              </div>
-                <Button v-if="hasPermission('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" class="w-fit" :disabled="!!createDisabledReason" :title="createDisabledReason">
-                  <Plus class="size-4" aria-hidden="true"/>
-                  Create Your First Matter
-                </Button>
-<!--              <SharedMattersCreateMatter class="w-fit" @created="reloadStatistics">-->
-<!--              </SharedMattersCreateMatter>-->
-            </div>
-          </XyzTransition>
         </div>
 
-        <!-- Calendar column -->
-        <div class="flex flex-col lg:col-span-1 p-3 gap-3">
-          <div class="flex flex-row justify-between items-center">
-            <h2 class="font-semibold">Your Calendar</h2>
+        <!-- Recent matters -->
+        <div v-if="!homeLoading && recentMatters.length" class="flex flex-col gap-1.5">
+          <div class="flex flex-row items-center justify-between">
+            <p class="font-medium ibm-plex-serif">Recent matters</p>
 
-            <NuxtLink to="/main/calendar">
-              <Button size="sm" variant="secondary">Details</Button>
+            <NuxtLink to="/main/matters">
+              <Button size="xs" variant="secondary">View All</Button>
             </NuxtLink>
           </div>
-
-          <div data-tour-guide="calendar" class="flex flex-col border p-2 rounded-xl">
-            <PageComponentsHomeEventCalendar/>
+          <div class="flex flex-col">
+            <button v-for="m in recentMatters" :key="m.id"
+                    class="group/m flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50"
+                    @click="openMatter(m.id)">
+              <div class="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                <Scale class="size-3.5"/>
+              </div>
+              <div class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-sm font-medium">{{ m.name || 'Matter' }}</span>
+                <span v-if="m.caseNumber" class="truncate text-xs text-muted-foreground">{{ m.caseNumber }}</span>
+              </div>
+              <span
+                  class="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-primary group-hover/m:opacity-100"
+                  title="Ask PractoAI about this"
+                  @click.stop="askAbout(`Summarise recent activity on the matter “${m.name}”.`)">
+                                    <Sparkles class="size-3.5"/>
+                                </span>
+              <ArrowRight
+                  class="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/m:translate-x-0.5"/>
+            </button>
           </div>
         </div>
+
+        <!-- Smart prompts -->
+        <div class="flex flex-wrap gap-2">
+          <button v-for="p in smartPrompts" :key="p"
+                  class="rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  @click="send(p)">
+            {{ p }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Thread -->
+      <div v-else class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
+        <template v-for="(msg, i) in messages" :key="i">
+          <!-- Tool event -->
+          <div v-if="msg.role === 'tool-event'" class="flex justify-center">
+                            <span
+                                class="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
+                                <Check v-if="msg.status === 'approved'" class="size-3 text-emerald-500"/>
+                                <X v-else class="size-3"/>
+                                {{ msg.status === 'approved' ? 'Approved' : 'Dismissed' }}: {{ msg.content }}
+                            </span>
+          </div>
+
+          <!-- User -->
+          <div v-else-if="msg.role === 'user'" class="flex justify-end">
+            <div class="flex max-w-[80%] flex-col items-end gap-1">
+              <div v-if="messageAttachments(msg.content).length" class="flex flex-wrap justify-end gap-1">
+                <template v-for="(att, j) in messageAttachments(msg.content)" :key="j">
+                  <img v-if="att.type === 'image'"
+                       :src="`data:${att.source.media_type};base64,${att.source.data}`"
+                       :alt="`Attachment ${j + 1}`" class="size-16 rounded-md border object-cover"/>
+                  <span v-else
+                        class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs">
+                                            <FileText class="size-3 shrink-0"/> {{ docLabel(att as AiDocumentBlock) }}
+                                        </span>
+                </template>
+              </div>
+              <div v-if="messageText(msg.content)"
+                   class="whitespace-pre-wrap rounded-2xl bg-muted px-4 py-2.5 text-sm leading-relaxed">
+                {{ messageText(msg.content) }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Assistant -->
+          <div v-else class="flex items-start gap-2.5">
+            <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+              <Sparkles class="size-3.5"/>
+            </div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1">
+              <!-- Collapsed activity summary -->
+              <div v-if="msg.steps && msg.steps.length" class="mb-0.5">
+                <button type="button"
+                        class="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        @click="msg.stepsOpen = !msg.stepsOpen">
+                  <Check class="size-3 text-emerald-500"/>
+                  <span>Worked for {{ formatDuration(msg.durationMs ?? 0) }}</span>
+                  <component :is="msg.stepsOpen ? ChevronDown : ChevronRight" class="size-3"/>
+                </button>
+                <ul v-if="msg.stepsOpen" class="ml-1 mt-1.5 flex flex-col gap-1 border-l border-border pl-3">
+                  <li v-for="step in msg.steps" :key="step.id"
+                      class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <component :is="stepIcon(step.tool)" class="size-3 shrink-0 opacity-70"/>
+                    <span class="truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{
+                        step.detail
+                      }}</span></span>
+                  </li>
+                </ul>
+              </div>
+              <div
+                  class="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none text-sm leading-relaxed"
+                  v-html="renderMarkdown(messageText(msg.content))"/>
+            </div>
+          </div>
+        </template>
+
+        <!-- Live working panel -->
+        <div v-if="loading" class="flex items-start gap-2.5">
+          <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+            <Sparkles class="size-3.5"/>
+          </div>
+          <div class="min-w-[11rem] pt-1">
+            <div class="flex items-center gap-1.5 text-xs font-medium">
+              <Loader2 class="size-3.5 animate-spin text-muted-foreground"/>
+              <span>Working…</span>
+            </div>
+            <ul v-if="activeSteps.length" class="mt-2 flex flex-col gap-1.5">
+              <li v-for="(step, idx) in activeSteps" :key="step.id"
+                  class="flex items-center gap-2 text-xs">
+                <Loader2 v-if="idx === activeSteps.length - 1"
+                         class="size-3 shrink-0 animate-spin text-muted-foreground"/>
+                <Check v-else class="size-3 shrink-0 text-emerald-500"/>
+                <span class="truncate"
+                      :class="idx === activeSteps.length - 1 ? 'text-foreground' : 'text-muted-foreground'">
+                                        {{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{
+                    step.detail
+                  }}</span>
+                                    </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Pending proposal -->
+        <div v-if="pendingProposal" class="max-w-[85%]">
+          <ProposalCard :proposal="pendingProposal" variant="panel" :loading="proposalLoading"
+                        @approve="approveProposal" @dismiss="dismissProposal"/>
+        </div>
+
+        <div ref="messagesEnd"/>
       </div>
     </div>
+
+    <!-- ░░ Composer (widget-style InputGroup) ░░ -->
+    <div class="shrink-0 border-t px-4 py-3">
+      <div class="mx-auto flex w-full max-w-3xl flex-col gap-2">
+        <!-- Active context badges -->
+        <div v-if="selectedItems.length" class="flex flex-wrap gap-1">
+          <Badge v-for="item in selectedItems" :key="item.id" variant="secondary" class="flex items-center gap-1 pr-1">
+            <component :is="contextIcons[item.type]" class="size-3 shrink-0"/>
+            <span class="max-w-[160px] truncate text-xs">{{ item.label }}</span>
+            <button class="ml-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    @click="removeItem(item.id)">
+              <X class="size-3"/>
+            </button>
+          </Badge>
+        </div>
+
+        <!-- Pending attachment chips -->
+        <div v-if="attachments.length" class="flex flex-wrap gap-1.5">
+          <div v-for="att in attachments" :key="att.id"
+               class="flex items-center gap-1.5 rounded-md border bg-background px-1 py-1 text-xs">
+            <img v-if="att.mime.startsWith('image/')" :src="att.dataUrl" :alt="att.name"
+                 class="size-8 shrink-0 rounded object-cover"/>
+            <FileText v-else class="size-4 shrink-0 text-muted-foreground"/>
+            <span class="max-w-[140px] truncate font-medium">{{ att.name }}</span>
+            <span class="text-muted-foreground">{{ formatBytes(att.size) }}</span>
+            <button class="ml-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    :aria-label="`Remove ${att.name}`" @click="removeAttachment(att.id)">
+              <X class="size-3"/>
+            </button>
+          </div>
+        </div>
+
+        <input ref="fileInput" type="file" multiple
+               accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log"
+               class="hidden" @change="onFilesChosen"/>
+
+        <InputGroup>
+          <InputGroupAddon align="block-start">
+            <Button size="sm" variant="outline"
+                    :class="selectedItems.length ? 'border-primary/50 text-primary' : ''"
+                    @click="contextDrawerOpen = true">
+              <AtSign class="size-4"/>
+              Add Context
+              <Badge v-if="selectedItems.length" variant="secondary" class="ml-1 px-1 text-xs">
+                {{ selectedItems.length }}
+              </Badge>
+            </Button>
+          </InputGroupAddon>
+
+          <InputGroupTextarea v-model="draft" placeholder="Ask, Search or Chat…" @keydown="handleKeydown"/>
+
+          <InputGroupAddon align="block-end">
+            <InputGroupButton variant="outline" size="icon-sm" title="Attach a PDF or image"
+                              @click="openFilePicker">
+              <Paperclip class="size-4"/>
+              <span class="sr-only">Attach a PDF or image</span>
+            </InputGroupButton>
+            <InputGroupButton variant="outline" size="sm" :disabled="!canEnhance"
+                              title="Enhance prompt — rewrite it for better results" @click="enhancePrompt">
+              <Loader2 v-if="enhancing" class="size-4 animate-spin"/>
+              <Sparkles v-else class="size-4"/>
+              {{ enhancing ? 'Enhancing…' : 'Enhance' }}
+            </InputGroupButton>
+            <Separator orientation="vertical" class="ml-auto !h-4"/>
+            <InputGroupButton variant="default" class="rounded-full" size="icon-sm"
+                              :disabled="!canSend" @click="send()">
+              <ArrowUpIcon class="size-4"/>
+              <span class="sr-only">Send</span>
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </div>
+    </div>
+
+    <!-- ░░ Context picker — inline overlay (no nested modal) ░░ -->
+    <Transition name="context-panel">
+      <div v-if="contextDrawerOpen" class="absolute inset-0 z-30 flex flex-col justify-end">
+        <div class="absolute inset-0 bg-black/40" @click="contextDrawerOpen = false"/>
+        <div class="relative flex max-h-[75vh] min-h-0 flex-col rounded-t-xl border-t bg-background shadow-xl">
+          <div class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
+            <AtSign class="size-4 text-muted-foreground"/>
+            <span class="text-sm font-semibold">Add Context</span>
+            <Button size="icon-sm" variant="ghost" class="ml-auto" @click="contextDrawerOpen = false">
+              <X class="size-4"/>
+            </Button>
+          </div>
+          <div class="shrink-0 border-b px-4 pb-2 pt-3">
+            <input v-model="contextSearch" placeholder="Search matters, deadlines, lawyers…"
+                   class="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"/>
+          </div>
+          <Tabs v-model="contextTab" class="flex min-h-0 flex-1 flex-col">
+            <TabsList class="h-auto shrink-0 justify-start gap-1 rounded-none border-b bg-transparent px-4 py-2">
+              <TabsTrigger value="matter" class="gap-1.5 text-xs">
+                <Building2 class="size-3"/>
+                Matters
+              </TabsTrigger>
+              <TabsTrigger value="deadline" class="gap-1.5 text-xs">
+                <Clock class="size-3"/>
+                Deadlines
+              </TabsTrigger>
+              <TabsTrigger value="user" class="gap-1.5 text-xs">
+                <User class="size-3"/>
+                Lawyers
+              </TabsTrigger>
+            </TabsList>
+            <div v-if="contextLoading" class="flex items-center justify-center p-8">
+              <Loader2 class="size-5 animate-spin text-muted-foreground"/>
+            </div>
+            <template v-else>
+              <TabsContent value="matter" class="mt-0 flex-1 overflow-y-auto pb-8">
+                <button v-for="m in filteredMatters" :key="m.id"
+                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
+                        :class="isSelected(m.id) ? 'bg-accent' : ''"
+                        @click="toggleItem({ type: 'matter', id: m.id, label: m.name, sublabel: m.caseNumber })">
+                  <div class="flex min-w-0 flex-1 flex-col"><span class="truncate text-sm font-medium">{{
+                      m.name
+                    }}</span><span class="text-xs text-muted-foreground">{{ m.caseNumber }}</span></div>
+                  <Check v-if="isSelected(m.id)" class="size-4 shrink-0 text-primary"/>
+                </button>
+                <p v-if="!filteredMatters.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No matters
+                  found.</p>
+              </TabsContent>
+              <TabsContent value="deadline" class="mt-0 flex-1 overflow-y-auto pb-8">
+                <button v-for="d in filteredDeadlines" :key="d.id"
+                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
+                        :class="isSelected(d.id) ? 'bg-accent' : ''"
+                        @click="toggleItem({ type: 'deadline', id: d.id, label: d.name, sublabel: d.matterName })">
+                  <div class="flex min-w-0 flex-1 flex-col"><span class="truncate text-sm font-medium">{{
+                      d.name
+                    }}</span><span class="truncate text-xs text-muted-foreground">{{ d.matterName }}</span></div>
+                  <Check v-if="isSelected(d.id)" class="size-4 shrink-0 text-primary"/>
+                </button>
+                <p v-if="!filteredDeadlines.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No
+                  pending deadlines found.</p>
+              </TabsContent>
+              <TabsContent value="user" class="mt-0 flex-1 overflow-y-auto pb-8">
+                <button v-for="u in filteredUsers" :key="u.id"
+                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
+                        :class="isSelected(u.id) ? 'bg-accent' : ''"
+                        @click="toggleItem({ type: 'user', id: u.id, label: u.name, sublabel: u.role })">
+                  <Avatar class="size-7 shrink-0">
+                    <AvatarImage :src="u.avatar ?? ''" :alt="u.name"/>
+                    <AvatarFallback class="bg-primary text-[10px] text-primary-foreground">{{
+                        initials(u.name)
+                      }}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div class="flex min-w-0 flex-1 flex-col"><span class="text-sm font-medium">{{ u.name }}</span><span
+                      v-if="u.role" class="text-xs capitalize text-muted-foreground">{{ u.role }}</span></div>
+                  <Check v-if="isSelected(u.id)" class="size-4 shrink-0 text-primary"/>
+                </button>
+                <p v-if="!filteredUsers.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No lawyers
+                  found.</p>
+              </TabsContent>
+            </template>
+          </Tabs>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+/* Context picker slide-up */
+.context-panel-enter-active,
+.context-panel-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.context-panel-enter-active > div:last-child,
+.context-panel-leave-active > div:last-child {
+  transition: transform 0.25s ease;
+}
+
+.context-panel-enter-from,
+.context-panel-leave-to {
+  opacity: 0;
+}
+
+.context-panel-enter-from > div:last-child,
+.context-panel-leave-to > div:last-child {
+  transform: translateY(100%);
+}
+</style>

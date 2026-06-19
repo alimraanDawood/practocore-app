@@ -1,12 +1,12 @@
 <template>
-  <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-hidden border-x">
-    <div class="flex flex-row gap-2 w-full p-3 justify-between">
-      <div class="flex flex-col">
-        <h1 class="text-2xl font-bold ibm-plex-serif">{{ currentTab === 'invitations' ? 'Invitations' : 'Team' }}</h1>
-        <p class="hidden lg:block text-sm text-muted-foreground">MMAKS Advocates</p>
+  <div class="flex flex-col w-full h-full overflow-hidden">
+    <div class="flex flex-row gap-2 w-full p-3 justify-between border-b">
+      <div class="flex flex-row items-center">
+        <SidebarTrigger class="lg:hidden" />
+        <h1 class="text-xl font-bold ibm-plex-serif">{{ currentTab === 'invitations' ? 'Invitations' : 'Team' }}</h1>
       </div>
 
-      <div class="flex flex-row gap-3">
+      <div class="hidden lg:flex flex-row gap-3">
         <ImportLawyers @imported="onInvited">
           <Button variant="outline" class="hidden lg:flex"><Download class="size-4 mr-2" /> Import</Button>
         </ImportLawyers>
@@ -20,7 +20,17 @@
       </div>
     </div>
 
-    <div class="flex flex-col gap-2 lg:flex-row justify-between w-full p-3 border-y">
+    <div class="lg:hidden flex flex-row gap-3 p-3">
+      <ImportLawyers @imported="onInvited" class="w-full">
+        <Button variant="outline" class="w-full flex-1"><Download class="size-4 mr-2" /> Import</Button>
+      </ImportLawyers>
+
+      <InviteUser @invited="onInvited" >
+        <Button class="w-full flex-1"><Plus /> Add Lawyer</Button>
+      </InviteUser>
+    </div>
+
+    <div class="flex flex-col gap-2 lg:flex-row justify-between w-full p-3 border-b">
       <div class="flex flex-row gap-3">
         <InputGroup>
           <InputGroupInput :placeholder="currentTab === 'invitations' ? 'Search invitations...' : 'Search...'" v-model="searchQuery" />

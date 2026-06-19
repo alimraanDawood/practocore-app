@@ -3,8 +3,11 @@ import {
   AtSign, ArrowUpIcon, Paperclip, Globe,
   Mic, MicOff, VolumeX, Volume2, X, Check, Loader2, Sparkles,
   Building2, Clock, User,
-  History, Plus, Trash2, MessageSquare, Settings, Lock,
+  History, Plus, Trash2, MessageSquare, Settings, Lock, Zap,
+  FileText, Briefcase, ArrowRight, Bell,
+  Search, BookOpen, ChevronRight, ChevronDown, Download, FileType2,
 } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
 import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
 import { Sheet, SheetContent, SheetTrigger } from '~/components/ui/sheet';
@@ -14,13 +17,16 @@ import type { VoiceEntry } from '~/composables/useSpeech';
 import { marked } from 'marked';
 import { getSignedInUser } from '~/services/auth';
 import {
-  sendAiMessage, confirmAiProposal,
+  sendAiMessageStream, confirmAiProposal, improvePrompt,
   listConversations, getConversation, deleteConversation,
-  type AiMessage, type AiResponse, type AiContext, type AiConversationSummary,
-  type ConvDisplayMessage,
+  type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
+  type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
+  type ConvDisplayMessage, type AiStreamStep,
 } from '~/services/ai';
 import { getMatters, getAllDeadlines } from '~/services/matters';
 import { getOrganisationUsers } from '~/services/admin';
+import { useMattersStore } from '~/stores/matters';
+import AICreditGauge from './AICreditGauge.vue';
 
 marked.use({ breaks: true, gfm: true });
 
@@ -37,7 +43,7 @@ const isDesktop = useMediaQuery('(min-width: 1024px)');
 const {
   isListening, isTranscribing, transcript, audioLevel, micError,
   startListening, stopListening,
-  isSpeaking, ttsSupported, speak, stopSpeaking, unlockAudio,
+  isSpeaking, ttsSupported, caption, speak, speakTimed, stopSpeaking, unlockAudio,
   prefs: speechPrefs, savePrefs,
 } = useSpeech();
 
@@ -50,42 +56,24 @@ const voiceState = ref<VoiceState>('idle');
 // Close audio mode when the sheet closes
 watch(open, (isOpen) => {
   if (!isOpen && audioMode.value) exitAudioMode();
-});
-
-// ── Conversational loop ───────────────────────────────────────────────────────
-
-// Silence detection: after user starts speaking, auto-stop when silence persists
-let hasSpoken = false;
-let silenceTimer: ReturnType<typeof setTimeout> | null = null;
-
-function clearSilenceTimer() {
-  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-}
-
-watch(isListening, (listening) => {
-  if (listening) {
-    hasSpoken = false;
-    clearSilenceTimer();
-    voiceState.value = 'listening';
-  } else {
-    clearSilenceTimer();
-    if (voiceState.value === 'listening') voiceState.value = 'thinking';
+  // Re-arm the credit gate on each open: if the user topped up (e.g. via Billing)
+  // the next send re-validates server-side instead of staying locked from a stale 402.
+  if (isOpen) {
+    creditBlocked.value = false;
+    refreshAiUsage();
   }
 });
 
-// Level above which we count as intentional speech (filters ambient noise / soft background sounds)
-const SPEECH_THRESHOLD = 18;
+// ── Conversational loop ───────────────────────────────────────────────────────
+// End-of-turn is detected server-side by AssemblyAI (it finalises the transcript
+// and stops the stream). We no longer run a client-side silence timer — it
+// competed with the model's turn detection and cut speakers off during pauses.
 
-watch(audioLevel, (level) => {
-  if (!isListening.value || !audioMode.value) return;
-  if (level > SPEECH_THRESHOLD) {
-    hasSpoken = true;
-    clearSilenceTimer();
-  } else if (hasSpoken && !silenceTimer) {
-    silenceTimer = setTimeout(() => {
-      silenceTimer = null;
-      if (isListening.value) stopListening();
-    }, 1600);
+watch(isListening, (listening) => {
+  if (listening) {
+    voiceState.value = 'listening';
+  } else if (voiceState.value === 'listening') {
+    voiceState.value = 'thinking';
   }
 });
 
@@ -129,7 +117,6 @@ watch(isSpeaking, (speaking) => {
 });
 
 watch(micError, () => {
-  clearSilenceTimer();
   voiceState.value = 'idle';
 });
 
@@ -146,7 +133,6 @@ function toggleMic() {
     return;
   }
   if (isListening.value) {
-    clearSilenceTimer();
     stopListening();
   } else {
     stopSpeaking();
@@ -155,7 +141,6 @@ function toggleMic() {
 }
 
 function exitAudioMode() {
-  clearSilenceTimer();
   stopListening();
   stopSpeaking();
   voiceState.value = 'idle';
@@ -218,26 +203,217 @@ const innerRingScale = computed(() => {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
-type ChatMessage = AiMessage | ToolEvent;
+// UI-only message: a tappable card to open a just-created matter. Kept out of the
+// API/history payloads (it isn't an assistant/user turn) — see apiMessages/convMessages.
+type MatterCreated = { role: 'matter-created'; matterId: string; matterName?: string };
+type ReminderCreated = { role: 'reminder-created'; reminderTitle?: string };
+// UI-only card: a freshly generated .docx the user can download. Carries the
+// GeneratedDocuments row id so the card can fetch a file token on demand.
+type DocumentGenerated = {
+  role: 'document-generated';
+  documentId: string;
+  title?: string;
+  kind?: string;
+  filename?: string;
+};
+// Assistant turns optionally carry the activity steps that produced them (streamed
+// mid-turn) plus how long the work took, so the UI can show a collapsible
+// "Worked for Ns" summary. These UI-only fields are stripped before the API payload.
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean };
+type ChatMessage = DisplayAiMessage | ToolEvent | MatterCreated | ReminderCreated | DocumentGenerated;
 
 const messages = ref<ChatMessage[]>([]);
 
-const apiMessages = computed(() =>
-  messages.value.filter((m): m is AiMessage => m.role !== 'tool-event'),
+// UI-only affordance roles never go to the model or the saved transcript.
+const UI_ONLY_ROLES = ['matter-created', 'reminder-created', 'document-generated'];
+
+const apiMessages = computed<AiMessage[]>(() =>
+  messages.value
+    .filter((m): m is DisplayAiMessage => m.role !== 'tool-event' && !UI_ONLY_ROLES.includes(m.role))
+    // Project to the bare {role, content} the API expects — drop UI-only step metadata.
+    .map(m => ({ role: m.role, content: m.content })),
 );
 
 const convMessages = computed<ConvDisplayMessage[]>(() =>
-  messages.value.map(m =>
-    m.role === 'tool-event'
-      ? { role: `tool-event:${m.status}`, content: m.content }
-      : { role: m.role, content: m.content },
-  ),
+  messages.value
+    // UI-only affordance cards are not part of the saved transcript.
+    .filter((m): m is AiMessage | ToolEvent => !UI_ONLY_ROLES.includes(m.role))
+    .map(m =>
+      m.role === 'tool-event'
+        ? { role: `tool-event:${m.status}`, content: m.content }
+        // Persisted history is text-only: flatten any multimodal content to a
+        // string with bracketed placeholders for attachments. Keeps the
+        // conversation row small and the backend's messagesToConvMessages happy.
+        : { role: m.role, content: messageText(m.content) },
+    ),
 );
 const conversationId = ref<string>('');
 const pendingProposal = ref<AiResponse | null>(null);
 const inputText = ref('');
 const loading = ref(false);
 const messagesEnd = ref<HTMLElement | null>(null);
+
+// ── Live activity steps ───────────────────────────────────────────────────────
+// Populated by the streaming chat endpoint as the tool loop runs. The last entry is
+// the in-flight step (spinner); earlier ones are done (check). Cleared when the reply
+// lands — at which point the real tool steps are attached to the assistant message.
+const activeSteps = ref<AiStreamStep[]>([]);
+const workStartedAt = ref(0);
+
+/** Map a tool name to a small status icon for the activity list. */
+function stepIcon(tool: string) {
+  switch (tool) {
+    case 'search_matters':
+    case 'search_procedure':
+    case 'find_applicable_procedure':
+      return Search;
+    case 'web_search':
+      return Globe;
+    case 'get_procedure_overview':
+    case 'get_procedure_step':
+    case 'get_procedure_citation':
+    case 'list_legal_knowledge':
+      return BookOpen;
+    case 'load_skill':
+    case 'list_skills':
+      return Sparkles;
+    case 'fetch_url':
+      return FileText;
+    case '':
+      return Sparkles; // synthetic "Assessing"/"Drafting" bookends
+    default:
+      return Briefcase; // matter/deadline/template reads
+  }
+}
+
+/** Human "Worked for 6s" / "Worked for 1m 12s" from a millisecond duration. */
+function formatDuration(ms: number): string {
+  const secs = Math.max(1, Math.round(ms / 1000));
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
+
+// ── Attachments (PDF + images) ────────────────────────────────────────────────
+// Attached files ride along on the next send as image/document content blocks.
+// Sonnet 4.6 reads PDFs and images natively; the backend caps the total base64
+// payload at 30MB and rejects anything past that.
+interface Attachment {
+  id: string;
+  name: string;
+  /** MIME type — image/*, application/pdf, or a text/Markdown type. */
+  mime: string;
+  /** Raw byte size, for display + cap enforcement. */
+  size: number;
+  /** 'binary' = image/PDF (base64); 'text' = Markdown/plain-text (raw UTF-8). */
+  kind: 'binary' | 'text';
+  /** Base64 data with NO `data:` URI prefix (binary kind only). */
+  base64?: string;
+  /** Full data URL retained for image thumbnails (binary kind only). */
+  dataUrl?: string;
+  /** Raw UTF-8 text (text kind only), sent as an Anthropic text document block. */
+  text?: string;
+}
+
+const attachments = ref<Attachment[]>([]);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+/** Per-file cap (10MB) — generous enough for multi-page PDFs and high-res photos. */
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Total cap across all attachments in one send (25MB raw ≈ 33MB base64). */
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+
+const totalAttachmentBytes = computed(() =>
+  attachments.value.reduce((sum, a) => sum + a.size, 0),
+);
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileToBase64(file: File): Promise<{ base64: string; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      // FileReader returns `data:<mime>;base64,<payload>` — strip the prefix so we
+      // can feed the raw payload to Anthropic's `source.data`.
+      const comma = dataUrl.indexOf(',');
+      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      resolve({ base64, dataUrl });
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+const ACCEPTED_IMAGE_TYPES: AiImageMediaType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+// Text/Markdown/source files. Browsers report an unreliable (often empty) MIME
+// for .md, so we also match on extension. Sent as Anthropic text document blocks.
+const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.text', '.csv', '.json', '.log', '.rtf'];
+function isTextFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  if (TEXT_EXTENSIONS.some(ext => name.endsWith(ext))) return true;
+  const t = file.type;
+  return t.startsWith('text/') || t === 'application/json' || t === 'application/markdown';
+}
+
+function isAcceptedFile(file: File): boolean {
+  return file.type === 'application/pdf'
+    || (ACCEPTED_IMAGE_TYPES as string[]).includes(file.type)
+    || isTextFile(file);
+}
+
+async function addFiles(files: File[] | FileList) {
+  const list = Array.from(files);
+  for (const file of list) {
+    if (!isAcceptedFile(file)) {
+      toast('Unsupported file', { description: `${file.name} (${file.type || 'unknown type'}) — PDFs, images, and text/Markdown only.` });
+      continue;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast('File too large', { description: `${file.name} is ${formatBytes(file.size)}. Each file must be under ${formatBytes(MAX_FILE_BYTES)}.` });
+      continue;
+    }
+    if (totalAttachmentBytes.value + file.size > MAX_TOTAL_BYTES) {
+      toast('Attachment limit reached', { description: `Total attachment size must stay under ${formatBytes(MAX_TOTAL_BYTES)}.` });
+      continue;
+    }
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      if (isTextFile(file)) {
+        const text = await file.text();
+        attachments.value.push({ id, name: file.name, mime: file.type || 'text/markdown', size: file.size, kind: 'text', text });
+      } else {
+        const { base64, dataUrl } = await fileToBase64(file);
+        attachments.value.push({ id, name: file.name, mime: file.type, size: file.size, kind: 'binary', base64, dataUrl });
+      }
+    } catch (err: any) {
+      toast('Could not read file', { description: file.name + (err?.message ? ` — ${err.message}` : '') });
+    }
+  }
+}
+
+async function onFilesChosen(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (!input.files || input.files.length === 0) return;
+  await addFiles(input.files);
+  // Reset so the same file can be re-selected after removal.
+  input.value = '';
+}
+
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter(a => a.id !== id);
+}
+
+function openFilePicker() {
+  if (!aiEnabled.value) return;
+  fileInput.value?.click();
+}
 
 const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
 
@@ -246,16 +422,66 @@ const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 't
 const activePlan = usePlanActive();
 const isSubscriptionActive = computed(() => activePlan.value?.active === true);
 
-const canSend = computed(() => inputText.value.trim().length > 0 && !loading.value && isSubscriptionActive.value);
+// AI credit gate (AI_CREDITS_STRATEGY.md §3). `creditBlocked` locks the composer
+// after a 402 (pool + overage + grace exhausted); `creditDegraded` is advisory —
+// AI still answers on the lighter model, so we only surface a banner.
+const creditBlocked = ref(false);
+const creditDegraded = ref(false);
+
+// Both a live plan and available credits are required to chat.
+const aiEnabled = computed(() => isSubscriptionActive.value && !creditBlocked.value);
+
+// Shared usage state powering the header gauge — refreshed after each round so
+// the credits tick up live as they're spent.
+const { refresh: refreshAiUsage } = useAiUsage();
+
+const composerPlaceholder = computed(() => {
+  if (!isSubscriptionActive.value) return 'Subscription required to chat';
+  if (creditBlocked.value) return 'AI credit limit reached';
+  return 'Ask, Search or Chat...';
+});
+
+const canSend = computed(() =>
+  (inputText.value.trim().length > 0 || attachments.value.length > 0)
+  && !loading.value
+  && aiEnabled.value,
+);
+
+/** Flatten a message's content (string or content-block array) to a displayable
+ *  string. Image/document blocks render as bracketed placeholders so the empty
+ *  state, history preview, and persisted conversation rows have something
+ *  meaningful to show. */
+function messageText(content: AiMessage['content']): string {
+  if (typeof content === 'string') return content;
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === 'text') parts.push(block.text);
+    else if (block.type === 'image') parts.push('[image]');
+    else if (block.type === 'document') parts.push(block.source?.type === 'text' ? '[document]' : '[PDF]');
+  }
+  return parts.join(' ');
+}
+
+/** Return only the attachment blocks of a content array — used by the render
+ *  loop to show file chips/thumbnails above the text bubble. */
+function messageAttachments(content: AiMessage['content']): Array<AiImageBlock | AiDocumentBlock> {
+  if (typeof content === 'string') return [];
+  return content.filter((b): b is AiImageBlock | AiDocumentBlock => b.type === 'image' || b.type === 'document');
+}
+
+/** Human label for a document attachment chip (text doc vs PDF). */
+function docLabel(att: AiDocumentBlock): string {
+  return att.source?.type === 'text' ? 'Document' : 'PDF';
+}
 
 const lastAssistantText = computed(() => {
   const msgs = messages.value.filter((m): m is AiMessage => m.role === 'assistant');
-  return msgs.at(-1)?.content ?? '';
+  return messageText(msgs.at(-1)?.content ?? '');
 });
 
 const lastUserText = computed(() => {
   const msgs = messages.value.filter((m): m is AiMessage => m.role === 'user');
-  return msgs.at(-1)?.content ?? '';
+  return messageText(msgs.at(-1)?.content ?? '');
 });
 
 // ── History panel ─────────────────────────────────────────────────────────────
@@ -288,6 +514,16 @@ async function loadConversation(id: string) {
     if (m.role.startsWith('tool-event:')) {
       const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
       return { role: 'tool-event', content: m.content, status };
+    }
+    // Rehydrate the collapsed "Worked for Ns" activity summary persisted with the turn.
+    if (m.role === 'assistant' && m.steps && m.steps.length) {
+      return {
+        role: 'assistant',
+        content: m.content,
+        steps: m.steps,
+        durationMs: m.durationMs,
+        stepsOpen: false,
+      } as DisplayAiMessage;
     }
     return m as AiMessage;
   });
@@ -371,6 +607,45 @@ function buildContext(): AiContext | undefined {
     deadlineIds: selectedItems.value.filter(i => i.type === 'deadline').map(i => i.id),
     userIds:     selectedItems.value.filter(i => i.type === 'user').map(i => i.id),
   };
+}
+
+// ── Prompt enhancement ─────────────────────────────────────────────────────────
+// "Enhance" rewrites the user's draft into a sharper prompt that steers the
+// assistant toward the right tools. The toast offers a one-click Undo back to the
+// original text.
+const enhancing = ref(false);
+
+const canEnhance = computed(() =>
+  inputText.value.trim().length > 0 && !enhancing.value && !loading.value && aiEnabled.value,
+);
+
+async function enhancePrompt() {
+  const original = inputText.value.trim();
+  if (!original || enhancing.value || loading.value || !aiEnabled.value) return;
+
+  enhancing.value = true;
+  try {
+    const result = await improvePrompt(original, buildContext());
+    if (result.blocked) {
+      creditBlocked.value = true;
+      toast.error(result.error ?? 'AI credit limit reached.');
+      return;
+    }
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result.improved.trim() === original) {
+      toast('Prompt already looks clear — left it as is.');
+      return;
+    }
+    inputText.value = result.improved;
+    toast('Prompt enhanced', {
+      action: { label: 'Undo', onClick: () => { inputText.value = original; } },
+    });
+  } finally {
+    enhancing.value = false;
+  }
 }
 
 function isSelected(id: string) {
@@ -510,20 +785,74 @@ function scrollToBottom() {
 
 async function send(voiceText?: string) {
   const text = voiceText ?? inputText.value.trim();
-  if (!text || loading.value || !isSubscriptionActive.value) return;
+  const hasAttachments = !voiceText && attachments.value.length > 0;
+  // Allow attachments-only sends; voice path never carries attachments.
+  if (!text && !hasAttachments) return;
+  if (loading.value || !aiEnabled.value) return;
 
-  messages.value.push({ role: 'user', content: text });
-  if (!voiceText) inputText.value = '';
+  // Build either a plain text turn (back-compat with persisted history) or a
+  // multimodal content-block array. Document/image blocks come first so the
+  // text reads as a caption to what's attached.
+  let userContent: string | AiContentBlock[];
+  if (hasAttachments) {
+    const blocks: AiContentBlock[] = [];
+    for (const a of attachments.value) {
+      if (a.kind === 'text') {
+        // Prefix the filename so the model knows the document's name/type.
+        const body = `# ${a.name}\n\n${a.text ?? ''}`;
+        blocks.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data: body } });
+      } else if (a.mime === 'application/pdf') {
+        blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 as string } });
+      } else {
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 as string } });
+      }
+    }
+    blocks.push({ type: 'text', text: text || 'Help me create a matter from this.' });
+    userContent = blocks;
+  } else {
+    userContent = text;
+  }
+
+  messages.value.push({ role: 'user', content: userContent });
+  if (!voiceText) {
+    inputText.value = '';
+    if (hasAttachments) attachments.value = [];
+  }
   pendingProposal.value = null;
   loading.value = true;
   voiceState.value = 'thinking';
+  activeSteps.value = [];
+  workStartedAt.value = Date.now();
   scrollToBottom();
 
-  const response = await sendAiMessage(apiMessages.value, buildContext(), conversationId.value || undefined);
+  const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
+    onStep: (s) => {
+      activeSteps.value = [...activeSteps.value, s];
+      scrollToBottom();
+    },
+  });
+  const elapsedMs = Date.now() - workStartedAt.value;
+  // Only the real tool steps are worth keeping as a summary; the synthetic
+  // "Assessing"/"Drafting" bookends (tool === '') are dropped so a trivial reply
+  // shows no summary at all.
+  const turnSteps = activeSteps.value.filter(s => s.tool);
+  activeSteps.value = [];
   loading.value = false;
 
+  // Reflect the credit gate: a degraded reply still lands (lighter model); a
+  // blocked reply (402) locks the composer until the user tops up.
+  creditDegraded.value = !!response.degraded;
+  if (response.blocked) creditBlocked.value = true;
+  refreshAiUsage(); // this round just spent credits — tick the gauge
+
   if (response.type === 'text') {
-    messages.value.push({ role: 'assistant', content: response.content ?? '' });
+    messages.value.push({
+      role: 'assistant',
+      content: response.content ?? '',
+      steps: turnSteps.length ? turnSteps : undefined,
+      durationMs: turnSteps.length ? elapsedMs : undefined,
+      stepsOpen: false,
+    });
     if (response.conversationId) {
       const isNew = !conversationId.value;
       conversationId.value = response.conversationId;
@@ -534,7 +863,7 @@ async function send(voiceText?: string) {
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
     }
-    if (audioMode.value) speak(response.content ?? '');
+    if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -553,6 +882,31 @@ function handleKeydown(e: KeyboardEvent) {
 
 function prefill(text: string) { inputText.value = text; }
 
+// Imperative API for the useAiChat composable (entry points outside the chat,
+// e.g. the "Create with AI" card on the create-matter page, signal here to
+// seed text and/or attachments before the user hits send).
+defineExpose({
+  prefill,
+  addFiles,
+});
+
+// Watch the global open-request signal (written by useAiChat().open()).
+// When set, open this chat, drop the seed text into the input, run any
+// File objects through the same validation pipeline as the paperclip, then
+// clear the signal so the next open is independent.
+const aiChat = useAiChat();
+watch(() => aiChat.request.value?.requestedAt, async (ts) => {
+  if (!ts) return;
+  const req = aiChat.request.value;
+  if (!req) return;
+  open.value = true;
+  if (req.seedText) prefill(req.seedText);
+  if (req.seedAttachments && req.seedAttachments.length > 0) {
+    await addFiles(req.seedAttachments);
+  }
+  aiChat.consume();
+});
+
 function goToBilling() {
   open.value = false;
   navigateTo('/main/settings/billing');
@@ -563,6 +917,27 @@ function dismissProposal() {
     messages.value.push({ role: 'tool-event', content: formatToolName(pendingProposal.value.tool ?? ''), status: 'rejected' });
   }
   pendingProposal.value = null;
+}
+
+/** Hand off an AI-extracted matter draft to the manual create-matter form.
+ *  Stashes the draft + extracted fields in sessionStorage so the page can
+ *  hydrate its store on mount, then closes the chat and navigates over. */
+function handoffMatterDraft() {
+  const preview = pendingProposal.value?.preview;
+  if (preview?.kind !== 'create_matter') return;
+  try {
+    sessionStorage.setItem('practocore.matterDraft', JSON.stringify({
+      template: preview.template,
+      matter: preview.matter,
+      fields: preview.fields,
+    }));
+  } catch {
+    // sessionStorage can be unavailable (private browsing edge cases); navigate
+    // anyway — the user keeps a manual entry point.
+  }
+  pendingProposal.value = null;
+  open.value = false;
+  navigateTo('/main/matters/create');
 }
 
 const proposalLoading = ref(false);
@@ -595,13 +970,16 @@ async function approveProposal() {
   loading.value = false;
   proposalLoading.value = false;
 
+  creditDegraded.value = !!response.degraded;
+  refreshAiUsage();
+
   if (response.type === 'text') {
     messages.value.push({ role: 'assistant', content: response.content ?? '' });
     if (response.conversationId) {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
     }
-    if (audioMode.value) speak(response.content ?? '');
+    if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -610,7 +988,87 @@ async function approveProposal() {
     messages.value.push({ role: 'assistant', content: response.error ?? 'Something went wrong.' });
     voiceState.value = 'idle';
   }
+
+  // The executed write-tool's structured output (actionResult) is independent of
+  // the conversational reply type: the follow-up turn may come back as text OR as
+  // another approval proposal (e.g. the model chains into save_memory after a
+  // generate_document). Surface the action card regardless, or it gets silently
+  // dropped whenever the reply isn't plain text.
+  applyApprovedActionResult(response);
+
   scrollToBottom();
+}
+
+// Appends the in-chat card / toast for a successfully executed write-tool. Driven
+// purely by the backend's structured actionResult, so it works whether the
+// follow-up reply is text or another proposal. For create_matter_draft we DON'T
+// force-navigate — the reply already confirms it; we append a tappable card so the
+// user opens the matter when they're ready, and refresh the matters cache.
+function applyApprovedActionResult(response: AiResponse) {
+  const action = response.actionResult;
+  if (!action) return;
+
+  if (action.tool === 'create_matter_draft') {
+    const matterId = action.data?.matterId;
+    if (matterId && typeof matterId === 'string') {
+      const matterName = action.data?.name as string | undefined;
+      toast('Matter created', {
+        description: matterName ? `"${matterName}" is ready.` : 'Your new matter is ready.',
+      });
+      messages.value.push({ role: 'matter-created', matterId, matterName });
+      useMattersStore().fetchMatters(true).catch(() => {});
+    }
+  } else if (action.tool === 'schedule_reminder' && action.data?.success) {
+    const reminderTitle = action.data?.title as string | undefined;
+    toast('Reminder scheduled', {
+      description: reminderTitle ? `"${reminderTitle}" is set.` : 'Your reminder is set.',
+    });
+    messages.value.push({ role: 'reminder-created', reminderTitle });
+  } else if (action.tool === 'generate_document' && action.data?.success) {
+    const d = action.data;
+    const title = d?.title as string | undefined;
+    toast('Document drafted', {
+      description: title ? `"${title}" is ready to download.` : 'Your document is ready to download.',
+    });
+    messages.value.push({
+      role: 'document-generated',
+      documentId: d?.documentId as string,
+      title,
+      kind: d?.kind as string | undefined,
+      filename: d?.filename as string | undefined,
+    });
+  }
+}
+
+// User-initiated open of a just-created matter (from the in-chat card). Closes
+// the chat first so navigation lands on a clean matter page.
+function openMatter(matterId: string) {
+  open.value = false;
+  navigateTo(`/main/matters/matter/${matterId}`);
+}
+
+function openReminders() {
+  open.value = false;
+  navigateTo('/main/reminder');
+}
+
+// Download a just-generated document. Fetches the row by id (cheap, cached by the
+// SDK) so we don't have to thread the full record through the chat message, then
+// streams the .docx via a tokenised file URL.
+const downloadingDocId = ref<string | null>(null);
+async function downloadGeneratedDocument(documentId: string) {
+  if (!documentId) return;
+  downloadingDocId.value = documentId;
+  try {
+    const { pb } = await import('~/lib/pocketbase');
+    const { downloadDocument } = await import('~/services/documents');
+    const doc = await pb.collection('GeneratedDocuments').getOne(documentId);
+    await downloadDocument(doc as any);
+  } catch (e) {
+    toast('Could not download the document', { description: 'Please try again.' });
+  } finally {
+    downloadingDocId.value = null;
+  }
 }
 
 function formatToolName(tool: string): string {
@@ -629,7 +1087,7 @@ function formatToolName(tool: string): string {
       :is="isDesktop ? DialogContent : SheetContent"
       :side="isDesktop ? undefined : 'bottom'"
       :class="isDesktop
-        ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
+        ? 'flex flex-col p-0 gap-0 overflow-hidden w-[760px] max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] h-[82vh] max-h-[82vh]'
         : ['flex flex-col p-0 gap-0 overflow-hidden', (messages.length > 0 || audioMode || historyOpen) ? 'h-dvh' : 'h-auto']"
       :hideX="true"
       @escape-key-down="(e: Event) => { if (contextDrawerOpen) { e.preventDefault(); contextDrawerOpen = false; } }"
@@ -663,6 +1121,7 @@ function formatToolName(tool: string): string {
               class="mx-4 mt-3 shrink-0"
               @approve="approveProposal"
               @dismiss="dismissProposal"
+              @edit-manually="handoffMatterDraft"
             />
           </Transition>
 
@@ -710,6 +1169,7 @@ function formatToolName(tool: string): string {
                 <p v-if="voiceState === 'listening' && transcript" key="t" class="text-foreground text-lg font-medium leading-snug">{{ transcript }}</p>
                 <p v-else-if="voiceState === 'listening'" key="l" class="text-primary text-sm font-medium animate-pulse">Listening…</p>
                 <p v-else-if="voiceState === 'thinking'" key="th" class="text-muted-foreground text-sm">Thinking…</p>
+                <p v-else-if="voiceState === 'speaking' && caption" key="spc" class="text-foreground text-sm leading-relaxed line-clamp-4">{{ caption }}</p>
                 <p v-else-if="voiceState === 'speaking'" key="sp" class="text-primary text-sm font-medium animate-pulse">Speaking…</p>
                 <div v-else-if="lastAssistantText" key="ex" class="space-y-1">
                   <p v-if="lastUserText" class="text-muted-foreground/60 text-xs truncate">{{ lastUserText }}</p>
@@ -782,6 +1242,7 @@ function formatToolName(tool: string): string {
         </div>
         <span class="font-semibold text-sm">PractoAI</span>
         <div class="ml-auto flex items-center gap-1">
+          <AICreditGauge />
           <Button size="icon-sm" variant="ghost" :class="historyOpen ? 'text-primary' : ''" @click="historyOpen = !historyOpen">
             <History class="size-4" />
           </Button>
@@ -865,9 +1326,85 @@ function formatToolName(tool: string): string {
                   {{ msg.status === 'approved' ? 'Approved' : 'Dismissed' }}: {{ msg.content }}
                 </span>
               </div>
+              <!-- Open-matter card: shown after the assistant confirms a creation,
+                   so the user opens it on their own terms (no forced navigation). -->
+              <div v-else-if="msg.role === 'matter-created'" class="flex">
+                <button
+                  type="button"
+                  class="group/open flex items-center gap-3 max-w-[80%] rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:bg-muted"
+                  @click="openMatter(msg.matterId)"
+                >
+                  <div class="size-8 rounded-md grid place-items-center shrink-0 bg-primary/10 text-primary">
+                    <Briefcase class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ msg.matterName || 'New matter' }}</p>
+                    <p class="text-xs text-muted-foreground">Open matter</p>
+                  </div>
+                  <ArrowRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-x-0.5" />
+                </button>
+              </div>
+              <!-- Open-reminders card: shown after the assistant confirms a reminder. -->
+              <div v-else-if="msg.role === 'reminder-created'" class="flex">
+                <button
+                  type="button"
+                  class="group/open flex items-center gap-3 max-w-[80%] rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:bg-muted"
+                  @click="openReminders()"
+                >
+                  <div class="size-8 rounded-md grid place-items-center shrink-0 bg-primary/10 text-primary">
+                    <Bell class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ msg.reminderTitle || 'Reminder set' }}</p>
+                    <p class="text-xs text-muted-foreground">Open reminders</p>
+                  </div>
+                  <ArrowRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-x-0.5" />
+                </button>
+              </div>
+              <!-- Download card: shown after the assistant drafts a .docx document. -->
+              <div v-else-if="msg.role === 'document-generated'" class="flex">
+                <button
+                  type="button"
+                  class="group/open flex items-center gap-3 max-w-[80%] rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:bg-muted disabled:opacity-60"
+                  :disabled="downloadingDocId === msg.documentId"
+                  @click="downloadGeneratedDocument(msg.documentId)"
+                >
+                  <div class="size-8 rounded-md grid place-items-center shrink-0 bg-primary/10 text-primary">
+                    <FileType2 class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ msg.title || 'New document' }}</p>
+                    <p class="text-xs text-muted-foreground capitalize">
+                      {{ msg.kind ? `${msg.kind} · ` : '' }}Download .docx
+                    </p>
+                  </div>
+                  <Loader2 v-if="downloadingDocId === msg.documentId" class="size-4 shrink-0 text-muted-foreground animate-spin" />
+                  <Download v-else class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-y-0.5" />
+                </button>
+              </div>
               <div v-else-if="msg.role === 'user'" class="flex justify-end">
-                <div class="max-w-[80%] bg-muted text-muted-foreground border rounded-lg px-3 py-2 text-sm whitespace-pre-wrap">
-                  {{ msg.content }}
+                <div class="flex flex-col items-end gap-1 max-w-[80%]">
+                  <!-- Attachment chips above the text bubble — only present on multimodal turns -->
+                  <div v-if="messageAttachments(msg.content).length > 0" class="flex flex-wrap gap-1 justify-end">
+                    <template v-for="(att, j) in messageAttachments(msg.content)" :key="j">
+                      <img
+                        v-if="att.type === 'image'"
+                        :src="`data:${att.source.media_type};base64,${att.source.data}`"
+                        :alt="`Attached image ${j + 1}`"
+                        class="size-16 rounded-md object-cover border"
+                      />
+                      <span v-else class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-background text-foreground">
+                        <FileText class="size-3 shrink-0" />
+                        {{ docLabel(att as AiDocumentBlock) }}
+                      </span>
+                    </template>
+                  </div>
+                  <div
+                    v-if="messageText(msg.content)"
+                    class="bg-muted text-muted-foreground border rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
+                  >
+                    {{ messageText(msg.content) }}
+                  </div>
                 </div>
               </div>
               <div v-else class="flex items-start gap-2 group/msg">
@@ -875,14 +1412,33 @@ function formatToolName(tool: string): string {
                   <Sparkles class="size-3" />
                 </div>
                 <div class="flex flex-col gap-0.5 max-w-[80%]">
+                  <!-- Collapsed activity summary for turns that ran tools. Click to
+                       expand the steps that produced this answer. -->
+                  <div v-if="msg.steps && msg.steps.length" class="mb-1">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      @click="msg.stepsOpen = !msg.stepsOpen"
+                    >
+                      <Check class="size-3 text-emerald-500" />
+                      <span>Worked for {{ formatDuration(msg.durationMs ?? 0) }}</span>
+                      <component :is="msg.stepsOpen ? ChevronDown : ChevronRight" class="size-3" />
+                    </button>
+                    <ul v-if="msg.stepsOpen" class="mt-1.5 ml-1 flex flex-col gap-1 border-l border-border pl-3">
+                      <li v-for="step in msg.steps" :key="step.id" class="flex items-center gap-2 text-xs text-muted-foreground">
+                        <component :is="stepIcon(step.tool)" class="size-3 shrink-0 opacity-70" />
+                        <span class="truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span></span>
+                      </li>
+                    </ul>
+                  </div>
                   <div
                     class="bg-background border text-foreground rounded-lg px-3 py-2 text-sm prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none"
-                    v-html="renderMarkdown(msg.content)"
+                    v-html="renderMarkdown(messageText(msg.content))"
                   />
                   <button
                     class="self-start flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100 px-0.5"
                     :class="speakingIdx === i ? '!opacity-100 text-primary' : ''"
-                    @click="toggleSpeak(msg.content, i)"
+                    @click="toggleSpeak(messageText(msg.content), i)"
                   >
                     <VolumeX v-if="speakingIdx === i" class="size-3" />
                     <Volume2 v-else class="size-3" />
@@ -891,23 +1447,47 @@ function formatToolName(tool: string): string {
               </div>
             </template>
 
+            <!-- Live "Working…" panel: shows the real tool steps as they stream in,
+                 last one spinning. Replaces the old bare spinner. -->
             <div v-if="loading" class="flex items-start gap-2">
               <div class="size-6 bg-primary text-primary-foreground dark:bg-secondary dark:text-secondary-foreground grid place-items-center rounded-full shrink-0 mt-0.5">
                 <Sparkles class="size-3" />
               </div>
-              <div class="bg-background border rounded-lg px-3 py-2">
-                <Loader2 class="size-4 animate-spin text-muted-foreground" />
+              <div class="min-w-[11rem] pt-1">
+                <div class="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Loader2 class="size-3.5 animate-spin text-muted-foreground" />
+                  <span>Working…</span>
+                </div>
+                <ul v-if="activeSteps.length" class="mt-2 flex flex-col gap-1.5">
+                  <li
+                    v-for="(step, idx) in activeSteps"
+                    :key="step.id"
+                    class="flex items-center gap-2 text-xs"
+                  >
+                    <Loader2 v-if="idx === activeSteps.length - 1" class="size-3 shrink-0 animate-spin text-muted-foreground" />
+                    <Check v-else class="size-3 shrink-0 text-emerald-500" />
+                    <span
+                      class="truncate"
+                      :class="idx === activeSteps.length - 1 ? 'text-foreground' : 'text-muted-foreground'"
+                    >
+                      {{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span>
+                    </span>
+                  </li>
+                </ul>
               </div>
             </div>
-
-            <ProposalCard
-              v-if="pendingProposal"
-              :proposal="pendingProposal"
-              variant="panel"
-              :loading="proposalLoading"
-              @approve="approveProposal"
-              @dismiss="dismissProposal"
-            />
+            
+            <div class="max-w-[80%]">
+              <ProposalCard
+                v-if="pendingProposal"
+                :proposal="pendingProposal"
+                variant="panel"
+                :loading="proposalLoading"
+                @approve="approveProposal"
+                @dismiss="dismissProposal"
+                @edit-manually="handoffMatterDraft"
+              />
+            </div>
 
             <div ref="messagesEnd" />
           </div>
@@ -920,6 +1500,26 @@ function formatToolName(tool: string): string {
               <span>
                 Chatting with PractoAI needs an active subscription.
                 <button class="underline font-medium hover:text-foreground" @click="goToBilling">Renew</button>
+              </span>
+            </div>
+
+            <!-- Credit gate — blocked (locked) -->
+            <div v-else-if="creditBlocked" class="flex items-center gap-1.5 text-xs text-destructive">
+              <Lock class="size-3 shrink-0" />
+              <span>
+                AI credit limit reached.
+                <button class="underline font-medium hover:opacity-80" @click="goToBilling">Top up</button>
+                to keep using AI.
+              </span>
+            </div>
+
+            <!-- Credit gate — degraded (lighter model, still usable) -->
+            <div v-else-if="creditDegraded" class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+              <Zap class="size-3 shrink-0" />
+              <span>
+                Pool used up — running on the lighter model.
+                <button class="underline font-medium hover:opacity-80" @click="goToBilling">Top up</button>
+                to restore full power.
               </span>
             </div>
 
@@ -938,6 +1538,43 @@ function formatToolName(tool: string): string {
               </Badge>
             </div>
 
+            <!-- Pending attachments — chips shown above the input until the next send -->
+            <div v-if="attachments.length > 0" class="flex flex-wrap gap-1.5">
+              <div
+                v-for="att in attachments" :key="att.id"
+                class="flex items-center gap-1.5 rounded-md border bg-background pr-1 pl-1 py-1 text-xs"
+              >
+                <img
+                  v-if="att.mime.startsWith('image/')"
+                  :src="att.dataUrl"
+                  :alt="att.name"
+                  class="size-8 rounded object-cover shrink-0"
+                />
+                <FileText v-else class="size-4 text-muted-foreground shrink-0" />
+                <span class="max-w-[140px] truncate font-medium">{{ att.name }}</span>
+                <span class="text-muted-foreground">{{ formatBytes(att.size) }}</span>
+                <button
+                  class="ml-0.5 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  :aria-label="`Remove ${att.name}`"
+                  @click="removeAttachment(att.id)"
+                >
+                  <X class="size-3" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Hidden file input — the Paperclip button below triggers it.
+                 capture=\"environment\" opens the rear camera on Capacitor/Android
+                 from the OS picker, giving us "take a photo" support for free. -->
+            <input
+              ref="fileInput"
+              type="file"
+              multiple
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log"
+              class="hidden"
+              @change="onFilesChosen"
+            />
+
             <InputGroup>
               <InputGroupAddon align="block-start">
                 <Button size="sm" variant="outline" :class="selectedItems.length > 0 ? 'border-primary/50 text-primary' : ''" @click="contextDrawerOpen = true">
@@ -951,18 +1588,36 @@ function formatToolName(tool: string): string {
 
               <InputGroupTextarea
                 v-model="inputText"
-                :placeholder="isSubscriptionActive ? 'Ask, Search or Chat...' : 'Subscription required to chat'"
-                :disabled="!isSubscriptionActive"
+                :placeholder="composerPlaceholder"
+                :disabled="!aiEnabled"
                 @keydown="handleKeydown"
               />
 
               <InputGroupAddon align="block-end">
-                <InputGroupButton variant="outline" size="icon-sm">
+                <InputGroupButton
+                  variant="outline"
+                  size="icon-sm"
+                  :disabled="!aiEnabled"
+                  title="Attach a PDF or image"
+                  @click="openFilePicker"
+                >
                   <Paperclip class="size-4" />
+                  <span class="sr-only">Attach a PDF or image</span>
                 </InputGroupButton>
                 <InputGroupButton variant="outline" size="sm">
                   <Globe />
                   Sources
+                </InputGroupButton>
+                <InputGroupButton
+                  variant="outline"
+                  size="sm"
+                  :disabled="!canEnhance"
+                  title="Enhance prompt — rewrite it to get better results"
+                  @click="enhancePrompt"
+                >
+                  <Loader2 v-if="enhancing" class="size-4 animate-spin" />
+                  <Sparkles v-else class="size-4" />
+                  {{ enhancing ? 'Enhancing…' : 'Enhance' }}
                 </InputGroupButton>
                 <Separator orientation="vertical" class="!h-4 ml-auto" />
                 <InputGroupButton
@@ -981,7 +1636,7 @@ function formatToolName(tool: string): string {
                   class="rounded-full"
                   size="icon-sm"
                   title="Voice conversation"
-                  :disabled="!isSubscriptionActive"
+                  :disabled="!aiEnabled"
                   @click="toggleMic"
                 >
                   <Mic class="size-4" />

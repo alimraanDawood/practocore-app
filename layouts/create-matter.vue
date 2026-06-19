@@ -13,13 +13,19 @@
 
       <!-- Center: step indicator -->
       <div class="flex-1 flex items-center gap-1.5 min-w-0">
-        <span class="text-xs text-muted-foreground shrink-0 hidden md:block">Step {{ store.stepIndex }}:</span>
-        <component :is="stepIcon" class="size-3.5 shrink-0 text-primary hidden sm:block" />
-        <span class="font-semibold text-sm truncate">{{ store.stepName }}</span>
+        <template v-if="store.isCreated">
+          <CircleCheckBig class="size-3.5 shrink-0 text-primary hidden sm:block" />
+          <span class="font-semibold text-sm truncate">Matter created</span>
+        </template>
+        <template v-else>
+          <span class="text-xs text-muted-foreground shrink-0 hidden md:block">Step {{ store.stepIndex }}:</span>
+          <component :is="stepIcon" class="size-3.5 shrink-0 text-primary hidden sm:block" />
+          <span class="font-semibold text-sm truncate">{{ store.stepName }}</span>
+        </template>
       </div>
 
       <!-- Right: next hint + actions -->
-      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div v-if="!store.isCreated" class="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <!-- Mobile: step count -->
         <span class="text-xs text-muted-foreground sm:hidden font-medium tabular-nums">
           {{ store.stepIndex }}/{{ store.stepCount }}
@@ -61,7 +67,7 @@
     <div class="w-full h-0.5 bg-muted shrink-0">
       <div
         class="h-full bg-primary transition-all duration-500 ease-out"
-        :style="{ width: `${progress}%` }"
+        :style="{ width: `${store.isCreated ? 100 : progress}%` }"
       />
     </div>
 
@@ -73,7 +79,7 @@
     </div>
 
     <!-- Mobile bottom bar -->
-    <div class="flex sm:hidden items-center gap-3 px-4 py-3 border-t bg-background shrink-0">
+    <div v-if="!store.isCreated" class="flex sm:hidden items-center gap-3 px-4 py-3 border-t bg-background shrink-0">
       <Button
         variant="outline"
         @click="store.handleBack"
@@ -105,6 +111,7 @@ import {
   Briefcase,
   UserCheck,
   CalendarDays,
+  CircleCheckBig,
 } from 'lucide-vue-next'
 import { useCreateMatterStore } from '~/stores/createMatter'
 

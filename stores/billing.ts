@@ -9,6 +9,9 @@ import {getSignedInUser} from "~/services/auth";
 export const useBillingStore = defineStore("billing", {
     state: () => ({
         activeSubscription: null as Record<string, any> | null,
+        // The soonest queued term that starts after the current one (e.g. a paid
+        // plan stacked on top of a still-running trial). Null when nothing queued.
+        nextSubscription: null as Record<string, any> | null,
         subscriptionHistory: [] as any[],
         loaded: false,
         loadingHistory: false,
@@ -30,10 +33,13 @@ export const useBillingStore = defineStore("billing", {
 
         async reloadSubscriptionData() {
             try {
-                this.activeSubscription = (await getActiveSubscription())?.subscription || null;
+                const status = await getActiveSubscription();
+                this.activeSubscription = status?.subscription || null;
+                this.nextSubscription = status?.next || null;
             } catch (err) {
                 console.warn("Failed to fetch active subscription:", err);
                 this.activeSubscription = null;
+                this.nextSubscription = null;
             }
 
             try {

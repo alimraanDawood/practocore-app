@@ -1,9 +1,17 @@
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden items-center">
-    <div class="flex flex-col h-full lg:w-[95vw] w-full border-x">
+    <div class="flex flex-row items-center p-3 border-b justify-between w-full">
+      <div class="flex items-center gap-2">
+        <SidebarTrigger class="lg:hidden"/>
+        <span class="font-semibold text-xl ibm-plex-serif">Settings</span>
+      </div>
+    </div>
+
+    <div class="flex flex-col h-full w-full">
       <div class="flex flex-col lg:flex-row w-full gap-3 h-full overflow-hidden">
         <!-- Desktop: Tabs Layout -->
-        <div class="hidden lg:flex flex-row bg-muted lg:bg-muted rounded-lg border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[250px] lg:h-full gap-3">
+        <div
+            class="hidden lg:flex flex-row border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[200px] lg:h-full gap-3">
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -26,8 +34,8 @@
             Billing
           </Button>
 
-          <Separator class="my-1" />
-          
+          <Separator class="my-1"/>
+
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -43,7 +51,7 @@
               @click="activeTab = 'documentation'"
           >Documentation
           </Button>
-          
+
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
@@ -63,7 +71,9 @@
               <p class="text-sm text-muted-foreground">Manage your subscription and billing information.</p>
             </div>
             <Separator/>
-            <SharedBilling />
+            <SharedBilling/>
+            <SharedBillingAiCredits/>
+
           </div>
           <PageComponentsSettingsEccmis v-if="activeTab === 'eccmis'" />
           <PageComponentsSettingsDocumentation v-if="activeTab === 'documentation'" />
@@ -76,9 +86,11 @@
           <div class="flex flex-col rounded-lg gap-2">
             <div class="flex flex-row items-center gap-2">
               <Avatar class="size-12">
-                <AvatarImage :src="getSignedInUser()?.avatar" alt="Profile" />
+                <AvatarImage :src="getSignedInUser()?.avatar" alt="Profile"/>
                 <AvatarFallback class=" bg-primary text-primary-foreground">
-                  {{ getSignedInUser()?.name?.split(" ").at(0)?.at(0)?.toUpperCase() + getSignedInUser()?.name?.split(" ").at(1)?.at(0)?.toUpperCase() }}
+                  {{
+                    getSignedInUser()?.name?.split(" ").at(0)?.at(0)?.toUpperCase() + getSignedInUser()?.name?.split(" ").at(1)?.at(0)?.toUpperCase()
+                  }}
                 </AvatarFallback>
               </Avatar>
 
@@ -89,9 +101,9 @@
             </div>
 
             <Button
-              class="w-fit"
-              size="sm"
-              @click="navigateTo('/main/settings/profile')"
+                class="w-fit"
+                size="sm"
+                @click="navigateTo('/main/settings/profile')"
             >
               Edit profile
             </Button>
@@ -104,19 +116,19 @@
               <NuxtLink to="/main/settings/notifications" class="w-full">
                 <Button variant="ghost" class="justify-between items-center w-full">
                   <div class="flex flex-row justify-center items-center gap-2">
-                    <Bell />
+                    <Bell/>
                     Notifications
                   </div>
-                  <ChevronRight class="size-5 text-muted-foreground" />
+                  <ChevronRight class="size-5 text-muted-foreground"/>
                 </Button>
               </NuxtLink>
 
               <Button variant="ghost" class="justify-between items-center">
                 <div class="flex flex-row justify-center items-center gap-2">
-                  <Moon />
+                  <Moon/>
                   Dark Mode
                 </div>
-                <SharedDarkModeSwitch />
+                <SharedDarkModeSwitch/>
               </Button>
             </div>
           </div>
@@ -124,25 +136,28 @@
           <div v-if="authStore.isAdmin && getSignedInUser()?.organisation" class="flex flex-col gap-2">
             <span class="font-semibold">Organisation</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/organisation')">
+              <Button variant="ghost" class="justify-between items-center"
+                      @click="navigateTo('/main/settings/organisation')">
                 <div class="flex flex-row justify-center items-center gap-2">
-                  <Building2 />
+                  <Building2/>
                   Organisation Profile
                 </div>
-                <ChevronRight class="size-5 text-muted-foreground" />
+                <ChevronRight class="size-5 text-muted-foreground"/>
               </Button>
             </div>
           </div>
 
-          <div v-if="(getSignedInUser()?.organisation && authStore.isAdmin) || !getSignedInUser()?.organisation" class="flex flex-col gap-2">
+          <div v-if="(getSignedInUser()?.organisation && authStore.isAdmin) || !getSignedInUser()?.organisation"
+               class="flex flex-col gap-2">
             <span class="font-semibold">Advanced</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/billing')">
+              <Button variant="ghost" class="justify-between items-center"
+                      @click="navigateTo('/main/settings/billing')">
                 <div class="flex flex-row justify-center items-center gap-2">
-                  <CreditCard />
+                  <CreditCard/>
                   Billing
                 </div>
-                <ChevronRight class="size-5 text-muted-foreground" />
+                <ChevronRight class="size-5 text-muted-foreground"/>
               </Button>
             </div>
           </div>
@@ -163,27 +178,29 @@
           <div class="flex flex-col gap-2">
             <span class="font-semibold">Help Center</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/documentation')">
+              <Button variant="ghost" class="justify-between items-center"
+                      @click="navigateTo('/main/settings/documentation')">
                 <div class="flex flex-row justify-center items-center gap-2">
-                  <BookOpen />
+                  <BookOpen/>
                   Documentation
                 </div>
-                <ChevronRight class="size-5 text-muted-foreground" />
+                <ChevronRight class="size-5 text-muted-foreground"/>
               </Button>
 
-              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/support')">
+              <Button variant="ghost" class="justify-between items-center"
+                      @click="navigateTo('/main/settings/support')">
                 <div class="flex flex-row justify-center items-center gap-2">
-                  <Headset />
+                  <Headset/>
                   Contact Support
                 </div>
-                <ChevronRight class="size-5 text-muted-foreground" />
+                <ChevronRight class="size-5 text-muted-foreground"/>
               </Button>
             </div>
           </div>
 
           <div class="flex flex-col">
             <Button class="justify-start" variant="destructive" @click="signOutUser">
-              <LogOut />
+              <LogOut/>
 
               Sign Out
             </Button>
@@ -195,7 +212,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import {ref, computed} from 'vue'
 import {
   Bell,
   CreditCard,
@@ -207,9 +224,9 @@ import {
   Globe,
   Users,
   UserPlus,
-  Moon
+  Moon, WifiOff
 } from "lucide-vue-next"
-import { getSignedInUser, signOut } from "~/services/auth"
+import {getSignedInUser, signOut} from "~/services/auth"
 
 definePageMeta({
   layout: 'default'

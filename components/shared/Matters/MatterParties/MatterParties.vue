@@ -187,6 +187,7 @@
 import {computed} from "vue";
 import {Users, Scale, CheckCircle2, Mail, Phone, ChevronDown} from "lucide-vue-next";
 import {Badge} from "~/components/ui/badge";
+import {normalizePartyConfig} from '~/utils/normalizeTemplate';
 
 interface Props {
   matter: any;
@@ -209,12 +210,11 @@ const representing = computed(() => {
   return props.matter?.representing;
 });
 
-// Get party role label from template
-const getRoleLabel = (roleId: string) => {
-  if (!props.matter?.partyConfig?.roles) return roleId;
+const partyConfigNormalized = computed(() => normalizePartyConfig(props.matter?.partyConfig))
 
-  const role = props.matter?.partyConfig?.roles.find((r: any) => r.id === roleId);
-  return role?.label_plural || role?.name || roleId;
+const getRoleLabel = (roleId: string) => {
+  const role = partyConfigNormalized.value.roles.find((r) => r.id === roleId)
+  return role?.label_plural || role?.name || roleId
 };
 
 // Check if a role is represented

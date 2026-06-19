@@ -1,41 +1,70 @@
 <template>
-  <div class="flex flex-col lg:flex-row lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
-
+  <div class="flex flex-col lg:flex-row w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
   <!-- Main Calendar Area -->
-    <div class="flex flex-col w-full h-full p-5 gap-5 overflow-y-auto">
+    <div class="flex flex-col w-full h-full gap-5 overflow-y-auto">
       <!-- Header with filters -->
-      <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div class="flex flex-col">
-          <h1 class="text-2xl font-bold ibm-plex-serif">Calendar</h1>
-          <p class="text-sm text-muted-foreground">Manage your deadlines and matters</p>
+      <div class="flex flex-col sm:flex-row lg:gap-3 items-start sm:items-center justify-between lg:p-3 lg:border-b">
+        <div class="flex flex-col border-b lg:border-0 p-3 lg:p-0 w-full lg:w-fit">
+          <div class="flex flex-row items-center">
+            <SidebarTrigger class="lg:hidden" />
+            <h1 class="text-2xl font-bold ibm-plex-serif">Calendar</h1>
+          </div>
         </div>
 
-        <div class="flex flex-row gap-2 w-full sm:w-auto">
-          <Button @click="goToToday" variant="outline" size="sm" class="h-11 sm:h-8">
+        <div class="flex flex-row gap-2 border-b lg:border-0 w-full sm:w-auto items-center lg:p-0 p-3">
+          <Button @click="goToToday" variant="outline" size="sm">
             <CalendarClock class="size-4 mr-2" />
             Today
           </Button>
 
-          <div class="flex flex-row border rounded-md" role="group" aria-label="Filter deadlines">
+          <div class="lg:flex flex-row border rounded-md hidden" role="group" aria-label="Filter deadlines">
             <Button @click="setFilter('all')"
                     :variant="activeFilter === 'all' ? 'secondary' : 'ghost'"
                     :aria-pressed="activeFilter === 'all'"
                     size="sm"
-                    class="rounded-r-none h-11 sm:h-8">
+                    class="rounded-r-none">
               All
             </Button>
             <Button @click="setFilter('pending')"
                     :variant="activeFilter === 'pending' ? 'secondary' : 'ghost'"
                     :aria-pressed="activeFilter === 'pending'"
                     size="sm"
-                    class="rounded-none h-11 sm:h-8">
+                    class="rounded-none">
               Pending
             </Button>
             <Button @click="setFilter('fulfilled')"
                     :variant="activeFilter === 'fulfilled' ? 'secondary' : 'ghost'"
                     :aria-pressed="activeFilter === 'fulfilled'"
                     size="sm"
-                    class="rounded-l-none h-11 sm:h-8">
+                    class="rounded-l-none">
+              Completed
+            </Button>
+          </div>
+
+          <Button @click="addEventOpen = true" size="sm" class="ml-auto sm:ml-0">
+            <Plus class="size-4 mr-1" />
+            Add Event
+          </Button>
+        </div>
+
+        <div class="flex flex-col p-3 lg:hidden border-b w-full">
+          <div class="flex flex-row border rounded-lg max-auto w-fit p-1 bg-muted" role="group" aria-label="Filter deadlines">
+            <Button @click="setFilter('all')"
+                    :variant="activeFilter === 'all' ? 'outline' : 'ghost'"
+                    :aria-pressed="activeFilter === 'all'"
+                    size="xs">
+              All
+            </Button>
+            <Button @click="setFilter('pending')"
+                    :variant="activeFilter === 'pending' ? 'outline' : 'ghost'"
+                    :aria-pressed="activeFilter === 'pending'"
+                    size="xs">
+              Pending
+            </Button>
+            <Button @click="setFilter('fulfilled')"
+                    :variant="activeFilter === 'fulfilled' ? 'outline' : 'ghost'"
+                    :aria-pressed="activeFilter === 'fulfilled'"
+                    size="xs">
               Completed
             </Button>
           </div>
@@ -43,42 +72,54 @@
       </div>
 
       <!-- Search Bar -->
-      <div class="relative w-full">
-        <label for="calendar-search" class="sr-only">Search deadlines</label>
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
-        <Input id="calendar-search" v-model="searchQuery" placeholder="Search deadlines…" class="pl-10" />
-      </div>
-
-      <!-- Calendar -->
-      <FeaturesCalendarMonthView
-        :events="filteredEvents"
-        @day-click="onDayClick"
-        @event-click="onEventClick"
-        @date-change="updateDate"
-        ref="calendarRef"
-      />
-
-      <!-- Mobile: Deadlines List -->
-      <div class="lg:hidden flex flex-col w-full gap-2">
-        <div class="flex flex-row items-center justify-between">
-          <h2 class="font-semibold">{{ selectedDateFormatted }}</h2>
-          <Badge variant="secondary">{{ currentDateDeadlines.length }} deadline(s)</Badge>
+      <div class="flex flex-col p-3 lg:p-5 gap-5">
+        <div class="relative w-full">
+          <label for="calendar-search" class="sr-only">Search deadlines</label>
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
+          <Input id="calendar-search" v-model="searchQuery" placeholder="Search deadlines…" class="pl-10" />
         </div>
 
-        <div v-if="currentDateDeadlines.length === 0" class="text-center py-12 text-muted-foreground">
-          <CalendarOff class="size-12 mx-auto mb-2 opacity-50" />
-          <p class="text-sm">No deadlines on this date</p>
-        </div>
+        <!-- Calendar -->
+        <FeaturesCalendarMonthView
+            :events="filteredEvents"
+            @day-click="onDayClick"
+            @event-click="onEventClick"
+            @date-change="updateDate"
+            ref="calendarRef"
+        />
 
-        <SharedDeadlineViewDeadline
-          v-for="deadline in currentDateDeadlines"
-          :key="deadline.id"
-          :index="calendar.accentIndexFor(deadline.id)"
-          :deadline="deadline">
-          <SharedDeadlineCalendarCard :deadline="deadline" variant="mobile" />
-        </SharedDeadlineViewDeadline>
+        <!-- Mobile: Deadlines List -->
+        <div class="lg:hidden flex flex-col w-full gap-2">
+          <div class="flex flex-row items-center justify-between">
+            <h2 class="font-semibold">{{ selectedDateFormatted }}</h2>
+            <Badge variant="secondary">{{ currentDateDeadlines.length + currentDateReminders.length }} item(s)</Badge>
+          </div>
+
+          <div v-if="currentDateDeadlines.length === 0 && currentDateReminders.length === 0" class="flex flex-col gap-3 text-center py-12 text-muted-foreground">
+            <CalendarOff class="size-12 mx-auto opacity-50" />
+            <p class=" italic text-lg ibm-plex-serif">Nothing on this date</p>
+            <Button @click="addEventOpen = true" size="sm" class="w-full">
+              <Plus class="size-4 mr-1" />
+              Add Event
+            </Button>
+          </div>
+
+          <SharedDeadlineViewDeadline
+              v-for="deadline in currentDateDeadlines"
+              :key="deadline.id"
+              :index="calendar.accentIndexFor(deadline.id)"
+              :deadline="deadline">
+            <SharedDeadlineCalendarCard :deadline="deadline" variant="mobile" />
+          </SharedDeadlineViewDeadline>
+
+          <SharedCalendarReminderCard
+              v-for="r in currentDateReminders"
+              :key="r.id"
+              :reminder="r"
+              @changed="calendar.fetchReminders()" />
+        </div>
       </div>
-    </div>
+      </div>
 
     <!-- Desktop: Right Sidebar -->
     <div class="hidden lg:flex flex-col w-96 h-full border-l bg-muted/30 overflow-hidden">
@@ -108,22 +149,39 @@
           </div>
         </div>
 
-        <div v-else-if="currentDateDeadlines.length === 0" class="text-center py-12 text-muted-foreground">
+        <div v-else-if="currentDateDeadlines.length === 0 && currentDateReminders.length === 0" class="text-center py-12 text-muted-foreground">
           <CalendarOff class="size-12 mx-auto mb-2 opacity-50" aria-hidden="true" />
-          <p class="text-sm">No deadlines on this date</p>
-          <p class="text-xs mt-1">Select another date or check your filters</p>
+          <p class="text-sm">Nothing on this date</p>
+          <p class="text-xs mt-1">Add an event or check your filters</p>
+          <Button @click="addEventOpen = true" size="sm" class="ml-auto sm:ml-0">
+            <Plus class="size-4 mr-1" />
+            Add Event
+          </Button>
         </div>
 
-        <SharedDeadlineViewDeadline
-          v-else
-          v-for="deadline in currentDateDeadlines"
-          :key="deadline.id"
-          :index="calendar.accentIndexFor(deadline.id)"
-          :deadline="deadline">
-          <SharedDeadlineCalendarCard :deadline="deadline" variant="desktop" />
-        </SharedDeadlineViewDeadline>
+        <template v-else>
+          <SharedDeadlineViewDeadline
+            v-for="deadline in currentDateDeadlines"
+            :key="deadline.id"
+            :index="calendar.accentIndexFor(deadline.id)"
+            :deadline="deadline">
+            <SharedDeadlineCalendarCard :deadline="deadline" variant="desktop" />
+          </SharedDeadlineViewDeadline>
+
+          <SharedCalendarReminderCard
+            v-for="r in currentDateReminders"
+            :key="r.id"
+            :reminder="r"
+            @changed="calendar.fetchReminders()" />
+        </template>
       </div>
     </div>
+
+    <!-- Add Event dialog -->
+    <SharedCalendarAddEventDialog
+      v-model:open="addEventOpen"
+      :default-date="currentDate"
+      @created="calendar.fetchReminders()" />
 
     <!-- Deadline Detail Sheet -->
     <Sheet v-model:open="selectedDeadline.open">
@@ -148,7 +206,8 @@ import { Button } from '@/components/ui/button';
 import {
   Search,
   CalendarOff,
-  CalendarClock
+  CalendarClock,
+  Plus
 } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { useCalendarStore } from '~/stores/calendar';
@@ -167,7 +226,8 @@ definePageMeta({
 });
 
 const calendar = useCalendarStore();
-const { deadlines, selectedDate, loading } = storeToRefs(calendar);
+const { deadlines, reminders, selectedDate, loading } = storeToRefs(calendar);
+const addEventOpen = ref(false);
 const calendarRef = ref<{ goToday: () => void } | null>(null);
 
 const currentDate = computed({
@@ -212,9 +272,32 @@ const filteredDeadlines = computed(() => {
   return filtered;
 });
 
-// Get events for calendar
+// Reminders the user can act on, filtered to match the active status filter and
+// search the same way deadlines are.
+const filteredReminders = computed(() => {
+  let list = reminders.value || [];
+  const now = new Date();
+
+  if (activeFilter.value === 'pending') {
+    list = list.filter(r => r.status !== 'done' && now <= new Date(r.targetDate));
+  } else if (activeFilter.value === 'fulfilled') {
+    list = list.filter(r => r.status === 'done');
+  }
+
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    list = list.filter(r =>
+      r.title?.toLowerCase().includes(query) ||
+      r.expand?.matter?.name?.toLowerCase().includes(query)
+    );
+  }
+
+  return list;
+});
+
+// Get events for calendar — deadlines + standalone reminder "events".
 const filteredEvents = computed(() => {
-  return filteredDeadlines.value.map((d) => {
+  const deadlineEvents = filteredDeadlines.value.map((d) => {
     const idx = (calendar.accentIndexFor(d.id) % 4) + 1;
     return {
       id: d.id,
@@ -222,13 +305,33 @@ const filteredEvents = computed(() => {
       title: d.name,
       color: `accent-${idx}`,
       completed: d.completed,
+      kind: 'deadline' as const,
     };
   });
+
+  const reminderEvents = filteredReminders.value.map((r) => {
+    const idx = (calendar.accentIndexFor(r.id) % 4) + 1;
+    return {
+      id: r.id,
+      date: r.targetDate,
+      title: r.title,
+      color: `accent-${idx}`,
+      completed: r.status === 'done',
+      kind: 'event' as const,
+    };
+  });
+
+  return [...deadlineEvents, ...reminderEvents];
 });
 
 // Current date deadlines
 const currentDateDeadlines = computed(() => {
   return filteredDeadlines.value.filter(d => toISO(d.date) === currentDate.value);
+});
+
+// Current date reminder events
+const currentDateReminders = computed(() => {
+  return filteredReminders.value.filter(r => toISO(r.targetDate) === currentDate.value);
 });
 
 // Status counts for selected date
@@ -307,6 +410,9 @@ function toDate(input?: string | Date) {
 
 onMounted(async () => {
   calendar.ensureSubscribed();
-  await calendar.fetchDeadlines(false);
+  await Promise.all([
+    calendar.fetchDeadlines(false),
+    calendar.fetchReminders(),
+  ]);
 });
 </script>

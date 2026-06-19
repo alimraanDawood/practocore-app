@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col lg:w-[95vw] w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
+    <div class="flex flex-col w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
         <div class="flex flex-col h-full w-full">
             <DefineSearchFilterTemplate>
                 <div class="flex flex-row items-center gap-2 w-full">
@@ -119,6 +119,7 @@
             <div class="flex flex-col w-full h-full">
                 <div class="flex flex-row items-center p-3 border-b justify-between">
                     <div class="flex items-center gap-2">
+                        <SidebarTrigger class="lg:hidden" />
                         <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
                         <span v-if="_offlineFallback" class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
                             <WifiOff class="size-3" /> Cached
@@ -139,36 +140,59 @@
                           </TabsList>
                         </Tabs>
 
-                        <Button
-                            v-if="matters?.items?.length > 0"
-                            size="sm"
-                            :variant="selection.active ? 'secondary' : 'outline'"
-                            @click="toggleSelectionMode"
-                        >
-                            <ListChecks class="size-4" />
-                            {{ selection.active ? 'Cancel' : 'Select' }}
-                        </Button>
+                        <div class="flex-row gap-2 items-center hidden lg:flex">
+                          <Button
+                              v-if="matters?.items?.length > 0"
+                              size="sm"
+                              :variant="selection.active ? 'secondary' : 'outline'"
+                              @click="toggleSelectionMode"
+                          >
+                              <ListChecks class="size-4" />
+                              {{ selection.active ? 'Cancel' : 'Select' }}
+                          </Button>
 
-                        <Button
-                            v-if="hasPermission('canCreateMatters')"
-                            variant="outline"
-                            :disabled="!!createDisabledReason"
-                            :title="createDisabledReason"
-                            @click="navigateTo('/main/eccmis')"
-                        >
-                            <Download /> Import
-                        </Button>
+                          <Button
+                              v-if="hasPermission('canCreateMatters')"
+                              variant="outline"
+                              :disabled="!!createDisabledReason"
+                              :title="createDisabledReason"
+                              @click="navigateTo('/main/eccmis')"
+                          >
+                              <Download /> Import
+                          </Button>
 
-                        <Button
-                            v-if="hasPermission('canCreateMatters')"
-                            @click="navigateTo('/main/matters/create?next=/main/matters')"
-                            :disabled="!!createDisabledReason"
-                            :title="createDisabledReason"
-                        >
-                            <Plus /> Add Matter
-                        </Button>
+                          <Button
+                              v-if="hasPermission('canCreateMatters')"
+                              @click="navigateTo('/main/matters/create?next=/main/matters')"
+                              :disabled="!!createDisabledReason"
+                              :title="createDisabledReason"
+                          >
+                              <Plus /> Add Matter
+                          </Button>
+                        </div>
                     </div>
                 </div>
+
+              <div class="flex-row gap-2 items-center px-3 py-2 border-b justify-between flex lg:hidden">
+                <Button
+                    v-if="matters?.items?.length > 0"
+                    :variant="selection.active ? 'secondary' : 'outline'"
+                    @click="toggleSelectionMode"
+                >
+                  <ListChecks class="size-4" />
+                  {{ selection.active ? 'Cancel' : 'Select' }}
+                </Button>
+
+                <Button
+                    v-if="hasPermission('canCreateMatters')"
+                    @click="navigateTo('/main/matters/create?next=/main/matters')"
+                    :disabled="!!createDisabledReason"
+                    :title="createDisabledReason"
+
+                >
+                  <Plus /> Add Matter
+                </Button>
+              </div>
 
                 <div class="flex flex-col p-3 border-b gap-2 lg:hidden">
                   <ReuseSearchFilterTemplate />
@@ -252,7 +276,7 @@
 
             <XyzTransition xyz="fade down">
                 <div v-if="selection.active"
-                    class="fixed p-3 w-full bottom-[4rem] lg:bottom-0 flex flex-col items-center justify-center z-30">
+                    class="fixed p-3 w-full bottom-0 lg:bottom-0 flex flex-col items-center justify-center z-30">
                     <div
                         class="bg-background p-3 rounded border shadow-sm space-x-2 justify-between flex flex-row w-full lg:max-w-md">
                         <div class="flex flex-row items-center text-xs gap-2">

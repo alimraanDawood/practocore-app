@@ -106,8 +106,21 @@
           </div>
         </div>
 
+        <!-- Scheduled next term (e.g. a paid plan stacked on top of a running trial) -->
+        <div v-if="scheduledPlan" class="flex flex-row items-start gap-3 border border-dashed rounded-lg p-4 bg-muted/20">
+          <CalendarClock class="size-5 text-muted-foreground shrink-0 mt-0.5" />
+          <div class="flex flex-col gap-0.5 text-sm">
+            <span class="font-medium">
+              {{ scheduledPlan.expand?.plan?.name || 'Scheduled plan' }} starts {{ dayjs(scheduledPlan.startDate).format('MMM D, YYYY') }}
+            </span>
+            <span class="text-muted-foreground">
+              Begins automatically when your current {{ activeSubscription?.trial ? 'trial' : 'plan' }} ends — UGX {{ scheduledPlan.amount?.toLocaleString() }}.
+            </span>
+          </div>
+        </div>
+
         <!-- No Active Subscription -->
-        <div v-else class="flex flex-col border border-dashed rounded-lg p-8 items-center justify-center gap-4 text-center">
+        <div v-if="false" class="flex flex-col border border-dashed rounded-lg p-8 items-center justify-center gap-4 text-center">
           <div class="flex flex-col gap-2">
             <CreditCard class="size-12 text-muted-foreground mx-auto" />
             <h3 class="font-semibold text-lg">No Active Subscription</h3>
@@ -270,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { Calendar, CreditCard, Tag, ArrowRight, Loader2, FileText, Infinity } from "lucide-vue-next";
+import { Calendar, CalendarClock, CreditCard, Tag, ArrowRight, Loader2, FileText, Infinity } from "lucide-vue-next";
 import dayjs from "dayjs";
 import { useOrganisationStore } from "~/stores/organisation";
 import { getSignedInUser } from "~/services/auth";
@@ -286,6 +299,8 @@ organisationStore.fetchOrganisation(getSignedInUser()?.organisation);
 
 // Cast active subscription for template type safety
 const activeSubscription = computed(() => billingStore.activeSubscription as any);
+// The queued/scheduled term (paid plan stacked on top of a running trial), if any.
+const scheduledPlan = computed(() => billingStore.nextSubscription as any);
 
 // Derive history items from store
 const historyItems = computed(() => {

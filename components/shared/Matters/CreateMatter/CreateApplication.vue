@@ -156,7 +156,7 @@
                       <SharedMattersCreateMatterTemplateSelector
                           v-bind="componentField"
 
-                          @template-selected="st => selectedTemplate = st"
+                          @template-selected="onTemplateSelected"
                       />
                       <FormMessage />
                     </FormItem>
@@ -182,7 +182,7 @@
                 </template>
 
                 <!-- STEP: DEFINE PARTIES (if template has data.parties) -->
-                <template v-if="steps[stepIndex - 1]?.id === 'parties' && selectedTemplate?.template?.data?.parties?.enabled">
+                <template v-if="steps[stepIndex - 1]?.id === 'parties' && hasParties">
                   <div class="space-y-2">
                     <h3 class="font-semibold text-sm">Add Parties</h3>
                     <p class="text-xs text-muted-foreground">
@@ -204,7 +204,7 @@
                       ref="partiesRef"
                       v-model="parties"
                       v-model:representing="representing"
-                      :party-roles="selectedTemplate?.template?.data?.parties?.roles || []"
+                      :party-roles="partyRoles"
                   />
                 </template>
 
@@ -424,9 +424,20 @@ const representing = ref<{
 
 const selectedTemplate = ref(null);
 
-// Computed steps - dynamically include party step if template has data.parties
+// Explicit handler — not an inline `selectedTemplate = st` — so the ref is reliably
+// written regardless of template-compiler ref-assignment behaviour.
+function onTemplateSelected(t: any) {
+  selectedTemplate.value = t;
+}
+
+// Single reactive source of truth for party configuration.
+const partyConfig = computed(() => selectedTemplate.value?.template?.data?.parties ?? null);
+const hasParties = computed(() => partyConfig.value?.enabled === true);
+const partyRoles = computed(() => partyConfig.value?.roles ?? []);
+
+// Computed steps - dynamically include party step if the template declares parties
 const steps = computed(() => {
-  const hasPartyConfig = selectedTemplate?.value?.template?.data?.parties?.enabled === true;
+  const hasPartyConfig = hasParties.value;
   const hasOrg = !!getSignedInUser()?.organisation;
 
   if (hasOrg) {
@@ -716,7 +727,7 @@ const isPartyStepValid = computed(() => {
   if(inheritParties.value) return true;
 
   if (stepIndex.value !== partyStepIndex.value) return true;
-  if (!selectedTemplate?.value?.template?.data?.parties?.enabled) return true;
+  if (!hasParties.value) return true;
 
   return partiesRef.value?.isValid ?? false;
 });
@@ -725,10 +736,10 @@ const isPartyStepValid = computed(() => {
 // Uses the "side" field from party roles to determine order (first side v. second side)
 // Truncates with "and others" when there are too many parties
 const generateCaseNameFromParties = () => {
-  if (!selectedTemplate?.value?.template?.data?.parties?.enabled) return '';
+  if (!hasParties.value) return '';
 
   const allParties = parties.value;
-  const partyRoles = selectedTemplate?.value?.template?.data?.parties?.roles || [];
+  const roles = partyRoles.value;
 
   // Configuration for truncation
   const MAX_PARTIES_PER_SIDE = 2; // Show max 2 parties, then "and others"
@@ -739,7 +750,7 @@ const generateCaseNameFromParties = () => {
   const secondSideParties: string[] = [];
 
   // Iterate through all party roles to get their side configuration
-  for (const role of partyRoles) {
+  for (const role of roles) {
     const members = allParties[role.id] || [];
     const namedMembers = members.filter(m => m.name?.trim());
 
@@ -801,7 +812,7 @@ const generateCaseNameFromParties = () => {
 watch(
     parties,
     () => {
-      if (!selectedTemplate?.value?.template?.data?.parties?.enabled) return;
+      if (!hasParties.value) return;
 
       const generatedName = generateCaseNameFromParties();
       if (generatedName && formRef.value?.setFieldValue) {
@@ -842,8 +853,8 @@ const onSubmit = async (values: any) => {
       court: values.court,
       judges: values.judges || [],
       opposingCounsel: values.opposingCounsel || [],
-      // Include parties and representing if template has data.parties
-      ...(selectedTemplate?.value?.template?.data?.parties?.enabled && {
+      // Include parties and representing if the template declares parties
+      ...(hasParties.value && {
         parties: cleanedParties,
         representing: representing.value,
       }),

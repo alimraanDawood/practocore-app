@@ -19,6 +19,12 @@
             <RotateCw />
           </Button>
 
+          <SharedReminders>
+            <Button size="icon-sm" variant="outline">
+              <AlarmClock />
+            </Button>
+          </SharedReminders>
+
           <SharedNotifications>
             <Button size="icon-sm" variant="outline">
               <Bell />
@@ -44,7 +50,7 @@
 </template>
 
 <script setup>
-import {Maximize2, Minus, X, ChevronDown, Bell, Settings, RotateCw} from "lucide-vue-next";
+import {Maximize2, Minus, X, ChevronDown, Bell, Settings, RotateCw, AlarmClock} from "lucide-vue-next";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
 import {getCurrentWindow} from "@tauri-apps/api/window";
 

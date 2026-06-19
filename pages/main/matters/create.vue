@@ -1,18 +1,31 @@
 <template>
-  <div v-if="isOffline" class="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
-    <WifiOff class="size-10 text-muted-foreground" />
-    <p class="font-semibold">No Internet Connection</p>
-    <p class="text-sm text-muted-foreground">Matter creation requires an internet connection to calculate deadlines.</p>
-    <Button variant="outline" @click="$router.back()">Go Back</Button>
-  </div>
+  <!-- SUCCESS: Matter created -->
+  <div
+    v-if="store.isCreated"
+    class="flex flex-col items-center justify-center text-center gap-6 py-10 h-full"
+  >
+    <div class="grid place-items-center size-16 rounded-full bg-primary/10 text-primary">
+      <CircleCheckBig class="size-8" />
+    </div>
 
-  <div v-else-if="!isSubscriptionActive" class="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
-    <Lock class="size-10 text-muted-foreground" />
-    <p class="font-semibold">Subscription expired</p>
-    <p class="text-sm text-muted-foreground">Renew your subscription to create new matters.</p>
-    <SharedBillingSubscribe>
-      <Button>Renew subscription</Button>
-    </SharedBillingSubscribe>
+    <div class="flex flex-col gap-1.5 max-w-sm">
+      <h2 class="font-semibold text-xl ibm-plex-serif">Matter created</h2>
+      <p class="text-sm text-muted-foreground">
+        <span class="font-medium text-foreground">{{ store.createdMatter?.name || 'Your matter' }}</span>
+        is ready. Its deadlines have been calculated and added to your calendar.
+      </p>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs">
+      <Button class="w-full gap-1.5 flex-1" @click="store.openCreatedMatter">
+        <ArrowUpRight class="size-4" />
+        Open Matter
+      </Button>
+      <Button variant="outline" class="w-full flex-1 gap-1.5" @click="store.handleClose">
+        <ChevronLeft class="size-4" />
+        Go back
+      </Button>
+    </div>
   </div>
 
   <form v-else id="create-matter-page" @submit.prevent class="flex flex-col gap-6">
@@ -203,17 +216,17 @@ import * as z from 'zod'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import { toast } from 'vue-sonner'
-import { WifiOff, Lock } from 'lucide-vue-next'
+import { CircleCheckBig, ArrowUpRight, ChevronLeft } from 'lucide-vue-next'
 import { createMatter } from '~/services/matters'
 import { useCreateMatterStore } from '~/stores/createMatter'
-
-const { isOffline } = useNetwork()
-const activePlan = usePlanActive()
-const isSubscriptionActive = computed(() => activePlan.value?.active === true)
+import { useMattersStore } from '~/stores/matters'
+import { useDashboardStore } from '~/stores/dashboard'
 
 definePageMeta({ layout: 'create-matter' })
 
 const store = useCreateMatterStore()
+const mattersStore = useMattersStore()
+const dashboardStore = useDashboardStore()
 const route = useRoute()
 
 // ─── Template ref (must stay in component scope) ──────────────────────────────
@@ -371,12 +384,6 @@ const generateCaseNameFromParties = () => {
 
 // ─── Submission ───────────────────────────────────────────────────────────────
 const onSubmit = async () => {
-  // Backstop for direct navigation — the form is gated above, but the layout's
-  // submit button lives outside this page, so guard the action itself too.
-  if (!isSubscriptionActive.value) {
-    toast.error('Your subscription has expired. Renew to create matters.')
-    return
-  }
   store.loading = true
   try {
     const cleanedParties: Record<string, any[]> = {}
@@ -409,12 +416,18 @@ const onSubmit = async () => {
     }
     const result = await createMatter(payload)
 
-    if (result) toast.success('Matter created successfully!')
-
+    // createMatter throws on a non-2xx response, so reaching here means success.
     umTrackEvent('created-matter', { result: result?.matter })
 
-    const next = route.query.next as string | undefined
-    await navigateTo(next ?? '/main/matters')
+    // Refresh the matters store so the new matter is visible on return. The list
+    // page only does a cache-respecting fetch on mount (5-min TTL), so without
+    // this the freshly created matter would be missing until the cache expires.
+    if (result?.matter) mattersStore.addMatterOptimistic(result.matter)
+    mattersStore.fetchMatters(true).catch(() => {})
+    dashboardStore.fetchStatistics(true).catch(() => {})
+
+    // Show the success screen (Open Matter / Go back) instead of navigating away.
+    store.createdMatter = result?.matter ?? null
   } catch {
     toast.error('Unable to create matter at this time.')
   } finally {

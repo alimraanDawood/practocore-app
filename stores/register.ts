@@ -1,15 +1,11 @@
 import { defineStore } from 'pinia'
 
 export type Persona = 'SOLO' | 'JOIN' | 'ORG'
-export type CreationMode = 'SCRATCH' | 'SAMPLE'
 export type RegisterStep =
     | 'persona'
     | 'join-info'
     | 'org-details'
     | 'firm-contact'
-    | 'matter-mode'
-    | 'matter-form'
-    | 'deadline-reveal'
     | 'invite-team'
     | 'account-create'
     | 'reminders'
@@ -35,16 +31,6 @@ export interface FirmContact {
     phoneNumber: string
 }
 
-export interface CalculatorResult {
-    mode: CreationMode
-    title: string
-    templateName: string
-    triggerDate: string
-    output: any
-    templateId: string
-    fieldValues: Record<string, any>
-}
-
 export interface InviteDetails {
     orgName: string
     inviterName: string
@@ -55,22 +41,17 @@ export interface InviteDetails {
 const STEPS_BY_PERSONA: Record<Persona, RegisterStep[]> = {
     ORG: [
         'persona', 'account-create', 'org-details', 'firm-contact',
-        'matter-mode', 'matter-form', 'deadline-reveal', 'reminders',
-        'trial-payment', 'creating', 'invite-team',
+        'reminders', 'trial-payment', 'creating', 'invite-team',
     ],
     JOIN: [
         'persona', 'join-info', 'account-create', 'reminders', 'creating',
     ],
     SOLO: [
-        'persona', 'account-create', 'matter-mode', 'matter-form',
-        'deadline-reveal', 'reminders', 'trial-payment', 'creating',
+        'persona', 'account-create', 'reminders', 'trial-payment', 'creating',
     ],
 }
 
 const SKIP_TARGETS: Partial<Record<RegisterStep, RegisterStep | string>> = {
-    'matter-mode': 'reminders',
-    'matter-form': 'reminders',
-    'deadline-reveal': 'reminders',
     'invite-team': '/main',
 }
 
@@ -78,7 +59,6 @@ export const useRegisterStore = defineStore('register', {
     state: () => ({
         // Flow control
         persona: 'SOLO' as Persona,
-        creationMode: '' as CreationMode | '',
 
         // Firm / org data
         orgDetails: { firmName: '' } as OrgDetails,
@@ -94,13 +74,14 @@ export const useRegisterStore = defineStore('register', {
             phone: '',
         } as ReminderPrefs,
 
-        // Calculator / matter result
-        calculatorResult: null as CalculatorResult | null,
-
         // Auth state
         isGoogleAuth: false,
         googleUserId: '',
         createdUserId: '',
+        // True when the user is already authenticated on entry (e.g. signed in with
+        // Google from the login page, or created their account earlier in this flow).
+        // Removes the redundant account-create step from the flow.
+        accountExists: false,
 
         // JOIN invite flow
         inviteToken: '',
@@ -129,17 +110,24 @@ export const useRegisterStore = defineStore('register', {
     }),
 
     getters: {
-        steps: (state): RegisterStep[] => STEPS_BY_PERSONA[state.persona],
+        steps(): RegisterStep[] {
+            const base = STEPS_BY_PERSONA[this.persona]
+            // Once the user is already authenticated, account-create is redundant —
+            // drop it so navigation, progress and the step dots all skip it cleanly.
+            return this.accountExists ? base.filter(s => s !== 'account-create') : base
+        },
 
         dotSteps(): RegisterStep[] {
             return (this.steps as RegisterStep[]).filter(s => s !== 'creating')
         },
 
-        progressForStep: (state) => (step: RegisterStep): number => {
-            const steps = STEPS_BY_PERSONA[state.persona]
-            const index = steps.indexOf(step)
-            if (index === -1 || steps.length <= 1) return 0
-            return (index / (steps.length - 1)) * 100
+        progressForStep(): (step: RegisterStep) => number {
+            const steps = this.steps as RegisterStep[]
+            return (step: RegisterStep): number => {
+                const index = steps.indexOf(step)
+                if (index === -1 || steps.length <= 1) return 0
+                return (index / (steps.length - 1)) * 100
+            }
         },
     },
 
@@ -151,14 +139,14 @@ export const useRegisterStore = defineStore('register', {
         // Navigation path helpers — return full Nuxt route paths
 
         nextStepPath(currentStep: RegisterStep): string | null {
-            const steps = STEPS_BY_PERSONA[this.persona]
+            const steps = this.steps
             const index = steps.indexOf(currentStep)
             if (index === -1 || index >= steps.length - 1) return null
             return `/auth/register/${steps[index + 1]}`
         },
 
         prevStepPath(currentStep: RegisterStep): string | null {
-            const steps = STEPS_BY_PERSONA[this.persona]
+            const steps = this.steps
             const index = steps.indexOf(currentStep)
             if (index <= 0) return null
             if (steps[index - 1] === 'creating') {

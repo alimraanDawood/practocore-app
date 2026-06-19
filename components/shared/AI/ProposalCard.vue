@@ -3,7 +3,8 @@ import { Zap, Check, X, Loader2 } from 'lucide-vue-next';
 import type {
   AiResponse,
   ReassignPreview, BulkReassignPreview, NotificationPreview,
-  AdjournPreview, FulfillPreview, MatterEditPreview,
+  AdjournPreview, FulfillPreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
+  GenerateDocumentPreview,
 } from '~/services/ai';
 import { proposalTheme, formatToolName, type ProposalVariant } from './proposals/theme';
 import ProposalReassign from './proposals/ProposalReassign.vue';
@@ -12,6 +13,9 @@ import ProposalNotification from './proposals/ProposalNotification.vue';
 import ProposalAdjourn from './proposals/ProposalAdjourn.vue';
 import ProposalFulfill from './proposals/ProposalFulfill.vue';
 import ProposalMatterEdit from './proposals/ProposalMatterEdit.vue';
+import ProposalCreateMatter from './proposals/ProposalCreateMatter.vue';
+import ProposalReminder from './proposals/ProposalReminder.vue';
+import ProposalGenerateDocument from './proposals/ProposalGenerateDocument.vue';
 import ProposalGeneric from './proposals/ProposalGeneric.vue';
 
 const props = withDefaults(defineProps<{
@@ -20,7 +24,7 @@ const props = withDefaults(defineProps<{
   loading?: boolean;
 }>(), { variant: 'panel', loading: false });
 
-defineEmits<{ approve: []; dismiss: [] }>();
+const emit = defineEmits<{ approve: []; dismiss: []; editManually: [] }>();
 
 const t = computed(() => proposalTheme(props.variant));
 const glass = computed(() => props.variant === 'glass');
@@ -56,6 +60,14 @@ const iconWrap = computed(() => glass.value
       <ProposalAdjourn v-else-if="kind === 'adjourn'" :preview="(proposal.preview as AdjournPreview)" :variant="variant" />
       <ProposalFulfill v-else-if="kind === 'fulfill'" :preview="(proposal.preview as FulfillPreview)" :variant="variant" />
       <ProposalMatterEdit v-else-if="kind === 'matter_edit'" :preview="(proposal.preview as MatterEditPreview)" :variant="variant" />
+      <ProposalReminder v-else-if="kind === 'reminder'" :preview="(proposal.preview as ReminderPreview)" :variant="variant" />
+      <ProposalGenerateDocument v-else-if="kind === 'generate_document'" :preview="(proposal.preview as GenerateDocumentPreview)" :variant="variant" />
+      <ProposalCreateMatter
+        v-else-if="kind === 'create_matter'"
+        :preview="(proposal.preview as CreateMatterPreview)"
+        :variant="variant"
+        @edit-manually="emit('editManually')"
+      />
       <template v-else>
         <p v-if="proposal.description" class="text-sm mb-2" :class="t.muted">{{ proposal.description }}</p>
         <ProposalGeneric :input="proposal.input" :variant="variant" />

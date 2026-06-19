@@ -65,8 +65,8 @@
           <!-- Desktop event pills -->
           <div class="hidden lg:flex flex-col gap-1 mt-1 w-full">
             <template v-for="evt in visibleEvents(cell.date)" :key="evt.id">
-              <div class="text-[11px] px-1.5 py-0.5 rounded cursor-pointer truncate border overflow-visible relative"
-                   :class="`bg-${evt.color}/50 text-${evt.color} border-${evt.color}`"
+              <div class="text-[11px] px-1.5 py-0.5 rounded cursor-pointer truncate border overflow-visible font-semibold relative"
+                   :class="`bg-${evt.color} text-white border-${evt.color}`"
                    @click.stop="eventClicked(cell.date, evt)"
                    :aria-label="evt.title">
                 <div v-if="evt.completed"
@@ -75,7 +75,10 @@
                      aria-hidden="true">
                   <Check class="size-3" />
                 </div>
-                <div class="flex flex-row w-full overflow-hidden">{{ evt.title }}</div>
+                <div class="flex flex-row items-center gap-1 w-full overflow-hidden">
+                  <Bell v-if="evt.kind === 'event'" class="size-2.5 shrink-0" aria-hidden="true" />
+                  <span class="truncate">{{ evt.title }}</span>
+                </div>
               </div>
             </template>
             <div v-if="overflowCount(cell.date) > 0" class="text-[11px] text-muted-foreground">
@@ -99,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, Check } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, Check, Bell } from 'lucide-vue-next';
 
 interface CalendarEvent {
   id: string
@@ -107,6 +110,7 @@ interface CalendarEvent {
   title: string
   color?: string
   completed?: boolean
+  kind?: 'deadline' | 'event'
 }
 
 const props = withDefaults(defineProps<{

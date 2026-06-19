@@ -1,112 +1,262 @@
-<template>
-  <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
-    <SharedOfflineBanner />
-    <SharedDesktopTitleBar class="hidden xs:flex" />
-
-    <SharedBillingExpiryBanner class="xs:hidden" />
-
-    <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
-      <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">
-        <div class="flex flex-col w-full lg:w-[95vw] bg-background gap-4 text-foreground p-5 pb-0 h-full">
-          <SharedTopBar />
-        </div>
-      </div>
-
-      <div class="flex flex-col w-full items-center h-full overflow-hidden relative">
-        <NuxtPage :transition="{
-          name: 'page',
-          mode: 'out-in'
-        }" />
-
-        <div class="p-3 absolute bottom-0 right-0">
-          <SharedAITrigger />
-        </div>
-
-      </div>
-
-      <SharedMobileNavigation class="w-full xs:hidden" />
-    </div>
-  </div>
-</template>
-
-<script setup>
-import { Search, LogOut, Bell, MessageSquareText, ChevronDown } from 'lucide-vue-next';
+<script lang="ts" setup>
+// App-shell layout: a collapsible sidebar (modeled on the assistant page's
+// shell) that wraps every page rendered into <slot />. Pages opt out with
+// `definePageMeta({ layout: 'blank' })` (or another layout).
+import {
+  ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
+  Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
+  type LucideIcon, Plus, Workflow,
+} from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
-import {computed, ref, onMounted} from "vue";
-import { Capacitor } from '@capacitor/core';
-import {Vue3PullToRefresh} from "@amirafa/vue3-pull-to-refresh";
+import {useAuthStore} from '~/stores/auth';
+import {useOrganisationStore} from '~/stores/organisation';
+
+const workspace = 'PractoCore';
+const route = useRoute();
+const authStore = useAuthStore();
+authStore.init();
 
 useOfflineSync();
-const hours = new Date().getHours();
 
-const signOutUser = () => {
+// ── Current organisation (shown under the brand, switchable) ────────────────
+const orgStore = useOrganisationStore();
+const currentOrgId = computed(() => getSignedInUser()?.organisation || '');
+const orgName = computed(() => {
+  if (!currentOrgId.value) return 'Personal account';
+  return orgStore.organisation?.name || 'Loading…';
+});
+
+onMounted(() => {
+  if (currentOrgId.value) orgStore.fetchOrganisation(currentOrgId.value);
+});
+
+// ── Signed-in user (footer profile) ─────────────────────────────────────────
+const user = computed(() => {
+  const u = getSignedInUser();
+  return {name: u?.name || 'User', email: u?.email || '', avatar: u?.avatar || ''};
+});
+
+function userInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || 'U';
+}
+
+function signOutUser() {
   signOut();
   window.location.reload();
 }
 
-const isTauri = computed(() => {
-  return '__TAURI_INTERNALS__' in window;
-});
+interface NavLink {
+  label: string;
+  icon: LucideIcon;
+  to: string;
+  exact?: boolean;
+  adminOnly?: boolean;
+  needsOrg?: boolean;
+  beta?: boolean;
+}
 
-// Platform detection for pull-to-refresh
-const isMobile = ref(false);
+const hasOrg = computed(() => !!getSignedInUser()?.organisation);
 
-onMounted(() => {
-  const platform = Capacitor.getPlatform();
-  isMobile.value = platform === 'android' || platform === 'ios';
-});
+const appNav: NavLink[] = [
+  // { label: 'Home', icon: Home, to: '/main', exact: true },
+  {label: 'Assistant', icon: MessageSquareText, to: '/main', exact: true},
+  {label: 'Matters', icon: Scale, to: '/main/matters'},
+  {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
+  {label: 'Vault', icon: FolderLock, to: '/main/vault'},
+  {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
+  {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
+  // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },
+];
+
+const visibleNav = computed(() => appNav.filter((item) => {
+  if (item.needsOrg && !hasOrg.value) return false;
+  if (item.adminOnly && !authStore.isAdmin) return false;
+  return true;
+}));
+
+function isActive(item: NavLink): boolean {
+  if (item.exact) return route.path === item.to;
+  return route.path === item.to || route.path.startsWith(`${item.to}/`);
+}
 </script>
 
-<style>
-/* Fade transition */
-.page-enter-active,
-.page-leave-active {
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-}
+<template>
+  <div class="flex h-svh flex-col">
 
-.page-enter-from {
-  opacity: 0;
-  transform: translateX(10px);
-}
+    <SidebarProvider class="min-h-0 flex-1 overflow-hidden">
+      <!-- Mobile/touch gestures: left-edge swipe opens the offcanvas sidebar,
+           swipe-back closes it, and navigation auto-closes it. -->
+      <LayoutSidebarMobileGestures />
+      <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
+          <SidebarMenu>
 
-.page-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
-}
+            <SidebarMenuItem class="flex flex-row items-center gap-1">
+              <!-- Brand + current organisation — click to switch organisation. -->
+              <SharedSwitchOrganisations>
+                <SidebarMenuButton size="lg" class="min-w-0 flex-1 data-[state=open]:bg-sidebar-accent"
+                                   :tooltip="orgName">
+                  <div
+                      class="grid size-8 shrink-0 place-items-center rounded-md bg-foreground text-sm font-bold text-background">
+                    <img src="@/assets/img/logos/Practo Core Square -- orange.png" class="size-8" alt="PractoCore"/>
+                  </div>
+                  <div class="grid min-w-0 flex-1 text-left leading-tight">
+                    <span class="truncate text-sm font-semibold">{{ workspace }}</span>
+                    <span class="truncate text-xs text-muted-foreground">{{ orgName }}</span>
+                  </div>
+                  <ChevronsUpDown class="ml-auto size-4 shrink-0 text-muted-foreground"/>
+                </SidebarMenuButton>
+              </SharedSwitchOrganisations>
+              <!-- Collapse toggle — hidden in icon mode (the rail handles expanding). -->
+              <SidebarTrigger class="size-7 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden"/>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
 
-/* Alternative: Slide transition (uncomment to use) */
-/*
-.page-enter-active,
-.page-leave-active {
-  transition: all 0.3s ease;
-}
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton class="border" tooltip="New chat" @click="$router.push('/main')">
+                  <Plus/>
+                  <span>New Chat</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+          <SidebarGroup>
+            <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem v-for="item in visibleNav" :key="item.to">
+                  <SidebarMenuButton as-child :tooltip="item.label" :is-active="isActive(item)">
+                    <NuxtLink :to="item.to">
+                      <component :is="item.icon"/>
+                      <span>{{ item.label }}</span>
+                    </NuxtLink>
+                  </SidebarMenuButton>
+                  <SidebarMenuBadge
+                    v-if="item.beta"
+                    class="bg-primary/10 text-primary text-[10px] font-medium uppercase tracking-wide"
+                  >
+                    Beta
+                  </SidebarMenuBadge>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-.page-enter-from {
-  opacity: 0;
-  transform: translateX(20px);
-}
+          <!-- Page-aware quick-access: recent chats on the assistant, document
+               libraries on the vault. -->
+          <LayoutSidebarContextPanel />
+        </SidebarContent>
 
-.page-leave-to {
-  opacity: 0;
-  transform: translateX(-20px);
-}
-*/
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child tooltip="Settings" :is-active="route.path.startsWith('/main/settings')">
+                <NuxtLink to="/main/settings">
+                  <Settings/>
+                  <span>Settings</span>
+                </NuxtLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child tooltip="Help">
+                <NuxtLink to="/main/settings">
+                  <LifeBuoy/>
+                  <span>Help</span>
+                </NuxtLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <!-- Theme toggle — collapses away in icon mode. -->
+            <SidebarMenuItem class="group-data-[collapsible=icon]:hidden">
+              <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground">
+                <span>Dark mode</span>
+                <SharedDarkModeSwitch/>
+              </div>
+            </SidebarMenuItem>
 
-/* Alternative: Scale transition (uncomment to use) */
-/*
-.page-enter-active,
-.page-leave-active {
-  transition: all 0.25s ease;
-}
+            <!-- User profile + account menu. -->
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <SidebarMenuButton size="lg" class="data-[state=open]:bg-sidebar-accent"
+                                     :tooltip="user.name">
+                    <Avatar class="size-8 shrink-0 rounded-md">
+                      <AvatarImage :src="user.avatar" :alt="user.name"/>
+                      <AvatarFallback class="rounded-md bg-primary text-xs text-primary-foreground">
+                        {{ userInitials(user.name) }}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div class="grid min-w-0 flex-1 text-left leading-tight">
+                      <span class="truncate text-sm font-medium">{{ user.name }}</span>
+                      <span class="truncate text-xs text-muted-foreground">{{ user.email }}</span>
+                    </div>
+                    <ChevronsUpDown class="ml-auto size-4 shrink-0 text-muted-foreground"/>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent class="min-w-56 w-[--radix-dropdown-menu-trigger-width]" side="top" align="end">
+                  <div class="flex items-center gap-2 px-2 py-1.5">
+                    <Avatar class="size-8 shrink-0 rounded-md">
+                      <AvatarImage :src="user.avatar" :alt="user.name"/>
+                      <AvatarFallback class="rounded-md bg-primary text-xs text-primary-foreground">
+                        {{ userInitials(user.name) }}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div class="grid min-w-0 flex-1 leading-tight">
+                      <span class="truncate text-sm font-medium">{{ user.name }}</span>
+                      <span class="truncate text-xs text-muted-foreground">{{ user.email }}</span>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator/>
+                  <DropdownMenuItem as-child>
+                    <NuxtLink to="/main/settings">
+                      <UserIcon class="size-4"/>
+                      <span>Account</span>
+                    </NuxtLink>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem as-child>
+                    <NuxtLink to="/main/settings">
+                      <Settings class="size-4"/>
+                      <span>Settings</span>
+                    </NuxtLink>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator/>
+                  <DropdownMenuItem class="text-destructive focus:text-destructive" @click="signOutUser">
+                    <LogOut class="size-4"/>
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
 
-.page-enter-from {
-  opacity: 0;
-  transform: scale(0.95);
-}
+        <!-- Edge rail: click/drag to toggle in any state (expanded or collapsed). -->
+        <SidebarRail/>
+      </Sidebar>
 
-.page-leave-to {
-  opacity: 0;
-  transform: scale(1.05);
-}
-*/
-</style>
+      <!-- ── Main panel ──────────────────────────────────────────────── -->
+      <SidebarInset class="relative min-h-0">
+        <!-- Mobile-only bar: the sidebar is an offcanvas sheet on small
+             screens, so its trigger must live outside it. Hidden on desktop,
+             where the in-sidebar trigger + rail handle toggling. -->
+
+        <SharedOfflineBanner/>
+        <SharedBillingExpiryBanner class="xs:hidden"/>
+
+        <div class="min-h-0 h-dvh flex-col flex w-full overflow-hidden xs:pb-12 lg:pb-0">
+          <!--                    <SharedDesktopTitleBar class="hidden lg:flex" />-->
+          <div class="flex flex-col w-full h-full">
+            <slot/>
+          </div>
+
+<!--          <SharedMobileNavigation class="w-full xs:hidden"/>-->
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  </div>
+</template>

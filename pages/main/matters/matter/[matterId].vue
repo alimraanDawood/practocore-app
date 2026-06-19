@@ -52,14 +52,16 @@
   </div>
 
   <div v-else class="flex flex-col w-full h-full items-center overflow-y-scroll">
-    <div class="flex flex-col w-full lg:flex-row lg:w-[95vw] h-full lg:border-x lg:divide-x">
+    <div class="flex flex-col w-full lg:flex-row h-full">
       <div class="flex flex-col w-full overflow-y-scroll">
+        <!-- Title -->
         <div class="xs:flex flex-col w-full hidden p-3">
           <Badge variant="secondary" v-if="currentMatterOrApplication?.collectionName === 'Applications'">Application</Badge>
           <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
 
+        <!-- Case Controls -->
         <div class="flex flex-row flex-wrap w-full items-center gap-2 p-3">
           <SharedMattersMemberManagement
             v-if="isSupervisor && currentUser?.organisation !== ''"
@@ -83,7 +85,10 @@
           </div>
         </div>
 
-        <div class="flex flex-row gap-2 p-3">
+        <Separator />
+
+        <!-- Tabs (Applications: to be moved to another place) (Replace) -->
+        <div v-if="false" class="flex flex-row gap-2 p-2">
           <div class="flex flex-row flex-wrap gap-1 items-center">
             <Tabs default-value="all" v-model="currentApplicationOption">
               <TabsList class="gap-2 items-center">
@@ -97,7 +102,11 @@
                   {{ application.caseNumber }}
                 </TabsTrigger>
 
-                <SharedMattersCreateMatterCreateApplication v-if="hasPermission('canCreateApplications')" :parent-matter="matter">
+                <!-- Interlocutory applications are dropped pending the v2 SPAWN/toll
+                     decision (toll Q#1). The entry point is disabled (v-if="false")
+                     so nothing calls the removed create-application endpoint. The
+                     CreateApplication.vue component is left dormant for a future revisit. -->
+                <SharedMattersCreateMatterCreateApplication v-if="false" :parent-matter="matter">
                   <Button size="sm">
                     <Plus />
                     Add Application
@@ -108,111 +117,163 @@
           </div>
         </div>
 
-        <Separator />
+        <div class="flex flex-row gap-2 p-2 h-full">
+          <Tabs class="w-full h-full" default-value="timeline">
+            <TabsList>
+              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
+              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="drafts">AI Drafts</TabsTrigger>
+            </TabsList>
 
-        <!-- Mobile deadline summary (the desktop sidebar is hidden on mobile) -->
-        <div
-          v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
-          class="lg:hidden flex flex-col gap-3 p-3"
-        >
-          <div v-if="latestDeadline" class="border rounded-lg p-3 bg-muted flex flex-col gap-1">
-            <span class="text-sm font-semibold ibm-plex-serif">Upcoming Deadline</span>
-            <span
-              class="text-sm italic text-muted-foreground ibm-plex-serif"
-              v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
-            ></span>
-          </div>
+            <!-- Timeline -->
+            <TabsContent  value="timeline" class="h-full">
+              <div class="flex flex-col h-full">
+                <Separator />
 
-          <div
-            v-if="missedDeadlines.length > 0"
-            class="border border-destructive/30 rounded-lg p-3 bg-destructive/5 flex flex-col gap-1"
-          >
+                <!-- Mobile deadline summary (the desktop sidebar is hidden on mobile) -->
+                <div
+                    v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
+                    class="lg:hidden flex flex-col gap-3 p-3"
+                >
+                  <div v-if="latestDeadline" class="border rounded-lg p-3 bg-muted flex flex-col gap-1">
+                    <span class="text-sm font-semibold ibm-plex-serif">Upcoming Deadline</span>
+                    <span
+                        class="text-sm italic text-muted-foreground ibm-plex-serif"
+                        v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
+                    ></span>
+                  </div>
+
+                  <div
+                      v-if="missedDeadlines.length > 0"
+                      class="border border-destructive/30 rounded-lg p-3 bg-destructive/5 flex flex-col gap-1"
+                  >
             <span class="text-sm font-semibold ibm-plex-serif">
               {{ missedDeadlines.length }} Missed Deadline{{ missedDeadlines.length !== 1 ? 's' : '' }}
             </span>
-            <template v-for="missed in missedDeadlines" :key="missed.id">
+                    <template v-for="missed in missedDeadlines" :key="missed.id">
               <span
-                class="text-sm italic text-muted-foreground ibm-plex-serif"
-                v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
+                  class="text-sm italic text-muted-foreground ibm-plex-serif"
+                  v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
               ></span>
-            </template>
-          </div>
+                    </template>
+                  </div>
 
-          <div v-if="pendingEvents.length > 0">
-            <Drawer>
-              <DrawerTrigger as-child>
-                <Button size="sm" variant="outline" class="w-full">
-                  <CalendarIcon class="size-4"/>
-                  {{ pendingEvents.length }} Key Event{{ pendingEvents.length !== 1 ? 's' : '' }} Pending
-                </Button>
-              </DrawerTrigger>
+                  <div v-if="pendingEvents.length > 0">
+                    <Drawer>
+                      <DrawerTrigger as-child>
+                        <Button size="sm" variant="outline" class="w-full">
+                          <CalendarIcon class="size-4"/>
+                          {{ pendingEvents.length }} Key Event{{ pendingEvents.length !== 1 ? 's' : '' }} Pending
+                        </Button>
+                      </DrawerTrigger>
 
-              <DrawerContent>
-                <div class="flex flex-col gap-4 p-4 pb-8">
-                  <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
-                  <div v-for="event in pendingEvents" :key="event.id" class="flex flex-col gap-2">
-                    <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
-                    <SharedEventsCompleteEvent @updated="reloadMatter" :event="event">
-                      <Button size="sm" class="w-fit">
-                        <CalendarIcon class="size-3"/>
-                        Set Date
-                      </Button>
-                    </SharedEventsCompleteEvent>
+                      <DrawerContent>
+                        <div class="flex flex-col gap-4 p-4 pb-8">
+                          <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
+                          <div v-for="event in pendingEvents" :key="event.id" class="flex flex-col gap-2">
+                            <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
+                            <SharedEventsCompleteEvent @updated="reloadMatter" :event="event">
+                              <Button size="sm" class="w-fit">
+                                <CalendarIcon class="size-3"/>
+                                Set Date
+                              </Button>
+                            </SharedEventsCompleteEvent>
+                          </div>
+                        </div>
+                      </DrawerContent>
+                    </Drawer>
                   </div>
                 </div>
-              </DrawerContent>
-            </Drawer>
-          </div>
-        </div>
 
-        <Separator
-          class="lg:hidden"
-          v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
-        />
+                <Separator
+                    class="lg:hidden"
+                    v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
+                />
 
-        <div class="flex flex-col w-full p-3">
-          <SharedMattersMatterTimeline
-            @updated="reloadMatter"
-            :matter="matter"
-            :application-filter="currentApplicationOption"
-          />
-        </div>
-      </div>
+                <div class="flex flex-row w-full lg:divide-x h-full">
+                  <div class="flex flex-col w-full p-3">
+                    <SharedMattersMatterTimeline
+                        @updated="reloadMatter"
+                        :matter="matter"
+                        :application-filter="currentApplicationOption"
+                    />
+                  </div>
 
-      <!-- Desktop sidebar -->
-      <div class="hidden lg:flex flex-col max-w-sm w-full h-full gap-5 p-3">
-        <div class="flex flex-col" v-if="latestDeadline">
-          <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
-          <span
-            class="text-sm italic text-muted-foreground ibm-plex-serif"
-            v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
-          ></span>
-        </div>
+                  <div class="hidden lg:flex flex-col max-w-sm w-full h-full gap-5 p-3">
+                    <div class="flex flex-col" v-if="latestDeadline">
+                      <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
+                      <span
+                          class="text-sm italic text-muted-foreground ibm-plex-serif"
+                          v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
+                      ></span>
+                    </div>
 
-        <div class="flex flex-col" v-if="latestDeadline">
-          <span class="text-lg font-semibold ibm-plex-serif">Missed Deadlines</span>
-          <template v-if="missedDeadlines.length > 0">
+                    <div class="flex flex-col" v-if="latestDeadline">
+                      <span class="text-lg font-semibold ibm-plex-serif">Missed Deadlines</span>
+                      <template v-if="missedDeadlines.length > 0">
             <span
-              v-for="missed in missedDeadlines"
-              :key="missed.id"
-              class="text-sm italic text-muted-foreground ibm-plex-serif"
-              v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
+                v-for="missed in missedDeadlines"
+                :key="missed.id"
+                class="text-sm italic text-muted-foreground ibm-plex-serif"
+                v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
             ></span>
-          </template>
-          <span class="text-sm text-muted-foreground mx-auto p-3" v-else>No Missed Deadlines</span>
-        </div>
+                      </template>
+                      <span class="text-sm text-muted-foreground mx-auto p-3" v-else>No Missed Deadlines</span>
+                    </div>
 
-        <div v-if="pendingEvents.length > 0" class="flex flex-col gap-5">
-          <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
-          <div v-for="event in pendingEvents" :key="event.id" class="flex flex-col gap-3">
-            <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
-            <SharedEventsCompleteEvent @updated="reloadMatter" :event="event">
-              <Button size="sm" class="w-fit">
-                <CalendarIcon class="size-3"/>
-                Set Date
-              </Button>
-            </SharedEventsCompleteEvent>
-          </div>
+                    <div v-if="pendingEvents.length > 0" class="flex flex-col gap-5">
+                      <span class="text-lg font-semibold ibm-plex-serif">Key Events</span>
+                      <div v-for="event in pendingEvents" :key="event.id" class="flex flex-col gap-3">
+                        <span class="text-sm font-semibold ibm-plex-serif">{{ event.input_prompt }}</span>
+                        <SharedEventsCompleteEvent @updated="reloadMatter" :event="event">
+                          <Button size="sm" class="w-fit">
+                            <CalendarIcon class="size-3"/>
+                            Set Date
+                          </Button>
+                        </SharedEventsCompleteEvent>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <!-- Case Documents — vault files scoped to this matter (upload + live ingestion) -->
+            <TabsContent value="documents">
+              <template v-if="matter?.id">
+                <Separator />
+                <div class="flex flex-col gap-3 p-3">
+                  <div class="flex items-center gap-2">
+                    <FolderLock class="size-4 text-muted-foreground" />
+                    <span class="text-lg font-semibold ibm-plex-serif">Case Documents</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground -mt-1">
+                    Upload pleadings, correspondence and evidence. The AI reads them so it can answer questions and
+                    draft with this case's facts.
+                  </p>
+                  <SharedVaultBrowser scope="matter" :scope-id="matter.id" root-label="Case Documents" />
+                </div>
+              </template>
+            </TabsContent>
+
+            <!-- Drafted Documents — AI-generated .docx work product scoped to this matter -->
+            <TabsContent value="drafts">
+              <template v-if="matter?.id">
+                <Separator />
+                <div class="flex flex-col gap-3 p-3">
+                  <div class="flex items-center gap-2">
+                    <FileType2 class="size-4 text-muted-foreground" />
+                    <span class="text-lg font-semibold ibm-plex-serif">Drafted Documents</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground -mt-1">
+                    Editable Word drafts the assistant produced for this case — plaints, letters, contracts and more.
+                    Ask the assistant to draft one; approved drafts land here.
+                  </p>
+                  <SharedDocumentsBrowser :matter-id="matter.id" />
+                </div>
+              </template>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
@@ -232,6 +293,8 @@ import {
   XCircle,
   ArrowLeft,
   Users,
+  FolderLock,
+  FileType2,
 } from 'lucide-vue-next';
 import {
   subscribeToDeadline,
@@ -254,7 +317,7 @@ dayjs.extend(timezone);
 dayjs.extend(relativeTime);
 
 definePageMeta({
-  layout: 'no-mobile-nav',
+  layout: 'default',
 });
 
 const route = useRoute();

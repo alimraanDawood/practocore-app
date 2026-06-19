@@ -22,7 +22,7 @@ definePageMeta({ layout: 'blank' });
 const {
   isListening, isTranscribing, transcript, audioLevel, micError,
   startListening, stopListening,
-  isSpeaking, ttsSupported, speak, stopSpeaking,
+  isSpeaking, ttsSupported, caption, speak, speakTimed, stopSpeaking,
   prefs: speechPrefs, savePrefs,
 } = useSpeech();
 
@@ -352,7 +352,7 @@ async function sendMessage(text: string) {
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
     }
-    if (autoRead.value && ttsSupported.value) speak(response.content ?? '');
+    if (autoRead.value && ttsSupported.value) (audioMode.value ? speakTimed : speak)(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -405,7 +405,7 @@ async function approveProposal() {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
     }
-    if (autoRead.value && ttsSupported.value) speak(response.content ?? '');
+    if (autoRead.value && ttsSupported.value) (audioMode.value ? speakTimed : speak)(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -512,6 +512,8 @@ onMounted(async () => {
               <p v-if="voiceState === 'listening' && transcript" class="text-white text-xl font-medium leading-snug">{{ transcript }}</p>
               <p v-else-if="voiceState === 'listening'" class="text-white/40 text-sm animate-pulse">Listening…</p>
               <p v-else-if="voiceState === 'thinking'" class="text-white/40 text-sm">Thinking…</p>
+              <p v-else-if="voiceState === 'speaking' && caption" class="text-white/90 text-base leading-relaxed line-clamp-5">{{ caption }}</p>
+              <p v-else-if="voiceState === 'speaking'" class="text-white/40 text-sm animate-pulse">Speaking…</p>
               <div v-else-if="lastAssistantText" class="space-y-2">
                 <p v-if="lastUserText" class="text-white/30 text-xs truncate">{{ lastUserText }}</p>
                 <p class="text-white/70 text-sm leading-relaxed line-clamp-4">{{ lastAssistantText }}</p>
@@ -649,18 +651,20 @@ onMounted(async () => {
         <template v-else-if="groupedConversations.length > 0">
           <div v-for="group in groupedConversations" :key="group.label" class="mb-2">
             <p class="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">{{ group.label }}</p>
-            <button
-              v-for="conv in group.items" :key="conv.id"
-              class="group w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-start gap-2.5"
-              :class="conversationId === conv.id ? 'bg-accent' : ''"
-              @click="loadConversation(conv.id)"
-            >
-              <MessageSquare class="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-              <span class="flex-1 text-sm truncate leading-snug">{{ conv.title }}</span>
+            <div class="flex flex-row gap-1 items-center">
+              <button
+                v-for="conv in group.items" :key="conv.id"
+                class="group w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-start gap-2.5"
+                :class="conversationId === conv.id ? 'bg-accent' : ''"
+                @click="loadConversation(conv.id)"
+              >
+                <MessageSquare class="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                <span class="flex-1 text-sm truncate leading-snug">{{ conv.title }}</span>
+              </button>
               <button class="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0" @click.stop="removeConversation(conv.id)">
                 <Trash2 class="size-3.5" />
               </button>
-            </button>
+            </div>
           </div>
         </template>
         <p v-else class="px-3 py-8 text-sm text-muted-foreground text-center">No conversations yet.</p>
@@ -681,6 +685,7 @@ onMounted(async () => {
           <span class="font-semibold text-sm">PractoAI</span>
         </div>
         <div class="ml-auto flex items-center gap-1">
+          <SharedDarkModeSwitch />
           <Button
             size="icon-sm" variant="ghost"
             :class="autoRead ? 'text-primary' : 'text-muted-foreground'"

@@ -4,6 +4,7 @@ const TAB_ROOTS: Record<string, string> = {
   main: '/main',
   matters: '/main/matters',
   calendar: '/main/calendar',
+  vault: '/main/vault',
   lawyers: '/main/lawyers',
   settings: '/main/settings',
   ai: '/main/ai',
@@ -12,6 +13,7 @@ const TAB_ROOTS: Record<string, string> = {
 function getTabForPath(path: string): string | null {
   if (path.startsWith('/main/matters')) return 'matters'
   if (path.startsWith('/main/calendar')) return 'calendar'
+  if (path.startsWith('/main/vault')) return 'vault'
   if (path.startsWith('/main/lawyers')) return 'lawyers'
   if (path.startsWith('/main/settings')) return 'settings'
   if (path.startsWith('/main/ai')) return 'ai'
@@ -24,6 +26,7 @@ const tabStacks = reactive<Record<string, string[]>>({
   main: ['/main'],
   matters: ['/main/matters'],
   calendar: ['/main/calendar'],
+  vault: ['/main/vault'],
   lawyers: ['/main/lawyers'],
   settings: ['/main/settings'],
   ai: ['/main/ai'],

@@ -1,19 +1,31 @@
 <template>
-  <div class="flex flex-row px-3 h-16 shrink-0 justify-around items-center border-t bg-background">
-    <button
-        v-for="item in visibleTabs"
-        :key="item.tab"
-        @click="onTabClick(item.tab)"
-        class="flex flex-col items-center text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px] transition-colors"
-        :class="{ 'font-semibold text-primary': activeTab === item.tab }">
-      <component :is="item.icon" class="size-5" />
-      <span>{{ item.label }}</span>
-    </button>
+  <div class="dark flex flex-row gap-6 p-3 justify-center">
+    <div class="flex flex-row w-fit p-3 gap-6 h-16 shrink-0 justify-around items-center border-t bg-background rounded-full iems-center">
+      <button
+          v-for="item in visibleTabs"
+          :key="item.tab"
+          @click="onTabClick(item.tab)"
+          class="flex flex-col items-center text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px] transition-colors"
+          :class="{ 'font-semibold text-primary': activeTab === item.tab }">
+        <component :is="item.icon" class="size-5" />
+        <span>{{ item.label }}</span>
+      </button>
+    </div>
+
+    <div class="bg-background dark p-3 rounded-full">
+      <SidebarTrigger>
+        <button
+            class="flex flex-col items-center text-muted-foreground size-12 justify-center aspect-square text-xs rounded gap-[4px] transition-colors">
+          <Ellipsis class="size-5" />
+          <span>More</span>
+        </button>
+      </SidebarTrigger>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Home, Settings, Scale, CalendarIcon, Users } from 'lucide-vue-next'
+import { Home, Settings, Scale, CalendarIcon, Users, FolderLock, Ellipsis } from 'lucide-vue-next'
 import { Capacitor } from '@capacitor/core'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
@@ -23,9 +35,7 @@ const { navigateToTab, activeTab } = useTabHistory()
 const allTabs = [
   { tab: 'main',     label: 'Home',     icon: Home,         adminOnly: false },
   { tab: 'matters',  label: 'Matters',  icon: Scale,        adminOnly: false },
-  { tab: 'calendar', label: 'Calendar', icon: CalendarIcon, adminOnly: false },
-  { tab: 'lawyers',  label: 'Lawyers',  icon: Users,        adminOnly: true  },
-  { tab: 'settings', label: 'Settings', icon: Settings,     adminOnly: false },
+  { tab: 'vault',    label: 'Vault',    icon: FolderLock,   adminOnly: false },
 ]
 
 const visibleTabs = computed(() =>

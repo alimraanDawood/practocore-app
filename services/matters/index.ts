@@ -64,10 +64,39 @@ export async function createMatter(options: {
     templateId: string,
     date: string,
     fieldValues: any[],
-    parties?: Record<string, any[]>,  // Party data organized by role ID
-    representing?: { role_id: string, party_member_ids: string[] }  // Representation data
+    parties?: Record<string, any[]>,
+    representing?: { role_id: string, party_member_ids: string[] }
 }) {
-    return fetch(`${SERVER_URL}/api/practocore/create-matter`, {
+    const res = await fetch(`${SERVER_URL}/api/de/v1/create-matter`, {
+        method: 'POST',
+        body: JSON.stringify(options),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    });
+    if (!res.ok) {
+        // Never let an error body ({error:'...'}) be treated as a created matter —
+        // otherwise callers report a false "success" and the matter is never created.
+        const body = await res.text().catch(() => '');
+        throw new Error(`createMatter failed (${res.status}): ${body}`);
+    }
+    return res.json();
+}
+
+export async function createMatterFromDates(options: {
+    name: string,
+    caseNumber: string,
+    personal: boolean,
+    members?: string[],
+    templateId: string,
+    date: string,
+    fieldValues: any[],
+    deadlineDates: Record<string, string>,
+    parties?: Record<string, any[]>,
+    representing?: { role_id: string, party_member_ids: string[] }
+}) {
+    return fetch(`${SERVER_URL}/api/de/v1/create-matter-from-dates`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {

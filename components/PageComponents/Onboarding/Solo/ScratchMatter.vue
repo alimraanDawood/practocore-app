@@ -3,7 +3,7 @@ import * as z from 'zod';
 import dayjs from 'dayjs';
 import { toTypedSchema } from '@vee-validate/zod';
 import { useMediaQuery } from '@vueuse/core';
-import { DeadlineEngine } from '~/lib/deadline-engine';
+import { previewLegacyTemplate } from '~/services/deadline-v2';
 import { getTemplates } from '~/services/templates';
 
 type CreationMode = 'SCRATCH' | 'SAMPLE';
@@ -191,13 +191,14 @@ const applySamplePreset = async () => {
   }
 };
 
-const calculate = (values: any) => {
+const calculate = async (values: any) => {
   if (!selectedTemplate.value?.template) {
     return;
   }
 
   try {
-    const generated = DeadlineEngine.generate(
+    // Computation happens on the backend (v2 engine), not in the browser.
+    const generated = await previewLegacyTemplate(
       selectedTemplate.value.template,
       values.fields?.date,
       values.fields || {},
@@ -224,7 +225,7 @@ const canSubmit = computed(() =>
 const triggerSubmit = async () => {
   const result = await formRef.value?.validate()
   if (result?.valid) {
-    calculate(formRef.value?.values as any)
+    await calculate(formRef.value?.values as any)
   }
 }
 

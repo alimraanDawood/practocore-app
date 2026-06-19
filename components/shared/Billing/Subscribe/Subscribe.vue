@@ -291,15 +291,15 @@
   </Dialog>
 
   <!-- Mobile: Drawer -->
-  <Drawer v-else v-model:open="isOpen">
-    <DrawerTrigger>
+  <Sheet v-else v-model:open="isOpen">
+    <SheetTrigger>
       <slot />
-    </DrawerTrigger>
+    </SheetTrigger>
 
-    <DrawerContent class="flex flex-col max-h-[90vh] overflow-y-scroll">
+    <SheetContent class="flex flex-col w-full overflow-y-scroll">
       <ReuseTemplate />
-    </DrawerContent>
-  </Drawer>
+    </SheetContent>
+  </Sheet>
 </template>
 
 <script setup>
