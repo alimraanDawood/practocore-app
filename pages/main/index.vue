@@ -6,7 +6,6 @@ import {
   CalendarClock, CircleAlert, ArrowRight, Scale,
   type LucideIcon,
 } from 'lucide-vue-next';
-import {marked} from 'marked';
 import {toast} from 'vue-sonner';
 import {getSignedInUser} from '~/services/auth';
 import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
@@ -16,19 +15,13 @@ import {
   getConversation, deleteConversation,
   type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
   type AiImageMediaType, type AiResponse, type AiContext,
-  type ConvDisplayMessage, type AiStreamStep,
+  type ConvDisplayMessage, type AiStreamStep, type AiCitation,
 } from '~/services/ai';
 import {getMatters, getAllDeadlines} from '~/services/matters';
 import {getOrganisationUsers} from '~/services/admin';
 
 // Uses the default app-shell layout (global sidebar + header).
 // Chat-specific controls (new chat, history) live in this page's own toolbar.
-
-marked.use({breaks: true, gfm: true});
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text) as string;
-}
 
 const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
 
@@ -170,7 +163,7 @@ const draft = ref('');
 
 // ── Chat engine ─────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
-type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean };
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[] };
 type ChatMessage = DisplayAiMessage | ToolEvent;
 
 const messages = ref<ChatMessage[]>([]);
@@ -330,6 +323,7 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
       steps: turnSteps.length ? turnSteps : undefined,
       durationMs: turnSteps.length ? elapsedMs : undefined,
       stepsOpen: false,
+      citations: response.citations?.length ? response.citations : undefined,
     });
     if (response.conversationId) {
       const isNew = !conversationId.value;
@@ -641,13 +635,14 @@ async function loadConversation(id: string) {
       const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
       return {role: 'tool-event', content: m.content, status};
     }
-    if (m.role === 'assistant' && m.steps?.length) {
+    if (m.role === 'assistant' && (m.steps?.length || m.citations?.length)) {
       return {
         role: 'assistant',
         content: m.content,
-        steps: m.steps,
+        steps: m.steps?.length ? m.steps : undefined,
         durationMs: m.durationMs,
-        stepsOpen: false
+        stepsOpen: false,
+        citations: m.citations?.length ? m.citations : undefined,
       } as DisplayAiMessage;
     }
     return m as AiMessage;
@@ -664,19 +659,30 @@ async function removeConversation(id: string) {
   if (conversationId.value === id) newChat();
 }
 
-function newChat() {
+// Clear the in-memory thread WITHOUT touching the router. The route watcher
+// below is the single source of truth and calls this whenever `?c` disappears
+// (e.g. the sidebar "New Chat" link, which navigates to /main with empty query).
+function resetThread() {
   messages.value = [];
   conversationId.value = '';
   pendingProposal.value = null;
   draft.value = '';
   activeSteps.value = [];
+}
+
+function newChat() {
+  // Drive everything through the URL so the sidebar link and the in-page
+  // buttons share one path; the watcher performs the actual reset.
   if (route.query.c) router.replace({ query: {} });
+  else resetThread();
 }
 
 // URL is the single source of truth for which conversation is open: the sidebar,
-// deep links and the in-page history all set `?c=<id>`; this loads it.
+// deep links and the in-page history all set `?c=<id>`. Loading `?c` opens that
+// conversation; clearing it (no `?c`) resets to a fresh chat.
 watch(() => route.query.c, (id) => {
   if (typeof id === 'string' && id) loadConversation(id);
+  else resetThread();
 }, { immediate: false });
 
 onMounted(async () => {
@@ -936,9 +942,10 @@ onMounted(async () => {
                   </li>
                 </ul>
               </div>
-              <div
-                  class="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none text-sm leading-relaxed"
-                  v-html="renderMarkdown(messageText(msg.content))"/>
+              <SharedAICitationsCitedAnswer
+                  class="text-sm leading-relaxed"
+                  :content="messageText(msg.content)"
+                  :citations="(msg as DisplayAiMessage).citations"/>
             </div>
           </div>
         </template>

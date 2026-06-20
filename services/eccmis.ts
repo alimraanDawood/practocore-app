@@ -98,6 +98,9 @@ const CONNECT_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/connect`;
 const STATUS_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/status`;
 const FETCH_PREVIEW_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/fetch-preview`;
 const IMPORT_SELECTED_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/import-selected`;
+const PORTFOLIO_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/portfolio`;
+const ATTACH_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/attach`;
+const DETACH_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/detach`;
 
 /**
  * Throws an Error carrying the server's `error` string (or a status fallback)
@@ -271,4 +274,58 @@ export async function importEccmisSelected(selectedCaseNumbers: string[]): Promi
         },
     });
     return parseOrThrow<ImportSelectedResult>(res);
+}
+
+// ---- Phase 3: create-in-Practo, attach-to-ECCMIS (read-side link) ----------
+
+/** One case in the advocate's ECCMIS portfolio, for the attach picker. */
+export interface PortfolioCase {
+    caseInstanceId: number;
+    caseNumber: string;
+    statusLabel?: string;
+    parties?: string[];
+    filingDate?: string;
+    /** If set, this ECCMIS case is already linked to that local matter. */
+    linkedMatterId?: string;
+}
+
+export interface AttachResult {
+    matterId: string;
+    caseNumber: string;
+    deadlinesCreated: number;
+}
+
+/** Fetch the advocate's ECCMIS portfolio (annotated with existing links). */
+export async function fetchEccmisPortfolio(): Promise<PortfolioCase[]> {
+    const res = await fetch(PORTFOLIO_ENDPOINT, {
+        headers: { 'Authorization': pocketbase.authStore.token },
+    });
+    const { cases } = await parseOrThrow<{ cases: PortfolioCase[] }>(res);
+    return cases ?? [];
+}
+
+/** Link an existing PractoCore matter to an ECCMIS case (read-side only). */
+export async function attachEccmisCase(matterId: string, caseInstanceId: number): Promise<AttachResult> {
+    const res = await fetch(ATTACH_ENDPOINT, {
+        method: 'POST',
+        body: JSON.stringify({ matterId, caseInstanceId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json',
+        },
+    });
+    return parseOrThrow<AttachResult>(res);
+}
+
+/** Remove the ECCMIS link from a matter (keeps already-imported hearings). */
+export async function detachEccmisCase(matterId: string): Promise<void> {
+    const res = await fetch(DETACH_ENDPOINT, {
+        method: 'POST',
+        body: JSON.stringify({ matterId }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json',
+        },
+    });
+    await parseOrThrow<{ detached: boolean }>(res);
 }
