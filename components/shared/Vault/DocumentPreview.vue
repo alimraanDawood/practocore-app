@@ -16,7 +16,10 @@ import { vaultFileUrl, type VaultDocument } from '~/services/vault';
 // HTML). Anything else falls back to a "can't preview" empty state. The host
 // (Browser.vue) decides the chrome around this — a desktop side panel or a
 // mobile sheet — so this component only owns its own title bar + body.
-const props = defineProps<{ doc: VaultDocument }>();
+// initialPage (1-based) is an optional jump target — set when opened from a
+// citation whose locator is a "page N". After the PDF renders we scroll that page
+// into view. Ignored for non-PDF documents.
+const props = defineProps<{ doc: VaultDocument; initialPage?: number }>();
 const emit = defineEmits<{ close: [] }>();
 
 marked.use({ breaks: true, gfm: true });
@@ -138,6 +141,22 @@ onBeforeUnmount(revokeObjectUrl);
 // vue-pdf-embed is heavy and pulls in pdfjs — load it lazily, client-only.
 const VuePdfEmbed = defineAsyncComponent(() => import('vue-pdf-embed'));
 
+const pdfHost = ref<HTMLElement | null>(null);
+
+// Once the PDF finishes rendering, scroll the requested page into view (citation
+// jump). vue-pdf-embed renders one canvas per page in document order, so the
+// (initialPage-1)th canvas is the target. Best-effort: out-of-range or no target
+// just leaves the view at the top.
+function onPdfRendered() {
+  const page = props.initialPage;
+  if (!page || page < 1 || !pdfHost.value) return;
+  nextTick(() => {
+    const canvases = pdfHost.value?.querySelectorAll('canvas');
+    const target = canvases?.[page - 1];
+    target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+}
+
 async function download() {
   try {
     const signed = await vaultFileUrl(props.doc);
@@ -205,9 +224,9 @@ async function download() {
       </div>
 
       <!-- PDF -->
-      <div v-else-if="kind === 'pdf'" class="bg-muted/30 p-3">
+      <div v-else-if="kind === 'pdf'" ref="pdfHost" class="bg-muted/30 p-3">
         <ClientOnly>
-          <VuePdfEmbed :source="url" class="mx-auto max-w-3xl [&_canvas]:!h-auto [&_canvas]:!w-full" />
+          <VuePdfEmbed :source="url" class="mx-auto max-w-3xl [&_canvas]:!h-auto [&_canvas]:!w-full" @rendered="onPdfRendered" />
           <template #fallback>
             <div class="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
               <Loader2 class="size-4 animate-spin" /> Rendering PDF…

@@ -153,6 +153,16 @@
 
                           <Button
                               v-if="hasPermission('canCreateMatters')"
+                              variant="outline"
+                              :disabled="!!createDisabledReason"
+                              :title="createDisabledReason"
+                              @click="navigateTo('/main/eccmis')"
+                          >
+                              <Download /> Import
+                          </Button>
+
+                          <Button
+                              v-if="hasPermission('canCreateMatters')"
                               @click="navigateTo('/main/matters/create?next=/main/matters')"
                               :disabled="!!createDisabledReason"
                               :title="createDisabledReason"
@@ -313,7 +323,7 @@
 
 <script setup lang="ts">
 import { vOnLongPress } from '@vueuse/components'
-import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table, Grid2X2, ListChecks, WifiOff } from 'lucide-vue-next';
+import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table, Grid2X2, ListChecks, WifiOff, Download } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
@@ -500,4 +510,5 @@ const deleteSelectedMatters = async () => {
         dashboardStore.fetchStatistics(true)
     ]);
 }
+
 </script>

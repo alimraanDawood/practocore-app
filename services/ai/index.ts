@@ -62,6 +62,36 @@ export interface ConvDisplayMessage {
   content: string;
   steps?: AiStreamStep[];
   durationMs?: number;
+  citations?: AiCitation[];
+}
+
+// A verifiable source the assistant consulted while producing an answer. The
+// backend builds these in practocore-backend/ai/citations.go (keep in sync). The
+// answer text may reference one inline as a [[cite:<citeId>]] marker, and every
+// citation also appears in the "Sources" footer. `kind` drives how the popover
+// renders and what "open" does.
+export interface AiCitation {
+  citeId: string;
+  kind: 'memory' | 'legal' | 'matter' | 'web';
+  title: string;
+  snippet?: string;
+  meta?: {
+    // memory
+    scope?: string;
+    confidence?: number;
+    provenance?: { type?: string; ref?: string; locator?: string };
+    sourceDocId?: string;   // vault document id — open the doc at `locator`
+    locator?: string;       // e.g. "page 3" or a section/clause heading
+    vaultName?: string;
+    // legal
+    url?: string;
+    sourceId?: string;
+    templateId?: string;
+    // matter
+    matterId?: string;
+    // (web reuses `url`)
+    [k: string]: any;
+  };
 }
 
 export interface AiContext {
@@ -94,6 +124,9 @@ export interface AiResponse {
   actionResult?: AiActionResult;
   // error field
   error?: string;
+  // Verifiable sources this answer consulted (type=text only). Rendered as a
+  // "Sources" footer; inline [[cite:<citeId>]] markers in `content` resolve here.
+  citations?: AiCitation[];
   // Set when the credit pool+overage is exhausted: the reply was forced onto the
   // lighter model. The UI shows a "running on the lighter model" banner.
   degraded?: boolean;

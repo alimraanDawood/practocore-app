@@ -83,6 +83,13 @@
           <div v-if="currentMatterOrApplication?.parties">
             <SharedMattersMatterParties :matter="currentMatterOrApplication"/>
           </div>
+
+          <SharedMattersEccmisLink
+            v-if="currentMatterOrApplication?.collectionName !== 'Applications'"
+            :matter="currentMatterOrApplication"
+            :can-manage="isSupervisor || currentMatterOrApplication?.owner === currentUser?.id"
+            @updated="reloadMatter"
+          />
         </div>
 
         <Separator />

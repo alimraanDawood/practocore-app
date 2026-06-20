@@ -78,9 +78,11 @@ const deadlineText = computed(() => {
 });
 
 const deadlineCompletion = computed(() => {
-    let deadlineCount = props.matter.expand.deadlines.filter(d => (d.status === 'fulfilled')).length;
-    
-    return ((deadlineCount / props.matter.deadlines.length) * 100);
+    const total = props.matter.deadlines.length;
+    if (total === 0) return 0;
+    const deadlineCount = props.matter.expand.deadlines.filter(d => (d.status === 'fulfilled')).length;
+
+    return Number(((deadlineCount / total) * 100).toFixed(1));
 });
 
 const nextDeadLineText = computed(() => {

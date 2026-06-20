@@ -39,6 +39,14 @@
           <Button
               size="sm"
               class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'eccmis' ? 'default' : 'ghost'"
+              @click="activeTab = 'eccmis'"
+          >ECCMIS Sync
+          </Button>
+
+          <Button
+              size="sm"
+              class="lg:w-full flex flex-row justify-start"
               :variant="activeTab === 'documentation' ? 'default' : 'ghost'"
               @click="activeTab = 'documentation'"
           >Documentation
@@ -67,8 +75,9 @@
             <SharedBillingAiCredits/>
 
           </div>
-          <PageComponentsSettingsDocumentation v-if="activeTab === 'documentation'"/>
-          <PageComponentsSettingsSupport v-if="activeTab === 'support'"/>
+          <PageComponentsSettingsEccmis v-if="activeTab === 'eccmis'" />
+          <PageComponentsSettingsDocumentation v-if="activeTab === 'documentation'" />
+          <PageComponentsSettingsSupport v-if="activeTab === 'support'" />
         </div>
 
         <!-- Mobile: List Layout -->
@@ -154,6 +163,19 @@
           </div>
 
           <div class="flex flex-col gap-2">
+            <span class="font-semibold">Integrations</span>
+            <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
+              <Button variant="ghost" class="justify-between items-center" @click="navigateTo('/main/settings/eccmis')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <Globe />
+                  ECCMIS Sync
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
             <span class="font-semibold">Help Center</span>
             <div class="flex flex-col bg-muted p-1 gap-3 rounded-lg border">
               <Button variant="ghost" class="justify-between items-center"
@@ -199,6 +221,7 @@ import {
   Headset,
   BookOpen,
   Building2,
+  Globe,
   Users,
   UserPlus,
   Moon, WifiOff

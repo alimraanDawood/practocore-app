@@ -22,6 +22,7 @@ export enum Collections {
 	JobNotifications = "JobNotifications",
 	Judges = "Judges",
 	MatterActionEvents = "MatterActionEvents",
+	MatterImports = "MatterImports",
 	Matters = "Matters",
 	Notifications = "Notifications",
 	OTPs = "OTPs",
@@ -370,10 +371,35 @@ export type MatterActionEventsRecord<Taction = unknown, Tinput = unknown, Toutpu
 	updated: IsoAutoDateString
 }
 
-export type MattersRecord<TfieldValues = unknown, TopposingCounsel = unknown, Tparties = unknown, TpartyConfig = unknown, Trepresenting = unknown, Tstate = unknown> = {
+export enum MatterImportsSourceKindOptions {
+	"upload" = "upload",
+	"extension" = "extension",
+	"authorized-server" = "authorized-server",
+}
+
+// One row per ECCMIS import session (see practocore-eccmis/HANDOFF.md §5).
+export type MatterImportsRecord<Tsummary = unknown> = {
+	committed?: boolean
+	committedAt?: IsoDateString
+	contentHash?: string
+	created: IsoAutoDateString
+	id: string
+	mattersCreated?: RecordIdString[]
+	mattersUpdated?: RecordIdString[]
+	organisation?: RecordIdString
+	sourceKind?: MatterImportsSourceKindOptions
+	sourceLabel?: string
+	summary?: null | Tsummary
+	updated: IsoAutoDateString
+	user: RecordIdString
+}
+
+export type MattersRecord<TfieldValues = unknown, TopposingCounsel = unknown, Tparties = unknown, TpartyConfig = unknown, Trepresenting = unknown, Tstate = unknown, TeccmisData = unknown> = {
 	caseNumber?: string
 	court?: RecordIdString
 	created: IsoAutoDateString
+	eccmisCaseInstanceId?: number
+	eccmisData?: null | TeccmisData
 	fieldValues?: null | TfieldValues
 	id: string
 	judges?: RecordIdString[]
@@ -831,7 +857,8 @@ export type FirmsResponse<Tmeta = unknown, Texpand = unknown> = Required<FirmsRe
 export type JobNotificationsResponse<Tactions = unknown, Tmetadata = unknown, Texpand = unknown> = Required<JobNotificationsRecord<Tactions, Tmetadata>> & BaseSystemFields<Texpand>
 export type JudgesResponse<Texpand = unknown> = Required<JudgesRecord> & BaseSystemFields<Texpand>
 export type MatterActionEventsResponse<Taction = unknown, Tinput = unknown, Toutput = unknown, Texpand = unknown> = Required<MatterActionEventsRecord<Taction, Tinput, Toutput>> & BaseSystemFields<Texpand>
-export type MattersResponse<TfieldValues = unknown, TopposingCounsel = unknown, Tparties = unknown, TpartyConfig = unknown, Trepresenting = unknown, Tstate = unknown, Texpand = unknown> = Required<MattersRecord<TfieldValues, TopposingCounsel, Tparties, TpartyConfig, Trepresenting, Tstate>> & BaseSystemFields<Texpand>
+export type MatterImportsResponse<Tsummary = unknown, Texpand = unknown> = Required<MatterImportsRecord<Tsummary>> & BaseSystemFields<Texpand>
+export type MattersResponse<TfieldValues = unknown, TopposingCounsel = unknown, Tparties = unknown, TpartyConfig = unknown, Trepresenting = unknown, Tstate = unknown, TeccmisData = unknown, Texpand = unknown> = Required<MattersRecord<TfieldValues, TopposingCounsel, Tparties, TpartyConfig, Trepresenting, Tstate, TeccmisData>> & BaseSystemFields<Texpand>
 export type NotificationsResponse<Tactions = unknown, Tmetadata = unknown, Texpand = unknown> = Required<NotificationsRecord<Tactions, Tmetadata>> & BaseSystemFields<Texpand>
 export type OTPsResponse<Texpand = unknown> = Required<OTPsRecord> & BaseSystemFields<Texpand>
 export type OrganisationDirectInvitesResponse<Texpand = unknown> = Required<OrganisationDirectInvitesRecord> & BaseSystemFields<Texpand>
@@ -876,6 +903,7 @@ export type CollectionRecords = {
 	JobNotifications: JobNotificationsRecord
 	Judges: JudgesRecord
 	MatterActionEvents: MatterActionEventsRecord
+	MatterImports: MatterImportsRecord
 	Matters: MattersRecord
 	Notifications: NotificationsRecord
 	OTPs: OTPsRecord
@@ -920,6 +948,7 @@ export type CollectionResponses = {
 	JobNotifications: JobNotificationsResponse
 	Judges: JudgesResponse
 	MatterActionEvents: MatterActionEventsResponse
+	MatterImports: MatterImportsResponse
 	Matters: MattersResponse
 	Notifications: NotificationsResponse
 	OTPs: OTPsResponse

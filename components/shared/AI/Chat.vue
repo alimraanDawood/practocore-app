@@ -3,7 +3,7 @@ import {
   AtSign, ArrowUpIcon, Paperclip, Globe,
   Mic, MicOff, VolumeX, Volume2, X, Check, Loader2, Sparkles,
   Building2, Clock, User,
-  History, Plus, Trash2, MessageSquare, Settings, Lock, Zap,
+  History, Plus, Trash2, MessageSquare, Settings, Lock, Zap, SquarePen,
   FileText, Briefcase, ArrowRight, Bell,
   Search, BookOpen, ChevronRight, ChevronDown, Download, FileType2,
 } from 'lucide-vue-next';
@@ -14,25 +14,18 @@ import { Sheet, SheetContent, SheetTrigger } from '~/components/ui/sheet';
 import ProposalCard from './ProposalCard.vue';
 import { initials } from './proposals/theme';
 import type { VoiceEntry } from '~/composables/useSpeech';
-import { marked } from 'marked';
 import { getSignedInUser } from '~/services/auth';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt,
   listConversations, getConversation, deleteConversation,
   type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
-  type ConvDisplayMessage, type AiStreamStep,
+  type ConvDisplayMessage, type AiStreamStep, type AiCitation,
 } from '~/services/ai';
 import { getMatters, getAllDeadlines } from '~/services/matters';
 import { getOrganisationUsers } from '~/services/admin';
 import { useMattersStore } from '~/stores/matters';
 import AICreditGauge from './AICreditGauge.vue';
-
-marked.use({ breaks: true, gfm: true });
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text) as string;
-}
 
 const props = defineProps<{ currentMatterId?: string }>();
 const open = defineModel<boolean>('open', { default: false });
@@ -219,7 +212,7 @@ type DocumentGenerated = {
 // Assistant turns optionally carry the activity steps that produced them (streamed
 // mid-turn) plus how long the work took, so the UI can show a collapsible
 // "Worked for Ns" summary. These UI-only fields are stripped before the API payload.
-type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean };
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[] };
 type ChatMessage = DisplayAiMessage | ToolEvent | MatterCreated | ReminderCreated | DocumentGenerated;
 
 const messages = ref<ChatMessage[]>([]);
@@ -515,14 +508,16 @@ async function loadConversation(id: string) {
       const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
       return { role: 'tool-event', content: m.content, status };
     }
-    // Rehydrate the collapsed "Worked for Ns" activity summary persisted with the turn.
-    if (m.role === 'assistant' && m.steps && m.steps.length) {
+    // Rehydrate the collapsed "Worked for Ns" activity summary and the citation
+    // trail persisted with the turn, so both survive a conversation reload.
+    if (m.role === 'assistant' && ((m.steps && m.steps.length) || (m.citations && m.citations.length))) {
       return {
         role: 'assistant',
         content: m.content,
-        steps: m.steps,
+        steps: m.steps?.length ? m.steps : undefined,
         durationMs: m.durationMs,
         stepsOpen: false,
+        citations: m.citations?.length ? m.citations : undefined,
       } as DisplayAiMessage;
     }
     return m as AiMessage;
@@ -538,6 +533,10 @@ function newChat() {
   conversationId.value = '';
   pendingProposal.value = null;
   inputText.value = '';
+  // Clear the credit gate so a fresh chat can try again; the next send
+  // re-blocks via the 402 path if the pool is still exhausted.
+  creditBlocked.value = false;
+  creditDegraded.value = false;
   historyOpen.value = false;
 }
 
@@ -852,6 +851,7 @@ async function send(voiceText?: string) {
       steps: turnSteps.length ? turnSteps : undefined,
       durationMs: turnSteps.length ? elapsedMs : undefined,
       stepsOpen: false,
+      citations: response.citations?.length ? response.citations : undefined,
     });
     if (response.conversationId) {
       const isNew = !conversationId.value;
@@ -974,7 +974,11 @@ async function approveProposal() {
   refreshAiUsage();
 
   if (response.type === 'text') {
-    messages.value.push({ role: 'assistant', content: response.content ?? '' });
+    messages.value.push({
+      role: 'assistant',
+      content: response.content ?? '',
+      citations: response.citations?.length ? response.citations : undefined,
+    });
     if (response.conversationId) {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
@@ -1243,6 +1247,9 @@ function formatToolName(tool: string): string {
         <span class="font-semibold text-sm">PractoAI</span>
         <div class="ml-auto flex items-center gap-1">
           <AICreditGauge />
+          <Button v-if="messages.length > 0 || conversationId" size="icon-sm" variant="ghost" title="New chat" :disabled="loading" @click="newChat">
+            <SquarePen class="size-4" />
+          </Button>
           <Button size="icon-sm" variant="ghost" :class="historyOpen ? 'text-primary' : ''" @click="historyOpen = !historyOpen">
             <History class="size-4" />
           </Button>
@@ -1431,10 +1438,12 @@ function formatToolName(tool: string): string {
                       </li>
                     </ul>
                   </div>
-                  <div
-                    class="bg-background border text-foreground rounded-lg px-3 py-2 text-sm prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none"
-                    v-html="renderMarkdown(messageText(msg.content))"
-                  />
+                  <div class="bg-background border text-foreground rounded-lg px-3 py-2 text-sm">
+                    <SharedAICitationsCitedAnswer
+                      :content="messageText(msg.content)"
+                      :citations="(msg as DisplayAiMessage).citations"
+                    />
+                  </div>
                   <button
                     class="self-start flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100 px-0.5"
                     :class="speakingIdx === i ? '!opacity-100 text-primary' : ''"

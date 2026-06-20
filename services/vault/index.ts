@@ -219,6 +219,13 @@ export function listDocuments(scope: VaultScope, scopeId: string): Promise<Vault
   });
 }
 
+// Fetch a single document by id (used to open a citation's source document).
+// Resolves to null if the document is missing or the caller can't view it — the
+// AiVaultDocuments collection's view rule still governs access here.
+export function getDocument(id: string): Promise<VaultDocument | null> {
+  return pb.collection(DOCS).getOne<VaultDocument>(id).catch(() => null);
+}
+
 // ── Realtime ────────────────────────────────────────────────────────────────
 // Subscribe to both collections for a library; the callback fires on any
 // create/update/delete so the browser can patch its in-memory tree (and watch a

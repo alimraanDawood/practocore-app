@@ -9,7 +9,9 @@ import { MessageSquareText, Plus, Building2, Briefcase, ChevronDown } from 'luci
 
 const route = useRoute();
 
-const onAssistant = computed(() => route.path.startsWith('/main/assistant'));
+// The assistant lives at /main (pages/main/index.vue). Match it exactly — a
+// startsWith('/main') would wrongly fire on every /main/* page (vault, matters…).
+const onAssistant = computed(() => route.path === '/main' || route.path === '/main/');
 const onVault = computed(() => route.path.startsWith('/main/vault'));
 const visible = computed(() => onAssistant.value || onVault.value);
 
@@ -47,7 +49,7 @@ watch(visible, (on) => {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton as-child :is-active="!activeConvId">
-              <NuxtLink :to="{ path: '/main/assistant', query: {} }">
+              <NuxtLink :to="{ path: '/main', query: {} }">
                 <Plus />
                 <span>New chat</span>
               </NuxtLink>
@@ -63,7 +65,7 @@ watch(visible, (on) => {
 
           <SidebarMenuItem v-for="conv in visibleChats" :key="conv.id">
             <SidebarMenuButton as-child :is-active="activeConvId === conv.id" :tooltip="conv.title">
-              <NuxtLink :to="{ path: '/main/assistant', query: { c: conv.id } }">
+              <NuxtLink :to="{ path: '/main', query: { c: conv.id } }">
                 <MessageSquareText />
                 <span class="truncate">{{ conv.title }}</span>
               </NuxtLink>
