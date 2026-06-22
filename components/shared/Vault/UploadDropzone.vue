@@ -1,8 +1,14 @@
 <script lang="ts" setup>
-import { UploadCloud, FileText, CheckCircle2, XCircle, Loader2, Sparkles } from 'lucide-vue-next';
+import { UploadCloud, Loader2 } from 'lucide-vue-next';
 import {
-  uploadDocument, VaultDisabledError, VAULT_DOC_TYPES, type VaultScope,
+  uploadDocument, VaultDisabledError, type VaultScope,
 } from '~/services/vault';
+
+// Below `customxs` the add-document flow is shown as a bottom Drawer instead of
+// a centered Dialog — easier to reach with a thumb and it can't overflow the
+// viewport with long file lists.
+const viewport = useViewport();
+const isCompactScreen = computed(() => !viewport.isGreaterOrEquals('customxs'));
 
 // A drag-and-drop / click upload zone. Picking files opens a short dialog that
 // asks what kind of document is being added and whether the AI should read it
@@ -124,10 +130,11 @@ async function confirmUpload() {
     </button>
     <input ref="fileInput" type="file" multiple :accept="ACCEPT" class="hidden" @change="onPicked" />
 
-    <!-- Add-document dialog: classification + AI ingestion choice -->
-    <Dialog v-model:open="dialogOpen">
-      <DialogContent class="max-w-lg">
-        <DialogHeader>
+    <!-- Add-document flow: classification + AI ingestion choice.
+         Dialog on wider screens, bottom Drawer on phones. -->
+    <Dialog v-if="!isCompactScreen" v-model:open="dialogOpen">
+      <DialogContent class="flex max-h-[85dvh] flex-col gap-4 sm:max-w-lg">
+        <DialogHeader class="shrink-0">
           <DialogTitle>
             Add {{ pendingFiles.length === 1 ? 'document' : `${pendingFiles.length} documents` }}
           </DialogTitle>
@@ -136,58 +143,15 @@ async function confirmUpload() {
           </DialogDescription>
         </DialogHeader>
 
-        <!-- File summary -->
-        <div class="flex flex-col gap-1.5">
-          <div v-for="(f, i) in pendingFiles" :key="i"
-            class="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm">
-            <component
-              :is="items[i]?.state === 'done' ? CheckCircle2 : items[i]?.state === 'error' ? XCircle : FileText"
-              class="size-4 shrink-0"
-              :class="items[i]?.state === 'done' ? 'text-emerald-500' : items[i]?.state === 'error' ? 'text-destructive' : 'text-muted-foreground'" />
-            <div class="flex min-w-0 flex-1 flex-col gap-1">
-              <span class="truncate">{{ f.name }}</span>
-              <Progress v-if="items[i]?.state === 'uploading'" :model-value="Math.round((items[i]?.progress || 0) * 100)" class="h-1" />
-              <span v-else-if="items[i]?.state === 'error'" class="text-xs text-destructive">{{ items[i]?.error }}</span>
-            </div>
-            <Loader2 v-if="items[i]?.state === 'uploading'" class="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-          </div>
+        <!-- Scrollable body: the file list can be long, so keep it inside a
+             contained scroll area while the header/footer stay pinned. -->
+        <div class="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+          <SharedVaultUploadDocOptions
+            v-model:doc-type="docType" v-model:ingest="ingest"
+            :pending-files="pendingFiles" :items="items" :uploading="uploading" :kb-scope="kbScope" />
         </div>
 
-        <!-- Document type -->
-        <div class="flex flex-col gap-2">
-          <Label class="text-sm font-medium">What kind of document is this?</Label>
-          <RadioGroup v-model="docType" :disabled="uploading" class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <Label
-              v-for="t in VAULT_DOC_TYPES" :key="t.value"
-              :for="`dt-${t.value}`"
-              class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors hover:bg-accent/40"
-              :class="docType === t.value ? 'border-primary bg-primary/5 ring-1 ring-primary' : ''"
-            >
-              <RadioGroupItem :id="`dt-${t.value}`" :value="t.value" />
-              <span>{{ t.label }}</span>
-            </Label>
-          </RadioGroup>
-        </div>
-
-        <!-- AI ingestion -->
-        <div class="flex items-start gap-3 rounded-lg border p-3"
-          :class="ingest ? 'border-primary/40 bg-primary/5' : ''">
-          <div class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-            <Sparkles class="size-4" />
-          </div>
-          <div class="flex min-w-0 flex-1 flex-col">
-            <Label for="vault-ingest" class="cursor-pointer text-sm font-medium">
-              Let the AI read this into the {{ kbScope }} knowledge base
-            </Label>
-            <p class="text-xs text-muted-foreground">
-              The assistant can cite and recall facts from documents it reads. Turn this off to store the
-              file for the record only — it won't be processed or searchable by the AI.
-            </p>
-          </div>
-          <Switch id="vault-ingest" v-model="ingest" :disabled="uploading" class="mt-0.5 shrink-0" />
-        </div>
-
-        <DialogFooter>
+        <DialogFooter class="shrink-0">
           <Button variant="outline" :disabled="uploading" @click="dialogOpen = false">Cancel</Button>
           <Button :disabled="uploading || !pendingFiles.length" class="gap-1.5" @click="confirmUpload">
             <Loader2 v-if="uploading" class="size-4 animate-spin" />
@@ -196,5 +160,33 @@ async function confirmUpload() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Drawer v-else v-model:open="dialogOpen">
+      <DrawerContent class="max-h-[90dvh]">
+        <DrawerHeader class="shrink-0 text-left">
+          <DrawerTitle>
+            Add {{ pendingFiles.length === 1 ? 'document' : `${pendingFiles.length} documents` }}
+          </DrawerTitle>
+          <DrawerDescription>
+            Tell us what you're adding and whether the AI should read it.
+          </DrawerDescription>
+        </DrawerHeader>
+
+        <!-- Scrollable body so a long file list never pushes the footer away. -->
+        <div class="min-h-0 flex-1 overflow-y-auto px-4">
+          <SharedVaultUploadDocOptions
+            v-model:doc-type="docType" v-model:ingest="ingest"
+            :pending-files="pendingFiles" :items="items" :uploading="uploading" :kb-scope="kbScope" />
+        </div>
+
+        <DrawerFooter class="shrink-0">
+          <Button :disabled="uploading || !pendingFiles.length" class="gap-1.5" @click="confirmUpload">
+            <Loader2 v-if="uploading" class="size-4 animate-spin" />
+            {{ uploading ? 'Uploading…' : ingest ? 'Add & process' : 'Add' }}
+          </Button>
+          <Button variant="outline" :disabled="uploading" @click="dialogOpen = false">Cancel</Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   </div>
 </template>
