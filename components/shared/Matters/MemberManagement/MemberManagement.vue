@@ -277,6 +277,7 @@
 </template>
 
 <script setup lang="ts">
+import { useVModel } from '@vueuse/core'
 import { UserPlus, X, Check, Loader2, Users, Shield, ShieldOff } from 'lucide-vue-next'
 import { getOrganisationMembers } from '~/services/admin'
 import { addMemberToMatter, removeMemberFromMatter, promoteMemberToSupervisor, demoteSupervisorToMember } from '~/services/matters'
@@ -286,13 +287,18 @@ import { toast } from 'vue-sonner'
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
 const props = defineProps<{
   matter: any
+  /** Optional controlled open state — lets a parent (e.g. a deep link) drive the sheet. */
+  open?: boolean
 }>()
 
 const emit = defineEmits<{
   updated: []
+  'update:open': [value: boolean]
 }>()
 
-const sheetOpen = ref(false)
+// Controlled when the parent binds `v-model:open`, otherwise internal (passive)
+// so the slot-trigger usage keeps working unchanged.
+const sheetOpen = useVModel(props, 'open', emit, { passive: true, defaultValue: false })
 const addMemberSheetOpen = ref(false)
 const selectedNewMembers = ref<string[]>([])
 const loading = ref(false)

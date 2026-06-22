@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import {
-  Brain, Scale, Folder, Globe, ExternalLink, FileText, X, type LucideIcon,
+  Brain, Scale, Folder, Globe, Gavel, ExternalLink, FileText, X, type LucideIcon,
 } from 'lucide-vue-next';
 import type { AiCitation } from '~/services/ai';
 
@@ -21,6 +21,7 @@ const KIND_META: Record<AiCitation['kind'], { icon: LucideIcon; label: string; t
   legal: { icon: Scale, label: 'Legal source', tint: 'text-amber-500' },
   matter: { icon: Folder, label: 'Matter', tint: 'text-sky-500' },
   web: { icon: Globe, label: 'Web result', tint: 'text-emerald-500' },
+  authority: { icon: Gavel, label: 'Case law', tint: 'text-indigo-500' },
 };
 const meta = computed(() => KIND_META[props.citation.kind] ?? KIND_META.web);
 
@@ -31,10 +32,11 @@ const openLabel = computed<string | null>(() => {
   const c = props.citation;
   if (c.kind === 'memory') return m.value.sourceDocId ? 'View source document' : null;
   if (c.kind === 'matter') return m.value.matterId ? 'Open matter' : null;
-  if ((c.kind === 'legal' || c.kind === 'web') && m.value.url) return 'Open source';
+  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority') && m.value.url) return 'Open source';
   return null;
 });
-const opensExternally = computed(() => props.citation.kind === 'legal' || props.citation.kind === 'web');
+const opensExternally = computed(() =>
+  props.citation.kind === 'legal' || props.citation.kind === 'web' || props.citation.kind === 'authority');
 
 const provenanceLine = computed(() => {
   const p = m.value.provenance;
@@ -119,15 +121,21 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
               class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
             >{{ m.scope }}</span>
             <span v-if="m.vaultName" class="text-[11px] text-muted-foreground">{{ m.vaultName }}</span>
-            <span
-              v-if="typeof m.confidence === 'number'"
-              class="text-[11px] text-muted-foreground"
-            >· {{ Math.round((m.confidence as number) * 100) }}% confidence</span>
           </div>
           <p v-if="provenanceLine" class="flex items-start gap-1.5 text-[11px] text-muted-foreground">
             <FileText class="mt-0.5 size-3 shrink-0" />
             <span>{{ provenanceLine }}<span v-if="m.locator"> — {{ m.locator }}</span></span>
           </p>
+        </template>
+
+        <!-- case-law authority: neutral citation · court · pinned paragraph -->
+        <template v-else-if="citation.kind === 'authority'">
+          <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span v-if="m.citation" class="font-medium text-foreground/80">{{ m.citation }}</span>
+            <span v-if="m.court">· {{ m.court }}</span>
+            <span v-if="m.anchor" class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-indigo-600 dark:text-indigo-400">{{ m.anchor }}</span>
+          </div>
+          <p class="text-[10px] italic text-muted-foreground">Verbatim — verify against the judgment.</p>
         </template>
 
         <!-- legal / web url host -->

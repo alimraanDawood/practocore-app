@@ -23,6 +23,9 @@ const EXEMPT_PREFIXES = [
     "/onboarding",
     "/org-switch",
     "/select-organisation",
+    // Standalone superuser admin area — gated by the `superuser` middleware, not
+    // the app's Users/workspace context.
+    "/admin",
 ];
 
 export default defineNuxtRouteMiddleware(async (to) => {

@@ -3,7 +3,8 @@ import {
   Sparkles, Plus, MessageSquareText, History, Search, Globe,
   Loader2, Check, X, ChevronRight, ChevronDown, ArrowUpIcon, Trash2,
   Briefcase, FileText, BookOpen, AtSign, Paperclip, Building2, Clock, User,
-  CalendarClock, CircleAlert, ArrowRight, Scale,
+  CalendarClock, CircleAlert, ArrowRight, Scale, Library,
+  Mic, MicOff, AudioLines, VolumeX, Headphones,
   type LucideIcon,
 } from 'lucide-vue-next';
 import {toast} from 'vue-sonner';
@@ -11,12 +12,16 @@ import {getSignedInUser} from '~/services/auth';
 import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
 import {initials} from '~/components/shared/AI/proposals/theme';
 import {
-  sendAiMessageStream, confirmAiProposal, improvePrompt,
-  getConversation, deleteConversation,
-  type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
-  type AiImageMediaType, type AiResponse, type AiContext,
-  type ConvDisplayMessage, type AiStreamStep, type AiCitation,
+  sendAiMessageStream, sendAiMessageVoiceStream, confirmAiProposal, improvePrompt,
+  getConversation, deleteConversation, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
+  listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
+  type AiMessage, type AiContentBlock,
+  type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
+  type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
 } from '~/services/ai';
+import { useMediaQuery } from '@vueuse/core';
+import MessageAttachments, { type AttachmentView } from '~/components/shared/AI/MessageAttachments.vue';
+import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
 import {getMatters, getAllDeadlines} from '~/services/matters';
 import {getOrganisationUsers} from '~/services/admin';
 
@@ -163,8 +168,117 @@ const draft = ref('');
 
 // ── Chat engine ─────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
-type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[] };
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[]; attachments?: ConvAttachment[] };
 type ChatMessage = DisplayAiMessage | ToolEvent;
+
+// sha256 → resolved open/download URL for attachments in the open conversation. Blob
+// URLs for files sent this session; token URLs resolved from AiChatAttachments on reload.
+const attachmentUrls = ref<Map<string, string>>(new Map());
+
+/** Normalized chip views for a user turn, merging its refs with resolved URLs. */
+function messageChips(msg: DisplayAiMessage): AttachmentView[] {
+  return (msg.attachments ?? []).map(a => ({
+    id: a.sha256,
+    name: a.name ?? '',
+    mime: a.mime ?? '',
+    kind: a.kind ?? 'binary',
+    size: a.size,
+    url: attachmentUrls.value.get(a.sha256),
+  }));
+}
+
+// ── Attachment preview (reuses the vault DocumentPreview viewer) ───────────────
+const isDesktop = useMediaQuery('(min-width: 1024px)');
+const previewTarget = ref<AttachmentView | null>(null);
+const previewOpen = computed({
+  get: () => !!previewTarget.value,
+  set: (v) => { if (!v) previewTarget.value = null; },
+});
+const previewDoc = computed<PreviewDoc | null>(() => previewTarget.value
+    ? { id: previewTarget.value.id, filename: previewTarget.value.name, file: previewTarget.value.name, mime: previewTarget.value.mime }
+    : null);
+function openPreview(att: AttachmentView) { previewTarget.value = att; }
+// Thunk for DocumentPreview's resolveUrl — defined here because bare `Promise`
+// isn't in template scope. The URL is already resolved (blob: live / token URL on reload).
+const resolvePreviewUrl = () => Promise.resolve(previewTarget.value?.url ?? '');
+
+/** Strip the bracketed attachment placeholders so the bubble shows only the caption. */
+function stripAttachmentPlaceholders(text: string): string {
+  return text.replace(/\[(?:image|file|PDF|document)(?::[^\]]*)?\]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+// ── Vault promotion (Phase 3, suggest mode) ───────────────────────────────────
+// When a conversation accumulates a lot of files, nudge the user to move them into
+// the per-conversation vault so the assistant can keep referencing them without
+// re-uploading. Suggest-only: a non-blocking banner with a one-click action.
+const ATTACH_NUDGE_THRESHOLD = 5;
+const promotion = ref<{ total: number; unpromoted: number; vaultId: string }>({ total: 0, unpromoted: 0, vaultId: '' });
+const promotionDismissed = ref(false);
+const promoting = ref(false);
+const showPromotionNudge = computed(() =>
+  !promotionDismissed.value && !promoting.value && promotion.value.unpromoted >= ATTACH_NUDGE_THRESHOLD);
+
+// Refresh the promotion counters from the persisted attachment rows (which carry the
+// `vault` link once promoted). Cheap SDK read; called after loads and sends.
+async function refreshPromotion() {
+  if (!conversationId.value) { promotion.value = { total: 0, unpromoted: 0, vaultId: '' }; return; }
+  try {
+    const rows = await listConversationAttachments(conversationId.value);
+    promotion.value = {
+      total: rows.length,
+      unpromoted: rows.filter(r => !r.vault).length,
+      vaultId: rows.find(r => r.vault)?.vault ?? '',
+    };
+  } catch { /* best-effort */ }
+}
+
+async function promoteAttachments() {
+  if (!conversationId.value || promoting.value) return;
+  promoting.value = true;
+  try {
+    const r = await promoteConversationAttachments(conversationId.value);
+    if (r.error) { toast.error(r.error); return; }
+    await refreshPromotion();
+    // If files are being read, show the quiet progress ring + finish with a toast;
+    // otherwise (stored-only, nothing to distil) just confirm the move.
+    if (r.vault && (r.ingesting ?? 0) > 0) startIngestPoll(r.vault);
+    else toast.success(r.message || 'Moved to the conversation vault.');
+  } finally {
+    promoting.value = false;
+  }
+}
+
+// ── Ingestion progress (post-promotion) ───────────────────────────────────────
+// Poll the per-conversation vault while the assistant distils the promoted files, so
+// the user sees an unobtrusive "Processing n/m" ring and a toast when it's done.
+const ingest = ref<{ done: number; total: number; active: boolean }>({ done: 0, total: 0, active: false });
+let ingestTimer: ReturnType<typeof setInterval> | null = null;
+let ingestDeadline: ReturnType<typeof setTimeout> | null = null;
+
+function stopIngestPoll() {
+  if (ingestTimer) { clearInterval(ingestTimer); ingestTimer = null; }
+  if (ingestDeadline) { clearTimeout(ingestDeadline); ingestDeadline = null; }
+  ingest.value.active = false;
+}
+
+async function pollIngest(vaultId: string) {
+  const p = await vaultIngestProgress(vaultId);
+  ingest.value = { done: p.done, total: p.total, active: p.total > 0 && p.done < p.total };
+  if (p.total > 0 && p.done >= p.total) {
+    stopIngestPoll();
+    toast.success(`${p.total} ${p.total === 1 ? 'file is' : 'files are'} ready in the vault.`);
+  }
+}
+
+function startIngestPoll(vaultId: string) {
+  stopIngestPoll();
+  ingest.value = { done: 0, total: 0, active: true };
+  pollIngest(vaultId);
+  ingestTimer = setInterval(() => pollIngest(vaultId), 2500);
+  ingestDeadline = setTimeout(stopIngestPoll, 5 * 60 * 1000); // safety cap
+}
+
+onBeforeUnmount(stopIngestPoll);
 
 const messages = ref<ChatMessage[]>([]);
 const conversationId = ref('');
@@ -190,7 +304,7 @@ const convMessages = computed<ConvDisplayMessage[]>(() =>
     messages.value.map(m =>
         m.role === 'tool-event'
             ? {role: `tool-event:${m.status}`, content: m.content}
-            : {role: m.role, content: messageText(m.content)},
+            : {role: m.role, content: messageText(m.content), attachments: m.attachments},
     ),
 );
 
@@ -203,17 +317,6 @@ function messageText(content: AiMessage['content']): string {
               : b.source?.type === 'text' ? '[document]'
                   : '[PDF]',
   ).join(' ');
-}
-
-/** Human label for a document attachment chip (text doc vs PDF). */
-function docLabel(att: AiDocumentBlock): string {
-  return att.source?.type === 'text' ? 'Document' : 'PDF';
-}
-
-/** Just the attachment blocks of a content array — drives the chips above a user bubble. */
-function messageAttachments(content: AiMessage['content']): Array<AiImageBlock | AiDocumentBlock> {
-  if (typeof content === 'string') return [];
-  return content.filter((b): b is AiImageBlock | AiDocumentBlock => b.type === 'image' || b.type === 'document');
 }
 
 function buildContext(): AiContext | undefined {
@@ -273,17 +376,35 @@ async function send(explicit?: string) {
 
   // Plain text turn, or a multimodal content-block array (attachments first, text as caption).
   let userContent: string | AiContentBlock[];
+  const userAttachments: ConvAttachment[] = [];
   if (hasAttachments) {
-    const blocks: AiContentBlock[] = attachments.value.map(a => {
+    const blocks: AiContentBlock[] = [];
+    for (const a of attachments.value) {
+      // Build the transmitted `data` string once, then hash it for the metadata
+      // side-channel so the backend can name + dedup the persisted file.
+      let block: AiContentBlock;
+      let data: string;
       if (a.kind === 'text') {
         // Prefix the filename so the model knows the document's name/type.
-        const body = `# ${a.name}\n\n${a.text ?? ''}`;
-        return {type: 'document', source: {type: 'text', media_type: 'text/plain', data: body}};
+        data = `# ${a.name}\n\n${a.text ?? ''}`;
+        block = {type: 'document', source: {type: 'text', media_type: 'text/plain', data}};
+      } else {
+        data = a.base64 as string;
+        block = a.mime === 'application/pdf'
+            ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data}}
+            : {type: 'image', source: {type: 'base64', media_type: a.mime as AiImageMediaType, data}};
       }
-      return a.mime === 'application/pdf'
-          ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: a.base64 as string}}
-          : {type: 'image', source: {type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 as string}};
-    });
+      blocks.push(block);
+      const sha256 = await attachmentSha256(data);
+      sentAttachmentsMeta.value.push({sha256, name: a.name, mime: a.mime, kind: a.kind, size: a.size});
+      userAttachments.push({sha256, name: a.name, mime: a.mime, kind: a.kind, size: a.size});
+      // Resolve a usable URL now so chips preview immediately (before any reload).
+      // Object URLs (not data: URLs) so the previewer's XHR fetch works reliably.
+      const url = a.kind === 'text'
+          ? URL.createObjectURL(new Blob([a.text ?? ''], {type: a.mime || 'text/plain'}))
+          : base64ToObjectUrl(a.base64 as string, a.mime);
+      if (url && sha256) attachmentUrls.value.set(sha256, url);
+    }
     blocks.push({type: 'text', text: text || 'Help me with this.'});
     userContent = blocks;
     attachments.value = [];
@@ -291,7 +412,7 @@ async function send(explicit?: string) {
     userContent = text;
   }
 
-  messages.value.push({role: 'user', content: userContent});
+  messages.value.push({role: 'user', content: userContent, attachments: userAttachments.length ? userAttachments : undefined});
   draft.value = '';
   pendingProposal.value = null;
   loading.value = true;
@@ -304,6 +425,7 @@ async function send(explicit?: string) {
       activeSteps.value = [...activeSteps.value, s];
       scrollToBottom();
     },
+    attachmentsMeta: sentAttachmentsMeta.value,
   });
 
   const elapsedMs = Date.now() - workStartedAt.value;
@@ -337,6 +459,8 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
         const idx = conversations.value.findIndex(c => c.id === response.conversationId);
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
+      // Refresh the promotion nudge once the turn (and its attachment persistence) lands.
+      if (sentAttachmentsMeta.value.length) refreshPromotion();
     }
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
@@ -351,6 +475,269 @@ function handleKeydown(e: KeyboardEvent) {
     send();
   }
 }
+
+// ── Conversational voice mode ─────────────────────────────────────────────────
+// A full-duplex-ish loop on top of the same message/conversation state as text
+// chat: listen → think → speak → listen. The reply is synthesized sentence-by-
+// sentence (fast first word) and the user can cut in at any point — either by
+// talking over it (barge-in) or tapping the orb. Web/desktop only for now; the
+// composer mic button is hidden where streaming STT isn't supported.
+const {
+  isListening, isTranscribing, transcript, audioLevel, micError, sttSupported,
+  startListening, stopListening,
+  isSpeaking, caption, stopSpeaking, unlockAudio,
+  beginStreamingSpeech, pushSpeechDelta, endStreamingSpeech, awaitStreamingDone,
+  armBargeIn, disarmBargeIn,
+} = useSpeech();
+
+const voiceOpen = ref(false);
+type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
+const voiceState = ref<VoiceState>('idle');
+
+// Barge-in lets you talk over the assistant, but on open speakers the mic hears
+// the assistant's OWN voice and treats it as a reply (a feedback loop). So it's
+// off by default and only safe with headphones; tap-the-orb interrupt always
+// works. Persisted so the choice sticks.
+const bargeInEnabled = ref(false);
+onMounted(() => {
+  try { bargeInEnabled.value = localStorage.getItem('practoai_bargein') === '1'; } catch {}
+});
+function toggleBargeIn() {
+  bargeInEnabled.value = !bargeInEnabled.value;
+  try { localStorage.setItem('practoai_bargein', bargeInEnabled.value ? '1' : '0'); } catch {}
+  if (!bargeInEnabled.value) disarmBargeIn();
+}
+
+function isUsableTranscript(t: string): boolean {
+  return t.trim().replace(/[.,!?…\s]/g, '').length >= 2;
+}
+
+// ── Simple dictation (composer) ───────────────────────────────────────────────
+// For now the mic button just transcribes speech into the prompt box rather than
+// opening the full conversational voice mode (kept below, but dormant — we'll
+// revisit it when the round-trip feels good enough). Tap to record, tap to stop;
+// the live transcript fills the draft, appended after whatever's already typed.
+const dictating = ref(false);        // recording or processing a dictation
+const dictateCancelled = ref(false); // user discarded this take
+let dictateBase = '';                // draft text that predates this take
+
+// Recording FX state: an rAF loop drives both the running timer and the waveform
+// so the bars keep a gentle motion even in silence (audioLevel alone freezes when
+// the room is quiet). Frozen the moment recording stops; the processing state has
+// its own animation.
+const recordingMs = ref(0);
+const waveTick = ref(0);
+let waveRaf: number | null = null;
+let recStart = 0;
+
+function startRecFx() {
+  recStart = performance.now();
+  recordingMs.value = 0;
+  const loop = () => {
+    waveTick.value = performance.now();
+    recordingMs.value = performance.now() - recStart;
+    waveRaf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function stopRecFx() {
+  if (waveRaf !== null) { cancelAnimationFrame(waveRaf); waveRaf = null; }
+}
+
+const recTime = computed(() => {
+  const s = Math.floor(recordingMs.value / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+});
+
+// Per-bar height for the live waveform: a travelling sine for idle shimmer, scaled
+// up by the live mic level so speech visibly drives the bars.
+function dictBarHeight(i: number): number {
+  const level = isListening.value ? audioLevel.value / 100 : 0;
+  const phase = i * 0.45 + waveTick.value / 220;
+  const shimmer = Math.sin(phase) * 0.5 + 0.5; // 0..1
+  return 3 + shimmer * 4 + level * 24 * (0.35 + 0.65 * shimmer);
+}
+
+function toggleDictation() {
+  if (dictating.value) return;
+  if (!sttSupported.value) {
+    toast.error('Dictation needs microphone access on a secure (https) connection.');
+    return;
+  }
+  dictateBase = draft.value.trim();
+  dictateCancelled.value = false;
+  dictating.value = true;
+  startRecFx();
+  startListening();
+}
+
+function stopDictation() {
+  if (isListening.value) stopListening();
+}
+
+function cancelDictation() {
+  dictateCancelled.value = true;
+  draft.value = dictateBase; // undo any live-filled text
+  if (isListening.value) stopListening();
+  else { dictating.value = false; stopRecFx(); }
+}
+
+// Live-fill the draft as the (web) transcript streams in.
+watch(transcript, (t) => {
+  if (dictating.value && !dictateCancelled.value && t) {
+    draft.value = dictateBase ? `${dictateBase} ${t}` : t;
+  }
+});
+
+// Freeze the timer/waveform the instant recording stops (processing has its own UI).
+watch(isListening, (now) => {
+  if (!now && dictating.value) stopRecFx();
+});
+
+onBeforeUnmount(stopRecFx);
+
+// Entry point for the full conversational voice mode. Intentionally retained but
+// not wired to any control for now — the composer mic does simple dictation
+// instead (see toggleDictation). We'll re-attach this when voice mode is ready.
+function enterVoice() {
+  if (!sttSupported.value) {
+    toast.error('Voice needs microphone access on a secure (https) connection.');
+    return;
+  }
+  unlockAudio(); // must run on the user gesture before any async audio
+  voiceOpen.value = true;
+  beginListening();
+}
+void enterVoice; // kept for the upcoming voice-mode revisit; avoids dead-symbol noise
+
+function exitVoice() {
+  voiceOpen.value = false;
+  voiceState.value = 'idle';
+  stopListening();
+  stopSpeaking();
+  disarmBargeIn();
+}
+
+// `settleMs` lets the assistant's audio fully clear the room before the mic opens,
+// so a speaker echo of the last word isn't transcribed as the user's reply.
+function beginListening(settleMs = 0) {
+  if (!voiceOpen.value) return;
+  stopSpeaking();
+  disarmBargeIn();
+  voiceState.value = 'listening';
+  if (settleMs > 0) {
+    setTimeout(() => { if (voiceOpen.value && voiceState.value === 'listening') startListening(); }, settleMs);
+  } else {
+    startListening();
+  }
+}
+
+// User cuts in while the assistant is talking — drop playback and listen.
+function onBargeIn() {
+  if (!voiceOpen.value) return;
+  beginListening();
+}
+
+// Tap the orb: interrupt if speaking, otherwise toggle the mic.
+function tapOrb() {
+  if (voiceState.value === 'thinking') return;
+  if (isSpeaking.value) { beginListening(); return; }
+  if (isListening.value) stopListening();
+  else beginListening();
+}
+
+async function runVoiceTurn(text: string) {
+  voiceState.value = 'thinking';
+  messages.value.push({ role: 'user', content: text });
+  scrollToBottom();
+
+  // Stream the reply: speak sentences as the model writes them (LLM→TTS pipeline).
+  // The first text delta flips us into 'speaking'; arm barge-in once we're talking.
+  beginStreamingSpeech();
+  let started = false;
+  const response = await sendAiMessageVoiceStream(
+    apiMessages.value, buildContext(), conversationId.value || undefined,
+    {
+      onText: (delta) => {
+        if (!voiceOpen.value) return;
+        if (!started) {
+          started = true;
+          voiceState.value = 'speaking';
+          if (bargeInEnabled.value) armBargeIn(onBargeIn);
+        }
+        pushSpeechDelta(delta);
+      },
+    },
+  );
+  if (!voiceOpen.value) return; // user left mid-flight
+
+  applyResponse(response);
+  scrollToBottom();
+
+  if (response.type === 'text' && response.content?.trim()) {
+    // If nothing streamed (e.g. proxy collapsed to JSON), speak the full text now.
+    if (!started) {
+      voiceState.value = 'speaking';
+      if (bargeInEnabled.value) armBargeIn(onBargeIn);
+      pushSpeechDelta(response.content);
+    }
+    endStreamingSpeech();
+    await awaitStreamingDone();
+    disarmBargeIn();
+    // Finished speaking uninterrupted → hand the turn back. Without barge-in (open
+    // speakers) wait a beat so the tail doesn't echo into the mic.
+    if (voiceOpen.value && voiceState.value === 'speaking') beginListening(bargeInEnabled.value ? 0 : 350);
+  } else {
+    // Proposal / error: nothing to read aloud, so just reopen the mic.
+    stopSpeaking();
+    beginListening();
+  }
+}
+
+// End of an STT turn (web + native both flip isTranscribing true→false at the end).
+watch(isTranscribing, (now, was) => {
+  if (!was || now) return;
+  // Dictation: commit the final transcript (native fills it only here), unless the
+  // take was cancelled — then leave the pre-existing draft untouched.
+  if (dictating.value) {
+    stopRecFx();
+    if (!dictateCancelled.value) {
+      const t = transcript.value.trim();
+      if (t) draft.value = dictateBase ? `${dictateBase} ${t}` : t;
+    }
+    dictating.value = false;
+    dictateCancelled.value = false;
+    return;
+  }
+  // Conversational voice mode (dormant for now).
+  if (!voiceOpen.value || voiceState.value !== 'listening') return;
+  const t = transcript.value.trim();
+  if (isUsableTranscript(t)) runVoiceTurn(t);
+  else beginListening(); // heard nothing usable — keep the mic open
+});
+
+watch(micError, (err) => {
+  if (!err) return;
+  if (dictating.value) { toast.error(err); dictating.value = false; }
+  if (voiceOpen.value) { toast.error(err); voiceState.value = 'idle'; }
+});
+
+// ── Orb visualisation ─────────────────────────────────────────────────────────
+function barHeight(i: number): number {
+  if (!isListening.value) return 4;
+  const wave = Math.abs(Math.sin((i + 1) * 0.9 + Date.now() / 200));
+  return Math.max(4, (audioLevel.value / 100) * 38 * wave + 4);
+}
+const outerRingScale = computed(() => {
+  if (voiceState.value === 'listening') return 1 + (audioLevel.value / 100) * 0.5;
+  if (voiceState.value === 'speaking') return 1.25;
+  return 1;
+});
+const innerRingScale = computed(() => {
+  if (voiceState.value === 'listening') return 1 + (audioLevel.value / 100) * 0.28;
+  if (voiceState.value === 'speaking') return 1.12;
+  return 1;
+});
 
 // ── Proposals ───────────────────────────────────────────────────────────────
 function dismissProposal() {
@@ -378,6 +765,8 @@ async function approveProposal() {
       proposal, true, buildContext(),
       conversationId.value || undefined,
       convMessages.value,
+      false,
+      sentAttachmentsMeta.value,
   );
   loading.value = false;
   proposalLoading.value = false;
@@ -401,6 +790,11 @@ interface Attachment {
 }
 
 const attachments = ref<Attachment[]>([]);
+// Metadata (name/mime/hash) for every file sent in this session, accumulated across
+// turns and re-sent each call. The backend dedups by hash, so resends are harmless;
+// carrying the full set means a turn whose first leg was a proposal still names its
+// files on the confirm leg. Reset when the conversation is cleared/switched.
+const sentAttachmentsMeta = ref<AiAttachmentMeta[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
@@ -645,11 +1039,17 @@ async function loadConversation(id: string) {
         citations: m.citations?.length ? m.citations : undefined,
       } as DisplayAiMessage;
     }
-    return m as AiMessage;
+    return {role: m.role, content: m.content, attachments: m.attachments} as DisplayAiMessage;
   });
   conversationId.value = conv.id;
   pendingProposal.value = null;
+  sentAttachmentsMeta.value = [];
+  promotionDismissed.value = false;
+  stopIngestPoll();
   scrollToBottom();
+  // Resolve token URLs for any persisted attachments so reloaded chips open/preview.
+  const urls = await resolveAttachmentUrls(id);
+  if (conversationId.value === id) { attachmentUrls.value = urls; refreshPromotion(); }
 }
 
 async function removeConversation(id: string) {
@@ -668,6 +1068,11 @@ function resetThread() {
   pendingProposal.value = null;
   draft.value = '';
   activeSteps.value = [];
+  sentAttachmentsMeta.value = [];
+  attachmentUrls.value = new Map();
+  promotion.value = { total: 0, unpromoted: 0, vaultId: '' };
+  promotionDismissed.value = false;
+  stopIngestPoll();
 }
 
 function newChat() {
@@ -899,20 +1304,10 @@ onMounted(async () => {
           <!-- User -->
           <div v-else-if="msg.role === 'user'" class="flex justify-end">
             <div class="flex max-w-[80%] flex-col items-end gap-1">
-              <div v-if="messageAttachments(msg.content).length" class="flex flex-wrap justify-end gap-1">
-                <template v-for="(att, j) in messageAttachments(msg.content)" :key="j">
-                  <img v-if="att.type === 'image'"
-                       :src="`data:${att.source.media_type};base64,${att.source.data}`"
-                       :alt="`Attachment ${j + 1}`" class="size-16 rounded-md border object-cover"/>
-                  <span v-else
-                        class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs">
-                                            <FileText class="size-3 shrink-0"/> {{ docLabel(att as AiDocumentBlock) }}
-                                        </span>
-                </template>
-              </div>
-              <div v-if="messageText(msg.content)"
+              <MessageAttachments v-if="messageChips(msg).length" :attachments="messageChips(msg)" align="end" @preview="openPreview"/>
+              <div v-if="stripAttachmentPlaceholders(messageText(msg.content))"
                    class="whitespace-pre-wrap rounded-2xl bg-muted px-4 py-2.5 text-sm leading-relaxed">
-                {{ messageText(msg.content) }}
+                {{ stripAttachmentPlaceholders(messageText(msg.content)) }}
               </div>
             </div>
           </div>
@@ -1002,6 +1397,33 @@ onMounted(async () => {
           </Badge>
         </div>
 
+        <!-- Vault promotion nudge (suggest mode) — non-blocking, dismissable. -->
+        <div v-if="showPromotionNudge"
+             class="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+          <Library class="mt-0.5 size-4 shrink-0 text-primary"/>
+          <div class="min-w-0 flex-1">
+            <p class="text-foreground">
+              That's {{ promotion.unpromoted }} files in this chat. Move them to a vault so the assistant
+              can keep referencing them without re-uploading.
+            </p>
+          </div>
+          <div class="flex shrink-0 items-center gap-1">
+            <Button size="sm" class="h-7 px-2" :disabled="promoting" @click="promoteAttachments">
+              <Library class="size-3.5"/>
+              {{ promoting ? 'Moving…' : 'Move to vault' }}
+            </Button>
+            <button class="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                    aria-label="Dismiss" @click="promotionDismissed = true">
+              <X class="size-3.5"/>
+            </button>
+          </div>
+        </div>
+
+        <!-- Vault ingestion progress (quiet — informs without shouting). -->
+        <div v-if="ingest.active" class="px-1 py-0.5">
+          <SharedAIIngestRing :done="ingest.done" :total="ingest.total"/>
+        </div>
+
         <!-- Pending attachment chips -->
         <div v-if="attachments.length" class="flex flex-wrap gap-1.5">
           <div v-for="att in attachments" :key="att.id"
@@ -1022,7 +1444,56 @@ onMounted(async () => {
                accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log"
                class="hidden" @change="onFilesChosen"/>
 
-        <InputGroup>
+        <Transition name="rec" mode="out-in">
+        <!-- ── Recording / transcribing state ── -->
+        <div v-if="dictating" key="rec"
+             class="flex flex-col gap-2.5 rounded-xl border border-destructive/30 bg-destructive/[0.03] px-3.5 py-3 shadow-sm">
+          <div class="flex items-center gap-3">
+            <!-- Live indicator + timer -->
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="relative flex size-2.5 items-center justify-center">
+                <span v-if="isListening" class="absolute inline-flex size-2.5 animate-ping rounded-full bg-destructive/60"/>
+                <span class="relative inline-flex size-2.5 rounded-full" :class="isListening ? 'bg-destructive' : 'bg-muted-foreground'"/>
+              </span>
+              <span class="font-mono text-xs tabular-nums text-muted-foreground">{{ recTime }}</span>
+            </div>
+
+            <!-- Waveform (recording) → bouncing dots (processing) -->
+            <div class="flex min-w-0 flex-1 items-center justify-center overflow-hidden">
+              <div v-if="isListening" class="flex h-8 items-center gap-[3px]" aria-hidden="true">
+                <span v-for="i in 56" :key="i" class="w-[3px] shrink-0 rounded-full bg-primary/80"
+                      :style="{ height: dictBarHeight(i) + 'px' }"/>
+              </div>
+              <div v-else class="flex items-center gap-2 text-sm text-muted-foreground">
+                <span class="flex gap-1">
+                  <span class="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]"/>
+                  <span class="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]"/>
+                  <span class="size-1.5 animate-bounce rounded-full bg-primary"/>
+                </span>
+                Transcribing…
+              </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex shrink-0 items-center gap-1.5">
+              <Button size="icon-sm" variant="ghost" class="rounded-full text-muted-foreground hover:text-foreground"
+                      title="Discard" @click="cancelDictation">
+                <X class="size-4"/>
+                <span class="sr-only">Discard recording</span>
+              </Button>
+              <Button size="icon-sm" class="rounded-full" :disabled="!isListening" title="Done" @click="stopDictation">
+                <Check class="size-4"/>
+                <span class="sr-only">Finish dictation</span>
+              </Button>
+            </div>
+          </div>
+
+          <!-- Live transcript -->
+          <p v-if="transcript" class="line-clamp-3 px-0.5 text-sm leading-relaxed text-foreground/90">{{ transcript }}</p>
+          <p v-else class="px-0.5 text-sm text-muted-foreground">{{ isListening ? 'Listening — start speaking' : 'Finishing up…' }}</p>
+        </div>
+
+        <InputGroup v-else key="composer">
           <InputGroupAddon align="block-start">
             <Button size="sm" variant="outline"
                     :class="selectedItems.length ? 'border-primary/50 text-primary' : ''"
@@ -1050,6 +1521,11 @@ onMounted(async () => {
               {{ enhancing ? 'Enhancing…' : 'Enhance' }}
             </InputGroupButton>
             <Separator orientation="vertical" class="ml-auto !h-4"/>
+            <InputGroupButton v-if="sttSupported" size="icon-sm" variant="outline"
+                              title="Dictate your prompt" @click="toggleDictation">
+              <Mic class="size-4"/>
+              <span class="sr-only">Dictate your prompt</span>
+            </InputGroupButton>
             <InputGroupButton variant="default" class="rounded-full" size="icon-sm"
                               :disabled="!canSend" @click="send()">
               <ArrowUpIcon class="size-4"/>
@@ -1057,6 +1533,7 @@ onMounted(async () => {
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
+        </Transition>
       </div>
     </div>
 
@@ -1145,6 +1622,111 @@ onMounted(async () => {
         </div>
       </div>
     </Transition>
+
+    <!-- ░░ Conversational voice mode ░░ -->
+    <Transition name="voice">
+      <div v-if="voiceOpen" class="absolute inset-0 z-40 flex flex-col bg-background">
+        <!-- Top bar -->
+        <div class="flex shrink-0 items-center justify-between border-b px-4 py-3">
+          <div class="flex items-center gap-2">
+            <span class="size-2 animate-pulse rounded-full bg-primary"/>
+            <span class="text-sm font-medium text-primary">Live voice</span>
+          </div>
+          <Button size="icon-sm" variant="ghost" title="Back to chat" @click="exitVoice">
+            <MessageSquareText class="size-4"/>
+          </Button>
+        </div>
+
+        <!-- Proposal card (e.g. create-matter) surfaces here too -->
+        <Transition name="context-panel">
+          <ProposalCard v-if="pendingProposal" :proposal="pendingProposal" variant="panel"
+                        :loading="proposalLoading" class="mx-4 mt-3 shrink-0"
+                        @approve="approveProposal" @dismiss="dismissProposal"/>
+        </Transition>
+
+        <!-- Centre: orb + live text -->
+        <div class="flex flex-1 flex-col items-center justify-center gap-7 px-8">
+          <button class="relative flex size-36 items-center justify-center" @click="tapOrb">
+            <span class="absolute size-36 rounded-full bg-primary/8 transition-transform duration-75 ease-out"
+                  :style="{ transform: `scale(${outerRingScale})` }"/>
+            <span class="absolute size-36 rounded-full bg-primary/12 transition-transform duration-75 ease-out"
+                  :style="{ transform: `scale(${innerRingScale})` }"/>
+            <span class="relative z-10 flex size-24 flex-col items-center justify-center rounded-full bg-primary text-primary-foreground shadow-2xl shadow-primary/25 transition-all duration-300"
+                  :class="{ 'scale-105': voiceState === 'listening', 'animate-pulse': voiceState === 'speaking' }">
+              <span v-if="voiceState === 'listening'" class="flex h-9 items-end gap-1">
+                <span v-for="i in 7" :key="i" class="w-1 rounded-full bg-primary-foreground transition-all duration-75 ease-out"
+                      :style="{ height: `${barHeight(i)}px` }"/>
+              </span>
+              <Loader2 v-else-if="voiceState === 'thinking'" class="size-8 animate-spin opacity-90"/>
+              <AudioLines v-else-if="voiceState === 'speaking'" class="size-8 opacity-90"/>
+              <Sparkles v-else class="size-8 opacity-90"/>
+            </span>
+          </button>
+
+          <div class="flex min-h-[4rem] w-full max-w-md flex-col items-center justify-center gap-1 text-center">
+            <Transition name="voice-fade" mode="out-in">
+              <p v-if="voiceState === 'listening' && transcript" key="t" class="text-lg font-medium leading-snug text-foreground">{{ transcript }}</p>
+              <p v-else-if="voiceState === 'listening'" key="l" class="animate-pulse text-sm font-medium text-primary">Listening…</p>
+              <p v-else-if="voiceState === 'thinking'" key="th" class="text-sm text-muted-foreground">Thinking…</p>
+              <p v-else-if="voiceState === 'speaking' && caption" key="c" class="line-clamp-4 text-sm leading-relaxed text-foreground">{{ caption }}</p>
+              <p v-else-if="voiceState === 'speaking'" key="s" class="animate-pulse text-sm font-medium text-primary">Speaking…</p>
+              <p v-else key="e" class="text-sm text-muted-foreground">Tap the orb and start talking</p>
+            </Transition>
+          </div>
+        </div>
+
+        <!-- Bottom controls -->
+        <div class="flex shrink-0 items-center justify-center gap-3 border-t px-6 pb-6 pt-3">
+          <Button size="icon" variant="ghost" class="relative rounded-full" title="Add context"
+                  @click="contextDrawerOpen = true">
+            <AtSign class="size-5"/>
+            <span v-if="selectedItems.length"
+                  class="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">
+              {{ selectedItems.length }}
+            </span>
+          </Button>
+
+          <Button size="icon" variant="ghost" class="rounded-full"
+                  :class="bargeInEnabled ? 'text-primary' : 'text-muted-foreground'"
+                  :title="bargeInEnabled ? 'Talk-over on (use headphones)' : 'Talk-over off — tap to enable (headphones only)'"
+                  @click="toggleBargeIn">
+            <Headphones class="size-5"/>
+          </Button>
+
+          <Button v-if="isSpeaking" size="icon" variant="ghost" class="rounded-full"
+                  title="Stop speaking" @click="beginListening()">
+            <VolumeX class="size-5"/>
+          </Button>
+
+          <Button size="icon" class="size-16 rounded-full shadow-lg shadow-primary/20 [&_svg]:size-6"
+                  :variant="isListening ? 'destructive' : 'default'"
+                  :class="isListening ? 'ring-4 ring-destructive/20' : ''"
+                  :disabled="voiceState === 'thinking'" @click="tapOrb">
+            <MicOff v-if="isListening"/>
+            <Mic v-else/>
+          </Button>
+
+          <Button size="icon" variant="destructive" class="rounded-full" title="Exit voice" @click="exitVoice">
+            <X class="size-5"/>
+          </Button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- ── Attachment preview (right sheet on desktop, bottom on touch) ──────── -->
+    <Sheet v-model:open="previewOpen">
+      <SheetContent
+          :side="isDesktop ? 'right' : 'bottom'"
+          hide-x
+          class="flex flex-col gap-0 p-0"
+          :class="isDesktop ? 'w-full sm:max-w-xl' : 'h-[88dvh]'"
+      >
+        <SheetTitle class="sr-only">Attachment preview</SheetTitle>
+        <DocumentPreview v-if="previewDoc" :doc="previewDoc"
+                         :resolve-url="resolvePreviewUrl"
+                         class="min-h-0 flex-1" @close="previewOpen = false"/>
+      </SheetContent>
+    </Sheet>
   </div>
 </template>
 
@@ -1168,5 +1750,42 @@ onMounted(async () => {
 .context-panel-enter-from > div:last-child,
 .context-panel-leave-to > div:last-child {
   transform: translateY(100%);
+}
+
+/* Composer ⇄ recording-panel swap */
+.rec-enter-active,
+.rec-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.rec-enter-from,
+.rec-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* Voice overlay fade */
+.voice-enter-active {
+  transition: opacity 0.25s ease;
+}
+
+.voice-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.voice-enter-from,
+.voice-leave-to {
+  opacity: 0;
+}
+
+/* Live-text crossfade inside the voice overlay */
+.voice-fade-enter-active,
+.voice-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.voice-fade-enter-from,
+.voice-fade-leave-to {
+  opacity: 0;
 }
 </style>

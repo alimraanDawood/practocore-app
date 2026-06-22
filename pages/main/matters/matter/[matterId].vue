@@ -67,6 +67,7 @@
             v-if="isSupervisor && currentUser?.organisation !== ''"
             @updated="reloadMatter"
             :matter="currentMatterOrApplication"
+            v-model:open="membersAction"
           >
             <Button variant="outline" size="sm" class="gap-2">
               <Users class="size-4"/>
@@ -89,7 +90,38 @@
             :matter="currentMatterOrApplication"
             :can-manage="isSupervisor || currentMatterOrApplication?.owner === currentUser?.id"
             @updated="reloadMatter"
+            v-model:open="eccmisAction"
           />
+
+          <!-- Headless editors driven by `?action=` deep links. They render no
+               visible trigger (controlled via v-model:open); the visible
+               affordances live in the display widgets above. -->
+          <SharedMattersOpposingCounselEditMatterOpposingCounsel
+            :matter="currentMatterOrApplication"
+            :opposing-counsel="currentMatterOrApplication?.opposingCounsel"
+            v-model:open="opposingAction"
+            @updated="reloadMatter"
+          >
+            <span class="hidden" />
+          </SharedMattersOpposingCounselEditMatterOpposingCounsel>
+
+          <SharedMattersCourtOfficersEditMatterCourtOfficers
+            :matter="currentMatterOrApplication"
+            v-model:open="officersAction"
+            @updated="reloadMatter"
+          >
+            <span class="hidden" />
+          </SharedMattersCourtOfficersEditMatterCourtOfficers>
+
+          <SharedMattersMatterPartiesEditMatterParties
+            :matter="currentMatterOrApplication"
+            :parties="currentMatterOrApplication?.parties"
+            :representing="currentMatterOrApplication?.representing"
+            v-model:open="partiesAction"
+            @updated="reloadMatter"
+          >
+            <span class="hidden" />
+          </SharedMattersMatterPartiesEditMatterParties>
         </div>
 
         <Separator />
@@ -125,7 +157,7 @@
         </div>
 
         <div class="flex flex-row gap-2 p-2 h-full">
-          <Tabs class="w-full h-full" default-value="timeline">
+          <Tabs class="w-full h-full" v-model="activeTab">
             <TabsList>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
@@ -328,8 +360,46 @@ definePageMeta({
 });
 
 const route = useRoute();
+const router = useRouter();
 const mattersStore = useMattersStore();
 const currentApplicationOption = ref('all');
+
+// Tab selection is URL-backed (`?tab=`) so links can deep-link into a matter's
+// Case Documents or AI Drafts (e.g. the assistant handing off to a tab).
+const MATTER_TABS = ['timeline', 'documents', 'drafts'];
+const activeTab = computed({
+  get() {
+    const t = route.query.tab;
+    return typeof t === 'string' && MATTER_TABS.includes(t) ? t : 'timeline';
+  },
+  set(t) {
+    router.replace({ query: { ...route.query, tab: t } });
+  },
+});
+
+// A single dialog/sheet is openable via `?action=` so a link can deep-link into
+// e.g. assigning lawyers or attaching an ECCMIS case. `actionModel(name)` yields
+// a writable boolean bound to each component's `v-model:open`; opening one sets
+// the query, closing (or dismissing) clears it.
+const MATTER_ACTIONS = ['members', 'opposing', 'officers', 'parties', 'eccmis'];
+const activeAction = computed(() => {
+  const a = route.query.action;
+  return typeof a === 'string' && MATTER_ACTIONS.includes(a) ? a : '';
+});
+const actionModel = (name) => computed({
+  get: () => activeAction.value === name,
+  set: (open) => {
+    const query = { ...route.query };
+    if (open) query.action = name;
+    else delete query.action;
+    router.replace({ query });
+  },
+});
+const membersAction = actionModel('members');
+const opposingAction = actionModel('opposing');
+const officersAction = actionModel('officers');
+const partiesAction = actionModel('parties');
+const eccmisAction = actionModel('eccmis');
 const matter = ref(null);
 const isInitialLoad = ref(true);
 const subscribedDeadlineIds = ref(new Set());

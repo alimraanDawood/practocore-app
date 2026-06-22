@@ -14,7 +14,7 @@ import { pb, SERVER_URL } from '~/lib/pocketbase';
 
 // 'vault' is a custom, membership-scoped vault (VAULTS_CUSTOM_STRATEGY.md); its
 // scope_id is the AiVaults id. matter/org are the original case/firm libraries.
-export type VaultScope = 'matter' | 'org' | 'vault';
+export type VaultScope = 'matter' | 'org' | 'vault' | 'user';
 
 // Mirrors ai/vault/collection.go status lifecycle. 'stored' = kept but AI
 // ingestion was deliberately turned off (not read into the knowledge base).
@@ -64,6 +64,8 @@ export interface VaultDocument {
   mime: string;
   status: VaultStatus;
   facts_count: number;
+  /** True when the text was recovered by OCR (a scanned/image PDF) rather than extracted. */
+  ocr?: boolean;
   provider: string;
   error: string;
   /** Soft-delete flag — true means the document is in the Trash. */
@@ -224,6 +226,36 @@ export function listDocuments(scope: VaultScope, scopeId: string): Promise<Vault
 // AiVaultDocuments collection's view rule still governs access here.
 export function getDocument(id: string): Promise<VaultDocument | null> {
   return pb.collection(DOCS).getOne<VaultDocument>(id).catch(() => null);
+}
+
+// ── Per-document facts (verification trail) ──────────────────────────────────
+// A single fact the AI distilled from a document: an atomic statement, its page
+// locator (in provenance), and the confidence the text stated it. Mirrors the
+// ai/memory Memory read view returned by /ai/vault/documents/{id}/facts.
+export interface VaultFact {
+  id: string;
+  content: string;
+  tags?: string[];
+  confidence: number;
+  /** provenance.type is always "document"; locator is the page/clause citation. */
+  provenance?: { type?: string; ref?: string; locator?: string };
+  created?: string;
+}
+
+export interface VaultFactsResult {
+  document: string;
+  status: VaultStatus;
+  count: number;
+  facts: VaultFact[];
+}
+
+/**
+ * Fetch the facts the AI distilled from one document — the per-document
+ * verification trail shown in the preview's "Facts" tab. Gated like the other
+ * document endpoints (org membership + Vaults entitlement + scope access).
+ */
+export function getDocumentFacts(id: string): Promise<VaultFactsResult> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}/facts`, { method: 'GET' });
 }
 
 // ── Realtime ────────────────────────────────────────────────────────────────

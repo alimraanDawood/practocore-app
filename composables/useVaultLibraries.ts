@@ -23,6 +23,14 @@ export function useVaultLibraries() {
   const loaded = useState<boolean>('vault-matters-loaded', () => false);
 
   const orgId = computed(() => getSignedInUser()?.organisation || '');
+  // Solo/individual accounts have no organisation: they get a Personal Library
+  // (scope="user", scope_id = their user id) instead of a firm-wide one.
+  const isIndividual = computed(() => !getSignedInUser()?.organisation);
+  const personalLibrary = computed<VaultLibrary | null>(() => {
+    const uid = getSignedInUser()?.id;
+    if (!uid || !isIndividual.value) return null;
+    return { scope: 'user', scopeId: uid, label: 'Personal Library' };
+  });
 
   async function refresh(force = false): Promise<void> {
     if (loading.value) return;
@@ -54,8 +62,9 @@ export function useVaultLibraries() {
     if (idx < 0) return null;
     const scope = lib.slice(0, idx);
     const scopeId = lib.slice(idx + 1);
-    if ((scope !== 'org' && scope !== 'matter' && scope !== 'vault') || !scopeId) return null;
-    const fallback = scope === 'org' ? 'Firm Library' : scope === 'vault' ? 'Vault' : 'Matter';
+    if ((scope !== 'org' && scope !== 'matter' && scope !== 'vault' && scope !== 'user') || !scopeId) return null;
+    const fallback = scope === 'org' ? 'Firm Library' : scope === 'vault' ? 'Vault'
+      : scope === 'user' ? 'Personal Library' : 'Matter';
     return {
       scope,
       scopeId,
@@ -63,5 +72,5 @@ export function useVaultLibraries() {
     };
   }
 
-  return { matters, loading, loaded, orgId, refresh, libraryQuery, parseLibraryQuery };
+  return { matters, loading, loaded, orgId, isIndividual, personalLibrary, refresh, libraryQuery, parseLibraryQuery };
 }

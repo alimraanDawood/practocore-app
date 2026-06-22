@@ -1058,7 +1058,7 @@ const ingestingCount = computed(() =>
           v-if="previewDoc && previewPushed"
           class="sticky top-0 hidden h-[calc(100dvh-7rem)] w-[400px] shrink-0 overflow-hidden rounded-xl border shadow-sm lg:block xl:w-[460px]"
       >
-        <SharedVaultDocumentPreview :doc="previewDoc" @close="closePreview"/>
+        <SharedVaultDocumentPreview :doc="previewDoc" :resolve-url="() => vaultFileUrl(previewDoc!)" :facts-doc-id="previewDoc.ingest ? previewDoc.id : undefined" @close="closePreview"/>
       </aside>
     </Transition>
 
@@ -1071,7 +1071,7 @@ const ingestingCount = computed(() =>
           :class="previewSheetSide === 'bottom' ? 'h-[88dvh]' : 'w-full sm:max-w-xl'"
       >
         <SheetTitle class="sr-only">Document preview</SheetTitle>
-        <SharedVaultDocumentPreview v-if="previewDoc" :doc="previewDoc" class="min-h-0 flex-1" @close="closePreview"/>
+        <SharedVaultDocumentPreview v-if="previewDoc" :doc="previewDoc" :resolve-url="() => vaultFileUrl(previewDoc!)" :facts-doc-id="previewDoc.ingest ? previewDoc.id : undefined" class="min-h-0 flex-1" @close="closePreview"/>
       </SheetContent>
     </Sheet>
   </div>

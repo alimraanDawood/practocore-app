@@ -2,7 +2,7 @@
 import { marked } from 'marked';
 import { toast } from 'vue-sonner';
 import type { AiCitation } from '~/services/ai';
-import { getDocument, type VaultDocument } from '~/services/vault';
+import { getDocument, vaultFileUrl, type VaultDocument } from '~/services/vault';
 
 // Renders an assistant answer with its verification trail: inline [[cite:<id>]]
 // markers become numbered citation chips, and a "Sources" footer lists every source
@@ -73,7 +73,7 @@ function pageFromLocator(locator?: string): number | undefined {
 async function open(c: AiCitation) {
   const meta = c.meta ?? {};
   active.value = null;
-  if ((c.kind === 'legal' || c.kind === 'web') && meta.url) {
+  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority') && meta.url) {
     window.open(meta.url, '_blank', 'noopener');
     return;
   }
@@ -98,7 +98,7 @@ async function open(c: AiCitation) {
 <template>
   <div>
     <div
-      class="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none [&_.ai-cite]:mx-px [&_.ai-cite]:cursor-pointer [&_.ai-cite]:rounded [&_.ai-cite]:bg-primary/10 [&_.ai-cite]:px-1 [&_.ai-cite]:font-semibold [&_.ai-cite]:text-primary [&_.ai-cite]:no-underline hover:[&_.ai-cite]:bg-primary/20"
+      class="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none [&_.ai-cite]:mx-px [&_.ai-cite]:cursor-pointer [&_.ai-cite]:rounded [&_.ai-cite]:bg-secondary [&_.ai-cite]:px-1 [&_.ai-cite]:font-semibold [&_.ai-cite]:text-secondary-foreground [&_.ai-cite]:no-underline hover:[&_.ai-cite]:bg-secondary/80"
       v-html="html"
       @click="onProseClick"
     />
@@ -121,10 +121,10 @@ async function open(c: AiCitation) {
         class="fixed inset-0 z-[130] flex"
         @click.self="previewDoc = null"
       >
-        <div class="absolute inset-0 bg-black/40" @click="previewDoc = null" />
-        <div class="ml-auto flex h-full w-full max-w-2xl flex-col border-l bg-background shadow-xl">
-          <SharedVaultDocumentPreview :doc="previewDoc" :initial-page="previewPage" @close="previewDoc = null" />
+        <div class="ml-auto flex h-full w-full max-w-2xl z-10 flex-col border-l bg-background shadow-xl">
+          <SharedVaultDocumentPreview :doc="previewDoc" :resolve-url="() => vaultFileUrl(previewDoc!)" :initial-page="previewPage" :facts-doc-id="previewDoc.id" @close="previewDoc = null" />
         </div>
+        <div class="absolute inset-0 bg-black/40 z-5" @click="previewDoc = null" />
       </div>
     </Teleport>
   </div>

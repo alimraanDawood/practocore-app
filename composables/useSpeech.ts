@@ -371,8 +371,15 @@ export function useSpeech() {
   let currentAudio: HTMLAudioElement | null = null;
   let currentObjectUrl: string | null = null;
   let captionFrame: number | null = null;
+  // Set when a conversational read is interrupted (stopSpeaking / barge-in) so the
+  // sentence-queue loop bails instead of marching on to the next chunk.
+  let convCancelled = false;
 
   function stopSpeaking() {
+    convCancelled = true;
+    // Drain the streaming queue so the consumer loop and awaitStreamingDone exit.
+    speakQueue = [];
+    speakEnded = true;
     if (captionFrame !== null) { cancelAnimationFrame(captionFrame); captionFrame = null; }
     if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; currentAudio = null; }
     if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
@@ -464,7 +471,7 @@ export function useSpeech() {
         if (!currentAudio || chars.length === 0) return;
         const t = currentAudio.currentTime;
         let n = 0;
-        while (n < starts.length && starts[n] <= t) n++;
+        while (n < starts.length && (starts[n] ?? Infinity) <= t) n++;
         caption.value = chars.slice(0, n).join('');
         if (!currentAudio.paused && !currentAudio.ended) {
           captionFrame = requestAnimationFrame(revealUpToNow);
@@ -486,9 +493,262 @@ export function useSpeech() {
     }
   }
 
+  // ── Conversational read — sentence-queued, fast first word ──────────────────
+  //
+  // The old audio mode synthesized the WHOLE reply before a single word played
+  // (one big /tts-timed blob), so a long answer = seconds of dead air. Here we
+  // split the reply into sentences, start playing sentence 1 as soon as it's
+  // synthesized, and prefetch the next sentence while the current one plays —
+  // gapless playback with a much shorter time-to-first-word. The caption reveals
+  // sentence-by-sentence as we go.
+
+  // Split into speakable chunks on sentence boundaries, keeping the terminator.
+  // Very short trailing fragments are merged back so we don't synthesize "Yes."
+  // as its own request.
+  function splitSentences(text: string): string[] {
+    const raw = text.match(/[^.!?…]+[.!?…]+(\s|$)|[^.!?…]+$/g) ?? [text];
+    const out: string[] = [];
+    for (const piece of raw) {
+      const s = piece.trim();
+      if (!s) continue;
+      const prev = out[out.length - 1];
+      // Glue a tiny fragment onto the previous chunk for more natural prosody.
+      if (prev && (s.length < 12 || prev.length < 12)) out[out.length - 1] = `${prev} ${s}`;
+      else out.push(s);
+    }
+    return out.length ? out : [text];
+  }
+
+  // Synthesize one sentence to a playable object URL via the streaming /tts route.
+  async function fetchSentence(sentence: string): Promise<string | null> {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/practocore/ai/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': pb.authStore.token },
+        body: JSON.stringify({ text: sentence, voiceId: prefs.value.voiceId }),
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+
+  // Play one object URL to completion. Resolves on ended/error; revokes the URL.
+  function playUrl(url: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const audio = new Audio(url);
+      currentAudio = audio;
+      currentObjectUrl = url;
+      const done = () => {
+        if (currentObjectUrl === url) { URL.revokeObjectURL(url); currentObjectUrl = null; }
+        if (currentAudio === audio) currentAudio = null;
+        resolve();
+      };
+      audio.onended = done;
+      audio.onerror = done;
+      audio.play().catch(done);
+    });
+  }
+
+  async function speakConversational(text: string) {
+    stopSpeaking();
+    convCancelled = false;
+    caption.value = '';
+    const clean = cleanForSpeech(text);
+    if (!clean) return;
+
+    const sentences = splitSentences(clean);
+    isSpeaking.value = true;
+
+    // Kick off synthesis of the first sentence immediately, then pipeline: while
+    // each sentence plays, the next is already being synthesized.
+    let nextFetch: Promise<string | null> | null = fetchSentence(sentences[0]!);
+    for (let i = 0; i < sentences.length; i++) {
+      if (convCancelled || !nextFetch) break;
+      const url = await nextFetch.catch(() => null);
+      // Start the next synthesis before we begin playing this chunk.
+      nextFetch = i + 1 < sentences.length ? fetchSentence(sentences[i + 1]!) : null;
+      if (convCancelled) { if (url) URL.revokeObjectURL(url); break; }
+      if (!url) continue; // skip a failed chunk rather than aborting the whole reply
+      caption.value = sentences.slice(0, i + 1).join(' ');
+      await playUrl(url);
+    }
+
+    // Drain any in-flight prefetch we never played (interrupted mid-reply).
+    if (nextFetch) { const u = await nextFetch.catch(() => null); if (u) URL.revokeObjectURL(u); }
+    if (!convCancelled) caption.value = clean;
+    isSpeaking.value = false;
+    currentAudio = null;
+  }
+
+  // ── Streaming read — speak the reply as the model writes it ─────────────────
+  //
+  // When the backend streams text deltas (voice mode), we don't wait for the whole
+  // answer: we accumulate deltas, peel off complete sentences as they finish, and
+  // feed them into a gapless TTS queue. So the first word can play while the model
+  // is still generating the rest — true LLM→TTS pipelining.
+  let speakQueue: string[] = [];
+  let speakEnded = false;
+  let consumerRunning = false;
+  let streamSpoken: string[] = []; // sentences already enqueued (drives the caption)
+  let streamConsumed = 0;          // chars of the cleaned buffer already turned into sentences
+  let streamRaw = '';              // raw accumulated text so far
+
+  // Pull complete (terminated) sentences out of `text`, returning them plus the
+  // index up to which we consumed. A trailing unterminated fragment is left behind.
+  function takeSentences(text: string): { sentences: string[]; consumed: number } {
+    const re = /[^.!?…]*[.!?…]+["')\]]*\s*/g;
+    const sentences: string[] = [];
+    let consumed = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const s = m[0].trim();
+      if (s) sentences.push(s);
+      consumed = re.lastIndex;
+    }
+    return { sentences, consumed };
+  }
+
+  async function consumeSpeakQueue() {
+    if (consumerRunning) return;
+    consumerRunning = true;
+    isSpeaking.value = true;
+    try {
+      while (!convCancelled) {
+        if (speakQueue.length === 0) {
+          if (speakEnded) break;
+          await new Promise(r => setTimeout(r, 40)); // wait for more deltas
+          continue;
+        }
+        const sentence = speakQueue.shift()!;
+        const url = await fetchSentence(sentence);
+        if (convCancelled) { if (url) URL.revokeObjectURL(url); break; }
+        if (!url) continue;
+        await playUrl(url);
+      }
+    } finally {
+      consumerRunning = false;
+      isSpeaking.value = false;
+      currentAudio = null;
+    }
+  }
+
+  function beginStreamingSpeech() {
+    stopSpeaking();
+    convCancelled = false;
+    speakQueue = [];
+    speakEnded = false;
+    streamSpoken = [];
+    streamConsumed = 0;
+    streamRaw = '';
+    caption.value = '';
+  }
+
+  // Feed one text delta. Enqueues any newly-completed sentences for TTS.
+  function pushSpeechDelta(delta: string) {
+    if (convCancelled) return;
+    streamRaw += delta;
+    const clean = cleanForSpeech(streamRaw);
+    if (clean.length <= streamConsumed) return;
+    const { sentences, consumed } = takeSentences(clean.slice(streamConsumed));
+    if (!sentences.length) return;
+    streamConsumed += consumed;
+    for (const s of sentences) {
+      speakQueue.push(s);
+      streamSpoken.push(s);
+    }
+    caption.value = streamSpoken.join(' ');
+    consumeSpeakQueue();
+  }
+
+  // No more deltas — flush any trailing fragment and let the queue drain.
+  function endStreamingSpeech() {
+    if (convCancelled) return;
+    const clean = cleanForSpeech(streamRaw);
+    const tail = clean.slice(streamConsumed).trim();
+    if (tail) {
+      speakQueue.push(tail);
+      streamSpoken.push(tail);
+      caption.value = streamSpoken.join(' ');
+    }
+    speakEnded = true;
+    consumeSpeakQueue();
+  }
+
+  // Resolve once the streaming queue has fully drained (or been interrupted).
+  function awaitStreamingDone(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const check = () => {
+        if (convCancelled || (!consumerRunning && speakQueue.length === 0 && speakEnded)) resolve();
+        else setTimeout(check, 60);
+      };
+      check();
+    });
+  }
+
+  // ── Barge-in — interrupt the assistant when the user starts talking ─────────
+  //
+  // While the assistant is speaking we run a lightweight analyser on a separate
+  // mic stream. Sustained energy above threshold = the user wants to jump in, so
+  // we fire onSpeech() (the caller stops playback and starts listening). Web only;
+  // echo cancellation keeps the assistant's own voice from self-triggering, but a
+  // manual tap-to-interrupt remains the reliable fallback on open speakers.
+  const BARGE_THRESHOLD = 26;  // 0–255 average bin energy
+  const BARGE_FRAMES = 6;      // consecutive loud frames (~100ms) before we trust it
+  let bargeStream: MediaStream | null = null;
+  let bargeCtx: AudioContext | null = null;
+  let bargeAnalyser: AnalyserNode | null = null;
+  let bargeFrame: number | null = null;
+  let bargeArmed = false;
+
+  async function armBargeIn(onSpeech: () => void) {
+    if (bargeArmed || isNative.value || !navigator.mediaDevices?.getUserMedia) return;
+    try {
+      bargeStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      bargeCtx = new AudioContext();
+      await bargeCtx.resume().catch(() => {});
+      const src = bargeCtx.createMediaStreamSource(bargeStream);
+      bargeAnalyser = bargeCtx.createAnalyser();
+      bargeAnalyser.fftSize = 512;
+      src.connect(bargeAnalyser);
+      bargeArmed = true;
+
+      const data = new Uint8Array(bargeAnalyser.frequencyBinCount);
+      let loud = 0;
+      const tick = () => {
+        if (!bargeArmed || !bargeAnalyser) return;
+        bargeAnalyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        // Only count while audio is actually playing, so playback start-up or
+        // the gap between sentences doesn't accumulate false positives.
+        if (isSpeaking.value && avg > BARGE_THRESHOLD) loud++;
+        else loud = Math.max(0, loud - 1);
+        if (loud >= BARGE_FRAMES) { loud = 0; onSpeech(); return; }
+        bargeFrame = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      // Mic unavailable — manual interrupt still works.
+      disarmBargeIn();
+    }
+  }
+
+  function disarmBargeIn() {
+    bargeArmed = false;
+    if (bargeFrame !== null) { cancelAnimationFrame(bargeFrame); bargeFrame = null; }
+    if (bargeAnalyser) { try { bargeAnalyser.disconnect(); } catch {} bargeAnalyser = null; }
+    if (bargeCtx) { bargeCtx.close().catch(() => {}); bargeCtx = null; }
+    if (bargeStream) { bargeStream.getTracks().forEach(t => t.stop()); bargeStream = null; }
+  }
+
   onUnmounted(async () => {
     await stopListening();
     stopSpeaking();
+    disarmBargeIn();
     teardownStream();
   });
 
@@ -497,7 +757,11 @@ export function useSpeech() {
     isListening, isTranscribing, transcript, sttSupported, audioLevel, micError,
     startListening, stopListening,
     // TTS
-    isSpeaking, ttsSupported, caption, speak, speakTimed, stopSpeaking, unlockAudio,
+    isSpeaking, ttsSupported, caption, speak, speakTimed, speakConversational, stopSpeaking, unlockAudio,
+    // Streaming TTS (LLM→TTS pipelining)
+    beginStreamingSpeech, pushSpeechDelta, endStreamingSpeech, awaitStreamingDone,
+    // Barge-in
+    armBargeIn, disarmBargeIn,
     // Prefs
     prefs, savePrefs,
   };

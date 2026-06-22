@@ -7,7 +7,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
         return;
     }
 
-    if(to.path === '/' || to.path.startsWith("/auth") || to.path.startsWith('/splash') || to.path.startsWith('/intro') || to.path.startsWith('/billing')) {
+    // `/admin/*` is the standalone superuser area, gated by the `superuser`
+    // route middleware (a separate `_superusers` session, not the app `Users`
+    // login) — it must stay reachable without a normal app session.
+    if(to.path === '/' || to.path.startsWith("/auth") || to.path.startsWith('/splash') || to.path.startsWith('/intro') || to.path.startsWith('/billing') || to.path.startsWith('/admin')) {
         return;
     }
 

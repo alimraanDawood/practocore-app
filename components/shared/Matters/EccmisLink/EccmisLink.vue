@@ -135,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import { useVModel } from '@vueuse/core';
 import { toast } from 'vue-sonner';
 import { Link2, Unlink, LoaderIcon, AlertCircle } from 'lucide-vue-next';
 import {
@@ -148,10 +149,13 @@ const props = defineProps<{
     matter: any;
     /** Whether the current user may attach/detach (supervisor/owner). */
     canManage?: boolean;
+    /** Optional controlled open state for the attach dialog (e.g. a deep link). */
+    open?: boolean;
 }>();
-const emits = defineEmits<{ updated: [] }>();
+const emits = defineEmits<{ updated: []; 'update:open': [value: boolean] }>();
 
-const open = ref(false);
+// Controlled when the parent binds `v-model:open`, otherwise internal (passive).
+const open = useVModel(props, 'open', emits, { passive: true, defaultValue: false });
 const confirmOpen = ref(false);
 const loading = ref(false);
 const busy = ref(false);
@@ -173,8 +177,7 @@ function scheduleConfirm() {
     }, 50);
 }
 
-async function openPicker() {
-    open.value = true;
+async function loadPortfolio() {
     loadError.value = '';
     cases.value = [];
     loading.value = true;
@@ -186,6 +189,19 @@ async function openPicker() {
         loading.value = false;
     }
 }
+
+function openPicker() {
+    open.value = true;
+    loadPortfolio();
+}
+
+// When the dialog is opened externally (deep link sets `open` true) rather than
+// via the button, load the portfolio too — otherwise it would show empty.
+watch(open, (isOpen) => {
+    if (isOpen && !loading.value && !cases.value.length && !loadError.value) {
+        loadPortfolio();
+    }
+});
 
 async function attach(c: PortfolioCase) {
     if (busy.value || isOtherwiseLinked(c)) return;

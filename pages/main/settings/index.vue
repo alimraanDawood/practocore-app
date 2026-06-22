@@ -232,7 +232,21 @@ definePageMeta({
   layout: 'default'
 })
 
-const activeTab = ref('profile')
+const route = useRoute()
+const router = useRouter()
+
+// Tab selection is URL-backed (`?tab=`) so links can land on a specific panel
+// (e.g. the AI can send a user straight to Billing). Unknown/missing → profile.
+const VALID_TABS = ['profile', 'notifications', 'billing', 'eccmis', 'documentation', 'support']
+const activeTab = computed({
+  get() {
+    const t = route.query.tab
+    return typeof t === 'string' && VALID_TABS.includes(t) ? t : 'profile'
+  },
+  set(t) {
+    router.replace({ query: { ...route.query, tab: t } })
+  },
+})
 
 const signOutUser = () => {
   signOut()

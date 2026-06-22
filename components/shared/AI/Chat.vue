@@ -5,23 +5,27 @@ import {
   Building2, Clock, User,
   History, Plus, Trash2, MessageSquare, Settings, Lock, Zap, SquarePen,
   FileText, Briefcase, ArrowRight, Bell,
-  Search, BookOpen, ChevronRight, ChevronDown, Download, FileType2,
+  Search, BookOpen, ChevronRight, ChevronDown, Download, FileType2, Library,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
 import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
-import { Sheet, SheetContent, SheetTrigger } from '~/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '~/components/ui/sheet';
+import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
 import ProposalCard from './ProposalCard.vue';
+import MessageAttachments from './MessageAttachments.vue';
 import { initials } from './proposals/theme';
 import type { VoiceEntry } from '~/composables/useSpeech';
 import { getSignedInUser } from '~/services/auth';
 import {
-  sendAiMessageStream, confirmAiProposal, improvePrompt,
+  sendAiMessageStream, confirmAiProposal, improvePrompt, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
+  listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
   listConversations, getConversation, deleteConversation,
-  type AiMessage, type AiContentBlock, type AiImageBlock, type AiDocumentBlock,
+  type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
-  type ConvDisplayMessage, type AiStreamStep, type AiCitation,
+  type AiAttachmentMeta, type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
 } from '~/services/ai';
+import type { AttachmentView } from './MessageAttachments.vue';
 import { getMatters, getAllDeadlines } from '~/services/matters';
 import { getOrganisationUsers } from '~/services/admin';
 import { useMattersStore } from '~/stores/matters';
@@ -212,7 +216,7 @@ type DocumentGenerated = {
 // Assistant turns optionally carry the activity steps that produced them (streamed
 // mid-turn) plus how long the work took, so the UI can show a collapsible
 // "Worked for Ns" summary. These UI-only fields are stripped before the API payload.
-type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[] };
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[]; attachments?: ConvAttachment[] };
 type ChatMessage = DisplayAiMessage | ToolEvent | MatterCreated | ReminderCreated | DocumentGenerated;
 
 const messages = ref<ChatMessage[]>([]);
@@ -235,9 +239,9 @@ const convMessages = computed<ConvDisplayMessage[]>(() =>
       m.role === 'tool-event'
         ? { role: `tool-event:${m.status}`, content: m.content }
         // Persisted history is text-only: flatten any multimodal content to a
-        // string with bracketed placeholders for attachments. Keeps the
-        // conversation row small and the backend's messagesToConvMessages happy.
-        : { role: m.role, content: messageText(m.content) },
+        // string with bracketed placeholders for attachments. Attachment refs ride
+        // alongside so the chips survive a reload (resolved via AiChatAttachments).
+        : { role: m.role, content: messageText(m.content), attachments: (m as DisplayAiMessage).attachments },
     ),
 );
 const conversationId = ref<string>('');
@@ -310,6 +314,10 @@ interface Attachment {
 }
 
 const attachments = ref<Attachment[]>([]);
+// Metadata for files sent this session, accumulated and re-sent each call so the
+// backend can name + dedup the persisted AiChatAttachments (and a proposal turn
+// still names its files on confirm). Reset on new chat / conversation switch.
+const sentAttachmentsMeta = ref<AiAttachmentMeta[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 /** Per-file cap (10MB) — generous enough for multi-page PDFs and high-res photos. */
@@ -455,17 +463,108 @@ function messageText(content: AiMessage['content']): string {
   return parts.join(' ');
 }
 
-/** Return only the attachment blocks of a content array — used by the render
- *  loop to show file chips/thumbnails above the text bubble. */
-function messageAttachments(content: AiMessage['content']): Array<AiImageBlock | AiDocumentBlock> {
-  if (typeof content === 'string') return [];
-  return content.filter((b): b is AiImageBlock | AiDocumentBlock => b.type === 'image' || b.type === 'document');
+// sha256 → resolved open/download URL for attachments in the open conversation. Blob
+// (or data:) URLs for files sent this session; token URLs resolved on reload.
+const attachmentUrls = ref<Map<string, string>>(new Map());
+
+/** Normalized chip views for a user turn, merging its refs with resolved URLs. */
+function messageChips(msg: DisplayAiMessage): AttachmentView[] {
+  return (msg.attachments ?? []).map(a => ({
+    id: a.sha256,
+    name: a.name ?? '',
+    mime: a.mime ?? '',
+    kind: a.kind ?? 'binary',
+    size: a.size,
+    url: attachmentUrls.value.get(a.sha256),
+  }));
 }
 
-/** Human label for a document attachment chip (text doc vs PDF). */
-function docLabel(att: AiDocumentBlock): string {
-  return att.source?.type === 'text' ? 'Document' : 'PDF';
+// ── Attachment preview (reuses the vault DocumentPreview viewer) ───────────────
+const previewTarget = ref<AttachmentView | null>(null);
+const previewOpen = computed({
+  get: () => !!previewTarget.value,
+  set: (v) => { if (!v) previewTarget.value = null; },
+});
+const previewDoc = computed<PreviewDoc | null>(() => previewTarget.value
+  ? { id: previewTarget.value.id, filename: previewTarget.value.name, file: previewTarget.value.name, mime: previewTarget.value.mime }
+  : null);
+function openPreview(att: AttachmentView) { previewTarget.value = att; }
+// Thunk for DocumentPreview's resolveUrl — defined here because bare `Promise`
+// isn't in template scope. The URL is already resolved (blob: live / token URL on reload).
+const resolvePreviewUrl = () => Promise.resolve(previewTarget.value?.url ?? '');
+
+/** Strip the bracketed attachment placeholders so the bubble shows only the caption. */
+function stripAttachmentPlaceholders(text: string): string {
+  return text.replace(/\[(?:image|file|PDF|document)(?::[^\]]*)?\]/g, '').replace(/\s{2,}/g, ' ').trim();
 }
+
+// ── Vault promotion (Phase 3, suggest mode) ───────────────────────────────────
+// Nudge the user to move a conversation's overflow files into its per-conversation
+// vault so the assistant can keep referencing them without re-uploading.
+const ATTACH_NUDGE_THRESHOLD = 5;
+const promotion = ref<{ total: number; unpromoted: number; vaultId: string }>({ total: 0, unpromoted: 0, vaultId: '' });
+const promotionDismissed = ref(false);
+const promoting = ref(false);
+const showPromotionNudge = computed(() =>
+  !promotionDismissed.value && !promoting.value && promotion.value.unpromoted >= ATTACH_NUDGE_THRESHOLD);
+
+async function refreshPromotion() {
+  if (!conversationId.value) { promotion.value = { total: 0, unpromoted: 0, vaultId: '' }; return; }
+  try {
+    const rows = await listConversationAttachments(conversationId.value);
+    promotion.value = {
+      total: rows.length,
+      unpromoted: rows.filter(r => !r.vault).length,
+      vaultId: rows.find(r => r.vault)?.vault ?? '',
+    };
+  } catch { /* best-effort */ }
+}
+
+async function promoteAttachments() {
+  if (!conversationId.value || promoting.value) return;
+  promoting.value = true;
+  try {
+    const r = await promoteConversationAttachments(conversationId.value);
+    if (r.error) { toast.error(r.error); return; }
+    await refreshPromotion();
+    if (r.vault && (r.ingesting ?? 0) > 0) startIngestPoll(r.vault);
+    else toast.success(r.message || 'Moved to the conversation vault.');
+  } finally {
+    promoting.value = false;
+  }
+}
+
+// ── Ingestion progress (post-promotion) ───────────────────────────────────────
+// Poll the per-conversation vault while the assistant distils the promoted files, so
+// the user sees an unobtrusive "Processing n/m" ring and a toast when it's done.
+const ingest = ref<{ done: number; total: number; active: boolean }>({ done: 0, total: 0, active: false });
+let ingestTimer: ReturnType<typeof setInterval> | null = null;
+let ingestDeadline: ReturnType<typeof setTimeout> | null = null;
+
+function stopIngestPoll() {
+  if (ingestTimer) { clearInterval(ingestTimer); ingestTimer = null; }
+  if (ingestDeadline) { clearTimeout(ingestDeadline); ingestDeadline = null; }
+  ingest.value.active = false;
+}
+
+async function pollIngest(vaultId: string) {
+  const p = await vaultIngestProgress(vaultId);
+  ingest.value = { done: p.done, total: p.total, active: p.total > 0 && p.done < p.total };
+  if (p.total > 0 && p.done >= p.total) {
+    stopIngestPoll();
+    toast.success(`${p.total} ${p.total === 1 ? 'file is' : 'files are'} ready in the vault.`);
+  }
+}
+
+function startIngestPoll(vaultId: string) {
+  stopIngestPoll();
+  ingest.value = { done: 0, total: 0, active: true };
+  pollIngest(vaultId);
+  ingestTimer = setInterval(() => pollIngest(vaultId), 2500);
+  ingestDeadline = setTimeout(stopIngestPoll, 5 * 60 * 1000); // safety cap
+}
+
+onBeforeUnmount(stopIngestPoll);
 
 const lastAssistantText = computed(() => {
   const msgs = messages.value.filter((m): m is AiMessage => m.role === 'assistant');
@@ -520,18 +619,29 @@ async function loadConversation(id: string) {
         citations: m.citations?.length ? m.citations : undefined,
       } as DisplayAiMessage;
     }
-    return m as AiMessage;
+    return { role: m.role, content: m.content, attachments: m.attachments } as DisplayAiMessage;
   });
   conversationId.value = conv.id;
   pendingProposal.value = null;
+  sentAttachmentsMeta.value = [];
+  promotionDismissed.value = false;
+  stopIngestPoll();
   historyOpen.value = false;
   scrollToBottom();
+  // Resolve token URLs for any persisted attachments so reloaded chips open/preview.
+  const urls = await resolveAttachmentUrls(id);
+  if (conversationId.value === id) { attachmentUrls.value = urls; refreshPromotion(); }
 }
 
 function newChat() {
   messages.value = [];
   conversationId.value = '';
   pendingProposal.value = null;
+  sentAttachmentsMeta.value = [];
+  attachmentUrls.value = new Map();
+  promotion.value = { total: 0, unpromoted: 0, vaultId: '' };
+  promotionDismissed.value = false;
+  stopIngestPoll();
   inputText.value = '';
   // Clear the credit gate so a fresh chat can try again; the next send
   // re-blocks via the 402 path if the pool is still exhausted.
@@ -793,18 +903,33 @@ async function send(voiceText?: string) {
   // multimodal content-block array. Document/image blocks come first so the
   // text reads as a caption to what's attached.
   let userContent: string | AiContentBlock[];
+  const userAttachments: ConvAttachment[] = [];
   if (hasAttachments) {
     const blocks: AiContentBlock[] = [];
     for (const a of attachments.value) {
+      // Build the transmitted `data` string once, hash it for the metadata
+      // side-channel (backend names + dedups the persisted file by this hash).
+      let data: string;
       if (a.kind === 'text') {
         // Prefix the filename so the model knows the document's name/type.
-        const body = `# ${a.name}\n\n${a.text ?? ''}`;
-        blocks.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data: body } });
+        data = `# ${a.name}\n\n${a.text ?? ''}`;
+        blocks.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data } });
       } else if (a.mime === 'application/pdf') {
-        blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 as string } });
+        data = a.base64 as string;
+        blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } });
       } else {
-        blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data: a.base64 as string } });
+        data = a.base64 as string;
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data } });
       }
+      const sha256 = await attachmentSha256(data);
+      sentAttachmentsMeta.value.push({ sha256, name: a.name, mime: a.mime, kind: a.kind, size: a.size });
+      userAttachments.push({ sha256, name: a.name, mime: a.mime, kind: a.kind, size: a.size });
+      // Resolve a usable URL now so chips preview immediately (before any reload).
+      // Object URLs (not data: URLs) so the previewer's XHR fetch works reliably.
+      const url = a.kind === 'text'
+        ? URL.createObjectURL(new Blob([a.text ?? ''], { type: a.mime || 'text/plain' }))
+        : base64ToObjectUrl(a.base64 as string, a.mime);
+      if (url && sha256) attachmentUrls.value.set(sha256, url);
     }
     blocks.push({ type: 'text', text: text || 'Help me create a matter from this.' });
     userContent = blocks;
@@ -812,7 +937,7 @@ async function send(voiceText?: string) {
     userContent = text;
   }
 
-  messages.value.push({ role: 'user', content: userContent });
+  messages.value.push({ role: 'user', content: userContent, attachments: userAttachments.length ? userAttachments : undefined });
   if (!voiceText) {
     inputText.value = '';
     if (hasAttachments) attachments.value = [];
@@ -829,6 +954,7 @@ async function send(voiceText?: string) {
       activeSteps.value = [...activeSteps.value, s];
       scrollToBottom();
     },
+    attachmentsMeta: sentAttachmentsMeta.value,
   });
   const elapsedMs = Date.now() - workStartedAt.value;
   // Only the real tool steps are worth keeping as a summary; the synthetic
@@ -862,6 +988,7 @@ async function send(voiceText?: string) {
         const idx = conversations.value.findIndex(c => c.id === response.conversationId);
         if (idx >= 0) conversations.value[idx]!.updated = new Date().toISOString();
       }
+      if (sentAttachmentsMeta.value.length) refreshPromotion();
     }
     if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
@@ -966,6 +1093,8 @@ async function approveProposal() {
     buildContext(),
     conversationId.value || undefined,
     convMessages.value,
+    false,
+    sentAttachmentsMeta.value,
   );
   loading.value = false;
   proposalLoading.value = false;
@@ -982,6 +1111,7 @@ async function approveProposal() {
     if (response.conversationId) {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
+      if (sentAttachmentsMeta.value.length) refreshPromotion();
     }
     if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
@@ -1392,25 +1522,12 @@ function formatToolName(tool: string): string {
               <div v-else-if="msg.role === 'user'" class="flex justify-end">
                 <div class="flex flex-col items-end gap-1 max-w-[80%]">
                   <!-- Attachment chips above the text bubble — only present on multimodal turns -->
-                  <div v-if="messageAttachments(msg.content).length > 0" class="flex flex-wrap gap-1 justify-end">
-                    <template v-for="(att, j) in messageAttachments(msg.content)" :key="j">
-                      <img
-                        v-if="att.type === 'image'"
-                        :src="`data:${att.source.media_type};base64,${att.source.data}`"
-                        :alt="`Attached image ${j + 1}`"
-                        class="size-16 rounded-md object-cover border"
-                      />
-                      <span v-else class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-background text-foreground">
-                        <FileText class="size-3 shrink-0" />
-                        {{ docLabel(att as AiDocumentBlock) }}
-                      </span>
-                    </template>
-                  </div>
+                  <MessageAttachments v-if="messageChips(msg).length" :attachments="messageChips(msg)" align="end" @preview="openPreview"/>
                   <div
-                    v-if="messageText(msg.content)"
+                    v-if="stripAttachmentPlaceholders(messageText(msg.content))"
                     class="bg-muted text-muted-foreground border rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
                   >
-                    {{ messageText(msg.content) }}
+                    {{ stripAttachmentPlaceholders(messageText(msg.content)) }}
                   </div>
                 </div>
               </div>
@@ -1545,6 +1662,36 @@ function formatToolName(tool: string): string {
                   <X class="size-3" />
                 </button>
               </Badge>
+            </div>
+
+            <!-- Vault promotion nudge (suggest mode) — non-blocking, dismissable. -->
+            <div
+              v-if="showPromotionNudge"
+              class="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+            >
+              <Library class="mt-0.5 size-4 shrink-0 text-primary" />
+              <p class="min-w-0 flex-1 text-foreground">
+                That's {{ promotion.unpromoted }} files in this chat. Move them to a vault so the assistant
+                can keep referencing them without re-uploading.
+              </p>
+              <div class="flex shrink-0 items-center gap-1">
+                <Button size="sm" class="h-7 px-2" :disabled="promoting" @click="promoteAttachments">
+                  <Library class="size-3.5" />
+                  {{ promoting ? 'Moving…' : 'Move to vault' }}
+                </Button>
+                <button
+                  class="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="Dismiss"
+                  @click="promotionDismissed = true"
+                >
+                  <X class="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Vault ingestion progress (quiet — informs without shouting). -->
+            <div v-if="ingest.active" class="px-1 py-0.5">
+              <SharedAIIngestRing :done="ingest.done" :total="ingest.total" />
             </div>
 
             <!-- Pending attachments — chips shown above the input until the next send -->
@@ -1774,6 +1921,21 @@ function formatToolName(tool: string): string {
           Active voice: <span class="font-medium text-foreground">{{ speechPrefs.voiceName }}</span>
         </div>
       </div>
+    </SheetContent>
+  </Sheet>
+
+  <!-- Attachment preview (right sheet on desktop, bottom on touch) -->
+  <Sheet v-model:open="previewOpen">
+    <SheetContent
+        :side="isDesktop ? 'right' : 'bottom'"
+        hide-x
+        class="flex flex-col gap-0 p-0"
+        :class="isDesktop ? 'w-full sm:max-w-xl' : 'h-[88dvh]'"
+    >
+      <SheetTitle class="sr-only">Attachment preview</SheetTitle>
+      <DocumentPreview v-if="previewDoc" :doc="previewDoc"
+                       :resolve-url="resolvePreviewUrl"
+                       class="min-h-0 flex-1" @close="previewOpen = false"/>
     </SheetContent>
   </Sheet>
 </template>

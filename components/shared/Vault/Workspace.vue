@@ -77,8 +77,8 @@ function back() {
         </div>
         <p class="text-sm font-semibold">Vault isn't enabled yet</p>
         <p class="max-w-sm text-xs text-muted-foreground">
-          The Vault turns your case files into AI-searchable knowledge. Ask your organisation admin to enable it
-          on your plan.
+          The Vault turns your case files into AI-searchable knowledge. It isn't enabled on this account — if you're
+          on a firm plan, ask your organisation admin to enable it.
         </p>
       </div>
 

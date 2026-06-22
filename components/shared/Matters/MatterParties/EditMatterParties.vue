@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useVModel } from '@vueuse/core';
 import { toast } from 'vue-sonner';
 import { LoaderIcon } from 'lucide-vue-next';
 import { normalizePartyConfig } from '~/utils/normalizeTemplate';
@@ -61,13 +62,17 @@ const props = defineProps<{
   matter: any;
   parties?: Record<string, any[]>;
   representing?: { role_id: string; party_member_ids: string[] } | null;
+  /** Optional controlled open state — lets a parent (e.g. a deep link) drive the sheet. */
+  open?: boolean;
 }>();
 
 const emits = defineEmits<{
   updated: [];
+  'update:open': [value: boolean];
 }>();
 
-const open = ref(false);
+// Controlled when the parent binds `v-model:open`, otherwise internal (passive).
+const open = useVModel(props, 'open', emits, { passive: true, defaultValue: false });
 const loading = ref(false);
 const partiesRef = ref<any>(null);
 

@@ -13,7 +13,7 @@ import {
 // panel. The matter list is shared with the global sidebar via useVaultLibraries().
 const emit = defineEmits<{ select: [lib: { scope: VaultScope; scopeId: string; label: string }] }>();
 
-const { matters, loading, orgId, refresh } = useVaultLibraries();
+const { matters, loading, orgId, personalLibrary, refresh } = useVaultLibraries();
 const query = ref('');
 
 // ── Custom vaults ─────────────────────────────────────────────────────────────
@@ -103,6 +103,10 @@ const filtered = computed(() => {
 function pickFirm() {
   if (orgId.value) emit('select', { scope: 'org', scopeId: orgId.value, label: 'Firm Library' });
 }
+function pickPersonal() {
+  const lib = personalLibrary.value;
+  if (lib) emit('select', lib);
+}
 function pickMatter(m: MatterLite) {
   emit('select', { scope: 'matter', scopeId: m.id, label: m.name || 'Matter' });
 }
@@ -127,7 +131,25 @@ function pickMatter(m: MatterLite) {
       </button>
     </div>
 
-    <!-- My vaults (custom, membership-scoped) -->
+    <!-- Personal library (solo/individual accounts have no firm) -->
+    <div v-else-if="personalLibrary">
+      <p class="mb-2 font-medium ibm-plex-serif tracking-wide text-muted-foreground text-sm">Your Documents</p>
+      <button
+        class="group flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+        @click="pickPersonal">
+        <div class="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <Building2 class="size-5" />
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col">
+          <span class="text-sm font-semibold">Personal Library</span>
+          <span class="text-xs text-muted-foreground">Your private documents — only you can see these, and the AI reads them for you</span>
+        </div>
+        <ChevronRight class="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+      </button>
+    </div>
+
+    <!-- My vaults (custom, membership-scoped). Solo accounts get private vaults
+         (no sharing); firms can also invite colleagues. -->
     <div>
       <div class="mb-2 flex items-center justify-between gap-2">
         <p class="font-medium ibm-plex-serif tracking-wide text-muted-foreground text-sm">My Vaults</p>

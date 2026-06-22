@@ -25,7 +25,7 @@ const visibleChats = computed(() =>
 const hasMoreChats = computed(() => conversations.value.length > RECENT_LIMIT);
 
 // ── Vault: libraries ────────────────────────────────────────────────────────
-const { matters, loading: vaultLoading, orgId, refresh: refreshVault, libraryQuery } = useVaultLibraries();
+const { matters, loading: vaultLoading, orgId, personalLibrary, refresh: refreshVault, libraryQuery } = useVaultLibraries();
 const activeLib = computed(() => (typeof route.query.lib === 'string' ? route.query.lib : ''));
 const vaultExpanded = ref(false);
 const visibleMatters = computed(() =>
@@ -99,10 +99,22 @@ watch(visible, (on) => {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
+          <SidebarMenuItem v-else-if="personalLibrary">
+            <SidebarMenuButton
+              as-child
+              :is-active="activeLib === `user:${personalLibrary.scopeId}`"
+              tooltip="Personal Library">
+              <NuxtLink :to="{ path: '/main/vault', query: libraryQuery(personalLibrary) }">
+                <Building2 />
+                <span>Personal Library</span>
+              </NuxtLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
           <SidebarMenuItem v-if="vaultLoading && !matters.length">
             <span class="block px-2 py-1.5 text-xs text-muted-foreground">Loading…</span>
           </SidebarMenuItem>
-          <SidebarMenuItem v-else-if="!matters.length && !orgId">
+          <SidebarMenuItem v-else-if="!matters.length && !orgId && !personalLibrary">
             <span class="block px-2 py-1.5 text-xs text-muted-foreground">No case files yet.</span>
           </SidebarMenuItem>
 

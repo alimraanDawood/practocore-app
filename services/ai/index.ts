@@ -49,9 +49,60 @@ export interface AiDocumentBlock {
 
 export type AiContentBlock = AiTextBlock | AiImageBlock | AiDocumentBlock;
 
+// Metadata side-channel for attached files. The content blocks above carry no
+// filename, so we pair each attachment to its block by a content hash (sha256 of the
+// block's transmitted `data` string — see attachmentSha256). The backend persists
+// these to AiChatAttachments. See practocore-backend/ai/attachments.go (AttachmentMeta).
+export interface AiAttachmentMeta {
+  /** sha256 hex of the block's `data` string; the join + idempotency key. */
+  sha256: string;
+  name: string;
+  mime: string;
+  kind: 'binary' | 'text';
+  size: number;
+}
+
+/**
+ * Hash an attachment's transmitted `data` string, byte-identically to the backend.
+ * Best-effort: SubtleCrypto needs a secure context, so on failure we return '' — the
+ * file is still persisted server-side (the backend computes its own hash for storage
+ * and dedup); it just falls back to a generated filename instead of the original.
+ */
+export async function attachmentSha256(data: string): Promise<string> {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Turn raw base64 into an object URL for a freshly-attached file, so the in-app
+ * preview can fetch it (the previewer reads via XHR, which is unreliable on `data:`
+ * URLs — a blob URL behaves like the token URL used on reload). Caller owns revocation.
+ */
+export function base64ToObjectUrl(base64: string, mime: string): string {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime || 'application/octet-stream' }));
+}
+
 export interface AiMessage {
   role: 'user' | 'assistant';
   content: string | AiContentBlock[];
+}
+
+// Display/lookup record for one file attached to a user turn. Carries no bytes; the
+// downloadable URL is resolved by matching `sha256` against the AiChatAttachments
+// rows for the conversation. Mirrors the Go ConvAttachment struct.
+export interface ConvAttachment {
+  name?: string;
+  mime?: string;
+  kind?: 'binary' | 'text';
+  size?: number;
+  sha256: string;
 }
 
 // Broader message type used for conversation persistence (includes tool-event roles).
@@ -63,6 +114,118 @@ export interface ConvDisplayMessage {
   steps?: AiStreamStep[];
   durationMs?: number;
   citations?: AiCitation[];
+  /** Attachment refs for a user turn, so chips survive a reload. */
+  attachments?: ConvAttachment[];
+}
+
+// ── Persisted chat attachments (AiChatAttachments) ─────────────────────────────
+// Phase 1 persists every attached file's bytes here, keyed to the conversation. The
+// chat UI resolves a turn's ConvAttachment refs to downloadable URLs by matching on
+// the content hash. Reads go through the SDK (the collection's owner/org read rule);
+// writes happen only on the chat/confirm legs, never from here.
+
+export interface ChatAttachmentRow {
+  id: string;
+  collectionId?: string;
+  collectionName?: string;
+  conversation: string;
+  owner: string;
+  org: string;
+  file: string;
+  name: string;
+  mime: string;
+  kind: 'binary' | 'text';
+  sha256: string;
+  size: number;
+  /** Set once the file has been promoted into the per-conversation vault (Phase 3). */
+  vault?: string;
+  vault_doc?: string;
+  created: string;
+}
+
+/** All persisted attachment rows for a conversation, oldest first. */
+export function listConversationAttachments(conversationId: string): Promise<ChatAttachmentRow[]> {
+  return pb.collection('AiChatAttachments').getFullList<ChatAttachmentRow>({
+    filter: pb.filter('conversation = {:c}', { c: conversationId }),
+    sort: 'created',
+  });
+}
+
+/**
+ * Resolve sha256 → downloadable URL for a conversation's attachments. The collection
+ * is read-protected, so each URL needs a short-lived file token; one token serves the
+ * whole batch. Returns an empty map if the conversation has no stored attachments.
+ */
+export async function resolveAttachmentUrls(conversationId: string): Promise<Map<string, string>> {
+  const rows = await listConversationAttachments(conversationId);
+  const map = new Map<string, string>();
+  if (!rows.length) return map;
+  const token = await pb.files.getToken();
+  for (const row of rows) {
+    if (row.file) map.set(row.sha256, pb.files.getURL(row as any, row.file, { token }));
+  }
+  return map;
+}
+
+export interface PromoteAttachmentsResult {
+  vault: string;
+  vault_name?: string;
+  promoted: number;
+  ingesting?: number;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Promote a conversation's attachments into its per-conversation vault (Phase 3,
+ * suggest-mode). Creates the vault on first use; idempotent server-side (only files
+ * not yet promoted are moved). Reuses the persisted bytes — nothing is re-uploaded.
+ */
+export async function promoteConversationAttachments(conversationId: string): Promise<PromoteAttachmentsResult> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/practocore/ai/attachments/promote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': pb.authStore.token,
+      },
+      body: JSON.stringify({ conversation: conversationId }),
+    });
+    if (!res.ok) {
+      let msg = `Request failed (${res.status})`;
+      try { const j = await res.json() as { message?: string }; if (j?.message) msg = j.message; } catch { /* noop */ }
+      return { vault: '', promoted: 0, error: msg };
+    }
+    return await res.json() as PromoteAttachmentsResult;
+  } catch (e: any) {
+    return { vault: '', promoted: 0, error: e?.message ?? 'Network error' };
+  }
+}
+
+export interface VaultIngestProgress {
+  /** AI-readable documents in the vault whose distillation has finished (or failed). */
+  done: number;
+  /** Total AI-readable documents in the vault. 0 when nothing is being ingested. */
+  total: number;
+}
+
+/**
+ * Ingestion progress for a vault: how many of its AI-readable documents have finished
+ * distilling. Polled by the chat after a promotion to show a quiet "Processing n/m"
+ * ring. Reads AiVaultDocuments directly (the owner is an active member, so the
+ * membership-gated read rule allows it). Best-effort: returns {0,0} on failure.
+ */
+export async function vaultIngestProgress(vaultId: string): Promise<VaultIngestProgress> {
+  try {
+    const rows = await pb.collection('AiVaultDocuments').getFullList<{ status: string }>({
+      filter: pb.filter('scope = "vault" && scope_id = {:v} && ingest = true', { v: vaultId }),
+      fields: 'status',
+    });
+    const done = rows.filter(r => r.status === 'ingested' || r.status === 'failed').length;
+    return { done, total: rows.length };
+  } catch {
+    return { done: 0, total: 0 };
+  }
 }
 
 // A verifiable source the assistant consulted while producing an answer. The
@@ -72,7 +235,7 @@ export interface ConvDisplayMessage {
 // renders and what "open" does.
 export interface AiCitation {
   citeId: string;
-  kind: 'memory' | 'legal' | 'matter' | 'web';
+  kind: 'memory' | 'legal' | 'matter' | 'web' | 'authority';
   title: string;
   snippet?: string;
   meta?: {
@@ -89,6 +252,12 @@ export interface AiCitation {
     templateId?: string;
     // matter
     matterId?: string;
+    // authority (case-law corpus): the verbatim paragraph is the snippet; meta
+    // pins it to the exact judgment paragraph for the verify trail.
+    provisionId?: string;
+    anchor?: string;        // e.g. "para 23"
+    citation?: string;      // neutral citation, e.g. [2020] UGSC 1
+    court?: string;
     // (web reuses `url`)
     [k: string]: any;
   };
@@ -314,6 +483,25 @@ export interface GenerateDocumentPreview {
   matter?: MatterRef;
 }
 
+/** Skill Studio (SKILLS_V2 §C2): the firm-custom skill the assistant proposes to author. */
+export interface ProposeSkillPreview {
+  kind: 'propose_skill';
+  /** Stable kebab-case id. */
+  name: string;
+  title: string;
+  purpose: string;
+  triggers: string;
+  courtScope: string;
+  instructions: string;
+  toolBindings: string[];
+  userInvocable: boolean;
+  exampleCount?: number;
+  /** True when this edits an existing firm skill of the same name (an overwrite). */
+  isUpdate: boolean;
+  /** The current status of the skill being overwritten, when isUpdate. */
+  currentStatus?: string;
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -328,6 +516,7 @@ export type ProposalPreview =
   | CreateMatterPreview
   | ReminderPreview
   | GenerateDocumentPreview
+  | ProposeSkillPreview
   | GenericPreview;
 
 export interface AiConversationSummary {
@@ -411,9 +600,11 @@ export interface AiStreamStep {
 }
 
 interface SseFrame {
-  kind: 'step' | 'result';
+  kind: 'step' | 'result' | 'text';
   step?: AiStreamStep;
   response?: AiResponse;
+  /** Incremental assistant text delta (kind === 'text'); voice mode only. */
+  text?: string;
 }
 
 /** Parse one SSE frame (its `data:` line(s)) into a typed frame, or null if malformed. */
@@ -435,7 +626,7 @@ export function sendAiMessageStream(
   messages: AiMessage[],
   context: AiContext | undefined,
   conversationId: string | undefined,
-  opts: { onStep?: (step: AiStreamStep) => void } = {},
+  opts: { onStep?: (step: AiStreamStep) => void; attachmentsMeta?: AiAttachmentMeta[]; mode?: string } = {},
 ): Promise<AiResponse> {
   return aiStreamPost(
     '/api/practocore/ai/chat',
@@ -447,8 +638,38 @@ export function sendAiMessageStream(
       userIds: context?.userIds,
       conversationId: conversationId ?? '',
       voiceMode: false,
+      attachmentsMeta: opts.attachmentsMeta ?? [],
+      // Constrains the backend tool set + system prompt, e.g. "skill_studio".
+      mode: opts.mode ?? '',
     },
     opts.onStep,
+  );
+}
+
+/**
+ * Voice-mode streaming chat. Same SSE transport as sendAiMessageStream but flags
+ * `voiceMode` (shorter spoken persona) and forwards incremental text deltas via
+ * onText so the caller can pipeline TTS sentence-by-sentence as the model writes.
+ */
+export function sendAiMessageVoiceStream(
+  messages: AiMessage[],
+  context: AiContext | undefined,
+  conversationId: string | undefined,
+  opts: { onText?: (delta: string) => void; onStep?: (step: AiStreamStep) => void } = {},
+): Promise<AiResponse> {
+  return aiStreamPost(
+    '/api/practocore/ai/chat',
+    {
+      messages,
+      currentMatterId: context?.matterIds?.[0],
+      matterIds: context?.matterIds,
+      deadlineIds: context?.deadlineIds,
+      userIds: context?.userIds,
+      conversationId: conversationId ?? '',
+      voiceMode: true,
+    },
+    opts.onStep,
+    opts.onText,
   );
 }
 
@@ -456,6 +677,7 @@ async function aiStreamPost(
   path: string,
   body: object,
   onStep?: (step: AiStreamStep) => void,
+  onText?: (delta: string) => void,
 ): Promise<AiResponse> {
   try {
     let timezone = '';
@@ -500,6 +722,7 @@ async function aiStreamPost(
         buffer = buffer.slice(sep + 2);
         if (!frame) continue;
         if (frame.kind === 'step' && frame.step) onStep?.(frame.step);
+        else if (frame.kind === 'text' && frame.text) onText?.(frame.text);
         else if (frame.kind === 'result' && frame.response) result = frame.response;
       }
     }
@@ -516,6 +739,8 @@ export function confirmAiProposal(
   conversationId?: string,
   conversationMessages?: ConvDisplayMessage[],
   voiceMode?: boolean,
+  attachmentsMeta?: AiAttachmentMeta[],
+  mode?: string,
 ): Promise<AiResponse> {
   return aiPost('/api/practocore/ai/chat/confirm', {
     pendingMessages: proposal.pendingMessages ?? [],
@@ -529,6 +754,8 @@ export function confirmAiProposal(
     conversationId: conversationId ?? '',
     conversationMessages: conversationMessages ?? [],
     voiceMode: voiceMode ?? false,
+    attachmentsMeta: attachmentsMeta ?? [],
+    mode: mode ?? '',
   });
 }
 
@@ -596,8 +823,11 @@ async function aiGet<T>(path: string): Promise<T | null> {
   }
 }
 
-export function listConversations(page = 1, perPage = 20): Promise<AiConversationPage | null> {
-  return aiGet(`/api/practocore/ai/conversations?page=${page}&perPage=${perPage}`);
+export function listConversations(page = 1, perPage = 20, mode = ''): Promise<AiConversationPage | null> {
+  // mode scopes the surface: '' = normal assistant (excludes studio threads),
+  // 'skill_studio' = Skill Studio history. Mirrors the chat `mode` field.
+  const q = mode ? `&mode=${encodeURIComponent(mode)}` : '';
+  return aiGet(`/api/practocore/ai/conversations?page=${page}&perPage=${perPage}${q}`);
 }
 
 export function getConversation(id: string): Promise<AiConversation | null> {

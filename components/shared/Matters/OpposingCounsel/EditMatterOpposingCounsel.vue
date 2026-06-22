@@ -48,6 +48,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useVModel } from '@vueuse/core';
 import { toast } from 'vue-sonner';
 import { LoaderIcon } from 'lucide-vue-next';
 import { updateMatter } from '~/services/matters';
@@ -57,13 +58,18 @@ import { Button } from '~/components/ui/button';
 const props = defineProps<{
   matter: any;
   opposingCounsel?: any[];
+  /** Optional controlled open state — lets a parent (e.g. a deep link) drive the sheet. */
+  open?: boolean;
 }>();
 
 const emits = defineEmits<{
   updated: [];
+  'update:open': [value: boolean];
 }>();
 
-const open = ref(false);
+// Controlled when the parent binds `v-model:open`, otherwise falls back to
+// internal state (passive) so the slot-trigger usages keep working unchanged.
+const open = useVModel(props, 'open', emits, { passive: true, defaultValue: false });
 const loading = ref(false);
 const opposingCounselRef = ref<any>(null);
 

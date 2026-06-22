@@ -5,7 +5,7 @@
 import {
   ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
   Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
-  type LucideIcon, Plus, Workflow,
+  type LucideIcon, Plus, Workflow, Scroll,
 } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
 import {useAuthStore} from '~/stores/auth';
@@ -64,6 +64,7 @@ const appNav: NavLink[] = [
   {label: 'Matters', icon: Scale, to: '/main/matters'},
   {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
+  {label: 'Skills', icon: Scroll, to: '/main/skills'},
   {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
   {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
   // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },

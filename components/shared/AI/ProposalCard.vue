@@ -4,7 +4,7 @@ import type {
   AiResponse,
   ReassignPreview, BulkReassignPreview, NotificationPreview,
   AdjournPreview, FulfillPreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
-  GenerateDocumentPreview,
+  GenerateDocumentPreview, ProposeSkillPreview,
 } from '~/services/ai';
 import { proposalTheme, formatToolName, type ProposalVariant } from './proposals/theme';
 import ProposalReassign from './proposals/ProposalReassign.vue';
@@ -16,6 +16,7 @@ import ProposalMatterEdit from './proposals/ProposalMatterEdit.vue';
 import ProposalCreateMatter from './proposals/ProposalCreateMatter.vue';
 import ProposalReminder from './proposals/ProposalReminder.vue';
 import ProposalGenerateDocument from './proposals/ProposalGenerateDocument.vue';
+import ProposalProposeSkill from './proposals/ProposalProposeSkill.vue';
 import ProposalGeneric from './proposals/ProposalGeneric.vue';
 
 const props = withDefaults(defineProps<{
@@ -62,6 +63,7 @@ const iconWrap = computed(() => glass.value
       <ProposalMatterEdit v-else-if="kind === 'matter_edit'" :preview="(proposal.preview as MatterEditPreview)" :variant="variant" />
       <ProposalReminder v-else-if="kind === 'reminder'" :preview="(proposal.preview as ReminderPreview)" :variant="variant" />
       <ProposalGenerateDocument v-else-if="kind === 'generate_document'" :preview="(proposal.preview as GenerateDocumentPreview)" :variant="variant" />
+      <ProposalProposeSkill v-else-if="kind === 'propose_skill'" :preview="(proposal.preview as ProposeSkillPreview)" :variant="variant" />
       <ProposalCreateMatter
         v-else-if="kind === 'create_matter'"
         :preview="(proposal.preview as CreateMatterPreview)"
