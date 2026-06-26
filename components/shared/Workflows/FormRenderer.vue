@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Loader2, Send, Plus, Trash2, AlertCircle, Users } from 'lucide-vue-next';
+import { Loader2, Send, Plus, Trash2, AlertCircle, Users, Paperclip, FileText } from 'lucide-vue-next';
 import {
   type FormDef,
   type Field,
@@ -50,12 +50,27 @@ function blankValue(f: Field): unknown {
 }
 
 const values = reactive<Record<string, any>>({});
+// Uploaded File objects for `file` fields, kept out of `values` (which is JSON).
+const files = reactive<Record<string, File | undefined>>({});
 function reset() {
   for (const k of Object.keys(values)) delete values[k];
+  for (const k of Object.keys(files)) delete files[k];
   for (const f of props.form.fields) values[f.key] = blankValue(f);
 }
 reset();
 watch(() => props.form.id, reset);
+
+function onFilePick(f: Field, e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  files[f.key] = file;
+  // Mirror the filename into values so required-field validation has something to
+  // see; the server replaces it with the extracted document text on submit.
+  values[f.key] = file ? file.name : '';
+}
+function clearFile(f: Field) {
+  files[f.key] = undefined;
+  values[f.key] = '';
+}
 
 // ── People picker ───────────────────────────────────────────────────────────
 // A select/multiselect with NO options means "pick from the org's lawyers" (e.g.
@@ -137,10 +152,13 @@ async function onSubmit() {
   }
   submitting.value = true;
   try {
+    const pickedFiles: Record<string, File> = {};
+    for (const [k, f] of Object.entries(files)) if (f) pickedFiles[k] = f;
     const result = await submitForm({
       formId: props.form.id,
       matterId: props.matterId,
       values: { ...values },
+      files: pickedFiles,
     });
     if (result.started) {
       toast.success('Workflow started');
@@ -278,6 +296,31 @@ async function onSubmit() {
         >
           {{ opt }}
         </button>
+      </div>
+
+      <!-- File upload -->
+      <div v-else-if="f.type === 'file'" class="flex flex-col gap-1.5">
+        <label
+          :for="`f-${f.key}`"
+          class="flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+        >
+          <Paperclip class="size-4" />
+          {{ files[f.key] ? 'Change file' : 'Choose a file' }}
+        </label>
+        <input
+          :id="`f-${f.key}`"
+          type="file"
+          class="hidden"
+          @change="onFilePick(f, $event)"
+        />
+        <div v-if="files[f.key]" class="flex items-center gap-2 text-xs text-muted-foreground">
+          <FileText class="size-3.5 shrink-0" />
+          <span class="truncate">{{ files[f.key]!.name }}</span>
+          <button type="button" class="text-muted-foreground hover:text-red-500" @click="clearFile(f)">
+            <Trash2 class="size-3.5" />
+          </button>
+        </div>
+        <p class="text-[11px] text-muted-foreground">The workflow reads this document's text. PDFs, Word docs and text files work best.</p>
       </div>
 
       <!-- Repeatable group -->

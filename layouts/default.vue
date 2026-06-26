@@ -5,9 +5,10 @@
 import {
   ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
   Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
-  type LucideIcon, Plus, Workflow, Scroll,
+  type LucideIcon, Plus, Workflow, Scroll, Telescope,
 } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
+import AICreditGauge from '~/components/shared/AI/AICreditGauge.vue';
 import {useAuthStore} from '~/stores/auth';
 import {useOrganisationStore} from '~/stores/organisation';
 
@@ -66,6 +67,7 @@ const appNav: NavLink[] = [
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
   {label: 'Skills', icon: Scroll, to: '/main/skills'},
   {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
+  {label: 'Deep Research', icon: Telescope, to: '/main/deep-research', beta: true},
   {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
   // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },
 ];
@@ -156,6 +158,13 @@ function isActive(item: NavLink): boolean {
 
         <SidebarFooter>
           <SidebarMenu>
+            <!-- AI credit usage — collapses away in icon mode. -->
+            <SidebarMenuItem class="group-data-[collapsible=icon]:hidden">
+              <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5">
+                <span class="text-sm text-muted-foreground">AI credits</span>
+                <AICreditGauge />
+              </div>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton as-child tooltip="Settings" :is-active="route.path.startsWith('/main/settings')">
                 <NuxtLink to="/main/settings">

@@ -359,7 +359,7 @@ async function download() {
       <!-- Markdown / docx (rendered HTML) -->
       <div v-else-if="kind === 'markdown' || kind === 'docx'" class="p-5">
         <div
-          class="prose prose-sm dark:prose-invert mx-auto max-w-3xl prose-headings:font-semibold prose-pre:bg-muted prose-pre:text-foreground"
+          class="prose prose-pink prose-sm dark:prose-invert mx-auto max-w-3xl prose-headings:font-semibold prose-pre:bg-muted prose-pre:text-foreground"
           v-html="htmlContent"
         />
       </div>

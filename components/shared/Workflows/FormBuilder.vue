@@ -16,10 +16,11 @@ const emit = defineEmits<{ (e: 'saved', id: string): void; (e: 'cancel'): void; 
 
 const FIELD_TYPES: FieldType[] = [
   'text', 'longtext', 'number', 'currency', 'date', 'email', 'phone',
-  'bool', 'select', 'multiselect', 'group',
+  'bool', 'select', 'multiselect', 'file', 'group',
 ];
-// Group sub-fields can't themselves be groups (no nested repeats in P0).
-const SUB_FIELD_TYPES = FIELD_TYPES.filter((t) => t !== 'group');
+// Group sub-fields can't themselves be groups (no nested repeats in P0) and can't
+// be files (uploads are top-level only in P0).
+const SUB_FIELD_TYPES = FIELD_TYPES.filter((t) => t !== 'group' && t !== 'file');
 
 const name = ref(props.form?.name ?? '');
 const slug = ref(props.form?.slug ?? '');

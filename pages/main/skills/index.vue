@@ -150,15 +150,11 @@ const statusTone: Record<string, string> = {
 <template>
   <div class="flex flex-col h-full min-h-0">
     <!-- Header -->
-    <div class="flex items-center gap-3 px-4 sm:px-6 py-4 border-b">
-      <div class="size-9 rounded-xl grid place-items-center bg-muted text-muted-foreground shrink-0">
-        <Scroll class="size-5" />
-      </div>
+    <div class="flex items-center gap-1 p-3 border-b">
+      <SidebarTrigger class="lg:hidden" />
       <div class="min-w-0 flex-1">
-        <h1 class="font-semibold leading-tight">Skills</h1>
-        <p class="text-sm text-muted-foreground truncate">
-          Reusable procedures the assistant follows to do legal work your firm's way.
-        </p>
+
+        <span class="font-semibold text-xl ibm-plex-serif truncate">Skills</span>
       </div>
       <Button size="sm" class="gap-1.5 shrink-0" @click="navigateTo('/main/skills/studio')">
         <Plus class="size-4" /> Create skill
@@ -166,13 +162,13 @@ const statusTone: Record<string, string> = {
     </div>
 
     <!-- Search -->
-    <div class="px-4 sm:px-6 pt-4">
+    <div class="p-3 border-b">
       <div class="relative max-w-md">
         <Search class="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <input
           v-model="search"
           placeholder="Search skills…"
-          class="w-full bg-muted/40 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+          class="w-full bg-muted/40 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary border"
         />
       </div>
     </div>

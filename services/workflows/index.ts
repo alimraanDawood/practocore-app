@@ -298,16 +298,36 @@ export async function submitForm(input: {
   formSlug?: string;
   matterId?: string;
   values: Record<string, unknown>;
+  // Uploaded files keyed by `file`-field key. When present the request is sent as
+  // multipart/form-data: a JSON `payload` part + one `file__<key>` part per file.
+  files?: Record<string, File>;
 }): Promise<SubmitResult> {
+  const payload = {
+    form_id: input.formId,
+    form_slug: input.formSlug,
+    matter_id: input.matterId,
+    values: input.values,
+  };
+  const fileEntries = Object.entries(input.files ?? {}).filter(([, f]) => f instanceof File);
+
+  let body: BodyInit;
+  // NB: with FormData the browser sets the multipart Content-Type (+ boundary), so
+  // we must NOT set it ourselves; with JSON we set it explicitly.
+  const headers: Record<string, string> = { Authorization: pb.authStore.token };
+  if (fileEntries.length) {
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify(payload));
+    for (const [key, file] of fileEntries) fd.append(`file__${key}`, file, file.name);
+    body = fd;
+  } else {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(payload);
+  }
+
   const res = await fetch(`${SERVER_URL}/api/practocore/workflows/submit`, {
     method: 'POST',
-    headers: { Authorization: pb.authStore.token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      form_id: input.formId,
-      form_slug: input.formSlug,
-      matter_id: input.matterId,
-      values: input.values,
-    }),
+    headers,
+    body,
   });
   if (res.status === 403) throw new WorkflowsDisabledError();
   if (res.status === 422) {
