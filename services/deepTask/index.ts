@@ -1,4 +1,5 @@
 import { pb, SERVER_URL } from '~/lib/pocketbase';
+import { track } from '~/utils/analytics';
 
 // ── Deep research-and-compile service ─────────────────────────────────────────
 // Surfaces the async deep-task pipeline (practocore-backend/ai/deeptask): a long,
@@ -135,6 +136,11 @@ export async function createDeepTask(input: {
   });
   if (res.status === 403) throw new Error('Deep research is not enabled for your account.');
   if (!res.ok) throw new Error(`Could not start the task (${res.status})`);
+  track('deep_research_started', {
+    has_conversation: Boolean(input.conversationId),
+    attachments: input.attachments?.length ?? 0,
+    instruction_len: input.instruction.length,
+  });
   return await res.json() as DeepTask;
 }
 

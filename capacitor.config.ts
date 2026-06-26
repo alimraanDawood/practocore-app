@@ -4,10 +4,10 @@ const config: CapacitorConfig = {
   appId: 'com.practocore.app',
   appName: 'PractoCore',
   webDir: 'dist',
-  server: {
-    url: 'http://localhost:3000',
-    cleartext: true
-  },
+  // server: {
+  //   url: 'http://localhost:3000',
+  //   cleartext: true
+  // },
   plugins: {
   },
 };

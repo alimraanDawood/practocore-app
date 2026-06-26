@@ -1161,6 +1161,7 @@ function applyApprovedActionResult(response: AiResponse) {
   } else if (action.tool === 'generate_document' && action.data?.success) {
     const d = action.data;
     const title = d?.title as string | undefined;
+    track('document_generated', { kind: (d?.kind as string) || 'generic', from: 'chat' });
     toast('Document drafted', {
       description: title ? `"${title}" is ready to download.` : 'Your document is ready to download.',
     });

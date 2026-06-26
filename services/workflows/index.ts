@@ -1,4 +1,5 @@
 import { pb, SERVER_URL } from '~/lib/pocketbase';
+import { track } from '~/utils/analytics';
 
 // ── Workflows service ─────────────────────────────────────────────────────────
 // Surfaces PractoCore Workflows (practocore-backend/ai/workflows, WORKFLOWS_STRATEGY.md
@@ -344,6 +345,11 @@ export async function submitForm(input: {
     }
     throw new Error(msg);
   }
+  track('workflow_started', {
+    has_matter: Boolean(input.matterId),
+    has_files: Object.keys(input.files ?? {}).length > 0,
+    by_slug: Boolean(input.formSlug),
+  });
   return res.json();
 }
 
@@ -450,6 +456,9 @@ export function decideRun(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ decision, comment }),
+  }).then((r) => {
+    track(decision === 'approved' ? 'workflow_approved' : 'workflow_rejected', { has_comment: Boolean(comment) });
+    return r;
   });
 }
 

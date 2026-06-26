@@ -113,13 +113,23 @@ export default defineNuxtConfig({
     runtimeConfig: {
         public: {
             // Override at deploy time by setting NUXT_PUBLIC_POCKETBASE_URL
-            pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'
+            pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'http://127.0.0.1:8090',
+            // PostHog product analytics. Leave the key empty to disable entirely
+            // (e.g. local dev). EU ingestion only — never point posthogHost at US.
+            posthogKey: process.env.NUXT_PUBLIC_POSTHOG_KEY || '',
+            posthogHost: process.env.NUXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com',
+            // Session replay — BETA ONLY. Off unless explicitly enabled. To turn
+            // it off for production, simply do NOT set this var in the prod env.
+            // Replays capture on-screen text (matter/client names); typed input
+            // values are masked. Keep the PostHog replay audience tight.
+            posthogSessionReplay: process.env.NUXT_PUBLIC_POSTHOG_SESSION_REPLAY === 'true',
         }
     },
     plugins: [
         '~/plugins/network.client',
         '~/plugins/animxyz',
         '~/plugins/pocketbase.client',
+        '~/plugins/posthog.client',
     ],
 
     umami: {

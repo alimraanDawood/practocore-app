@@ -1,4 +1,5 @@
 import { pb, SERVER_URL } from '~/lib/pocketbase';
+import { track } from '~/utils/analytics';
 
 // ── Vault service ───────────────────────────────────────────────────────────
 // Surfaces the AI Vault (practocore-backend/ai/vault) to the frontend. A vault is
@@ -463,6 +464,13 @@ export function uploadDocument(
       let body: any = {};
       try { body = JSON.parse(xhr.responseText); } catch { /* noop */ }
       if (xhr.status >= 200 && xhr.status < 300) {
+        track('vault_document_uploaded', {
+          scope: input.scope,
+          doc_type: input.docType || 'unspecified',
+          ingest: input.ingest ?? false,
+          // File extension only — never the filename (can carry a client/matter name).
+          ext: input.file.name.split('.').pop()?.toLowerCase() || 'unknown',
+        });
         resolve(body as UploadResult);
       } else if (xhr.status === 403) {
         reject(new VaultDisabledError());
@@ -502,6 +510,9 @@ export function createVault(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  }).then((v) => {
+    track('vault_created', { visibility: input.visibility || 'personal', ai_read_default: input.ai_read_default ?? false });
+    return v;
   });
 }
 

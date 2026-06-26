@@ -1,6 +1,7 @@
 import { type RecordModel, type RecordSubscription } from 'pocketbase';
 import {options} from "kolorist";
 import { pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
+import { track } from '~/utils/analytics';
 
 
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
@@ -81,6 +82,12 @@ export async function createMatter(options: {
         const body = await res.text().catch(() => '');
         throw new Error(`createMatter failed (${res.status}): ${body}`);
     }
+    track('matter_created', {
+        template_id: options.templateId,
+        personal: options.personal,
+        members: options.members?.length ?? 0,
+        source: 'form',
+    });
     return res.json();
 }
 
@@ -103,7 +110,10 @@ export async function createMatterFromDates(options: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
         }
-    }).then((e) => e.json());
+    }).then((e) => {
+        track('matter_created', { template_id: options.templateId, personal: options.personal, source: 'import_dates' });
+        return e.json();
+    });
 }
 
 export async function createApplication(matterId: string, options: {

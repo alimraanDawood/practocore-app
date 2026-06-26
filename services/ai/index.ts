@@ -1,4 +1,5 @@
 import { pb, SERVER_URL } from '~/lib/pocketbase';
+import { track } from '~/utils/analytics';
 
 // ── Message content blocks ─────────────────────────────────────────────────────
 // User messages can now carry image and PDF attachments alongside text. The shape
@@ -584,6 +585,12 @@ export function sendAiMessage(
   conversationId?: string,
   voiceMode?: boolean,
 ): Promise<AiResponse> {
+  track('ai_chat_message_sent', {
+    streaming: false,
+    has_matter_context: (context?.matterIds?.length ?? 0) > 0,
+    voice_mode: voiceMode ?? false,
+    is_new_conversation: !conversationId,
+  });
   return aiPost('/api/practocore/ai/chat', {
     messages,
     currentMatterId: context?.matterIds?.[0],
@@ -640,6 +647,13 @@ export function sendAiMessageStream(
   conversationId: string | undefined,
   opts: { onStep?: (step: AiStreamStep) => void; attachmentsMeta?: AiAttachmentMeta[]; mode?: string } = {},
 ): Promise<AiResponse> {
+  track('ai_chat_message_sent', {
+    streaming: true,
+    has_matter_context: (context?.matterIds?.length ?? 0) > 0,
+    attachments: opts.attachmentsMeta?.length ?? 0,
+    mode: opts.mode || 'chat',
+    is_new_conversation: !conversationId,
+  });
   return aiStreamPost(
     '/api/practocore/ai/chat',
     {
