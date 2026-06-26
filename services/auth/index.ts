@@ -144,6 +144,12 @@ export async function resendOTP(otpId : string, userId : string) {
     });
 }
 
+export async function sendOTP(userId : string) {
+    return await fetch(`${SERVER_URL}/api/practocore/auth/send-otp/${userId}`, {
+        method: "GET",
+    });
+}
+
 export async function signInWithEmail(email : string, password: string) {
     return pocketbase.collection('Users').authWithPassword(email, password, {});
 }

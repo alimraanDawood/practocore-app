@@ -98,7 +98,7 @@ async function open(c: AiCitation) {
 <template>
   <div>
     <div
-      class="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-xs max-w-none [&_.ai-cite]:mx-px [&_.ai-cite]:cursor-pointer [&_.ai-cite]:rounded [&_.ai-cite]:bg-secondary [&_.ai-cite]:px-1 [&_.ai-cite]:font-semibold [&_.ai-cite]:text-secondary-foreground [&_.ai-cite]:no-underline hover:[&_.ai-cite]:bg-secondary/80"
+      class="prose prose-pink prose-sm dark:prose-invert prose-pre:my-1 prose-code:text-xs max-w-none [&_.ai-cite]:mx-px [&_.ai-cite]:cursor-pointer [&_.ai-cite]:rounded [&_.ai-cite]:bg-secondary [&_.ai-cite]:px-1 [&_.ai-cite]:font-semibold [&_.ai-cite]:text-secondary-foreground [&_.ai-cite]:no-underline hover:[&_.ai-cite]:bg-secondary/80"
       v-html="html"
       @click="onProseClick"
     />

@@ -1,8 +1,10 @@
 <script lang="ts" setup>
+import { marked } from 'marked';
 import {
   Brain, Scale, Folder, Globe, Gavel, ExternalLink, FileText, X, type LucideIcon,
 } from 'lucide-vue-next';
 import type { AiCitation } from '~/services/ai';
+import { cleanCitationLabel } from '~/services/ai';
 
 // Floating detail card for one citation. Anchored to the clicked chip/footer entry
 // via a viewport rect and teleported to <body> so it escapes the chat's overflow
@@ -26,6 +28,16 @@ const KIND_META: Record<AiCitation['kind'], { icon: LucideIcon; label: string; t
 const meta = computed(() => KIND_META[props.citation.kind] ?? KIND_META.web);
 
 const m = computed(() => props.citation.meta ?? {});
+
+// Corpus provisions carry the OCR's Markdown (e.g. "### **34. Computation of time**").
+// The header label is rendered as plain text, so strip the noise; the snippet keeps its
+// emphasis but is rendered inline (parseInline ignores block syntax) so **bold**/*italic*
+// show properly instead of as literal asterisks. Leading heading hashes are dropped first.
+const cleanTitle = computed(() => cleanCitationLabel(props.citation.title));
+const snippetHtml = computed(() => {
+  const s = (props.citation.snippet || '').replace(/^\s*#{1,6}\s*/gm, '');
+  return marked.parseInline(s) as string;
+});
 
 // What "open" does, surfaced as the action button label (null = no open action).
 const openLabel = computed<string | null>(() => {
@@ -103,7 +115,7 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
           <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {{ meta.label }}<span class="opacity-50"> · {{ index }}</span>
           </p>
-          <p class="truncate text-sm font-medium leading-tight" :title="citation.title">{{ citation.title }}</p>
+          <p class="truncate text-sm font-medium leading-tight" :title="cleanTitle">{{ cleanTitle }}</p>
         </div>
         <button class="shrink-0 text-muted-foreground hover:text-foreground" @click="emit('close')">
           <X class="size-3.5" />
@@ -111,7 +123,8 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
       </div>
 
       <div class="space-y-2 px-3 py-2.5">
-        <p v-if="citation.snippet" class="text-xs leading-relaxed text-foreground/90">{{ citation.snippet }}</p>
+        <!-- eslint-disable-next-line vue/no-v-html — snippet is server-built corpus text rendered as inline markdown -->
+        <p v-if="citation.snippet" class="text-xs leading-relaxed text-foreground/90 [&_em]:italic [&_strong]:font-semibold [&_code]:rounded [&_code]:bg-muted [&_code]:px-1" v-html="snippetHtml" />
 
         <!-- memory provenance + locator -->
         <template v-if="citation.kind === 'memory'">

@@ -46,10 +46,8 @@ const selectedFormSlug = computed(() => (props.urlState ? (route.query.wfForm as
 const selectedRunId = computed(() => (props.urlState ? (route.query.wfRun as string) || '' : localState.run));
 // '' = none, 'new' = creating, else = editing this form id.
 const editing = computed(() => (props.urlState ? (route.query.wfEdit as string) || '' : localState.edit));
-// Manage sub-toggle: 'forms' (FormBuilder) | 'workflows' (WorkflowBuilder).
+// Manage sub-toggle: 'forms' (FormBuilder) | 'workflows' (dedicated /edit page).
 const manageMode = computed<ManageMode>(() => (props.urlState ? ((route.query.wfMode as ManageMode) || 'forms') : localState.mode));
-// '' = none, 'new' = creating, 'clone:<id>' = cloning, else = editing this workflow id.
-const wfEditing = computed(() => (props.urlState ? (route.query.wfWfEdit as string) || '' : localState.wfEdit));
 
 function patch(p: Partial<{ tab: Tab; form: string; run: string; edit: string; mode: ManageMode; wfEdit: string }>) {
   if (props.urlState) {
@@ -111,31 +109,6 @@ async function loadWorkflows() {
 // Only firm-owned workflows (org !== "") are editable; curated ones (org === "") are read-only but clonable.
 const ownWorkflows = computed(() => workflows.value.filter((w) => w.org));
 const curatedWorkflows = computed(() => workflows.value.filter((w) => !w.org));
-const editingWorkflow = computed(() =>
-  wfEditing.value && wfEditing.value !== 'new' && !wfEditing.value.startsWith('clone:')
-    ? workflows.value.find((w) => w.id === wfEditing.value) || null
-    : null);
-const cloningWorkflow = computed(() =>
-  wfEditing.value.startsWith('clone:')
-    ? workflows.value.find((w) => w.id === wfEditing.value.slice('clone:'.length)) || null
-    : null);
-
-async function onWorkflowSaved() {
-  await loadWorkflows();
-  describeDraft.value = null;
-  patch({ wfEdit: '' });
-}
-
-// ── Describe (AI authoring) ───────────────────────────────────────────────────
-// wfEdit === 'describe' shows the DescribePanel; once it produces a draft we stash
-// it here and switch to wfEdit === 'draft', which renders the WorkflowBuilder seeded
-// from that unsaved def for human review/save.
-const describeDraft = ref<WorkflowDef | null>(null);
-
-function onDescribeReview(def: WorkflowDef) {
-  describeDraft.value = def;
-  patch({ wfEdit: 'draft' });
-}
 
 onMounted(async () => {
   try {
@@ -297,31 +270,12 @@ async function onFormSaved() {
 
         <!-- ── Manage tab ────────────────────────────────────────────────────── -->
         <template v-else-if="tab === 'manage'">
-          <!-- Forms editor -->
+          <!-- Forms editor (workflows are now authored on the dedicated /edit page) -->
           <SharedWorkflowsFormBuilder
             v-if="editing"
             :form="editingForm"
             @saved="onFormSaved"
             @cancel="patch({ edit: '' })"
-            @disabled="onDisabled"
-          />
-          <!-- Describe-your-workflow AI panel -->
-          <SharedWorkflowsDescribePanel
-            v-else-if="wfEditing === 'describe'"
-            :forms="forms"
-            @review="onDescribeReview"
-            @cancel="patch({ wfEdit: '' })"
-            @disabled="onDisabled"
-          />
-          <!-- Workflow editor (manual, clone, or reviewing an AI draft) -->
-          <SharedWorkflowsWorkflowBuilder
-            v-else-if="wfEditing && !(wfEditing === 'draft' && !describeDraft)"
-            :workflow="editingWorkflow"
-            :clone-from="cloningWorkflow"
-            :draft="wfEditing === 'draft' ? describeDraft : null"
-            :forms="forms"
-            @saved="onWorkflowSaved"
-            @cancel="patch({ wfEdit: '' })"
             @disabled="onDisabled"
           />
           <div v-else class="flex flex-col gap-4">
@@ -384,10 +338,10 @@ async function onFormSaved() {
               <div class="flex items-center justify-between gap-2">
                 <h2 class="text-sm font-semibold">Your workflows</h2>
                 <div class="flex items-center gap-2">
-                  <Button size="sm" variant="outline" @click="patch({ wfEdit: 'describe' })">
+                  <Button size="sm" variant="outline" @click="navigateTo('/main/workflows/edit/new?describe=1')">
                     <Wand2 class="size-4" /> Describe with AI
                   </Button>
-                  <Button size="sm" @click="patch({ wfEdit: 'new' })"><Plus class="size-4" /> New workflow</Button>
+                  <Button size="sm" @click="navigateTo('/main/workflows/edit/new')"><Plus class="size-4" /> New workflow</Button>
                 </div>
               </div>
               <div v-if="workflowsLoading" class="flex items-center gap-2 rounded-xl border px-4 py-6 text-sm text-muted-foreground">
@@ -424,7 +378,7 @@ async function onFormSaved() {
                         {{ w.steps.length }} step(s) · trigger /{{ w.trigger?.form_slug || '—' }}
                       </p>
                     </div>
-                    <Button size="sm" variant="outline" @click="patch({ wfEdit: w.id })">
+                    <Button size="sm" variant="outline" @click="navigateTo(`/main/workflows/edit/${w.id}`)">
                       <Pencil class="size-4" /> Edit
                     </Button>
                   </li>
@@ -449,7 +403,7 @@ async function onFormSaved() {
                         </p>
                         <p class="truncate text-xs text-muted-foreground">{{ w.steps.length }} step(s)</p>
                       </div>
-                      <Button size="sm" variant="ghost" @click="patch({ wfEdit: `clone:${w.id}` })">
+                      <Button size="sm" variant="ghost" @click="navigateTo(`/main/workflows/edit/new?clone=${w.id}`)">
                         <Copy class="size-4" /> Duplicate
                       </Button>
                     </li>

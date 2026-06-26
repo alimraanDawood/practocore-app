@@ -8,6 +8,7 @@ export type RegisterStep =
     | 'firm-contact'
     | 'invite-team'
     | 'account-create'
+    | 'verify-otp'
     | 'reminders'
     | 'trial-payment'
     | 'creating'
@@ -40,14 +41,14 @@ export interface InviteDetails {
 // Steps per persona — defined outside store so they can be used in getters cleanly
 const STEPS_BY_PERSONA: Record<Persona, RegisterStep[]> = {
     ORG: [
-        'persona', 'account-create', 'org-details', 'firm-contact',
+        'persona', 'account-create', 'verify-otp', 'org-details', 'firm-contact',
         'reminders', 'trial-payment', 'creating', 'invite-team',
     ],
     JOIN: [
-        'persona', 'join-info', 'account-create', 'reminders', 'creating',
+        'persona', 'join-info', 'account-create', 'verify-otp', 'reminders', 'creating',
     ],
     SOLO: [
-        'persona', 'account-create', 'reminders', 'trial-payment', 'creating',
+        'persona', 'account-create', 'verify-otp', 'reminders', 'trial-payment', 'creating',
     ],
 }
 
@@ -149,7 +150,9 @@ export const useRegisterStore = defineStore('register', {
             const steps = this.steps
             const index = steps.indexOf(currentStep)
             if (index <= 0) return null
-            if (steps[index - 1] === 'creating') {
+            // No going back out of OTP verification — the account already exists and
+            // must be verified to continue; nor back past the creating step.
+            if (currentStep === 'verify-otp' || steps[index - 1] === 'creating') {
                 return null
             }
             return `/auth/register/${steps[index - 1]}`

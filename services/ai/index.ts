@@ -263,6 +263,18 @@ export interface AiCitation {
   };
 }
 
+// cleanCitationLabel strips the OCR/Markdown noise that corpus provisions carry —
+// heading hashes, bold/italic/code marks, and "$^{1}$" footnote superscripts — so a
+// citation title/label renders as clean plain text (e.g. "### **34. Computation**" →
+// "34. Computation"). Used by the Sources footer and popover header.
+export function cleanCitationLabel(s?: string): string {
+  return (s ?? '')
+    .replace(/\$\^\{[^}]*\}\$/g, '') // footnote superscripts
+    .replace(/[#*_`]/g, '')          // heading / emphasis / code marks
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export interface AiContext {
   matterIds?: string[];
   deadlineIds?: string[];

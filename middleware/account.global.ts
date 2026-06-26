@@ -39,6 +39,15 @@ export default defineNuxtRouteMiddleware(async (to) => {
         return;
     }
 
+    // Email-verification gate. An authenticated user who hasn't verified their
+    // email must complete OTP verification before using the app. Registration
+    // routes (/auth/*) are exempt above, so this only bites if they try to jump
+    // straight into the app while unverified. Only an explicit `false` gates —
+    // a missing flag is treated as "not blocking" to avoid trapping anyone.
+    if (pb.authStore.record?.verified === false) {
+        return navigateTo("/auth/register/verify-otp");
+    }
+
     const orgId = pb.authStore.record?.organisation as string | undefined;
     const access = await loadAccountAccess();
 

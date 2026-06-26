@@ -25,6 +25,7 @@ const stepComponents: Record<RegisterStep, ReturnType<typeof defineAsyncComponen
   'firm-contact':    defineAsyncComponent(() => import('@/components/Register/StepFirmContact.vue')),
   'invite-team':     defineAsyncComponent(() => import('@/components/Register/StepInviteTeam.vue')),
   'account-create':  defineAsyncComponent(() => import('@/components/Register/StepAccountCreate.vue')),
+  'verify-otp':      defineAsyncComponent(() => import('@/components/Register/StepOtp.vue')),
   'reminders':       defineAsyncComponent(() => import('@/components/Register/StepReminders.vue')),
   'trial-payment':   defineAsyncComponent(() => import('@/components/Register/StepTrialPayment.vue')),
   'creating':        defineAsyncComponent(() => import('@/components/Register/StepCreating.vue')),

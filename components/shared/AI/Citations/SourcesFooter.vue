@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { Brain, Scale, Folder, Globe, Gavel, type LucideIcon } from 'lucide-vue-next';
-import type { AiCitation } from '~/services/ai';
+import { cleanCitationLabel, type AiCitation } from '~/services/ai';
 
 // The deterministic "Sources" list shown under an assistant answer: every source the
 // turn consulted, whether or not it was cited inline. Numbers match the inline
@@ -42,7 +42,7 @@ function pick(e: MouseEvent, c: AiCitation) {
         >
           <span class="grid size-4 shrink-0 place-items-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">{{ i + 1 }}</span>
           <component :is="KIND_ICON[c.kind].icon" class="size-3.5 shrink-0" :class="KIND_ICON[c.kind].tint" />
-          <span class="truncate text-foreground/90">{{ c.title }}</span>
+          <span class="truncate text-foreground/90">{{ cleanCitationLabel(c.title) }}</span>
         </button>
       </li>
     </ul>
