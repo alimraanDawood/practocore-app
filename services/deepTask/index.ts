@@ -77,6 +77,30 @@ export interface DeepAttachmentRef {
   mime: string;
 }
 
+/** A single structured research finding — one citable, verifiable claim with its
+ * source evidence chain. These are extracted from the gather phase and stored as
+ * individual rows in AiResearchFindings. */
+export interface ResearchFinding {
+  id: string;
+  task_id: string;
+  sub_question_id: string;
+  claim: string;
+  confidence: 'high' | 'medium' | 'low' | 'conflicting';
+  contradicts?: string[];
+  source_chain: SourceSpan[];
+  tags?: string[];
+  authority_weight?: number;
+}
+
+/** Pinpoints where a finding's evidence lives in the corpus. */
+export interface SourceSpan {
+  source_type: 'statute' | 'case_law' | 'memory' | 'vault_doc';
+  source_id: string;
+  locator: string;
+  verbatim: string;
+  span_offsets?: [number, number];
+}
+
 export interface DeepTask {
   id: string;
   instruction: string;
@@ -101,6 +125,8 @@ export interface DeepTask {
   sources: AiCitation[];
   /** The research findings brief the gather wrote (capped for transport). */
   findings: string;
+  /** Number of structured findings extracted (full list via getTaskFindings). */
+  findingsCount?: number;
   /** The compiled document rendered to markdown for the in-app report-first view. */
   report: string;
   /** Resolved output-size band governing the outline cap + section budget. */
@@ -277,6 +303,15 @@ export async function retryDeepTask(id: string): Promise<DeepTask> {
   if (!res.ok) throw new Error(`Could not retry the task (${res.status})`);
   track('deep_research_retried', { task: id });
   return await res.json() as DeepTask;
+}
+
+/** Fetch the structured research findings for a task (separate from the poll
+ * endpoint to avoid bloating every tick with verbatim spans). */
+export async function getTaskFindings(taskId: string): Promise<ResearchFinding[]> {
+  const res = await fetch(`${BASE}/deep-task/${taskId}/findings`, { headers: authHeaders() });
+  if (!res.ok) return [];
+  const j = await res.json() as { findings?: ResearchFinding[] };
+  return j.findings ?? [];
 }
 
 /**

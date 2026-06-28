@@ -385,6 +385,13 @@ async function openSource(c: AiCitation) {
           />
         </div>
 
+        <!-- Structured findings (evidence layer) -->
+        <SharedAIDeepTaskFindingsPanel
+          v-if="(task.findingsCount ?? 0) > 0"
+          :task-id="task.id"
+          :count="task.findingsCount ?? 0"
+        />
+
         <!-- Outline review gate -->
         <div v-if="isReview && task.outline" class="rounded-md border p-3 space-y-3">
           <div class="flex items-center justify-between">
