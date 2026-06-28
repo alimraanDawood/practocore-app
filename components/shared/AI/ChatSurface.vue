@@ -99,8 +99,8 @@ function askAbout(prompt: string) {
 
 // Let a host page (e.g. the Word pane's quick actions) drive the chat imperatively:
 // `ask()` prefills the composer; `send()` sends a turn now (still runs contextProvider,
-// so the document selection rides along).
-defineExpose({ ask: askAbout, send: (text: string) => send(text), conversationId });
+// so the document selection rides along). defineExpose is below (after conversationId
+// is declared) so it can expose the ref without a TDZ error.
 
 // ── Chat engine ─────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
@@ -228,6 +228,7 @@ onBeforeUnmount(stopIngestPoll);
 const branches = useChatBranches<ChatMessage>();
 const messages = branches.messages;
 const conversationId = ref('');
+defineExpose({ ask: askAbout, send: (text: string) => send(text), conversationId });
 const pendingProposal = ref<AiResponse | null>(null);
 const loading = ref(false);
 const proposalLoading = ref(false);
@@ -1284,8 +1285,9 @@ onMounted(async () => {
 
 <template>
   <div class="relative flex h-full flex-col">
-    <!-- Chat toolbar — new chat + history (the global sidebar handles app nav) -->
-    <div class="lg:hidden flex h-12 shrink-0 items-center gap-2 border-b px-4">
+    <!-- Chat toolbar — new chat + history. On main mode, hidden on desktop (the app
+         sidebar handles nav); on other modes (research, workflow), always visible. -->
+    <div :class="[isMain ? 'lg:hidden' : '', 'flex h-12 shrink-0 items-center gap-2 border-b px-4']">
       <!-- Only the main assistant lives inside the app shell's SidebarProvider;
            other modes (e.g. the blank-layout workflow builder) must NOT mount
            SidebarTrigger, which throws without a provider. -->

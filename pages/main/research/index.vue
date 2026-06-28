@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Telescope, Sparkles, Search, BookOpen, FileText } from 'lucide-vue-next';
+import { Telescope, Sparkles } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import type { AiArtifact } from '~/services/ai';
 import type { ResearchPlan } from '~/services/deepTask';
@@ -11,12 +11,14 @@ const activePlan = ref<ResearchPlan | null>(null);
 const activeTaskId = ref('');
 const launching = ref(false);
 const launched = ref(false);
+const panelOpen = ref(false);
 
 function onArtifact(a: AiArtifact) {
   if (a.kind === 'research_plan' && a.data) {
     activePlan.value = a.data as ResearchPlan;
     launched.value = false;
     activeTaskId.value = '';
+    panelOpen.value = true;
   }
 }
 
@@ -48,8 +50,8 @@ const prompts = [
 </script>
 
 <template>
-  <div class="relative flex h-full flex-col">
-    <ChatSurface ref="surface" mode="research" class="flex-1" @artifact="onArtifact">
+  <div class="relative h-full">
+    <ChatSurface ref="surface" mode="research" class="h-full" @artifact="onArtifact">
       <template #empty="{ send }">
         <div class="flex w-full flex-col items-center gap-6 pt-8">
           <div class="flex flex-col items-center gap-2 text-center">
@@ -58,7 +60,8 @@ const prompts = [
             </div>
             <h1 class="text-lg font-semibold ibm-plex-serif">Research</h1>
             <p class="max-w-md text-sm text-muted-foreground">
-              Describe what you need to research. I'll ask clarifying questions, build a plan, then sweep your vault, case law, and statutes to compile a grounded report.
+              Describe what you need to research. I'll ask clarifying questions, build a plan,
+              then sweep your vault, case law, and statutes to compile a grounded report.
             </p>
           </div>
 
@@ -77,20 +80,16 @@ const prompts = [
       </template>
     </ChatSurface>
 
-    <!-- Research panel: plan card + live task progress -->
-    <Transition
-      enter-active-class="transition-all duration-200 ease-out"
-      enter-from-class="translate-y-4 opacity-0"
-      enter-to-class="translate-y-0 opacity-100"
-      leave-active-class="transition-all duration-150 ease-in"
-      leave-from-class="translate-y-0 opacity-100"
-      leave-to-class="translate-y-4 opacity-0"
-    >
-      <div
-        v-if="activePlan || activeTaskId"
-        class="border-t bg-background p-4"
-      >
-        <div class="mx-auto w-full max-w-2xl space-y-4">
+    <!-- Research panel as a right-side Sheet -->
+    <Sheet v-model:open="panelOpen">
+      <SheetContent side="right" class="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle class="flex items-center gap-2">
+            <Telescope class="size-4 text-primary" />
+            Research plan
+          </SheetTitle>
+        </SheetHeader>
+        <div class="space-y-4 pt-4">
           <SharedAIDeepTaskPlanCard
             v-if="activePlan"
             :plan="activePlan"
@@ -100,7 +99,7 @@ const prompts = [
           />
           <SharedAIDeepTaskCard v-if="activeTaskId" :key="activeTaskId" :task-id="activeTaskId" />
         </div>
-      </div>
-    </Transition>
+      </SheetContent>
+    </Sheet>
   </div>
 </template>
