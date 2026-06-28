@@ -26,6 +26,10 @@ const EXEMPT_PREFIXES = [
     // Standalone superuser admin area — gated by the `superuser` middleware, not
     // the app's Users/workspace context.
     "/admin",
+    // Office add-in task panes (Word + Outlook) — run inside the host with their own
+    // minimal chrome; they must not be bounced to /select-organisation inside the pane.
+    "/word",
+    "/outlook",
 ];
 
 export default defineNuxtRouteMiddleware(async (to) => {

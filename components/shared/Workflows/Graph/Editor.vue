@@ -1,20 +1,22 @@
 <script lang="ts" setup>
-import { Loader2, Save, FlaskConical, Plus, Sparkles } from 'lucide-vue-next';
+import { Loader2, Save, FlaskConical, Plus, Pencil, Sparkles } from 'lucide-vue-next';
 import {
-  type WorkflowDef, type FormDef, type Trigger, saveWorkflow, WorkflowsDisabledError,
+  type WorkflowDef, type FormDef, type Trigger, saveWorkflow, listForms, WorkflowsDisabledError,
 } from '~/services/workflows';
 import {
   type EditorStep,
   slugify, blankStep, makeUid, toEditorSteps, validateWorkflow, cleanSteps,
 } from '~/services/workflows/authoring';
+import type { AiArtifact } from '~/services/ai';
 import { toast } from 'vue-sonner';
 
 // Graph-based workflow editor (workflows-v2). Owns the working WorkflowDef and
 // renders it as a Vue Flow canvas (Graph/Canvas.vue) with a right-hand inspector:
 // the workflow's trigger/settings when the trigger node (or nothing) is selected,
-// or a per-step editor (Graph/StepInspector.vue) when a step is selected, plus an
-// optional AI builder side-panel (Graph/AssistantPanel.vue). The flat ordered step
-// list is the source of truth; the canvas is a view of it (see Canvas.vue header).
+// or a per-step editor (Graph/StepInspector.vue) when a step is selected, plus the
+// shared PractoAI chat (components/shared/AI/ChatSurface) as the AI builder pane in
+// workflow_studio mode. The flat ordered step list is the source of truth; the
+// canvas is a view of it (see Canvas.vue header).
 const props = withDefaults(defineProps<{
   workflow?: WorkflowDef | null;
   cloneFrom?: WorkflowDef | null;
@@ -54,13 +56,50 @@ const selectedId = ref<string>('trigger');
 const selectedStep = computed(() => steps.value.find((s) => s._uid === selectedId.value) || null);
 const selectedIndex = computed(() => steps.value.findIndex((s) => s._uid === selectedId.value));
 
+// Local, mutable copy of the available forms so the editor can append a form the
+// user (or the AI) authors inline without round-tripping through the parent page.
+// Re-seeded if the parent's list changes (e.g. an initial load completing).
+const formList = ref<FormDef[]>([...props.forms]);
+watch(() => props.forms, (v) => { formList.value = [...v]; });
+
 const triggerLabel = computed(() => {
-  const f = props.forms.find((x) => x.slug === formSlug.value);
+  const f = formList.value.find((x) => x.slug === formSlug.value);
   if (f) return `Form: ${f.name}`;
   return formSlug.value ? `Form: /${formSlug.value}` : 'No form selected yet';
 });
 
-const triggerForm = computed(() => props.forms.find((f) => f.slug === formSlug.value) ?? null);
+const triggerForm = computed(() => formList.value.find((f) => f.slug === formSlug.value) ?? null);
+
+// ── Inline form authoring ─────────────────────────────────────────────────────
+// The trigger form is built RIGHT HERE — no trip to a separate Forms section. The
+// sheet hosts the same FormBuilder used everywhere else; `formEditorSeed` is the
+// form being authored: a brand-new blank one, the selected form being edited, or a
+// draft the AI built via apply_form (form_def artifact).
+const showFormEditor = ref(false);
+const formEditorSeed = ref<FormDef | null>(null);
+// Literal template-token shown in help text; kept as a constant so the Vue compiler
+// doesn't try to parse the inner {{ }} as an interpolation.
+const fieldTokenExample = '{{ form.field }}';
+
+function newForm() {
+  formEditorSeed.value = null; // FormBuilder treats a null seed as a blank new form
+  showFormEditor.value = true;
+}
+function editForm() {
+  formEditorSeed.value = triggerForm.value;
+  showFormEditor.value = true;
+}
+
+// After the inline FormBuilder saves, refresh the form list and bind the trigger to
+// the saved form's slug (so a freshly-created form is selected automatically).
+async function onFormSaved(id: string) {
+  showFormEditor.value = false;
+  try {
+    formList.value = await listForms();
+  } catch { /* keep the optimistic list; a reload will reconcile */ }
+  const saved = formList.value.find((f) => f.id === id);
+  if (saved) formSlug.value = saved.slug;
+}
 
 // ── Step ops ─────────────────────────────────────────────────────────────────
 function addAfter(index: number) {
@@ -134,9 +173,20 @@ async function openTest() {
   showTest.value = true;
 }
 
-// ── AI builder side-panel (Phase 3) ──────────────────────────────────────────
-// Open it when explicitly requested or when a seed prompt arrived to auto-build.
-const showAssistant = ref(props.openAssistant || !!props.seedPrompt);
+// ── AI builder chat pane ─────────────────────────────────────────────────────
+// The builder's left pane is the SHARED PractoAI chat (<ChatSurface>) in
+// "workflow_studio" mode — identical UI + full tool set to /main, plus the
+// apply_workflow canvas tool. It's visible by default so the user designs
+// conversationally beside the live canvas; the toolbar toggle hides it for a
+// canvas-only view. (Replaces the old bespoke describe-only AssistantPanel.)
+const showAssistant = ref(true);
+
+// Seed prompts shown in the chat's empty state to get the user designing fast.
+const builderExamples = [
+  'When a company incorporation form is submitted, draft the board resolution, then have a partner approve filing with URSB, then email the client that it is ready.',
+  'On a new contract review request, summarise the key risks, then route to a senior associate for sign-off.',
+  'When a demand-letter intake is submitted, draft the demand letter and notify the assigned lawyer to review it.',
+];
 
 // The live def we hand to the authoring agent so follow-up turns refine the
 // on-canvas workflow (incl. manual edits) rather than starting from scratch.
@@ -163,6 +213,33 @@ function applyDef(def: WorkflowDef) {
   triggerFilter.value = def.trigger?.filter ?? '';
   steps.value = toEditorSteps(def.steps ?? []);
   selectedId.value = 'trigger';
+}
+
+// The chat surface emits `artifact` whenever an authoring tool runs:
+//  - apply_workflow → "workflow_def": drop the drafted workflow onto the canvas.
+//  - apply_form     → "form_def": drop the drafted trigger form into the inline form
+//    editor so the user reviews and saves it (the form is a real reusable entity, so
+//    saving is its own gate — exactly like picking one from the list).
+// The model has already explained any validation gaps in chat; these surfaces just
+// reflect the latest draft.
+function onArtifact(a: AiArtifact) {
+  if (a.kind === 'workflow_def') {
+    const def = (a.data as { workflowDef?: WorkflowDef })?.workflowDef;
+    if (def) applyDef(def);
+    return;
+  }
+  if (a.kind === 'form_def') {
+    const def = (a.data as { formDef?: FormDef })?.formDef;
+    if (def) {
+      // The backend clears the id (the agent may not target a record). If the AI is
+      // AMENDING a form we already have (same slug), reuse its id so FormBuilder
+      // updates it in place instead of creating a duplicate-slug copy.
+      const existing = def.slug ? formList.value.find((f) => f.slug === def.slug) : undefined;
+      formEditorSeed.value = existing ? { ...existing, ...def, id: existing.id } : def;
+      showFormEditor.value = true;
+      if (def.slug) formSlug.value = def.slug; // bind the trigger to it on save
+    }
+  }
 }
 </script>
 
@@ -195,18 +272,39 @@ function applyDef(def: WorkflowDef) {
       </div>
     </div>
 
-    <!-- Assistant + canvas + inspector -->
+    <!-- Chat ⟷ canvas + inspector -->
     <div class="flex min-h-0 flex-1">
-      <!-- AI builder side-panel -->
-      <aside v-if="showAssistant" class="w-80 shrink-0 border-r bg-background">
-        <SharedWorkflowsGraphAssistantPanel
-          :forms="forms"
-          :current-def="currentDef"
+      <!-- AI builder = the SHARED PractoAI chat in workflow_studio mode -->
+      <aside v-if="showAssistant" class="flex w-[440px] min-w-[340px] shrink-0 flex-col border-r bg-background">
+        <SharedAIChatSurface
+          class="h-full"
+          mode="workflow_studio"
           :seed="seedPrompt"
-          @apply="applyDef"
-          @close="showAssistant = false"
-          @disabled="emit('disabled')"
-        />
+          :workflow-context="currentDef"
+          @artifact="onArtifact"
+        >
+          <template #empty="{ send }">
+            <div class="flex flex-col gap-3">
+              <div class="flex items-center gap-2">
+                <div class="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <Sparkles class="size-4" />
+                </div>
+                <div>
+                  <p class="text-sm font-semibold leading-tight">AI builder</p>
+                  <p class="text-[11px] text-muted-foreground">Describe a procedure — I'll build it on the canvas</p>
+                </div>
+              </div>
+              <button
+                v-for="(ex, i) in builderExamples"
+                :key="i"
+                class="rounded-lg border bg-card px-2.5 py-2 text-left text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                @click="send(ex)"
+              >
+                {{ ex }}
+              </button>
+            </div>
+          </template>
+        </SharedAIChatSurface>
       </aside>
 
       <!-- Canvas -->
@@ -253,13 +351,29 @@ function applyDef(def: WorkflowDef) {
             <Select v-model="formSlug">
               <SelectTrigger><SelectValue placeholder="Pick a form…" /></SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="f in forms" :key="f.id" :value="f.slug">
+                <SelectItem v-for="f in formList" :key="f.id" :value="f.slug">
                   {{ f.name }}<span class="text-muted-foreground"> · /{{ f.slug }}</span>
                 </SelectItem>
               </SelectContent>
             </Select>
-            <p v-if="!forms.length" class="text-[11px] text-muted-foreground">
-              No forms yet — create one in the Forms section first.
+            <div class="flex items-center gap-2">
+              <Button variant="outline" size="sm" class="h-7 flex-1 text-xs" @click="newForm">
+                <Plus class="size-3.5" /> New form
+              </Button>
+              <Button
+                v-if="triggerForm"
+                variant="outline"
+                size="sm"
+                class="h-7 flex-1 text-xs"
+                @click="editForm"
+              >
+                <Pencil class="size-3.5" /> Edit form
+              </Button>
+            </div>
+            <p class="text-[11px] text-muted-foreground">
+              The form collects the inputs your steps reference as
+              <code class="rounded bg-muted px-1">{{ fieldTokenExample }}</code>. Build it here —
+              or ask the AI builder to.
             </p>
           </div>
 
@@ -285,6 +399,27 @@ function applyDef(def: WorkflowDef) {
         </div>
       </aside>
     </div>
+
+    <!-- Inline form editor — author the trigger form without leaving the workflow -->
+    <Sheet v-model:open="showFormEditor">
+      <SheetContent side="right" class="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>{{ formEditorSeed ? 'Edit form' : 'New form' }}</SheetTitle>
+          <SheetDescription>
+            This intake form triggers the workflow. Its fields are what your steps read.
+          </SheetDescription>
+        </SheetHeader>
+        <div class="px-4 pb-6 pt-2">
+          <SharedWorkflowsFormBuilder
+            v-if="showFormEditor"
+            :form="formEditorSeed"
+            @saved="onFormSaved"
+            @cancel="showFormEditor = false"
+            @disabled="emit('disabled')"
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
 
     <!-- Test panel (dry-run) -->
     <Sheet v-model:open="showTest">

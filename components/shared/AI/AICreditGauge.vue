@@ -19,7 +19,7 @@
         </span>
 
         <span class="tabular-nums font-medium whitespace-nowrap">
-          {{ fmt(usage.pool_used) }}<span class="opacity-60">/{{ fmt(usage.pool_total) }}</span>
+          {{ fmt(usage.pool_used) }}<span class="opacity-60">/{{ fmt(total) }}</span>
         </span>
       </button>
     </PopoverTrigger>
@@ -55,7 +55,7 @@
             <span class="text-xs tabular-nums text-muted-foreground">{{ fmt(left) }} left</span>
           </div>
           <span class="text-lg font-semibold tabular-nums ibm-plex-serif">
-            {{ fmt(usage.pool_used) }} <span class="text-muted-foreground font-normal">/ {{ fmt(usage.pool_total) }}</span>
+            {{ fmt(usage.pool_used) }} <span class="text-muted-foreground font-normal">/ {{ fmt(total) }}</span>
           </span>
           <span class="relative h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
             <span
@@ -113,15 +113,23 @@ const open = ref(false);
 
 const fmt = (n?: number) => Math.round(n ?? 0).toLocaleString();
 
+// The headline total absorbs prepaid top-ups: the usable pool is the monthly
+// allowance plus any overage balance, matching what the credit gate actually
+// spends against (Included + Overage).
+const total = computed(() => {
+  const u = usage.value;
+  return u ? u.pool_total + u.overage_balance : 0;
+});
+
 const pct = computed(() => {
   const u = usage.value;
-  if (!u || u.pool_total <= 0) return 0;
-  return Math.min(100, Math.round((u.pool_used / u.pool_total) * 100));
+  if (!u || total.value <= 0) return 0;
+  return Math.min(100, Math.round((u.pool_used / total.value) * 100));
 });
 
 const left = computed(() => {
   const u = usage.value;
-  return u ? Math.max(0, u.pool_total - u.pool_used) : 0;
+  return u ? Math.max(0, total.value - u.pool_used) : 0;
 });
 
 const state = computed(() => usage.value?.state ?? 'normal');
@@ -150,8 +158,8 @@ const periodLabel = computed(() =>
 const tooltip = computed(() => {
   const u = usage.value;
   if (!u) return '';
-  let t = `${fmt(u.pool_used)} of ${fmt(u.pool_total)} credits used · ${fmt(left.value)} left`;
-  if (u.overage_balance > 0) t += ` (+${fmt(u.overage_balance)} top-up)`;
+  let t = `${fmt(u.pool_used)} of ${fmt(total.value)} credits used · ${fmt(left.value)} left`;
+  if (u.overage_balance > 0) t += ` (incl. ${fmt(u.overage_balance)} top-up)`;
   return t;
 });
 

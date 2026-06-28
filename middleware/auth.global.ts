@@ -10,7 +10,11 @@ export default defineNuxtRouteMiddleware((to, from) => {
     // `/admin/*` is the standalone superuser area, gated by the `superuser`
     // route middleware (a separate `_superusers` session, not the app `Users`
     // login) — it must stay reachable without a normal app session.
-    if(to.path === '/' || to.path.startsWith("/auth") || to.path.startsWith('/splash') || to.path.startsWith('/intro') || to.path.startsWith('/billing') || to.path.startsWith('/admin')) {
+    // `/word/*` and `/outlook/*` are the Office add-in routes (rendered inside the
+    // Word/Outlook task pane). They own their own auth UX (a sign-in panel that hands
+    // off to /auth/login), so the global guard stands down rather than redirecting the
+    // pane itself.
+    if(to.path === '/' || to.path.startsWith("/auth") || to.path.startsWith('/splash') || to.path.startsWith('/intro') || to.path.startsWith('/billing') || to.path.startsWith('/admin') || to.path.startsWith('/word') || to.path.startsWith('/outlook')) {
         return;
     }
 

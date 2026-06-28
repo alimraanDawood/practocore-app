@@ -1,6 +1,19 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
+import {existsSync, readFileSync} from 'node:fs'
+import {homedir} from 'node:os'
+import {resolve} from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
+
+// HTTPS dev server for the Word add-in. Office requires the task-pane SourceLocation
+// to be served over HTTPS (http://localhost is rejected by the manifest validator and
+// Word-on-the-web). Opt in with `DEV_HTTPS=1 npm run dev`; reuses the trusted
+// office-addin-dev-certs (run `npx office-addin-dev-certs install` once). Plain
+// `npm run dev` is unaffected.
+const certDir = resolve(homedir(), '.office-addin-dev-certs')
+const certPath = resolve(certDir, 'localhost.crt')
+const keyPath = resolve(certDir, 'localhost.key')
+const devHttps = process.env.DEV_HTTPS === '1' && existsSync(certPath) && existsSync(keyPath)
 
 export default defineNuxtConfig({
     compatibilityDate: '2025-05-15',
@@ -8,6 +21,17 @@ export default defineNuxtConfig({
     css: ['~/assets/css/fonts.css', '~/assets/css/tailwind.css'],
 
     ssr: false,
+
+    ...(devHttps
+        ? {
+            devServer: {
+                https: {
+                    cert: readFileSync(certPath, 'utf8'),
+                    key: readFileSync(keyPath, 'utf8'),
+                },
+            },
+        }
+        : {}),
 
     app: {
         baseURL: './',

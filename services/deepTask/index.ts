@@ -1,5 +1,6 @@
 import { pb, SERVER_URL } from '~/lib/pocketbase';
 import { track } from '~/utils/analytics';
+import type { AiCitation } from '~/services/ai';
 
 // ── Deep research-and-compile service ─────────────────────────────────────────
 // Surfaces the async deep-task pipeline (practocore-backend/ai/deeptask): a long,
@@ -22,8 +23,16 @@ export type DeepTaskPhase =
   | 'outline_review'
   | 'authoring'
   | 'assembling'
+  | 'paused'
+  | 'cancelled'
   | 'done'
   | 'error';
+
+/** Cooperative control signal the user can set on a running task. */
+export type DeepTaskControl = '' | 'run' | 'pause' | 'cancel';
+
+/** Requested output-size band: caps the outline + per-section budget so "short" stays short. */
+export type DeepResearchLength = 'brief' | 'standard' | 'comprehensive';
 
 export interface DeepTaskStep {
   label: string;
@@ -78,15 +87,48 @@ export interface DeepTask {
   /** GeneratedDocuments id once compiled, else "". */
   document: string;
   error: string;
+  /** Cooperative control signal in flight ('pause'/'cancel' while parking). */
+  control: DeepTaskControl;
+  /** Launched from a conversational plan (planning/outlining were pre-baked). */
+  seeded: boolean;
+  /** Whether the task parks at outline_review before authoring. */
+  review: boolean;
   steps: DeepTaskStep[];
   outline: Outline | null;
   scope: DeepTaskScope | null;
   attachments: DeepAttachmentRef[];
+  /** The de-duped sources the gather sweep consulted (empty until gathering finishes). */
+  sources: AiCitation[];
+  /** The research findings brief the gather wrote (capped for transport). */
+  findings: string;
+  /** The compiled document rendered to markdown for the in-app report-first view. */
+  report: string;
+  /** Resolved output-size band governing the outline cap + section budget. */
+  length: DeepResearchLength | '';
   created: string;
   updated: string;
 }
 
-// Phases where the worker is actively progressing the task (keep polling).
+/**
+ * The conversational research plan (Feature A): the draft_research_plan tool
+ * artifact AND the optional `plan` the deep task is launched seeded from. The shape
+ * round-trips client → server unchanged.
+ */
+export interface ResearchPlan {
+  objective: string;
+  title?: string;
+  kind?: string;
+  scope?: {
+    matter_ids?: string[];
+    vault_ids?: string[];
+    memory_scopes?: string[];
+  };
+  outline: OutlineSection[];
+  open_questions?: string[];
+}
+
+// Phases where the worker is actively progressing the task (keep polling). A task
+// with a control signal in flight (pausing/cancelling) is still live until it parks.
 const LIVE_PHASES: DeepTaskPhase[] = [
   'pending', 'planning', 'gathering', 'outlining', 'authoring', 'assembling',
 ];
@@ -105,6 +147,8 @@ export function phaseLabel(p: DeepTaskPhase): string {
     case 'outline_review': return 'Awaiting your approval';
     case 'authoring': return 'Writing';
     case 'assembling': return 'Assembling';
+    case 'paused': return 'Paused';
+    case 'cancelled': return 'Cancelled';
     case 'done': return 'Done';
     case 'error': return 'Failed';
     default: return p;
@@ -117,21 +161,37 @@ function authHeaders(json = false): Record<string, string> {
   return h;
 }
 
-/** Start a deep-research task; returns the created (pending) task. */
+/**
+ * Start a deep-research task; returns the created (pending) task.
+ *
+ * Two launch modes:
+ *  - bare: pass an `instruction` (the legacy one-shot launch). Parks at
+ *    outline_review by default.
+ *  - seeded (Feature A): pass a conversational `plan`. The backend skips the silent
+ *    planning/outlining phases and starts at the gather sweep, and by default skips
+ *    the outline gate (pass `review: true` to keep an optional review pause).
+ */
 export async function createDeepTask(input: {
-  instruction: string;
+  instruction?: string;
   conversationId?: string;
   scope?: DeepTaskScope;
   attachments?: DeepAttachment[];
+  plan?: ResearchPlan;
+  review?: boolean;
+  /** Output-size band. Omit to let the backend auto-detect from the instruction. */
+  length?: DeepResearchLength;
 }): Promise<DeepTask> {
   const res = await fetch(`${BASE}/deep-task`, {
     method: 'POST',
     headers: authHeaders(true),
     body: JSON.stringify({
-      instruction: input.instruction,
+      instruction: input.instruction ?? '',
       conversationId: input.conversationId ?? '',
       scope: input.scope ?? {},
       attachments: input.attachments ?? [],
+      ...(input.plan ? { plan: input.plan } : {}),
+      ...(input.review !== undefined ? { review: input.review } : {}),
+      ...(input.length ? { length: input.length } : {}),
     }),
   });
   if (res.status === 403) throw new Error('Deep research is not enabled for your account.');
@@ -139,8 +199,35 @@ export async function createDeepTask(input: {
   track('deep_research_started', {
     has_conversation: Boolean(input.conversationId),
     attachments: input.attachments?.length ?? 0,
-    instruction_len: input.instruction.length,
+    seeded: Boolean(input.plan),
+    instruction_len: (input.plan?.objective ?? input.instruction ?? '').length,
   });
+  return await res.json() as DeepTask;
+}
+
+/** Request a cooperative pause; the task parks at the next checkpoint. */
+export async function pauseDeepTask(id: string): Promise<DeepTask> {
+  return controlDeepTask(id, 'pause');
+}
+
+/** Cancel a task (terminal). */
+export async function cancelDeepTask(id: string): Promise<DeepTask> {
+  return controlDeepTask(id, 'cancel');
+}
+
+/** Continue a paused task; resumes from saved research/outline (no re-gather). */
+export async function continueDeepTask(id: string): Promise<DeepTask> {
+  return controlDeepTask(id, 'continue');
+}
+
+async function controlDeepTask(id: string, action: 'pause' | 'cancel' | 'continue'): Promise<DeepTask> {
+  const res = await fetch(`${BASE}/deep-task/${id}/${action}`, {
+    method: 'POST',
+    headers: authHeaders(true),
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`Could not ${action} the task (${res.status})`);
+  track(`deep_research_${action}`, { task: id });
   return await res.json() as DeepTask;
 }
 
@@ -170,6 +257,25 @@ export async function approveOutline(id: string, outline?: Outline): Promise<Dee
     body: JSON.stringify(outline ? { outline } : {}),
   });
   if (!res.ok) throw new Error(`Could not approve the outline (${res.status})`);
+  return await res.json() as DeepTask;
+}
+
+/**
+ * Retry a failed task, resuming from the furthest cheap checkpoint. If the gather
+ * already produced findings, the backend reuses them and re-runs only the cheap
+ * outline step (re-parking at outline_review for approval) — so this does NOT
+ * re-run the expensive research sweep or re-author without re-approval. Only valid
+ * when the task is in the `error` phase.
+ */
+export async function retryDeepTask(id: string): Promise<DeepTask> {
+  const res = await fetch(`${BASE}/deep-task/${id}/retry`, {
+    method: 'POST',
+    headers: authHeaders(true),
+    body: '{}',
+  });
+  if (res.status === 403) throw new Error('Deep research is not enabled for your account.');
+  if (!res.ok) throw new Error(`Could not retry the task (${res.status})`);
+  track('deep_research_retried', { task: id });
   return await res.json() as DeepTask;
 }
 

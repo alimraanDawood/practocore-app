@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Brain, Scale, Folder, Globe, Gavel, type LucideIcon } from 'lucide-vue-next';
+import { Brain, Scale, Folder, Globe, Gavel, BookOpen, Landmark, type LucideIcon } from 'lucide-vue-next';
 import { cleanCitationLabel, type AiCitation } from '~/services/ai';
 
 // The deterministic "Sources" list shown under an assistant answer: every source the
@@ -14,6 +14,8 @@ const KIND_ICON: Record<AiCitation['kind'], { icon: LucideIcon; tint: string }> 
   matter: { icon: Folder, tint: 'text-sky-500' },
   web: { icon: Globe, tint: 'text-emerald-500' },
   authority: { icon: Gavel, tint: 'text-indigo-500' },
+  legislation: { icon: Landmark, tint: 'text-teal-500' },
+  help: { icon: BookOpen, tint: 'text-primary' },
 };
 
 const open = ref(false);

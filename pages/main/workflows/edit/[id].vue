@@ -49,7 +49,7 @@ const headerTitle = computed(() => {
 });
 
 function backToList() {
-  router.push({ path: '/main/workflows', query: { wfTab: 'manage', wfMode: 'workflows' } });
+  router.push({ path: '/main/workflows', query: { wfTab: 'manage' } });
 }
 
 function onSaved() {

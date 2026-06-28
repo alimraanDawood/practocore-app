@@ -66,8 +66,9 @@ const appNav: NavLink[] = [
   {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
   {label: 'Skills', icon: Scroll, to: '/main/skills'},
-  {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
-  {label: 'Deep Research', icon: Telescope, to: '/main/deep-research', beta: true},
+  // Workflows + Deep Research hidden from the UI for now (routes/backend remain intact).
+  // {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
+  // {label: 'Deep Research', icon: Telescope, to: '/main/deep-research', beta: true},
   {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
   // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },
 ];
@@ -174,8 +175,8 @@ function isActive(item: NavLink): boolean {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton as-child tooltip="Help">
-                <NuxtLink to="/main/settings">
+              <SidebarMenuButton as-child tooltip="Help" :is-active="route.path.startsWith('/main/help')">
+                <NuxtLink to="/main/help">
                   <LifeBuoy/>
                   <span>Help</span>
                 </NuxtLink>

@@ -236,7 +236,7 @@ export async function vaultIngestProgress(vaultId: string): Promise<VaultIngestP
 // renders and what "open" does.
 export interface AiCitation {
   citeId: string;
-  kind: 'memory' | 'legal' | 'matter' | 'web' | 'authority';
+  kind: 'memory' | 'legal' | 'matter' | 'web' | 'authority' | 'legislation' | 'help';
   title: string;
   snippet?: string;
   meta?: {
@@ -253,12 +253,19 @@ export interface AiCitation {
     templateId?: string;
     // matter
     matterId?: string;
+    // help (in-app Help Center article) — open at /main/help/<categorySlug>/<slug>
+    slug?: string;
+    categorySlug?: string;
+    articleId?: string;
     // authority (case-law corpus): the verbatim paragraph is the snippet; meta
     // pins it to the exact judgment paragraph for the verify trail.
     provisionId?: string;
     anchor?: string;        // e.g. "para 23"
     citation?: string;      // neutral citation, e.g. [2020] UGSC 1
     court?: string;
+    // legislation (statute corpus): verbatim section text (or Act-overview headnote)
+    // is the snippet; `anchor` is the section (e.g. "s.41"), `statute` the Act label.
+    statute?: string;
     // (web reuses `url`)
     [k: string]: any;
   };
@@ -289,10 +296,21 @@ export interface AiActionResult {
   data: Record<string, any>;
 }
 
+/** A tool-produced structured object the CLIENT renders (the model never saw it
+ *  verbatim). Kind discriminates the renderer; e.g. kind "workflow_def" carries a
+ *  drafted workflow for the builder canvas. Mirrors ai/tools.Artifact in the backend. */
+export interface AiArtifact {
+  kind: string;
+  data: any;
+}
+
 export interface AiResponse {
   type: 'text' | 'proposal' | 'error';
   content?: string;
   conversationId?: string;
+  /** Set on a type=text reply when a tool emitted a client-only artifact this turn
+   *  (e.g. apply_workflow → { kind: 'workflow_def', data: {...} }). */
+  artifact?: AiArtifact;
   // proposal fields
   tool?: string;
   toolUseId?: string;
@@ -312,9 +330,17 @@ export interface AiResponse {
   // Set when the credit pool+overage is exhausted: the reply was forced onto the
   // lighter model. The UI shows a "running on the lighter model" banner.
   degraded?: boolean;
+  // Which model actually served this reply and the effective speed tier
+  // ('auto' | 'fast' | 'deep'). Lets the UI show "ran on the fast model" and
+  // explain why a round cost more or fewer credits.
+  model?: string;
+  tier?: 'auto' | 'fast' | 'deep';
   // Synthetic flag (HTTP 402): the credit limit was reached and AI is locked.
   // Not sent by the server as JSON — aiPost sets it so callers can lock the UI.
   blocked?: boolean;
+  // Synthetic flag: the caller aborted the request mid-stream (the Stop button).
+  // Set client-side in aiStreamPost; callers should silently drop the turn.
+  aborted?: boolean;
 }
 
 // ── Proposal preview ───────────────────────────────────────────────────────────
@@ -541,6 +567,9 @@ export interface AiConversationSummary {
 
 export interface AiConversation extends AiConversationSummary {
   messages: ConvDisplayMessage[];
+  /** Serialized branch tree (conversation branching). Absent on conversations that
+   *  predate branching or were never edited — callers fall back to `messages`. */
+  tree?: unknown;
 }
 
 export interface AiConversationPage {
@@ -645,7 +674,20 @@ export function sendAiMessageStream(
   messages: AiMessage[],
   context: AiContext | undefined,
   conversationId: string | undefined,
-  opts: { onStep?: (step: AiStreamStep) => void; attachmentsMeta?: AiAttachmentMeta[]; mode?: string } = {},
+  opts: {
+    onStep?: (step: AiStreamStep) => void;
+    attachmentsMeta?: AiAttachmentMeta[];
+    mode?: string;
+    surface?: string;
+    /** Speed/cost tier: 'auto' (default), 'fast' (cheapest model) or 'deep'
+     *  (premium model for hard synthesis). Forwarded to the backend router. */
+    tier?: 'auto' | 'fast' | 'deep';
+    /** Live builder-canvas definition, sent in workflow_studio mode so the model
+     *  refines the current draft (incl. manual edits) rather than restarting. */
+    workflowContext?: unknown;
+    /** Abort signal for the Stop button — aborting resolves to { type:'aborted' }. */
+    signal?: AbortSignal;
+  } = {},
 ): Promise<AiResponse> {
   track('ai_chat_message_sent', {
     streaming: true,
@@ -667,8 +709,15 @@ export function sendAiMessageStream(
       attachmentsMeta: opts.attachmentsMeta ?? [],
       // Constrains the backend tool set + system prompt, e.g. "skill_studio".
       mode: opts.mode ?? '',
+      // Client surface, e.g. "word" — gates client-fulfilled tools (independent of mode).
+      surface: opts.surface ?? '',
+      // Speed/cost tier ('auto' default) — picks the serving model on the backend.
+      tier: opts.tier ?? 'auto',
+      workflowContext: opts.workflowContext ?? null,
     },
     opts.onStep,
+    undefined,
+    opts.signal,
   );
 }
 
@@ -704,6 +753,7 @@ async function aiStreamPost(
   body: object,
   onStep?: (step: AiStreamStep) => void,
   onText?: (delta: string) => void,
+  signal?: AbortSignal,
 ): Promise<AiResponse> {
   try {
     let timezone = '';
@@ -716,6 +766,7 @@ async function aiStreamPost(
         'Authorization': pb.authStore.token,
       },
       body: JSON.stringify({ timezone, ...body }),
+      signal,
     });
 
     // Credit gate / pre-flight errors arrive before the stream starts, as JSON.
@@ -754,6 +805,11 @@ async function aiStreamPost(
     }
     return result ?? { type: 'error', error: 'The response ended unexpectedly. Please try again.' };
   } catch (e: any) {
+    // The caller hit Stop — surface a quiet, dedicated outcome so the UI can drop
+    // the turn without flashing an error bubble.
+    if (e?.name === 'AbortError' || signal?.aborted) {
+      return { type: 'error', error: '', aborted: true };
+    }
     return { type: 'error', error: e?.message ?? 'Network error' };
   }
 }
@@ -878,6 +934,23 @@ export async function renameConversation(id: string, title: string): Promise<boo
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Authorization': pb.authStore.token },
       body: JSON.stringify({ title }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Persist the conversation's branch tree (conversation branching). Best-effort:
+// the flat active-path `messages` are saved by the chat turn itself; this stores
+// the full tree so alternate branches survive a reload. A failure just means the
+// thread reloads as a single branch.
+export async function saveConversationTree(id: string, tree: unknown): Promise<boolean> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/practocore/ai/conversations/${id}/tree`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': pb.authStore.token },
+      body: JSON.stringify({ tree }),
     });
     return res.ok;
   } catch {

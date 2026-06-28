@@ -108,6 +108,12 @@ export function superuserLogout(): void {
   adminPb.authStore.clear();
 }
 
+/** The current superuser auth token, for other admin surfaces (e.g. the Help
+ *  curator) that share this single `_superusers` session. "" when not signed in. */
+export function superuserToken(): string {
+  return adminPb.authStore.token || '';
+}
+
 // ── Reads (any authenticated user) ──────────────────────────────────────────
 
 export interface ListFilters {

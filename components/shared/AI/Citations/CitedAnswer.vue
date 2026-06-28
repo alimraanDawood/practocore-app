@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { toast } from 'vue-sonner';
 import type { AiCitation } from '~/services/ai';
 import { getDocument, vaultFileUrl, type VaultDocument } from '~/services/vault';
+import { SERVER_URL } from '~/lib/pocketbase';
 
 // Renders an assistant answer with its verification trail: inline [[cite:<id>]]
 // markers become numbered citation chips, and a "Sources" footer lists every source
@@ -10,7 +11,10 @@ import { getDocument, vaultFileUrl, type VaultDocument } from '~/services/vault'
 // opened (vault document preview, in-app matter, or external URL). Marker placement
 // is model-driven and best-effort, so unknown ids are dropped silently — the footer
 // (built deterministically server-side) is the source of truth.
-const props = defineProps<{ content: string; citations?: AiCitation[] }>();
+// `onLocate` (set by the Word surface) receives the verbatim snippet behind a
+// `doc:` link so the host can scroll the open document to it. Absent elsewhere, where
+// no doc: links are ever emitted.
+const props = defineProps<{ content: string; citations?: AiCitation[]; onLocate?: (text: string) => void }>();
 
 marked.use({ breaks: true, gfm: true });
 
@@ -37,8 +41,21 @@ const html = computed(() => {
     if (!n) return '';
     return `<sup class="ai-cite" data-cite="${id}" role="button" tabindex="0">${n}</sup>`;
   });
-  return marked.parse(withChips) as string;
+  return absolutizeBackendLinks(marked.parse(withChips) as string);
 });
+
+// Safety net for backend links. The model is told to emit only RELATIVE app-page
+// paths (which correctly resolve against the app origin) and never a backend/file
+// URL — but if it slips and writes a root-relative '/api/...' link, the browser
+// would resolve it against the FRONTEND origin (e.g. :3000), not PocketBase. Rewrite
+// any '/api/...' href to the configured backend base (SERVER_URL) so it points at the
+// right host regardless of how the firm self-hosts. (Protected files still need a
+// token, so the in-app download card remains the real path — this only fixes the host.)
+function absolutizeBackendLinks(rendered: string): string {
+  const base = SERVER_URL.replace(/\/$/, '');
+  return rendered.replace(/(<a\b[^>]*\bhref=)(["'])(\/api\/[^"']*)\2/gi,
+    (_m, pre: string, q: string, path: string) => `${pre}${q}${base}${path}${q}`);
+}
 
 // ── Popover ─────────────────────────────────────────────────────────────────────
 const active = ref<{ citation: AiCitation; index: number; anchor: DOMRect } | null>(null);
@@ -49,6 +66,15 @@ function openFor(c: AiCitation, anchor: DOMRect) {
 
 // Delegated click on an inline chip inside the v-html prose.
 function onProseClick(e: MouseEvent) {
+  // "Jump to passage" links (doc: scheme) — the Word surface scrolls the document to
+  // the verbatim snippet. Intercept before the browser tries to navigate to doc:…
+  const link = (e.target as HTMLElement)?.closest('a[href^="doc:"]') as HTMLAnchorElement | null;
+  if (link) {
+    e.preventDefault();
+    const snippet = decodeURIComponent(link.getAttribute('href')!.slice('doc:'.length)).trim();
+    if (snippet) props.onLocate?.(snippet);
+    return;
+  }
   const el = (e.target as HTMLElement)?.closest('[data-cite]') as HTMLElement | null;
   if (!el) return;
   e.preventDefault();
@@ -73,12 +99,16 @@ function pageFromLocator(locator?: string): number | undefined {
 async function open(c: AiCitation) {
   const meta = c.meta ?? {};
   active.value = null;
-  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority') && meta.url) {
+  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority' || c.kind === 'legislation') && meta.url) {
     window.open(meta.url, '_blank', 'noopener');
     return;
   }
   if (c.kind === 'matter' && meta.matterId) {
     navigateTo(`/main/matters/matter/${meta.matterId}`);
+    return;
+  }
+  if (c.kind === 'help' && meta.slug) {
+    navigateTo(`/main/help/${meta.categorySlug || 'article'}/${meta.slug}`);
     return;
   }
   if (c.kind === 'memory' && meta.sourceDocId) {
@@ -129,3 +159,16 @@ async function open(c: AiCitation) {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* "Jump to passage" links (Word surface). Render as a subtle, clickable affordance
+   rather than a normal hyperlink, since they navigate the document, not the web. */
+:deep(a[href^='doc:']) {
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+}
+:deep(a[href^='doc:']:hover) {
+  opacity: 0.8;
+}
+</style>

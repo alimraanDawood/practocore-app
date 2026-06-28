@@ -5,7 +5,7 @@ import {
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import {
-  createDeepTask, type DeepTaskScope, type DeepAttachment,
+  createDeepTask, type DeepTaskScope, type DeepAttachment, type DeepResearchLength,
 } from '~/services/deepTask';
 import { getMatters } from '~/services/matters';
 import { listVaults } from '~/services/vault';
@@ -29,6 +29,16 @@ const emit = defineEmits<{ (e: 'started', taskId: string): void }>();
 
 const instruction = ref('');
 const starting = ref(false);
+
+// Output-size band — caps the outline + per-section budget so "short" stays short and
+// the run doesn't balloon into an unwanted treatise (and exhaust credits). Default
+// standard. Each option carries its rough expectation for the estimate line.
+const LENGTHS: { value: DeepResearchLength; label: string; hint: string }[] = [
+  { value: 'brief', label: 'Brief', hint: '~2–4 min · 1–2 pages' },
+  { value: 'standard', label: 'Standard', hint: '~5–10 min · 3–6 pages' },
+  { value: 'comprehensive', label: 'Comprehensive', hint: '~10–20 min · in-depth' },
+];
+const length = ref<DeepResearchLength>('standard');
 
 // ── Attachments ───────────────────────────────────────────────────────────────
 interface Attachment {
@@ -204,6 +214,14 @@ function buildScope(): DeepTaskScope | undefined {
 // ── Launch ───────────────────────────────────────────────────────────────────
 const canStart = computed(() => !starting.value && instruction.value.trim().length > 0);
 
+// Lightweight expectation shown before launch (the run is the firm's most expensive
+// capability, so commit shouldn't feel blind). Driven by the chosen length band — the
+// single biggest determinant of cost/time — so the estimate tracks the real output size.
+const estimate = computed(() => {
+  const hint = LENGTHS.find(o => o.value === length.value)?.hint ?? '~5–10 min · 3–6 pages';
+  return `Runs in the background — about ${hint}, using Deep-tier credits. You'll review the findings and outline before it writes.`;
+});
+
 async function start() {
   if (!canStart.value) return;
   starting.value = true;
@@ -212,6 +230,7 @@ async function start() {
       instruction: instruction.value.trim(),
       conversationId: props.conversationId,
       scope: buildScope(),
+      length: length.value,
       attachments: attachments.value.map<DeepAttachment>(a => ({
         name: a.name, mime: a.mime, kind: a.kind, base64: a.base64, text: a.text,
       })),
@@ -378,6 +397,26 @@ function onKeydown(e: KeyboardEvent) {
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
+
+      <!-- Length governor: caps the document size so "short" stays short. -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs text-muted-foreground">Length</span>
+        <div class="inline-flex rounded-md border p-0.5">
+          <button
+            v-for="opt in LENGTHS"
+            :key="opt.value"
+            type="button"
+            :disabled="starting"
+            class="px-2.5 py-1 text-xs rounded-[5px] transition-colors"
+            :class="length === opt.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+            @click="length = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+
+      <p class="text-xs text-muted-foreground">{{ estimate }}</p>
     </div>
 
     <input

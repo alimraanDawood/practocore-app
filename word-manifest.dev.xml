@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PractoCore Word Add-in — DEV manifest for the IN-APP Nuxt route.
+  The task pane is now served by practocore-app itself at /word/taskpane (not the old
+  standalone Vite project). Run `npm run dev` (serves https://localhost:3000) and
+  sideload THIS file into Word.
+
+  Sideload (Windows): Word ▸ Insert ▸ Add-ins ▸ My Add-ins ▸ Upload My Add-in ▸ pick this file.
+  Sideload (Mac):  copy to ~/Library/Containers/com.microsoft.Word/Data/Documents/wef/  then
+                   Insert ▸ Add-ins ▸ My Add-ins ▸ Developer Add-ins.
+
+  For production: replace every https://localhost:3000 with the deployed HTTPS origin,
+  keep /word/taskpane as the path, and register https://<origin>/word/auth/callback as an
+  authorized redirect URI in Google + the PocketBase google provider.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <!-- New GUID so it can coexist with the standalone add-in during the transition. -->
+  <Id>1d6f2a4c-9b3e-4d77-bf21-3c5e8a90b1d4</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="PractoCore (Dev)" />
+  <Description DefaultValue="Draft, cite, and revise legal documents against your PractoCore matters — inside Word." />
+  <IconUrl DefaultValue="https://localhost:3000/favicon-32x32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/android-icon-96x96.png" />
+  <SupportUrl DefaultValue="https://practocore.com/support" />
+
+  <!-- Origins the add-in may navigate to (sign-in dialog + Google OAuth). -->
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://accounts.google.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3000/word/taskpane" />
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="PractoCore.Group">
+                <Label resid="Group.Label" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16" />
+                  <bt:Image size="32" resid="Icon.32" />
+                  <bt:Image size="80" resid="Icon.80" />
+                </Icon>
+                <Control xsi:type="Button" id="PractoCore.OpenPane">
+                  <Label resid="OpenPane.Label" />
+                  <Supertip>
+                    <Title resid="OpenPane.Label" />
+                    <Description resid="OpenPane.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16" />
+                    <bt:Image size="32" resid="Icon.32" />
+                    <bt:Image size="80" resid="Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>PractoCorePane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/favicon-16x16.png" />
+        <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/favicon-32x32.png" />
+        <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/android-icon-96x96.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/word/taskpane" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Group.Label" DefaultValue="PractoCore" />
+        <bt:String id="OpenPane.Label" DefaultValue="Assistant" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="OpenPane.Tip" DefaultValue="Open the PractoCore assistant panel." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

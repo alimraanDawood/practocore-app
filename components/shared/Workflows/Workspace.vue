@@ -11,7 +11,8 @@ import { toast } from 'vue-sonner';
 //   • Start     — pick a form, fill it in, run it
 //   • Runs      — run inbox + detail timeline
 //   • Approvals — pending sign-offs routed to me
-//   • Manage    — author firm-owned forms (structured builder)
+//   • Manage    — author firm-owned workflows (the intake form is built INSIDE the
+//                 workflow editor, so there is no separate Forms surface here)
 // Mirrors the Vault workspace: reused by the standalone /main/workflows page and
 // (optionally) embedded elsewhere. In `url-state` mode tab + selection live in the
 // URL so deep links and the sidebar can drive it.
@@ -34,30 +35,21 @@ const router = useRouter();
 const checking = ref(true);
 const enabled = ref(false);
 
-type ManageMode = 'forms' | 'workflows';
-
 // ── State (URL-backed when url-state, else local) ──────────────────────────────
 const localState = reactive({
-  tab: 'start' as Tab, form: '', run: '', edit: '', mode: 'forms' as ManageMode, wfEdit: '',
+  tab: 'start' as Tab, form: '', run: '',
 });
 
 const tab = computed<Tab>(() => (props.urlState ? ((route.query.wfTab as Tab) || 'start') : localState.tab));
 const selectedFormSlug = computed(() => (props.urlState ? (route.query.wfForm as string) || '' : localState.form));
 const selectedRunId = computed(() => (props.urlState ? (route.query.wfRun as string) || '' : localState.run));
-// '' = none, 'new' = creating, else = editing this form id.
-const editing = computed(() => (props.urlState ? (route.query.wfEdit as string) || '' : localState.edit));
-// Manage sub-toggle: 'forms' (FormBuilder) | 'workflows' (dedicated /edit page).
-const manageMode = computed<ManageMode>(() => (props.urlState ? ((route.query.wfMode as ManageMode) || 'forms') : localState.mode));
 
-function patch(p: Partial<{ tab: Tab; form: string; run: string; edit: string; mode: ManageMode; wfEdit: string }>) {
+function patch(p: Partial<{ tab: Tab; form: string; run: string }>) {
   if (props.urlState) {
     const q = { ...route.query };
     if (p.tab !== undefined) q.wfTab = p.tab;
     if (p.form !== undefined) p.form ? (q.wfForm = p.form) : delete q.wfForm;
     if (p.run !== undefined) p.run ? (q.wfRun = p.run) : delete q.wfRun;
-    if (p.edit !== undefined) p.edit ? (q.wfEdit = p.edit) : delete q.wfEdit;
-    if (p.mode !== undefined) q.wfMode = p.mode;
-    if (p.wfEdit !== undefined) p.wfEdit ? (q.wfWfEdit = p.wfEdit) : delete q.wfWfEdit;
     router.push({ query: q });
   } else {
     Object.assign(localState, p);
@@ -65,7 +57,7 @@ function patch(p: Partial<{ tab: Tab; form: string; run: string; edit: string; m
 }
 
 function goTab(t: Tab) {
-  patch({ tab: t, form: '', run: '', edit: '', wfEdit: '' });
+  patch({ tab: t, form: '', run: '' });
 }
 
 // ── Forms list ─────────────────────────────────────────────────────────────────
@@ -85,10 +77,6 @@ async function loadForms() {
 }
 
 const selectedForm = computed(() => forms.value.find((f) => f.slug === selectedFormSlug.value) || null);
-const editingForm = computed(() =>
-  editing.value && editing.value !== 'new' ? forms.value.find((f) => f.id === editing.value) || null : null);
-// Only firm-owned forms (org !== "") are editable; global/curated ones are read-only.
-const ownForms = computed(() => forms.value.filter((f) => f.org));
 
 // ── Workflows list (authoring) ───────────────────────────────────────────────
 const workflows = ref<WorkflowDef[]>([]);
@@ -121,18 +109,12 @@ onMounted(async () => {
   if (enabled.value) await loadForms();
 });
 
-// Reload forms when entering a tab that needs them.
+// Load each tab's data on first entry: Start needs the runnable forms; Manage lists
+// the firm's workflows (the trigger form is built inside the editor, not here).
 watch(tab, (t) => {
-  if (enabled.value && (t === 'start' || t === 'manage') && !forms.value.length) loadForms();
-  if (enabled.value && t === 'manage' && manageMode.value === 'workflows' && !workflows.value.length) loadWorkflows();
-});
-
-// Load workflows the first time the Manage > Workflows sub-tab is shown (needs forms too for the trigger dropdown).
-watch(manageMode, (m) => {
-  if (enabled.value && m === 'workflows') {
-    if (!workflows.value.length) loadWorkflows();
-    if (!forms.value.length) loadForms();
-  }
+  if (!enabled.value) return;
+  if (t === 'start' && !forms.value.length) loadForms();
+  if (t === 'manage' && !workflows.value.length) loadWorkflows();
 });
 
 function onDisabled() {
@@ -142,11 +124,6 @@ function onDisabled() {
 function onFormSubmitted(runId?: string) {
   if (runId) patch({ tab: 'runs', form: '', run: runId });
   else patch({ form: '' });
-}
-
-async function onFormSaved() {
-  await loadForms();
-  patch({ edit: '' });
 }
 </script>
 
@@ -225,7 +202,9 @@ async function onFormSaved() {
                 <FileText class="size-5" />
               </div>
               <p class="text-sm font-medium">No forms available</p>
-              <p class="max-w-xs text-xs text-muted-foreground">Create one in the Manage tab to get started.</p>
+              <p class="max-w-xs text-xs text-muted-foreground">
+                Build a workflow in the Manage tab — its intake form appears here to run.
+              </p>
             </div>
             <ul v-else class="flex flex-col gap-2">
               <li
@@ -268,73 +247,11 @@ async function onFormSaved() {
           <SharedWorkflowsApprovals @open="(id) => patch({ tab: 'runs', run: id })" @disabled="onDisabled" />
         </template>
 
-        <!-- ── Manage tab ────────────────────────────────────────────────────── -->
+        <!-- ── Manage tab (workflows; the trigger form is built in the editor) ── -->
         <template v-else-if="tab === 'manage'">
-          <!-- Forms editor (workflows are now authored on the dedicated /edit page) -->
-          <SharedWorkflowsFormBuilder
-            v-if="editing"
-            :form="editingForm"
-            @saved="onFormSaved"
-            @cancel="patch({ edit: '' })"
-            @disabled="onDisabled"
-          />
-          <div v-else class="flex flex-col gap-4">
-            <!-- Sub-toggle: Forms | Workflows -->
-            <div class="flex gap-1 rounded-lg border bg-muted/40 p-1 w-fit">
-              <button
-                v-for="m in (['forms', 'workflows'] as const)"
-                :key="m"
-                class="rounded-md px-3 py-1 text-xs font-medium capitalize transition"
-                :class="manageMode === m ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                @click="patch({ mode: m })"
-              >
-                {{ m }}
-              </button>
-            </div>
-
-            <!-- Forms list -->
-            <div v-if="manageMode === 'forms'" class="flex flex-col gap-3">
-              <div class="flex items-center justify-between">
-                <h2 class="text-sm font-semibold">Your forms</h2>
-                <Button size="sm" @click="patch({ edit: 'new' })"><Plus class="size-4" /> New form</Button>
-              </div>
-              <div v-if="formsLoading" class="flex items-center gap-2 rounded-xl border px-4 py-6 text-sm text-muted-foreground">
-                <Loader2 class="size-4 animate-spin" /> Loading…
-              </div>
-              <div
-                v-else-if="!ownForms.length"
-                class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-12 text-center"
-              >
-                <div class="grid size-11 place-items-center rounded-full bg-muted text-muted-foreground">
-                  <FileText class="size-5" />
-                </div>
-                <p class="text-sm font-medium">No firm forms yet</p>
-                <p class="max-w-xs text-xs text-muted-foreground">
-                  Build an intake form to trigger a workflow. Curated forms stay read-only.
-                </p>
-              </div>
-              <ul v-else class="flex flex-col gap-2">
-                <li
-                  v-for="f in ownForms"
-                  :key="f.id"
-                  class="flex items-center gap-3 rounded-lg border bg-card px-3 py-3"
-                >
-                  <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                    <FileText class="size-4" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-medium">{{ f.name }}</p>
-                    <p class="truncate text-xs text-muted-foreground">{{ f.fields.length }} field(s) · /{{ f.slug }}</p>
-                  </div>
-                  <Button size="sm" variant="outline" @click="patch({ edit: f.id })">
-                    <Pencil class="size-4" /> Edit
-                  </Button>
-                </li>
-              </ul>
-            </div>
-
+          <div class="flex flex-col gap-4">
             <!-- Workflows list -->
-            <div v-else class="flex flex-col gap-3">
+            <div class="flex flex-col gap-3">
               <div class="flex items-center justify-between gap-2">
                 <h2 class="text-sm font-semibold">Your workflows</h2>
                 <div class="flex items-center gap-2">

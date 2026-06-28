@@ -3,6 +3,21 @@
        tab (SettingsPage index) and the standalone /main/settings/documentation page. -->
   <div class="flex flex-col gap-8 p-4 lg:p-6">
 
+    <!-- Help Center hand-off: the full searchable knowledge base lives at /main/help. -->
+    <NuxtLink
+      to="/main/help"
+      class="flex flex-row items-center gap-4 rounded-xl border bg-muted/20 p-5 transition-colors hover:bg-muted/50"
+    >
+      <div class="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10">
+        <Icon name="i-lucide-book-open" class="size-5 text-primary" />
+      </div>
+      <div class="flex flex-col">
+        <span class="text-sm font-semibold">Open the Help Center</span>
+        <span class="text-xs text-muted-foreground">Search guides and answers, or browse every topic.</span>
+      </div>
+      <Icon name="i-lucide-arrow-right" class="ml-auto size-4 text-muted-foreground" />
+    </NuxtLink>
+
     <!-- Quick start cards -->
     <div class="flex flex-col gap-3">
       <h2 class="font-semibold text-lg">Getting Started</h2>

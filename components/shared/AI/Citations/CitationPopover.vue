@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { marked } from 'marked';
 import {
-  Brain, Scale, Folder, Globe, Gavel, ExternalLink, FileText, X, type LucideIcon,
+  Brain, Scale, Folder, Globe, Gavel, BookOpen, Landmark, ExternalLink, FileText, X, type LucideIcon,
 } from 'lucide-vue-next';
 import type { AiCitation } from '~/services/ai';
 import { cleanCitationLabel } from '~/services/ai';
@@ -24,6 +24,8 @@ const KIND_META: Record<AiCitation['kind'], { icon: LucideIcon; label: string; t
   matter: { icon: Folder, label: 'Matter', tint: 'text-sky-500' },
   web: { icon: Globe, label: 'Web result', tint: 'text-emerald-500' },
   authority: { icon: Gavel, label: 'Case law', tint: 'text-indigo-500' },
+  legislation: { icon: Landmark, label: 'Legislation', tint: 'text-teal-500' },
+  help: { icon: BookOpen, label: 'Help article', tint: 'text-primary' },
 };
 const meta = computed(() => KIND_META[props.citation.kind] ?? KIND_META.web);
 
@@ -44,11 +46,13 @@ const openLabel = computed<string | null>(() => {
   const c = props.citation;
   if (c.kind === 'memory') return m.value.sourceDocId ? 'View source document' : null;
   if (c.kind === 'matter') return m.value.matterId ? 'Open matter' : null;
-  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority') && m.value.url) return 'Open source';
+  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority' || c.kind === 'legislation') && m.value.url) return 'Open source';
+  if (c.kind === 'help' && m.value.slug) return 'Open help article';
   return null;
 });
 const opensExternally = computed(() =>
-  props.citation.kind === 'legal' || props.citation.kind === 'web' || props.citation.kind === 'authority');
+  props.citation.kind === 'legal' || props.citation.kind === 'web'
+  || props.citation.kind === 'authority' || props.citation.kind === 'legislation');
 
 const provenanceLine = computed(() => {
   const p = m.value.provenance;
@@ -149,6 +153,15 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
             <span v-if="m.anchor" class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-indigo-600 dark:text-indigo-400">{{ m.anchor }}</span>
           </div>
           <p class="text-[10px] italic text-muted-foreground">Verbatim — verify against the judgment.</p>
+        </template>
+
+        <!-- legislation: statute · section · verbatim provision (or Act-overview headnote) -->
+        <template v-else-if="citation.kind === 'legislation'">
+          <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span v-if="m.statute" class="font-medium text-foreground/80">{{ m.statute }}</span>
+            <span v-if="m.anchor" class="rounded-full bg-teal-500/10 px-2 py-0.5 text-teal-600 dark:text-teal-400">{{ m.anchor }}</span>
+          </div>
+          <p v-if="m.anchor" class="text-[10px] italic text-muted-foreground">Verbatim — verify against the Act.</p>
         </template>
 
         <!-- legal / web url host -->

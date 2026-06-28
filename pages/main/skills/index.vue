@@ -191,7 +191,7 @@ const statusTone: Record<string, string> = {
           <div class="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <button
               v-for="s in ownedSkills" :key="s.id"
-              class="text-left rounded-xl border p-4 hover:border-primary/50 hover:bg-accent/40 transition-colors flex flex-col gap-2"
+              class="text-left rounded-xl border p-4  hover:bg-muted transition-colors flex flex-col gap-2"
               @click="open(s)"
             >
               <div class="flex items-start justify-between gap-2">
@@ -218,7 +218,7 @@ const statusTone: Record<string, string> = {
           <div class="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <button
               v-for="s in globalSkills" :key="s.id"
-              class="text-left rounded-xl border p-4 hover:border-primary/50 hover:bg-accent/40 transition-colors flex flex-col gap-2"
+              class="text-left rounded-xl border p-4 hover:bg-muted transition-colors flex flex-col gap-2"
               @click="open(s)"
             >
               <div class="flex items-start justify-between gap-2">
@@ -256,7 +256,7 @@ const statusTone: Record<string, string> = {
                 {{ detail.owned ? 'Firm skill' : 'Standard skill' }}
               </Badge>
               <span class="text-[11px] px-1.5 py-0.5 rounded-full capitalize" :class="statusTone[detail.status] || statusTone.draft">{{ detail.status }}</span>
-              <span class="text-[11px] text-muted-foreground ml-auto">v{{ detail.version }}</span>
+              <span class="text-[11px] text-muted-foreground">v{{ detail.version }}</span>
             </div>
             <h2 v-if="!editing" class="font-semibold leading-tight">{{ detail.title }}</h2>
             <code class="text-[11px] text-muted-foreground">{{ detail.name }}</code>
@@ -282,7 +282,7 @@ const statusTone: Record<string, string> = {
 
             <div>
               <p class="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Instructions</p>
-              <div class="prose prose-sm dark:prose-invert max-w-none text-sm" v-html="renderMd(detail.instructions)" />
+              <div class="prose prose-pink prose-sm dark:prose-invert prose-pre:my-1 prose-code:text-xs max-w-none [&_.ai-cite]:mx-px [&_.ai-cite]:cursor-pointer [&_.ai-cite]:rounded [&_.ai-cite]:bg-secondary [&_.ai-cite]:px-1 [&_.ai-cite]:font-semibold [&_.ai-cite]:text-secondary-foreground [&_.ai-cite]:no-underline hover:[&_.ai-cite]:bg-secondary/80" v-html="renderMd(detail.instructions)" />
             </div>
           </div>
 

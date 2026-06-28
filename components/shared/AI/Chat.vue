@@ -5,7 +5,8 @@ import {
   Building2, Clock, User,
   History, Plus, Trash2, MessageSquare, Settings, Lock, Zap, SquarePen,
   FileText, Briefcase, ArrowRight, Bell,
-  Search, BookOpen, ChevronRight, ChevronDown, Download, FileType2, Library,
+  Search, BookOpen, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, Download, FileType2, Library,
+  Gauge,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
@@ -20,7 +21,7 @@ import { getSignedInUser } from '~/services/auth';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
-  listConversations, getConversation, deleteConversation,
+  listConversations, getConversation, deleteConversation, saveConversationTree,
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
   type AiAttachmentMeta, type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
@@ -216,25 +217,33 @@ type DocumentGenerated = {
 // Assistant turns optionally carry the activity steps that produced them (streamed
 // mid-turn) plus how long the work took, so the UI can show a collapsible
 // "Worked for Ns" summary. These UI-only fields are stripped before the API payload.
-type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[]; attachments?: ConvAttachment[] };
+type DisplayAiMessage = AiMessage & { steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[]; attachments?: ConvAttachment[]; failed?: boolean; stopped?: boolean; tier?: 'auto' | 'fast' | 'deep' };
 type ChatMessage = DisplayAiMessage | ToolEvent | MatterCreated | ReminderCreated | DocumentGenerated;
 
-const messages = ref<ChatMessage[]>([]);
+// Conversation branching: the message tree owns every turn; `messages` is the
+// active branch projected as a flat list. Editing an earlier user turn forks a
+// sibling branch the user can switch between with the version arrows.
+const branches = useChatBranches<ChatMessage>();
+const messages = branches.messages;
 
 // UI-only affordance roles never go to the model or the saved transcript.
 const UI_ONLY_ROLES = ['matter-created', 'reminder-created', 'document-generated'];
 
 const apiMessages = computed<AiMessage[]>(() =>
   messages.value
-    .filter((m): m is DisplayAiMessage => m.role !== 'tool-event' && !UI_ONLY_ROLES.includes(m.role))
+    // Drop tool-events, UI-only cards, and the failed/stopped placeholders — the
+    // last are session-only notes, never part of the model's context.
+    .filter((m): m is DisplayAiMessage => m.role !== 'tool-event' && !UI_ONLY_ROLES.includes(m.role)
+      && !(m as DisplayAiMessage).failed && !(m as DisplayAiMessage).stopped)
     // Project to the bare {role, content} the API expects — drop UI-only step metadata.
     .map(m => ({ role: m.role, content: m.content })),
 );
 
 const convMessages = computed<ConvDisplayMessage[]>(() =>
   messages.value
-    // UI-only affordance cards are not part of the saved transcript.
-    .filter((m): m is AiMessage | ToolEvent => !UI_ONLY_ROLES.includes(m.role))
+    // UI-only affordance cards + failed/stopped placeholders aren't part of the transcript.
+    .filter((m): m is AiMessage | ToolEvent => !UI_ONLY_ROLES.includes(m.role)
+      && !(m as DisplayAiMessage).failed && !(m as DisplayAiMessage).stopped)
     .map(m =>
       m.role === 'tool-event'
         ? { role: `tool-event:${m.status}`, content: m.content }
@@ -249,6 +258,42 @@ const pendingProposal = ref<AiResponse | null>(null);
 const inputText = ref('');
 const loading = ref(false);
 const messagesEnd = ref<HTMLElement | null>(null);
+
+// Stop button: controller for the in-flight streaming turn. Aborting makes the
+// request resolve to { aborted:true }, which we drop silently.
+let turnAbort: AbortController | null = null;
+function stopTurn() {
+  turnAbort?.abort();
+}
+
+// Inline edit of an earlier user turn → forks a new branch and resends.
+const editingIndex = ref<number | null>(null);
+const editDraft = ref('');
+function startEdit(index: number, current: string) {
+  if (loading.value) return;
+  editingIndex.value = index;
+  editDraft.value = current;
+}
+function cancelEdit() {
+  editingIndex.value = null;
+  editDraft.value = '';
+}
+function switchBranch(index: number, dir: -1 | 1) {
+  if (loading.value) return;
+  cancelEdit();
+  branches.switchSibling(index, dir);
+  persistTree();
+  scrollToBottom();
+}
+
+// Persist the branch tree (best-effort) so alternate branches survive a reload.
+let treeSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function persistTree() {
+  if (!conversationId.value) return;
+  if (treeSaveTimer) clearTimeout(treeSaveTimer);
+  const id = conversationId.value;
+  treeSaveTimer = setTimeout(() => { void saveConversationTree(id, branches.serialize()); }, 400);
+}
 
 // ── Live activity steps ───────────────────────────────────────────────────────
 // Populated by the streaming chat endpoint as the tool loop runs. The last entry is
@@ -434,7 +479,48 @@ const aiEnabled = computed(() => isSubscriptionActive.value && !creditBlocked.va
 
 // Shared usage state powering the header gauge — refreshed after each round so
 // the credits tick up live as they're spent.
-const { refresh: refreshAiUsage } = useAiUsage();
+const { usage: aiUsage, refresh: refreshAiUsage } = useAiUsage();
+
+// Keep the gate in sync with the shared usage state: when a top-up elsewhere
+// (e.g. Billing) refreshes usage to a non-blocked state, clear the local lock so
+// the composer reopens without waiting for a reopen or another 402 round-trip.
+watch(aiUsage, (u) => {
+  if (!u) return;
+  creditBlocked.value = u.state === 'blocked';
+  creditDegraded.value = u.state === 'degraded';
+});
+
+// Speed/cost tier the user picks for chat. 'auto' lets the backend choose; 'fast'
+// forces the cheapest model (much lower credit burn — DeepSeek where configured);
+// 'deep' forces the premium model. Persisted so the choice sticks across sessions.
+const TIERS = ['auto', 'fast', 'deep'] as const;
+type ChatTier = typeof TIERS[number];
+const chatTier = ref<ChatTier>('auto');
+if (import.meta.client) {
+  const saved = localStorage.getItem('ai.chat.tier');
+  if (saved === 'auto' || saved === 'fast' || saved === 'deep') chatTier.value = saved;
+}
+watch(chatTier, (t) => { if (import.meta.client) localStorage.setItem('ai.chat.tier', t); });
+function cycleTier() {
+  chatTier.value = TIERS[(TIERS.indexOf(chatTier.value) + 1) % TIERS.length];
+}
+const tierLabel = computed(() => chatTier.value === 'fast' ? 'Fast' : chatTier.value === 'deep' ? 'Deep' : 'Auto');
+const tierIcon = computed(() => chatTier.value === 'fast' ? Zap : chatTier.value === 'deep' ? Sparkles : Gauge);
+const tierTitle = computed(() =>
+  `Model speed: ${tierLabel.value}. Click to switch — Auto picks for you, Fast is cheapest (lowest credit cost), Deep is most capable.`,
+);
+
+// Per-message badge explaining which tier actually served a reply, so the cost is
+// legible. Only shown for the non-default tiers (fast/deep).
+function msgTierLabel(m: ChatMessage): string {
+  const t = (m as DisplayAiMessage).tier;
+  if (t === 'fast') return 'Fast model · lower credit cost';
+  if (t === 'deep') return 'Deep model · higher credit cost';
+  return '';
+}
+function msgTierIcon(m: ChatMessage) {
+  return (m as DisplayAiMessage).tier === 'deep' ? Sparkles : Zap;
+}
 
 const composerPlaceholder = computed(() => {
   if (!isSubscriptionActive.value) return 'Subscription required to chat';
@@ -602,7 +688,7 @@ async function loadConversation(id: string) {
   if (conversationId.value === id) { historyOpen.value = false; return; }
   const conv = await getConversation(id);
   if (!conv) return;
-  messages.value = (conv.messages ?? []).map((m): ChatMessage => {
+  const flat = (conv.messages ?? []).map((m): ChatMessage => {
     if (m.role.startsWith('tool-event:')) {
       const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
       return { role: 'tool-event', content: m.content, status };
@@ -621,6 +707,10 @@ async function loadConversation(id: string) {
     }
     return { role: m.role, content: m.content, attachments: m.attachments } as DisplayAiMessage;
   });
+  // Prefer the persisted branch tree (keeps alternate branches); fall back to the
+  // flat active path for conversations that were never edited.
+  if (!branches.load(conv.tree as any)) branches.loadFlat(flat);
+  cancelEdit();
   conversationId.value = conv.id;
   pendingProposal.value = null;
   sentAttachmentsMeta.value = [];
@@ -634,7 +724,8 @@ async function loadConversation(id: string) {
 }
 
 function newChat() {
-  messages.value = [];
+  branches.reset();
+  cancelEdit();
   conversationId.value = '';
   pendingProposal.value = null;
   sentAttachmentsMeta.value = [];
@@ -937,7 +1028,8 @@ async function send(voiceText?: string) {
     userContent = text;
   }
 
-  messages.value.push({ role: 'user', content: userContent, attachments: userAttachments.length ? userAttachments : undefined });
+  dropTrailingPlaceholder();
+  branches.append({ role: 'user', content: userContent, attachments: userAttachments.length ? userAttachments : undefined });
   if (!voiceText) {
     inputText.value = '';
     if (hasAttachments) attachments.value = [];
@@ -949,13 +1041,17 @@ async function send(voiceText?: string) {
   workStartedAt.value = Date.now();
   scrollToBottom();
 
+  turnAbort = new AbortController();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => {
       activeSteps.value = [...activeSteps.value, s];
       scrollToBottom();
     },
     attachmentsMeta: sentAttachmentsMeta.value,
+    tier: chatTier.value,
+    signal: turnAbort.signal,
   });
+  turnAbort = null;
   const elapsedMs = Date.now() - workStartedAt.value;
   // Only the real tool steps are worth keeping as a summary; the synthetic
   // "Assessing"/"Drafting" bookends (tool === '') are dropped so a trivial reply
@@ -964,6 +1060,16 @@ async function send(voiceText?: string) {
   activeSteps.value = [];
   loading.value = false;
 
+  // The user hit Stop: drop the turn quietly (no assistant bubble, no error). The
+  // user bubble stays so they can edit/resend.
+  if (response.aborted) {
+    // Session-only placeholder (not persisted) — reads as a note and offers Retry.
+    branches.append({ role: 'assistant', content: 'Response stopped.', stopped: true });
+    voiceState.value = 'idle';
+    scrollToBottom();
+    return;
+  }
+
   // Reflect the credit gate: a degraded reply still lands (lighter model); a
   // blocked reply (402) locks the composer until the user tops up.
   creditDegraded.value = !!response.degraded;
@@ -971,13 +1077,14 @@ async function send(voiceText?: string) {
   refreshAiUsage(); // this round just spent credits — tick the gauge
 
   if (response.type === 'text') {
-    messages.value.push({
+    branches.append({
       role: 'assistant',
       content: response.content ?? '',
       steps: turnSteps.length ? turnSteps : undefined,
       durationMs: turnSteps.length ? elapsedMs : undefined,
       stepsOpen: false,
       citations: response.citations?.length ? response.citations : undefined,
+      tier: response.tier,
     });
     if (response.conversationId) {
       const isNew = !conversationId.value;
@@ -990,16 +1097,150 @@ async function send(voiceText?: string) {
       }
       if (sentAttachmentsMeta.value.length) refreshPromotion();
     }
+    persistTree();
     if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
     voiceState.value = 'idle';
   } else {
-    messages.value.push({ role: 'assistant', content: response.error ?? 'Something went wrong.' });
+    // Session-only error placeholder (not persisted) — offers Retry.
+    branches.append({ role: 'assistant', content: response.error ?? 'Something went wrong.', failed: true });
     voiceState.value = 'idle';
   }
 
+  scrollToBottom();
+}
+
+// Edit an earlier user turn: fork a sibling branch carrying the new text and resend
+// from there. The previous branch (and its replies) stays reachable via the version
+// arrows.
+async function saveEdit(index: number) {
+  const text = editDraft.value.trim();
+  cancelEdit();
+  if (!text || loading.value || !aiEnabled.value) return;
+  branches.fork(index, { role: 'user', content: text });
+  pendingProposal.value = null;
+  loading.value = true;
+  voiceState.value = 'thinking';
+  activeSteps.value = [];
+  workStartedAt.value = Date.now();
+  scrollToBottom();
+
+  turnAbort = new AbortController();
+  const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
+    onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
+    tier: chatTier.value,
+    signal: turnAbort.signal,
+  });
+  turnAbort = null;
+  const elapsedMs = Date.now() - workStartedAt.value;
+  const turnSteps = activeSteps.value.filter(s => s.tool);
+  activeSteps.value = [];
+  loading.value = false;
+
+  if (response.aborted) {
+    // Session-only placeholder (not persisted) — reads as a note and offers Retry.
+    branches.append({ role: 'assistant', content: 'Response stopped.', stopped: true });
+    voiceState.value = 'idle';
+    scrollToBottom();
+    return;
+  }
+
+  creditDegraded.value = !!response.degraded;
+  if (response.blocked) creditBlocked.value = true;
+  refreshAiUsage();
+
+  if (response.type === 'text') {
+    branches.append({
+      role: 'assistant',
+      content: response.content ?? '',
+      steps: turnSteps.length ? turnSteps : undefined,
+      durationMs: turnSteps.length ? elapsedMs : undefined,
+      stepsOpen: false,
+      citations: response.citations?.length ? response.citations : undefined,
+      tier: response.tier,
+    });
+    if (response.conversationId) conversationId.value = response.conversationId;
+    persistTree();
+    voiceState.value = 'idle';
+  } else if (response.type === 'proposal') {
+    pendingProposal.value = response;
+    voiceState.value = 'idle';
+  } else {
+    // Session-only error placeholder (not persisted) — offers Retry.
+    branches.append({ role: 'assistant', content: response.error ?? 'Something went wrong.', failed: true });
+    voiceState.value = 'idle';
+  }
+  scrollToBottom();
+}
+
+// If the latest turn is a session-only failed/stopped placeholder, drop it before
+// the next action so it never enters the persisted tree or the model's context.
+function dropTrailingPlaceholder() {
+  const last = messages.value[messages.value.length - 1] as DisplayAiMessage | undefined;
+  if (last && (last.failed || last.stopped)) branches.popActive();
+}
+
+// Retry a failed turn: drop the error bubble (the active leaf) and resend from the
+// preceding user turn, which is left in place. The new reply replaces the error.
+async function retryTurn() {
+  if (loading.value || !aiEnabled.value) return;
+  branches.popActive();
+  pendingProposal.value = null;
+  loading.value = true;
+  voiceState.value = 'thinking';
+  activeSteps.value = [];
+  workStartedAt.value = Date.now();
+  scrollToBottom();
+
+  turnAbort = new AbortController();
+  const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
+    onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
+    attachmentsMeta: sentAttachmentsMeta.value,
+    tier: chatTier.value,
+    signal: turnAbort.signal,
+  });
+  turnAbort = null;
+  const elapsedMs = Date.now() - workStartedAt.value;
+  const turnSteps = activeSteps.value.filter(s => s.tool);
+  activeSteps.value = [];
+  loading.value = false;
+
+  if (response.aborted) {
+    // Session-only placeholder (not persisted) — reads as a note and offers Retry.
+    branches.append({ role: 'assistant', content: 'Response stopped.', stopped: true });
+    voiceState.value = 'idle';
+    scrollToBottom();
+    return;
+  }
+
+  creditDegraded.value = !!response.degraded;
+  if (response.blocked) creditBlocked.value = true;
+  refreshAiUsage();
+
+  if (response.type === 'text') {
+    branches.append({
+      role: 'assistant',
+      content: response.content ?? '',
+      steps: turnSteps.length ? turnSteps : undefined,
+      durationMs: turnSteps.length ? elapsedMs : undefined,
+      stepsOpen: false,
+      citations: response.citations?.length ? response.citations : undefined,
+      tier: response.tier,
+    });
+    if (response.conversationId) conversationId.value = response.conversationId;
+    persistTree();
+    if (audioMode.value) speakTimed(response.content ?? '');
+    else voiceState.value = 'idle';
+  } else if (response.type === 'proposal') {
+    pendingProposal.value = response;
+    voiceState.value = 'idle';
+  } else {
+    // Session-only error placeholder (not persisted) — offers Retry.
+    branches.append({ role: 'assistant', content: response.error ?? 'Something went wrong.', failed: true });
+    voiceState.value = 'idle';
+  }
   scrollToBottom();
 }
 
@@ -1041,7 +1282,8 @@ function goToBilling() {
 
 function dismissProposal() {
   if (pendingProposal.value) {
-    messages.value.push({ role: 'tool-event', content: formatToolName(pendingProposal.value.tool ?? ''), status: 'rejected' });
+    branches.append({ role: 'tool-event', content: formatToolName(pendingProposal.value.tool ?? ''), status: 'rejected' });
+    persistTree();
   }
   pendingProposal.value = null;
 }
@@ -1075,14 +1317,14 @@ async function approveProposal() {
   // subscription has lapsed. The proposal stays pending so it can be applied
   // once the plan is renewed.
   if (!isSubscriptionActive.value) {
-    messages.value.push({ role: 'assistant', content: 'Your subscription has expired. Renew your plan to apply changes.' });
+    branches.append({ role: 'assistant', content: 'Your subscription has expired. Renew your plan to apply changes.' });
     return;
   }
   proposalLoading.value = true;
   const proposal = pendingProposal.value;
   pendingProposal.value = null;
 
-  messages.value.push({ role: 'tool-event', content: formatToolName(proposal.tool ?? ''), status: 'approved' });
+  branches.append({ role: 'tool-event', content: formatToolName(proposal.tool ?? ''), status: 'approved' });
   loading.value = true;
   voiceState.value = 'thinking';
   scrollToBottom();
@@ -1103,23 +1345,26 @@ async function approveProposal() {
   refreshAiUsage();
 
   if (response.type === 'text') {
-    messages.value.push({
+    branches.append({
       role: 'assistant',
       content: response.content ?? '',
       citations: response.citations?.length ? response.citations : undefined,
+      tier: response.tier,
     });
     if (response.conversationId) {
       conversationId.value = response.conversationId;
       if (historyLoaded.value) refreshHistory();
       if (sentAttachmentsMeta.value.length) refreshPromotion();
     }
+    persistTree();
     if (audioMode.value) speakTimed(response.content ?? '');
     else voiceState.value = 'idle';
   } else if (response.type === 'proposal') {
     pendingProposal.value = response;
     voiceState.value = 'idle';
   } else {
-    messages.value.push({ role: 'assistant', content: response.error ?? 'Something went wrong.' });
+    branches.append({ role: 'assistant', content: response.error ?? 'Something went wrong.' });
+    persistTree();
     voiceState.value = 'idle';
   }
 
@@ -1149,7 +1394,7 @@ function applyApprovedActionResult(response: AiResponse) {
       toast('Matter created', {
         description: matterName ? `"${matterName}" is ready.` : 'Your new matter is ready.',
       });
-      messages.value.push({ role: 'matter-created', matterId, matterName });
+      branches.append({ role: 'matter-created', matterId, matterName });
       useMattersStore().fetchMatters(true).catch(() => {});
     }
   } else if (action.tool === 'schedule_reminder' && action.data?.success) {
@@ -1157,7 +1402,7 @@ function applyApprovedActionResult(response: AiResponse) {
     toast('Reminder scheduled', {
       description: reminderTitle ? `"${reminderTitle}" is set.` : 'Your reminder is set.',
     });
-    messages.value.push({ role: 'reminder-created', reminderTitle });
+    branches.append({ role: 'reminder-created', reminderTitle });
   } else if (action.tool === 'generate_document' && action.data?.success) {
     const d = action.data;
     const title = d?.title as string | undefined;
@@ -1165,7 +1410,7 @@ function applyApprovedActionResult(response: AiResponse) {
     toast('Document drafted', {
       description: title ? `"${title}" is ready to download.` : 'Your document is ready to download.',
     });
-    messages.value.push({
+    branches.append({
       role: 'document-generated',
       documentId: d?.documentId as string,
       title,
@@ -1173,6 +1418,7 @@ function applyApprovedActionResult(response: AiResponse) {
       filename: d?.filename as string | undefined,
     });
   }
+  persistTree();
 }
 
 // User-initiated open of a just-created matter (from the in-chat card). Closes
@@ -1520,8 +1766,20 @@ function formatToolName(tool: string): string {
                   <Download v-else class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/open:translate-y-0.5" />
                 </button>
               </div>
-              <div v-else-if="msg.role === 'user'" class="flex justify-end">
-                <div class="flex flex-col items-end gap-1 max-w-[80%]">
+              <div v-else-if="msg.role === 'user'" class="group flex justify-end">
+                <!-- Inline editor (editing this turn forks a new branch on save) -->
+                <div v-if="editingIndex === i" class="flex w-full max-w-[80%] flex-col items-end gap-2">
+                  <textarea v-model="editDraft" rows="3"
+                            class="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:ring-1 focus:ring-ring"
+                            @keydown.escape="cancelEdit"
+                            @keydown.enter.exact.prevent="saveEdit(i)"/>
+                  <div class="flex items-center gap-2">
+                    <Button size="sm" variant="ghost" class="h-7" @click="cancelEdit">Cancel</Button>
+                    <Button size="sm" class="h-7" :disabled="!editDraft.trim()" @click="saveEdit(i)">Send</Button>
+                  </div>
+                </div>
+
+                <div v-else class="flex flex-col items-end gap-1 max-w-[80%]">
                   <!-- Attachment chips above the text bubble — only present on multimodal turns -->
                   <MessageAttachments v-if="messageChips(msg).length" :attachments="messageChips(msg)" align="end" @preview="openPreview"/>
                   <div
@@ -1529,6 +1787,26 @@ function formatToolName(tool: string): string {
                     class="bg-muted text-muted-foreground border rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
                   >
                     {{ stripAttachmentPlaceholders(messageText(msg.content)) }}
+                  </div>
+                  <!-- Branch switcher + edit affordance -->
+                  <div class="flex items-center gap-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                       :class="branches.siblings(i).count > 1 ? '!opacity-100' : ''">
+                    <template v-if="branches.siblings(i).count > 1">
+                      <button class="rounded p-0.5 transition-colors hover:text-foreground disabled:opacity-40"
+                              :disabled="loading" title="Previous version" @click="switchBranch(i, -1)">
+                        <ChevronLeft class="size-3.5"/>
+                      </button>
+                      <span class="text-xs tabular-nums">{{ branches.siblings(i).current + 1 }}/{{ branches.siblings(i).count }}</span>
+                      <button class="rounded p-0.5 transition-colors hover:text-foreground disabled:opacity-40"
+                              :disabled="loading" title="Next version" @click="switchBranch(i, 1)">
+                        <ChevronRight class="size-3.5"/>
+                      </button>
+                    </template>
+                    <button class="rounded p-0.5 transition-colors hover:text-foreground disabled:opacity-40"
+                            :disabled="loading" title="Edit message"
+                            @click="startEdit(i, stripAttachmentPlaceholders(messageText(msg.content)))">
+                      <Pencil class="size-3.5"/>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1556,13 +1834,38 @@ function formatToolName(tool: string): string {
                       </li>
                     </ul>
                   </div>
-                  <div class="bg-background border text-foreground rounded-lg px-3 py-2 text-sm">
+                  <!-- A user-stopped turn reads as a neutral note, not an answer/error. -->
+                  <div v-if="(msg as DisplayAiMessage).stopped"
+                       class="text-sm italic text-muted-foreground px-0.5 py-1">
+                    Response stopped.
+                  </div>
+                  <div v-else class="border rounded-lg px-3 py-2 text-sm"
+                       :class="(msg as DisplayAiMessage).failed ? 'bg-destructive/5 border-destructive/30 text-destructive' : 'bg-background text-foreground'">
                     <SharedAICitationsCitedAnswer
                       :content="messageText(msg.content)"
                       :citations="(msg as DisplayAiMessage).citations"
                     />
                   </div>
+                  <!-- Which model served this reply, so the credit cost is legible. -->
+                  <div
+                    v-if="msgTierLabel(msg)"
+                    class="flex items-center gap-1 text-[11px] text-muted-foreground px-0.5 mt-0.5"
+                  >
+                    <component :is="msgTierIcon(msg)" class="size-3" />
+                    <span>{{ msgTierLabel(msg) }}</span>
+                  </div>
+                  <!-- Retry a failed/stopped turn (only the latest — retry drops the active leaf) -->
                   <button
+                    v-if="((msg as DisplayAiMessage).failed || (msg as DisplayAiMessage).stopped) && i === messages.length - 1 && !loading"
+                    type="button"
+                    class="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-0.5"
+                    @click="retryTurn"
+                  >
+                    <RotateCcw class="size-3" />
+                    Retry
+                  </button>
+                  <button
+                    v-else
                     class="self-start flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100 px-0.5"
                     :class="speakingIdx === i ? '!opacity-100 text-primary' : ''"
                     @click="toggleSpeak(messageText(msg.content), i)"
@@ -1768,6 +2071,16 @@ function formatToolName(tool: string): string {
                 <InputGroupButton
                   variant="outline"
                   size="sm"
+                  :disabled="!aiEnabled"
+                  :title="tierTitle"
+                  @click="cycleTier"
+                >
+                  <component :is="tierIcon" class="size-4" />
+                  {{ tierLabel }}
+                </InputGroupButton>
+                <InputGroupButton
+                  variant="outline"
+                  size="sm"
                   :disabled="!canEnhance"
                   title="Enhance prompt — rewrite it to get better results"
                   @click="enhancePrompt"
@@ -1778,6 +2091,18 @@ function formatToolName(tool: string): string {
                 </InputGroupButton>
                 <Separator orientation="vertical" class="!h-4 ml-auto" />
                 <InputGroupButton
+                  v-if="loading"
+                  variant="default"
+                  class="rounded-full"
+                  size="icon-sm"
+                  title="Stop generating"
+                  @click="stopTurn"
+                >
+                  <Square class="size-3.5 fill-current" />
+                  <span class="sr-only">Stop generating</span>
+                </InputGroupButton>
+                <InputGroupButton
+                  v-else
                   variant="default"
                   class="rounded-full"
                   size="icon-sm"

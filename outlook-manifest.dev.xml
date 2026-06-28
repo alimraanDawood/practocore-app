@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PractoCore Outlook Add-in — DEV manifest for the IN-APP Nuxt route.
+  The task pane is served by practocore-app at /outlook/taskpane. Run the app over
+  HTTPS (`DEV_HTTPS=1 npm run dev` → https://localhost:3000) and sideload THIS file.
+
+  Sideload (Outlook on the web / new Outlook): Get Add-ins ▸ My add-ins ▸ Custom Addins
+    ▸ Add a custom add-in ▸ Add from file ▸ pick this file.
+
+  For production: replace every https://localhost:3000 with the deployed HTTPS origin,
+  keep /outlook/taskpane as the path, and register https://<origin>/word/auth/callback
+  as an authorized redirect URI in Google + the PocketBase google provider (the Outlook
+  pane reuses the Word OAuth dialog routes).
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+
+  <Id>2c7b9e10-4d8a-49f6-9b2a-7e1d6c3f0a55</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="PractoCore (Dev)" />
+  <Description DefaultValue="Triage, summarise, and reply to correspondence against your PractoCore matters — inside Outlook." />
+  <IconUrl DefaultValue="https://localhost:3000/favicon-32x32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/android-icon-96x96.png" />
+  <SupportUrl DefaultValue="https://practocore.com/support" />
+
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://accounts.google.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5" />
+    </Sets>
+  </Requirements>
+
+  <!-- Legacy fallback surface (required by the schema). -->
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:3000/outlook/taskpane" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadWriteItem</Permissions>
+
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.5">
+          <bt:Set Name="Mailbox" />
+        </bt:Sets>
+      </Requirements>
+
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+            <FunctionFile resid="Taskpane.Url" />
+
+            <!-- Reading a message -->
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="PractoCore.GroupRead">
+                  <Label resid="Group.Label" />
+                  <Control xsi:type="Button" id="PractoCore.OpenPaneRead">
+                    <Label resid="OpenPane.Label" />
+                    <Supertip>
+                      <Title resid="OpenPane.Label" />
+                      <Description resid="OpenPane.Tip" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16" />
+                      <bt:Image size="32" resid="Icon.32" />
+                      <bt:Image size="80" resid="Icon.80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Taskpane.Url" />
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+
+            <!-- Composing / replying -->
+            <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="PractoCore.GroupCompose">
+                  <Label resid="Group.Label" />
+                  <Control xsi:type="Button" id="PractoCore.OpenPaneCompose">
+                    <Label resid="OpenPane.Label" />
+                    <Supertip>
+                      <Title resid="OpenPane.Label" />
+                      <Description resid="OpenPane.Tip" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16" />
+                      <bt:Image size="32" resid="Icon.32" />
+                      <bt:Image size="80" resid="Icon.80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Taskpane.Url" />
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+
+      <Resources>
+        <bt:Images>
+          <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/favicon-16x16.png" />
+          <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/favicon-32x32.png" />
+          <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/android-icon-96x96.png" />
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/outlook/taskpane" />
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="Group.Label" DefaultValue="PractoCore" />
+          <bt:String id="OpenPane.Label" DefaultValue="Assistant" />
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="OpenPane.Tip" DefaultValue="Open the PractoCore assistant panel." />
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>

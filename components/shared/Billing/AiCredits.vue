@@ -52,7 +52,7 @@
               {{ usage.is_solo ? 'Your AI credits' : 'Team AI pool' }}
             </span>
             <span class="text-2xl ibm-plex-serif font-semibold">
-              {{ fmt(usage.pool_used) }} / {{ fmt(usage.pool_total) }}
+              {{ fmt(usage.pool_used) }} / {{ fmt(total) }}
             </span>
             <span class="text-xs text-muted-foreground">{{ periodLabel }}</span>
           </div>
@@ -157,35 +157,39 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import dayjs from 'dayjs';
-import { getAiUsage, topUpCredits, type AiUsage } from '~/services/ai';
+import { topUpCredits } from '~/services/ai';
+import { useAiUsage } from '~/composables/useAiUsage';
 
-const usage = ref<AiUsage | null>(null);
-const loading = ref(true);
+// Use the SHARED usage state so a top-up here updates the header gauge and the
+// chat credit gate too — they all read the same source of truth.
+const { usage, loading, refresh } = useAiUsage();
 const error = ref(false);
 
 async function load() {
-  loading.value = true;
   error.value = false;
-  try {
-    usage.value = await getAiUsage();
-  } catch {
-    error.value = true;
-  } finally {
-    loading.value = false;
-  }
+  await refresh();
+  // refresh() keeps the last good value on failure, so a still-null usage after
+  // it resolves means the (first) fetch failed — surface the retry affordance.
+  if (!usage.value) error.value = true;
 }
 
 onMounted(load);
 
 const fmt = (n: number) => Math.round(n).toLocaleString();
 
+// The headline total absorbs prepaid top-ups: usable pool = monthly allowance +
+// overage balance, matching what the credit gate spends against.
+const total = computed(() =>
+  usage.value ? usage.value.pool_total + usage.value.overage_balance : 0,
+);
+
 const pct = computed(() => {
-  if (!usage.value || usage.value.pool_total <= 0) return 0;
-  return Math.min(100, Math.round((usage.value.pool_used / usage.value.pool_total) * 100));
+  if (!usage.value || total.value <= 0) return 0;
+  return Math.min(100, Math.round((usage.value.pool_used / total.value) * 100));
 });
 
 const remaining = computed(() =>
-  usage.value ? fmt(Math.max(0, usage.value.pool_total - usage.value.pool_used)) : '0',
+  usage.value ? fmt(Math.max(0, total.value - usage.value.pool_used)) : '0',
 );
 
 // Match the strategy guardrails: only get loud at ≥80%; "cap" degrades, not blocks.
