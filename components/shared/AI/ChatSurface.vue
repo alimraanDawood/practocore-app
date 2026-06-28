@@ -100,7 +100,7 @@ function askAbout(prompt: string) {
 // Let a host page (e.g. the Word pane's quick actions) drive the chat imperatively:
 // `ask()` prefills the composer; `send()` sends a turn now (still runs contextProvider,
 // so the document selection rides along).
-defineExpose({ ask: askAbout, send: (text: string) => send(text) });
+defineExpose({ ask: askAbout, send: (text: string) => send(text), conversationId });
 
 // ── Chat engine ─────────────────────────────────────────────────────────────
 type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 'rejected' };
