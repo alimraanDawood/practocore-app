@@ -1,19 +1,20 @@
 <script lang="ts" setup>
 // Page-aware section of the global sidebar, rendered between the workspace nav
-// and the footer. On the assistant it shows recent conversations; on the vault
-// it shows the firm + case-file libraries as quick-clicks. Selection is
-// URL-driven (`?c=` for chat, `?lib=` for vault) so clicking here drives the
+// and the footer. On the assistant/research it shows recent conversations; on
+// the vault it shows the firm + case-file libraries as quick-clicks. Selection
+// is URL-driven (`?c=` for chat, `?lib=` for vault) so clicking here drives the
 // page without the sidebar reaching into page state. Hidden when the sidebar is
 // collapsed to icons (the rail stays clean).
-import { MessageSquareText, Plus, Building2, Briefcase, ChevronDown } from 'lucide-vue-next';
+import { MessageSquareText, Plus, Building2, Briefcase, ChevronDown, Telescope } from 'lucide-vue-next';
 
 const route = useRoute();
 
 // The assistant lives at /main (pages/main/index.vue). Match it exactly — a
 // startsWith('/main') would wrongly fire on every /main/* page (vault, matters…).
 const onAssistant = computed(() => route.path === '/main' || route.path === '/main/');
+const onResearch = computed(() => route.path === '/main/research' || route.path === '/main/research/');
 const onVault = computed(() => route.path.startsWith('/main/vault'));
-const visible = computed(() => onAssistant.value || onVault.value);
+const visible = computed(() => onAssistant.value || onResearch.value || onVault.value);
 
 // ── Chat: recent conversations ──────────────────────────────────────────────
 const { conversations, loading: chatLoading, refresh: refreshChats } = useAssistantHistory();
@@ -23,6 +24,13 @@ const RECENT_LIMIT = 6;
 const visibleChats = computed(() =>
   chatsExpanded.value ? conversations.value : conversations.value.slice(0, RECENT_LIMIT));
 const hasMoreChats = computed(() => conversations.value.length > RECENT_LIMIT);
+
+// ── Research: recent conversations ──────────────────────────────────────────
+const { conversations: researchConvs, loading: researchLoading, refresh: refreshResearch } = useResearchHistory();
+const researchExpanded = ref(false);
+const visibleResearch = computed(() =>
+  researchExpanded.value ? researchConvs.value : researchConvs.value.slice(0, RECENT_LIMIT));
+const hasMoreResearch = computed(() => researchConvs.value.length > RECENT_LIMIT);
 
 // ── Vault: libraries ────────────────────────────────────────────────────────
 const { matters, loading: vaultLoading, orgId, personalLibrary, refresh: refreshVault, libraryQuery } = useVaultLibraries();
@@ -36,6 +44,7 @@ const hasMoreMatters = computed(() => matters.value.length > RECENT_LIMIT);
 watch(visible, (on) => {
   if (!on) return;
   if (onAssistant.value) refreshChats();
+  if (onResearch.value) refreshResearch();
   if (onVault.value) refreshVault();
 }, { immediate: true });
 </script>
@@ -76,6 +85,46 @@ watch(visible, (on) => {
             <SidebarMenuButton class="text-muted-foreground" @click="chatsExpanded = !chatsExpanded">
               <ChevronDown :class="['transition-transform', chatsExpanded ? 'rotate-180' : '']" />
               <span>{{ chatsExpanded ? 'Show less' : 'Recent conversations' }}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </template>
+
+    <!-- ── Research: recent conversations ─────────────────────────────── -->
+    <template v-else-if="onResearch">
+      <SidebarGroupLabel>Recent research</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton as-child :is-active="!activeConvId">
+              <NuxtLink :to="{ path: '/main/research', query: {} }">
+                <Plus />
+                <span>New research</span>
+              </NuxtLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem v-if="researchLoading && !researchConvs.length">
+            <span class="block px-2 py-1.5 text-xs text-muted-foreground">Loading…</span>
+          </SidebarMenuItem>
+          <SidebarMenuItem v-else-if="!researchConvs.length">
+            <span class="block px-2 py-1.5 text-xs text-muted-foreground">No research yet.</span>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem v-for="conv in visibleResearch" :key="conv.id">
+            <SidebarMenuButton as-child :is-active="activeConvId === conv.id" :tooltip="conv.title">
+              <NuxtLink :to="{ path: '/main/research', query: { c: conv.id } }">
+                <Telescope />
+                <span class="truncate">{{ conv.title }}</span>
+              </NuxtLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem v-if="hasMoreResearch">
+            <SidebarMenuButton class="text-muted-foreground" @click="researchExpanded = !researchExpanded">
+              <ChevronDown :class="['transition-transform', researchExpanded ? 'rotate-180' : '']" />
+              <span>{{ researchExpanded ? 'Show less' : 'Recent research' }}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

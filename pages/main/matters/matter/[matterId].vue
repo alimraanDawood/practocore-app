@@ -317,10 +317,10 @@
       </div>
     </div>
   </div>
-  <!-- AI trigger scoped to this matter -->
-  <div v-if="!isInitialLoad && currentMatterOrApplication?.id" class="fixed bottom-4 right-4 z-20">
-    <SharedAITrigger :matter-id="route.params.matterId" />
-  </div>
+<!--  &lt;!&ndash; AI trigger scoped to this matter &ndash;&gt;-->
+<!--  <div v-if="!isInitialLoad && currentMatterOrApplication?.id" class="fixed bottom-4 right-4 z-20">-->
+<!--    <SharedAITrigger :matter-id="route.params.matterId" />-->
+<!--  </div>-->
 </template>
 
 <script setup>

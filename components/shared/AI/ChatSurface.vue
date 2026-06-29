@@ -56,6 +56,8 @@ const props = withDefaults(defineProps<{
   seed?: string;
   workflowContext?: unknown;
   clientTool?: ChatClientTool;
+  label?: string;
+  hideToolbar?: boolean;
   // Returns ambient context to attach to the SENT payload of the next text turn
   // (e.g. the Word document selection). The bubble still shows only what the user
   // typed. Resolved at send time; return '' to attach nothing.
@@ -63,17 +65,20 @@ const props = withDefaults(defineProps<{
   // Click handler for "jump to passage" (doc:) links the assistant emits in the Word
   // surface — receives the verbatim snippet so the host can scroll the document to it.
   onLocate?: (text: string) => void;
-}>(), { mode: '', surface: '', seed: '' });
+}>(), { mode: '', surface: '', seed: '', label: 'Assistant' });
 
 const emit = defineEmits<{
   (e: 'artifact', artifact: AiArtifact): void;
+  (e: 'conversationChange', id: string): void;
+  (e: 'proposalApproved'): void;
 }>();
 
-// '' mode is the main assistant: it shares conversation history with the global
-// sidebar (useAssistantHistory) and drives the URL `?c=`. Any other mode keeps its own
-// in-component, mode-scoped history and never touches the route — so the builder's
-// threads don't pollute the sidebar and vice versa.
+// "Shared" modes share conversation history with the global sidebar and drive the
+// URL `?c=`. Any other mode keeps its own in-component, mode-scoped history and
+// never touches the route — so the builder's threads don't pollute the sidebar.
 const isMain = computed(() => !props.mode);
+const isResearch = computed(() => props.mode === 'research');
+const isShared = computed(() => isMain.value || isResearch.value);
 
 // ── Composer ────────────────────────────────────────────────────────────────
 const draft = ref('');
@@ -228,7 +233,8 @@ onBeforeUnmount(stopIngestPoll);
 const branches = useChatBranches<ChatMessage>();
 const messages = branches.messages;
 const conversationId = ref('');
-defineExpose({ ask: askAbout, send: (text: string) => send(text), conversationId });
+watch(conversationId, (id) => emit('conversationChange', id));
+defineExpose({ ask: askAbout, send: (text: string) => send(text), conversationId, loadConversation, newChat });
 const pendingProposal = ref<AiResponse | null>(null);
 const loading = ref(false);
 const proposalLoading = ref(false);
@@ -452,9 +458,9 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
       conversationId.value = response.conversationId;
       if (isNew) {
         // Reflect the freshly-created conversation in the URL (replace, so the
-        // empty-chat URL isn't pushed onto history) and pull it into the list. Only
-        // the main assistant owns the URL; other modes keep selection in-memory.
-        if (isMain.value) router.replace({ query: { c: response.conversationId } });
+        // empty-chat URL isn't pushed onto history) and pull it into the list.
+        // Shared modes own the URL; other modes keep selection in-memory.
+        if (isShared.value) router.replace({ query: { c: response.conversationId } });
         refreshHistory(true);
       } else if (historyLoaded.value) {
         const idx = conversations.value.findIndex(c => c.id === response.conversationId);
@@ -518,7 +524,7 @@ async function retryTurn() {
 // the main assistant persists (other modes keep branches in-memory for the session).
 let treeSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function persistTree() {
-  if (!conversationId.value || !isMain.value) return;
+  if (!conversationId.value || !isShared.value) return;
   if (treeSaveTimer) clearTimeout(treeSaveTimer);
   const id = conversationId.value;
   treeSaveTimer = setTimeout(() => {
@@ -885,6 +891,7 @@ async function approveProposal() {
   loading.value = false;
   proposalLoading.value = false;
 
+  emit('proposalApproved');
   applyResponse(response);
   scrollToBottom();
 }
@@ -1153,23 +1160,23 @@ async function enhancePrompt() {
 }
 
 // ── Conversation history (left rail) ────────────────────────────────────────
-// MAIN mode shares the list with the global sidebar (useAssistantHistory) and is
-// URL-driven (`?c=<id>`). Any other mode (e.g. the workflow builder) keeps its OWN
-// mode-scoped, in-component list so its threads don't leak into the sidebar, and
-// never touches the route — selection is purely in-memory.
-const sharedHistory = useAssistantHistory();
+// Shared modes (assistant + research) share their list with the global sidebar
+// and are URL-driven (`?c=<id>`). Other modes keep local in-component state.
+const assistantHistory = useAssistantHistory();
+const researchHistory = useResearchHistory();
+const sharedHistory = computed(() => isResearch.value ? researchHistory : assistantHistory);
 const localConversations = ref<AiConversationSummary[]>([]);
 const localLoading = ref(false);
 const localLoaded = ref(false);
 const router = useRouter();
 const route = useRoute();
 
-const conversations = computed<AiConversationSummary[]>(() => isMain.value ? sharedHistory.conversations.value : localConversations.value);
-const historyLoading = computed(() => isMain.value ? sharedHistory.loading.value : localLoading.value);
-const historyLoaded = computed(() => isMain.value ? sharedHistory.loaded.value : localLoaded.value);
+const conversations = computed<AiConversationSummary[]>(() => isShared.value ? sharedHistory.value.conversations.value : localConversations.value);
+const historyLoading = computed(() => isShared.value ? sharedHistory.value.loading.value : localLoading.value);
+const historyLoaded = computed(() => isShared.value ? sharedHistory.value.loaded.value : localLoaded.value);
 
 async function refreshHistory(force = false) {
-  if (isMain.value) return sharedHistory.refresh(force);
+  if (isShared.value) return sharedHistory.value.refresh(force);
   if (localLoading.value) return;
   if (localLoaded.value && !force) return;
   localLoading.value = true;
@@ -1182,10 +1189,10 @@ async function refreshHistory(force = false) {
   }
 }
 
-// Open a conversation. Main funnels through the URL (one source of truth shared with
-// the sidebar); other modes load it directly in-memory.
+// Open a conversation. Shared modes funnel through the URL (one source of truth
+// shared with the sidebar); other modes load directly in-memory.
 function selectConversation(id: string) {
-  if (isMain.value) router.push({ query: { c: id } });
+  if (isShared.value) router.push({ query: { c: id } });
   else loadConversation(id);
 }
 
@@ -1228,7 +1235,7 @@ async function loadConversation(id: string) {
 async function removeConversation(id: string) {
   const ok = await deleteConversation(id);
   if (!ok) return;
-  if (isMain.value) sharedHistory.conversations.value = sharedHistory.conversations.value.filter(c => c.id !== id);
+  if (isShared.value) sharedHistory.value.conversations.value = sharedHistory.value.conversations.value.filter(c => c.id !== id);
   else localConversations.value = localConversations.value.filter(c => c.id !== id);
   if (conversationId.value === id) newChat();
 }
@@ -1251,10 +1258,10 @@ function resetThread() {
 }
 
 function newChat() {
-  // Main drives everything through the URL so the sidebar link and the in-page
-  // buttons share one path (the watcher performs the reset); other modes reset
-  // the in-memory thread directly.
-  if (isMain.value) {
+  // Shared modes drive everything through the URL so the sidebar link and the
+  // in-page buttons share one path (the watcher performs the reset); other modes
+  // reset the in-memory thread directly.
+  if (isShared.value) {
     if (route.query.c) router.replace({ query: {} });
     else resetThread();
   } else {
@@ -1262,18 +1269,18 @@ function newChat() {
   }
 }
 
-// MAIN only: the URL is the single source of truth for which conversation is open
-// (sidebar, deep links and the in-page history all set `?c=<id>`). Other modes keep
+// Shared modes: the URL is the single source of truth for which conversation is
+// open (sidebar, deep links and the in-page history all set `?c=<id>`). Other modes keep
 // selection in-memory, so this watcher is a no-op for them.
 watch(() => route.query.c, (id) => {
-  if (!isMain.value) return;
+  if (!isShared.value) return;
   if (typeof id === 'string' && id) loadConversation(id);
   else resetThread();
 }, { immediate: false });
 
 onMounted(async () => {
   await refreshHistory();
-  if (isMain.value) {
+  if (isShared.value) {
     const initial = route.query.c;
     if (typeof initial === 'string' && initial) loadConversation(initial);
   }
@@ -1286,60 +1293,19 @@ onMounted(async () => {
 <template>
   <div class="relative flex h-full flex-col">
     <!-- Chat toolbar — new chat + history. On main mode, hidden on desktop (the app
-         sidebar handles nav); on other modes (research, workflow), always visible. -->
-    <div :class="[isMain ? 'lg:hidden' : '', 'flex h-12 shrink-0 items-center gap-2 border-b px-4']">
+         sidebar handles nav); on other modes (research, workflow), always visible.
+         hideToolbar suppresses it entirely (host page manages its own history rail). -->
+    <div v-if="!props.hideToolbar" :class="[isMain ? 'lg:hidden' : '', 'flex h-12 shrink-0 items-center gap-2 border-b px-4']">
       <!-- Only the main assistant lives inside the app shell's SidebarProvider;
            other modes (e.g. the blank-layout workflow builder) must NOT mount
            SidebarTrigger, which throws without a provider. -->
-      <SidebarTrigger v-if="isMain" class="lg:hidden" />
-      <div v-if="hasThread" class="flex items-center gap-2">
-        <div class="grid size-6 place-items-center rounded-full bg-primary text-primary-foreground">
-          <Sparkles class="size-3.5"/>
-        </div>
-        <span class="text-sm font-semibold">PractoAI</span>
-      </div>
-      <span v-else class="text-sm font-semibold">Assistant</span>
+      <SidebarTrigger class="lg:hidden" />
+      <span class="text-sm font-semibold">{{ label }}</span>
       <div class="ml-auto flex items-center gap-1">
         <!-- Conversation history -->
-        <Popover v-if="$viewport.isGreaterThan('tablet')">
-          <PopoverTrigger as-child>
-            <Button size="icon-sm" variant="ghost" title="Conversation history">
-              <History class="size-4"/>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" class="w-72 p-0">
-            <div class="flex items-center justify-between border-b px-3 py-2">
-              <span class="text-sm font-semibold">Recent chats</span>
-              <Button size="icon-sm" variant="ghost" title="New chat" @click="newChat">
-                <Plus class="size-4"/>
-              </Button>
-            </div>
-            <div v-if="historyLoading" class="flex justify-center py-6">
-              <Loader2 class="size-4 animate-spin text-muted-foreground"/>
-            </div>
-            <div v-else-if="conversations.length" class="max-h-80 overflow-y-auto py-1">
-              <div v-for="conv in conversations" :key="conv.id"
-                   class="group/conv flex items-center gap-1 px-1.5">
-                <button
-                    class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-                    :class="conversationId === conv.id ? 'bg-accent' : ''"
-                    @click="selectConversation(conv.id)">
-                  <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground"/>
-                  <span class="truncate">{{ conv.title }}</span>
-                </button>
-                <button
-                    class="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/conv:opacity-100"
-                    title="Delete conversation" @click="removeConversation(conv.id)">
-                  <Trash2 class="size-3.5"/>
-                </button>
-              </div>
-            </div>
-            <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No conversations yet.</p>
-          </PopoverContent>
-        </Popover>
-        <Sheet v-else>
+        <Sheet>
           <SheetTrigger as-child>
-            <Button size="icon-sm" variant="secondary" title="Conversation history">
+            <Button size="icon-sm" variant="ghost" title="Conversation history">
               <History class="size-4"/>
             </Button>
           </SheetTrigger>
@@ -1351,7 +1317,7 @@ onMounted(async () => {
             <div v-if="historyLoading" class="flex justify-center py-6">
               <Loader2 class="size-4 animate-spin text-muted-foreground"/>
             </div>
-            <div v-else-if="conversations.length" class="flex flex-col gap-2 max-h-80 overflow-y-auto py-1">
+            <div v-else-if="conversations.length" class="flex flex-col gap-2 overflow-y-auto py-1">
               <div class="flex flex-row px-2">
                 <SheetClose class="w-full">
                   <Button size="sm" variant="outline" class="w-full" title="New chat" @click="newChat">
@@ -1363,8 +1329,7 @@ onMounted(async () => {
 
               <div class="flex flex-col gap-1">
                 <SheetClose v-for="conv in conversations" :key="conv.id" class="w-full">
-                  <div
-                      class="group/conv flex items-center gap-1 px-1.5">
+                  <div class="group/conv flex items-center gap-1 px-1.5">
                     <button
                         class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                         :class="conversationId === conv.id ? 'bg-accent' : ''"

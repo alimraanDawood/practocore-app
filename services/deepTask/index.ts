@@ -34,6 +34,10 @@ export type DeepTaskControl = '' | 'run' | 'pause' | 'cancel';
 /** Requested output-size band: caps the outline + per-section budget so "short" stays short. */
 export type DeepResearchLength = 'brief' | 'standard' | 'comprehensive';
 
+/** Pipeline output mode: research (default) produces a cited report; document runs the
+ * full outline → author → assemble pipeline to produce a .docx. */
+export type DeepResearchMode = 'research' | 'document';
+
 export interface DeepTaskStep {
   label: string;
   detail?: string;
@@ -131,6 +135,8 @@ export interface DeepTask {
   report: string;
   /** Resolved output-size band governing the outline cap + section budget. */
   length: DeepResearchLength | '';
+  /** Pipeline output mode: research (cited report) or document (full .docx). */
+  mode: DeepResearchMode | '';
   created: string;
   updated: string;
 }
@@ -144,6 +150,7 @@ export interface ResearchPlan {
   objective: string;
   title?: string;
   kind?: string;
+  mode?: DeepResearchMode;
   scope?: {
     matter_ids?: string[];
     vault_ids?: string[];
@@ -206,6 +213,8 @@ export async function createDeepTask(input: {
   review?: boolean;
   /** Output-size band. Omit to let the backend auto-detect from the instruction. */
   length?: DeepResearchLength;
+  /** Pipeline output mode. Omit for research (default); set 'document' for full .docx. */
+  mode?: DeepResearchMode;
 }): Promise<DeepTask> {
   const res = await fetch(`${BASE}/deep-task`, {
     method: 'POST',
@@ -218,6 +227,7 @@ export async function createDeepTask(input: {
       ...(input.plan ? { plan: input.plan } : {}),
       ...(input.review !== undefined ? { review: input.review } : {}),
       ...(input.length ? { length: input.length } : {}),
+      ...(input.mode ? { mode: input.mode } : {}),
     }),
   });
   if (res.status === 403) throw new Error('Deep research is not enabled for your account.');
@@ -265,8 +275,11 @@ export async function getDeepTask(id: string): Promise<DeepTask | null> {
 }
 
 /** List the caller's recent tasks, newest first. */
-export async function listDeepTasks(): Promise<DeepTask[]> {
-  const res = await fetch(`${BASE}/deep-tasks`, { headers: authHeaders() });
+export async function listDeepTasks(conversationId?: string): Promise<DeepTask[]> {
+  const url = conversationId
+    ? `${BASE}/deep-tasks?conversation=${encodeURIComponent(conversationId)}`
+    : `${BASE}/deep-tasks`;
+  const res = await fetch(url, { headers: authHeaders() });
   if (!res.ok) return [];
   const j = await res.json() as { tasks?: DeepTask[] };
   return j.tasks ?? [];

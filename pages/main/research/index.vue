@@ -1,29 +1,81 @@
 <script lang="ts" setup>
-import { Telescope, Sparkles } from 'lucide-vue-next';
+import { Telescope, Sparkles, PanelRightOpen } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import type { AiArtifact } from '~/services/ai';
-import type { ResearchPlan } from '~/services/deepTask';
-import { createDeepTask } from '~/services/deepTask';
+import type { ResearchPlan, DeepTask, DeepResearchMode } from '~/services/deepTask';
+import { createDeepTask, listDeepTasks, phaseLabel, isLivePhase } from '~/services/deepTask';
 
 const surface = ref<InstanceType<typeof ChatSurface> | null>(null);
 
 const activePlan = ref<ResearchPlan | null>(null);
 const activeTaskId = ref('');
+const activeTask = ref<DeepTask | null>(null);
 const launching = ref(false);
 const launched = ref(false);
 const panelOpen = ref(false);
+
+const hasPanelContent = computed(() => !!activePlan.value || !!activeTaskId.value);
+
+const progressSummary = computed(() => {
+  const task = activeTask.value;
+  if (!task) return activePlan.value ? 'Research plan ready to launch' : '';
+  if (task.phase === 'done') return 'Research complete';
+  if (task.phase === 'failed') return 'Research failed';
+  if (task.phase === 'outline_review') return 'Outline awaiting your approval';
+  if (isLivePhase(task.phase)) {
+    const pct = task.progress > 0 ? ` — ${task.progress}%` : '';
+    return `${phaseLabel(task.phase)}${pct}`;
+  }
+  return phaseLabel(task.phase);
+});
 
 function onArtifact(a: AiArtifact) {
   if (a.kind === 'research_plan' && a.data) {
     activePlan.value = a.data as ResearchPlan;
     launched.value = false;
     activeTaskId.value = '';
+    activeTask.value = null;
     panelOpen.value = true;
   }
 }
 
-async function launchResearch(payload: { plan: ResearchPlan; review: boolean }) {
-  const convId = surface.value?.conversationId?.value;
+async function onConversationChange(convId: string) {
+  if (!convId) {
+    activePlan.value = null;
+    activeTaskId.value = '';
+    activeTask.value = null;
+    launched.value = false;
+    return;
+  }
+  try {
+    const tasks = await listDeepTasks(convId);
+    const task = tasks[0] ?? null;
+    if (task) {
+      activeTask.value = task;
+      activeTaskId.value = task.id;
+      launched.value = true;
+      activePlan.value = {
+        objective: task.instruction,
+        title: task.label,
+        outline: task.outline?.sections?.map(s => ({
+          heading: s.heading ?? '',
+          brief: s.brief ?? '',
+          numbered: false,
+        })) ?? [],
+      };
+    } else {
+      activeTaskId.value = '';
+      activeTask.value = null;
+      launched.value = false;
+      activePlan.value = null;
+    }
+  } catch {
+    // Silently ignore — entitlement may not be active
+  }
+}
+
+async function launchResearch(payload: { plan: ResearchPlan; review: boolean; mode: DeepResearchMode }) {
+  const convId = surface.value?.conversationId as string | undefined;
   if (!convId) return;
   launching.value = true;
   try {
@@ -31,8 +83,10 @@ async function launchResearch(payload: { plan: ResearchPlan; review: boolean }) 
       plan: payload.plan,
       conversationId: convId,
       review: payload.review,
+      mode: payload.mode,
     });
     activeTaskId.value = task.id;
+    activeTask.value = task;
     launched.value = true;
   } catch (e: any) {
     console.error('[research] launch failed:', e);
@@ -51,17 +105,36 @@ const prompts = [
 
 <template>
   <div class="relative h-full">
-    <ChatSurface ref="surface" mode="research" class="h-full" @artifact="onArtifact">
+    <ChatSurface
+      ref="surface"
+      mode="research"
+      class="h-full"
+      label="Research"
+      @artifact="onArtifact"
+      @conversation-change="onConversationChange"
+    >
+      <template #composer-top v-if="hasPanelContent && !panelOpen">
+        <div class="flex flex-row p-2 justify-between rounded-lg border bg-muted">
+          <span class="text-sm text-muted-foreground">{{ progressSummary }}</span>
+          <Button
+              variant="outline"
+              size="xs"
+              @click="panelOpen = true"
+          >
+            {{ !launched ? 'View plan' : activeTask?.phase === 'done' ? 'View report' : 'See progress' }}
+          </Button>
+        </div>
+      </template>
       <template #empty="{ send }">
         <div class="flex w-full flex-col items-center gap-6 pt-8">
           <div class="flex flex-col items-center gap-2 text-center">
-            <div class="grid size-12 place-items-center rounded-xl bg-primary/10">
-              <Telescope class="size-6 text-primary" />
+            <div class="grid size-12 place-items-center rounded-xl bg-muted">
+              <Telescope class="size-6 text-muted-foreground" />
             </div>
             <h1 class="text-lg font-semibold ibm-plex-serif">Research</h1>
             <p class="max-w-md text-sm text-muted-foreground">
               Describe what you need to research. I'll ask clarifying questions, build a plan,
-              then sweep your vault, case law, and statutes to compile a grounded report.
+              then sweep your vault, case law, and statutes to produce a cited research report.
             </p>
           </div>
 
@@ -69,10 +142,9 @@ const prompts = [
             <button
               v-for="p in prompts"
               :key="p"
-              class="flex items-start gap-2.5 rounded-lg border bg-card p-3 text-left text-sm transition-colors hover:bg-accent"
+              class="flex items-start gap-2.5 rounded-lg border text-muted-foreground bg-muted/50 p-3 text-left text-sm transition-colors hover:bg-accent"
               @click="send(p)"
             >
-              <Sparkles class="size-4 shrink-0 text-primary mt-0.5" />
               <span class="text-muted-foreground">{{ p }}</span>
             </button>
           </div>
@@ -89,14 +161,17 @@ const prompts = [
             Research plan
           </SheetTitle>
         </SheetHeader>
-        <div class="space-y-4 pt-4">
-          <SharedAIDeepTaskPlanCard
-            v-if="activePlan"
-            :plan="activePlan"
-            :launched="launched"
-            :launching="launching"
-            @launch="launchResearch"
-          />
+        <div class="space-y-4 p-3">
+          <div class="flex flex-col p-3">
+            <SharedAIDeepTaskPlanCard
+              v-if="activePlan"
+              :plan="activePlan"
+              :launched="launched"
+              :launching="launching"
+              borderless
+              @launch="launchResearch"
+            />
+          </div>
           <SharedAIDeepTaskCard v-if="activeTaskId" :key="activeTaskId" :task-id="activeTaskId" />
         </div>
       </SheetContent>

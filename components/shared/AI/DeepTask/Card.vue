@@ -243,7 +243,7 @@ async function openSource(c: AiCitation) {
 </script>
 
 <template>
-  <Card class="w-full">
+  <Card class="w-full p-3">
     <CardHeader class="pb-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
@@ -441,14 +441,14 @@ async function openSource(c: AiCitation) {
           </div>
         </div>
 
-        <!-- Result: the compiled report shown inline (report-first); the .docx is an export. -->
+        <!-- Result: the compiled report shown inline (report-first); the .docx is an export when available. -->
         <div v-if="isDone" class="rounded-md border">
           <div class="flex items-center justify-between gap-3 p-3 border-b">
             <div class="flex items-center gap-2 min-w-0">
               <FileText class="size-5 text-primary shrink-0" />
               <span class="text-sm font-medium truncate">{{ task.outline?.title || 'Research report' }}</span>
             </div>
-            <Button size="sm" variant="outline" :disabled="downloading" class="gap-1 shrink-0" @click="download">
+            <Button v-if="task.document" size="sm" variant="outline" :disabled="downloading" class="gap-1 shrink-0" @click="download">
               <Loader2 v-if="downloading" class="size-3.5 animate-spin" />
               <Download v-else class="size-3.5" />
               Export (.docx)

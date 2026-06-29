@@ -1,16 +1,16 @@
 <script lang="ts" setup>
-import { ArrowLeft, Wand2, CheckCircle2, Plus, History, Trash2, Loader2, MessageSquare } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle2, Plus, History, Trash2, Loader2, MessageSquare, Scroll } from 'lucide-vue-next';
 import {
-  listConversations, getConversation, deleteConversation,
+  listConversations, deleteConversation,
   type AiConversationSummary,
 } from '~/services/ai';
 import { getSkill } from '~/services/skills';
-import SkillStudioChat from '~/components/shared/Skills/SkillStudioChat.vue';
+import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 
 definePageMeta({ layout: 'default' });
 
 const route = useRoute();
-const studioRef = ref<InstanceType<typeof SkillStudioChat> | null>(null);
+const chatRef = ref<InstanceType<typeof ChatSurface> | null>(null);
 
 const conversations = ref<AiConversationSummary[]>([]);
 const listLoading = ref(true);
@@ -18,6 +18,12 @@ const activeId = ref('');
 const loadingId = ref('');
 const savedCount = ref(0);
 const mobileHistoryOpen = ref(false);
+
+const suggestions = [
+  'Create a skill for reviewing our standard tenancy agreements.',
+  'Teach you how we draft a demand letter for unpaid invoices.',
+  'Build a checklist skill for filing a Commercial Court application.',
+];
 
 async function loadList() {
   listLoading.value = true;
@@ -30,30 +36,43 @@ async function loadList() {
     listLoading.value = false;
   }
 }
+
 onMounted(async () => {
   loadList();
-  // Opened with ?skill=<id> → refine that skill conversationally. Seed the chat,
-  // then drop the query so a later "New skill" / refresh doesn't re-enter edit mode.
   const skillId = route.query.skill ? String(route.query.skill) : '';
   if (skillId) {
     try {
       const skill = await getSkill(skillId);
       await nextTick();
-      if (skill) studioRef.value?.beginEdit(skill);
+      if (skill) {
+        const seed = buildEditSeed(skill);
+        chatRef.value?.send(seed);
+      }
     } catch { /* fall back to a blank studio */ }
     navigateTo({ path: '/main/skills/studio' }, { replace: true });
   }
 });
 
+function buildEditSeed(s: { name: string; title: string; purpose?: string; triggers?: string; court_scope?: string; tool_bindings?: string[]; instructions?: string }): string {
+  const lines = [
+    `Let's refine an existing firm skill. Keep the same id \`${s.name}\` when you propose changes so it UPDATES this skill instead of creating a new one.`,
+    '',
+    `Title: ${s.title}`,
+    `Purpose: ${s.purpose}`,
+  ];
+  if (s.triggers) lines.push(`Used when: ${s.triggers}`);
+  if (s.court_scope) lines.push(`Court scope: ${s.court_scope}`);
+  if (s.tool_bindings?.length) lines.push(`Tools it may drive: ${s.tool_bindings.join(', ')}`);
+  lines.push('', 'Current instructions:', '', s.instructions || '(none yet)', '', 'Ask me what I would like to change.');
+  return lines.join('\n');
+}
+
 async function resume(id: string) {
   if (loadingId.value || id === activeId.value) { mobileHistoryOpen.value = false; return; }
   loadingId.value = id;
   try {
-    const conv = await getConversation(id);
-    if (conv) {
-      studioRef.value?.load(conv);
-      activeId.value = id;
-    }
+    await chatRef.value?.loadConversation(id);
+    activeId.value = id;
   } catch { /* ignore */ } finally {
     loadingId.value = '';
     mobileHistoryOpen.value = false;
@@ -61,14 +80,13 @@ async function resume(id: string) {
 }
 
 function newSkill() {
-  studioRef.value?.reset();
+  chatRef.value?.newChat();
   activeId.value = '';
   mobileHistoryOpen.value = false;
 }
 
 function onChanged(id: string) {
   activeId.value = id;
-  // A new thread won't be in the list yet, and titles update as the chat grows.
   loadList();
 }
 function onSaved() { savedCount.value++; }
@@ -91,18 +109,12 @@ function fmtWhen(s: string): string {
 <template>
   <div class="flex flex-col h-full min-h-0">
     <!-- Header -->
-    <div class="flex items-center gap-3 px-4 sm:px-6 py-4 border-b">
+    <div class="flex items-center gap-3 p-3 sm:px-6 border-b">
       <Button variant="ghost" size="icon-sm" class="shrink-0" title="Back to skills" @click="navigateTo('/main/skills')">
         <ArrowLeft class="size-4" />
       </Button>
-      <div class="size-9 rounded-xl grid place-items-center bg-primary/10 text-primary shrink-0">
-        <Wand2 class="size-5" />
-      </div>
       <div class="min-w-0 flex-1">
-        <h1 class="font-semibold leading-tight">Skill Studio</h1>
-        <p class="text-sm text-muted-foreground truncate">
-          Describe a task and I'll build a reusable skill with you — saved as a draft for your firm.
-        </p>
+        <h1 class="font-semibold leading-tight ibm-plex-serif">Skill Studio</h1>
       </div>
       <!-- Mobile history toggle -->
       <Button variant="outline" size="icon-sm" class="md:hidden shrink-0" title="In-progress builds" @click="mobileHistoryOpen = true">
@@ -158,9 +170,36 @@ function fmtWhen(s: string): string {
 
       <!-- Chat -->
       <div class="flex-1 min-h-0">
-        <div class="mx-auto h-full max-w-3xl px-4 sm:px-6 flex flex-col min-h-0">
-          <SkillStudioChat ref="studioRef" @saved="onSaved" @changed="onChanged" />
-        </div>
+        <ChatSurface
+          ref="chatRef"
+          mode="skill_studio"
+          label="Skill Studio"
+          hide-toolbar
+          @conversation-change="onChanged"
+          @proposal-approved="onSaved"
+        >
+          <template #empty="{ send }">
+            <div class="m-auto max-w-md text-center flex flex-col items-center gap-3 px-4">
+              <div class="size-11 rounded-xl grid place-items-center bg-muted text-muted-foreground">
+                <Scroll class="size-5" />
+              </div>
+              <p class="font-semibold">Build a firm skill</p>
+              <p class="text-sm text-muted-foreground">
+                Describe a task your firm does often. I'll interview you, then draft a reusable skill the
+                assistant can follow — saved as a private draft for your firm to review.
+              </p>
+              <div class="flex flex-col gap-2 w-full mt-1">
+                <button
+                  v-for="s in suggestions" :key="s"
+                  class="text-left text-sm rounded-lg border bg-muted/50 text-muted-foreground px-3 py-2 hover:bg-muted transition-colors"
+                  @click="send(s)"
+                >
+                  {{ s }}
+                </button>
+              </div>
+            </div>
+          </template>
+        </ChatSurface>
       </div>
     </div>
 
