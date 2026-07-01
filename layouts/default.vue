@@ -5,7 +5,7 @@
 import {
   ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
   Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
-  type LucideIcon, Plus, Workflow, Scroll, Telescope,
+  type LucideIcon, Plus, Workflow, Scroll, Telescope, Briefcase,
 } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
 import AICreditGauge from '~/components/shared/AI/AICreditGauge.vue';
@@ -63,6 +63,7 @@ const appNav: NavLink[] = [
   // { label: 'Home', icon: Home, to: '/main', exact: true },
   {label: 'Assistant', icon: MessageSquareText, to: '/main', exact: true},
   {label: 'Matters', icon: Scale, to: '/main/matters'},
+  {label: 'Engagements', icon: Briefcase, to: '/main/engagements', beta: true},
   {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
   {label: 'Skills', icon: Scroll, to: '/main/skills'},
