@@ -86,7 +86,7 @@ function isActive(item: NavLink): boolean {
 </script>
 
 <template>
-  <div class="flex h-svh flex-col">
+  <div class="flex h-svh flex-col safe-area-shell">
 
     <SidebarProvider class="min-h-0 flex-1 overflow-hidden">
       <!-- Mobile/touch gestures: left-edge swipe opens the offcanvas sidebar,
@@ -259,7 +259,7 @@ function isActive(item: NavLink): boolean {
         <SharedOfflineBanner/>
         <SharedBillingExpiryBanner class="xs:hidden"/>
 
-        <div class="min-h-0 h-dvh flex-col flex w-full overflow-hidden xs:pb-12 lg:pb-0">
+        <div class="min-h-0 flex-1 flex-col flex w-full overflow-hidden">
           <!--                    <SharedDesktopTitleBar class="hidden lg:flex" />-->
           <div class="flex flex-col w-full h-full">
             <slot/>

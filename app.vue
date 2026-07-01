@@ -10,18 +10,18 @@
 import {App} from '@capacitor/app';
 import {Toaster} from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
-import { SafeArea, SystemBarsStyle } from '@capacitor-community/safe-area'
-import { StatusBar } from '@capacitor/status-bar'
+import { registerPlugin } from '@capacitor/core'
 import { useBackButton } from './composables/useBackButton';
+
+// Capacitor 8's built-in system-bars plugin (handles edge-to-edge insets and
+// bar icon styling). No JS wrapper package — bind to the native plugin directly.
+const SystemBars = registerPlugin('SystemBars')
 
 // Back button handling is auto-initialized by the composable
 useBackButton();
 
 onMounted(async () => {
   console.log(await App.getLaunchUrl());
-  if (Capacitor.isNativePlatform()) {
-    await StatusBar.setOverlaysWebView({ overlay: false })
-  }
 });
 
 const router = useRouter();
@@ -38,11 +38,12 @@ watch(() => colorMode.value, (newMode) => {
 
 async function updateSystemBars(mode) {
   try {
-    // Dark style = light icons; Light style = dark icons
-    const style = mode === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light
-    await SafeArea.setSystemBarsStyle({ style })
+    // 'DARK' = light icons (dark background); 'LIGHT' = dark icons (light bg).
+    // Empty bar = apply to both the status bar and the navigation/gesture bar.
+    const style = mode === 'dark' ? 'DARK' : 'LIGHT'
+    await SystemBars.setStyle({ style, bar: '' })
   } catch (e) {
-    console.error('Safe Area plugin error:', e)
+    console.error('SystemBars style error:', e)
   }
 }
 

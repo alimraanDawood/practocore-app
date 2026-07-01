@@ -5,7 +5,7 @@
 
     <SharedBillingExpiryBanner class="xs:hidden" />
 
-    <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden xs:pb-12 lg:pb-0">
+    <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden safe-area-shell">
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">
         <div class="flex flex-col w-full lg:w-[95vw] bg-background gap-4 text-foreground p-5 pb-0 h-full">
           <SharedTopBar />

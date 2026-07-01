@@ -223,8 +223,10 @@
     --shadow-lg: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 4px 6px -1px oklch(0.00 0 0 / 0.10);
     --shadow-xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.10), 0 8px 10px -1px oklch(0.00 0 0 / 0.10);
     --shadow-2xl: 0 1px 3px 0px oklch(0.00 0 0 / 0.25);
-    --safe-area-top: env(safe-area-inset-top);
-    --safe-area-bottom: env(safe-area-inset-bottom);
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 .dark {
@@ -299,9 +301,22 @@
         font-optical-sizing: auto;
         font-weight: 400;
         font-style: normal;
-        /*padding-top: var(--safe-area-top);*/
-        /*padding-bottom: var(--safe-area-bottom);*/
         @apply bg-background text-foreground;
+    }
+
+    /*
+     * App-shell safe-area padding. Applied to the outermost layout container so
+     * content clears the status bar (top), the gesture/navigation bar (bottom),
+     * and any display cutouts in landscape (left/right). On web/desktop the
+     * env() values resolve to 0 via the fallbacks above, so this is a no-op
+     * there. On Android the @capacitor-community/safe-area plugin supplies the
+     * real inset values once edge-to-edge is enabled.
+     */
+    .safe-area-shell {
+        padding-top: var(--safe-area-top);
+        padding-bottom: var(--safe-area-bottom);
+        padding-left: var(--safe-area-left);
+        padding-right: var(--safe-area-right);
     }
 
     button,

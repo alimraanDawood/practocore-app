@@ -7,7 +7,6 @@
       "dependencies": {
         "@amirafa/vue3-pull-to-refresh": "^1.2.17",
         "@animxyz/vue3": "^0.6.7",
-        "@capacitor-community/safe-area": "^8.0.1",
         "@capacitor/android": "^8.3.1",
         "@capacitor/app": "^8.0.0",
         "@capacitor/assets": "^3.0.5",
@@ -183,8 +182,6 @@
     "@babel/types": ["@babel/types@7.29.0", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, ""],
 
     "@bomb.sh/tab": ["@bomb.sh/tab@0.0.14", "", { "peerDependencies": { "cac": "^6.7.14", "citty": "^0.1.6 || ^0.2.0", "commander": "^13.1.0" }, "optionalPeers": ["cac", "citty", "commander"], "bin": { "tab": "dist/bin/cli.mjs" } }, "sha512-cHMk2LI430MVoX1unTt9oK1iZzQS4CYDz97MSxKLNErW69T43Z2QLFTpdS/3jVOIKrIADWfuxQ+nQNJkNV7E4w=="],
-
-    "@capacitor-community/safe-area": ["@capacitor-community/safe-area@8.0.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, ""],
 
     "@capacitor/android": ["@capacitor/android@8.3.1", "", { "peerDependencies": { "@capacitor/core": "^8.3.0" } }, "sha512-hjskIG8YcBEh3X4yaTXvE9gcqpdcxunTgFruSKnuPxtMxAUzEK4Oq25x0Z1g3cz+MQPc+lRG09R7Ovc+ydKsNw=="],
 

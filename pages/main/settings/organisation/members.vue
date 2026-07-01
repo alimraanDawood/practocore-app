@@ -26,7 +26,7 @@ import { ArrowLeft, Headset, Mail, MessageCircle, ExternalLink, Copy } from "luc
 import { toast } from 'vue-sonner';
 
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'blank'
 })
 
 const platform = computed(() => {

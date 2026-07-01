@@ -25,7 +25,7 @@
 import { ArrowLeft } from "lucide-vue-next";
 
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'blank'
 })
 </script>
 

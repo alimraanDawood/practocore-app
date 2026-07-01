@@ -29,7 +29,7 @@ import { ArrowLeft } from "lucide-vue-next";
 import { getSignedInUser } from "~/services/auth";
 
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'blank'
 })
 
 // Redirect non-admin org users away from billing

@@ -65,7 +65,7 @@ import {Bell, UserCircle, CreditCard} from "lucide-vue-next";
 import {getSignedInUser} from "~/services/auth";
 
 definePageMeta({
-  layout: 'no-mobile-nav'
+  layout: 'blank'
 })
 
 const authStore = useAuthStore();

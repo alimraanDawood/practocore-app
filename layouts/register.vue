@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col w-full h-dvh bg-background">
+  <div class="flex flex-col w-full h-dvh bg-background safe-area-shell">
     <!-- Progress bar -->
     <div class="w-full h-0.5 bg-muted shrink-0">
       <div

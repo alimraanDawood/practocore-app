@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col w-full h-dvh bg-background">
+  <div class="flex flex-col w-full h-dvh bg-background safe-area-shell">
     <!-- Top bar -->
     <div class="flex flex-row items-center px-3 sm:px-5 h-14 border-b shrink-0 gap-2 sm:gap-4">
       <!-- Left: close + title -->
