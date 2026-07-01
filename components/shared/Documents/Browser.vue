@@ -3,17 +3,20 @@ import { FileType2, Download, Loader2 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import {
   listMatterDocuments,
+  listEngagementDocuments,
   subscribeMatterDocuments,
+  subscribeEngagementDocuments,
   downloadDocument,
   documentKindLabel,
   type GeneratedDocument,
 } from '~/services/documents';
 
-// Lists the AI-generated documents filed under a matter, with download. New
-// drafts appear live (the generate_document tool writes a GeneratedDocuments row
-// after the user approves in the assistant). Read-only surface — generation
-// happens through the AI assistant, not here.
-const props = defineProps<{ matterId: string }>();
+// Lists the AI-generated documents filed under a matter OR an engagement
+// (FLEXIBLE_MATTERS_STRATEGY.md), with download. New drafts appear live (the
+// generate_document tool writes a GeneratedDocuments row after the user approves
+// in the assistant). Read-only surface — generation happens through the AI
+// assistant, not here. Pass exactly one of matterId / engagementId.
+const props = defineProps<{ matterId?: string; engagementId?: string }>();
 
 const docs = ref<GeneratedDocument[]>([]);
 const loading = ref(true);
@@ -23,7 +26,9 @@ let unsub: (() => void) | null = null;
 async function load() {
   loading.value = true;
   try {
-    docs.value = await listMatterDocuments(props.matterId);
+    docs.value = props.engagementId
+      ? await listEngagementDocuments(props.engagementId)
+      : await listMatterDocuments(props.matterId!);
   } catch {
     // A missing collection (feature not yet deployed) just shows the empty state.
     docs.value = [];
@@ -59,10 +64,13 @@ function fmtDate(raw?: string): string {
 onMounted(async () => {
   await load();
   try {
-    unsub = await subscribeMatterDocuments(props.matterId, (action, record) => {
+    const onEvent = (action: string, record: GeneratedDocument) => {
       if (action === 'delete') docs.value = docs.value.filter((d) => d.id !== record.id);
       else upsert(record);
-    });
+    };
+    unsub = props.engagementId
+      ? await subscribeEngagementDocuments(props.engagementId, onEvent)
+      : await subscribeMatterDocuments(props.matterId!, onEvent);
   } catch { /* realtime is best-effort */ }
 });
 

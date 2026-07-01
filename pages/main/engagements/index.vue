@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Briefcase, Plus, Loader2 } from 'lucide-vue-next';
+import { Briefcase, Plus, Loader2, Wand2 } from 'lucide-vue-next';
 import {
   listEngagements, listEngagementTemplates, createEngagement,
   type Engagement, type EngagementTemplate,
@@ -97,10 +97,16 @@ function statusVariant(status: string) {
           Advisory, transactional, and regulatory work — anything that isn't a court case.
         </p>
       </div>
-      <Button @click="openCreate">
-        <Plus class="size-4 mr-1.5" />
-        New engagement
-      </Button>
+      <div class="flex items-center gap-2">
+        <Button variant="outline" @click="router.push('/main/engagements/studio')">
+          <Wand2 class="size-4 mr-1.5" />
+          Build a playbook
+        </Button>
+        <Button @click="openCreate">
+          <Plus class="size-4 mr-1.5" />
+          New engagement
+        </Button>
+      </div>
     </div>
 
     <div v-if="loading" class="flex items-center justify-center py-16 text-muted-foreground">

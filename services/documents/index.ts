@@ -18,6 +18,8 @@ export interface GeneratedDocument {
   org: string;
   /** Matters id this document relates to, or "" if standalone. */
   matter: string;
+  /** Engagements id this document relates to, or "" if standalone/matter-filed. */
+  engagement: string;
   /** Users id who generated it. */
   author: string;
   /** plaint | contract | letter | affidavit | ... */
@@ -42,6 +44,14 @@ export function listMatterDocuments(matterId: string): Promise<GeneratedDocument
   });
 }
 
+/** All generated documents filed under an Engagement, newest first. */
+export function listEngagementDocuments(engagementId: string): Promise<GeneratedDocument[]> {
+  return pb.collection(COLLECTION).getFullList<GeneratedDocument>({
+    filter: pb.filter('engagement = {:engagementId}', { engagementId }),
+    sort: '-created',
+  });
+}
+
 // ── Realtime ──────────────────────────────────────────────────────────────────
 // Watch a matter's documents so a freshly drafted one appears without a reload.
 // PB realtime ignores the list rule's row filter for *which* events arrive, so we
@@ -53,6 +63,16 @@ export async function subscribeMatterDocuments(
 ): Promise<() => void> {
   return pb.collection(COLLECTION).subscribe<GeneratedDocument>('*', (e) => {
     if (e.record?.matter === matterId) cb(e.action, e.record);
+  });
+}
+
+/** Same as subscribeMatterDocuments, scoped to an Engagement instead. */
+export async function subscribeEngagementDocuments(
+  engagementId: string,
+  cb: (action: string, record: GeneratedDocument) => void,
+): Promise<() => void> {
+  return pb.collection(COLLECTION).subscribe<GeneratedDocument>('*', (e) => {
+    if (e.record?.engagement === engagementId) cb(e.action, e.record);
   });
 }
 

@@ -166,6 +166,16 @@ const statusOptions: Engagement['status'][] = ['draft', 'active', 'completed', '
             </dl>
           </Card>
         </div>
+
+        <div>
+          <h2 class="text-sm font-medium text-muted-foreground mb-3">Drafted documents</h2>
+          <SharedDocumentsBrowser :engagement-id="engagement.id" />
+        </div>
+
+        <div>
+          <h2 class="text-sm font-medium text-muted-foreground mb-3">Vault</h2>
+          <SharedVaultBrowser scope="engagement" :scope-id="engagement.id" root-label="Engagement documents" />
+        </div>
       </div>
     </template>
   </div>

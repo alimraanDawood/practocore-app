@@ -15,7 +15,9 @@ import { track } from '~/utils/analytics';
 
 // 'vault' is a custom, membership-scoped vault (VAULTS_CUSTOM_STRATEGY.md); its
 // scope_id is the AiVaults id. matter/org are the original case/firm libraries.
-export type VaultScope = 'matter' | 'org' | 'vault' | 'user';
+// 'engagement' is the non-litigation matter type's document library
+// (FLEXIBLE_MATTERS_STRATEGY.md), its scope_id is the Engagements id.
+export type VaultScope = 'matter' | 'org' | 'vault' | 'user' | 'engagement';
 
 // Mirrors ai/vault/collection.go status lifecycle. 'stored' = kept but AI
 // ingestion was deliberately turned off (not read into the knowledge base).
