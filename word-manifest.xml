@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PractoCore Word Add-in — PRODUCTION manifest.
+  Task pane is served by practocore-app at https://app.practocore.com/word/taskpane.
+
+  Use this file for:
+    • Microsoft 365 admin center ▸ Integrated Apps (org-wide / centralized deployment).
+    • "Upload My Add-in" sideloading against production.
+    • AppSource submission via Partner Center (partner.microsoft.com).
+
+  Prerequisite for sign-in to work in production: register
+    https://app.practocore.com/word/auth/callback
+  as an authorized redirect URI in the Google Cloud OAuth client AND in the
+  PocketBase `google` auth provider on api.practocore.com.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <!-- Production GUID (distinct from the dev manifest so both can coexist during rollout). -->
+  <Id>cf8f85d3-85c9-4b6e-9994-ea81ff9d22eb</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="PractoCore" />
+  <Description DefaultValue="Draft, cite, and revise legal documents against your PractoCore matters — inside Word. Insert AI drafts, apply Ugandan court formats, pull precedent clauses and authorities, and save work product straight back to the matter vault." />
+  <IconUrl DefaultValue="https://app.practocore.com/favicon-32x32.png" />
+  <HighResolutionIconUrl DefaultValue="https://app.practocore.com/android-icon-96x96.png" />
+  <SupportUrl DefaultValue="https://www.practocore.com/contact" />
+
+  <!-- Origins the add-in may navigate to (sign-in dialog + Google OAuth). -->
+  <AppDomains>
+    <AppDomain>https://app.practocore.com</AppDomain>
+    <AppDomain>https://accounts.google.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://app.practocore.com/word/taskpane" />
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="PractoCore.Group">
+                <Label resid="Group.Label" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16" />
+                  <bt:Image size="32" resid="Icon.32" />
+                  <bt:Image size="80" resid="Icon.80" />
+                </Icon>
+                <Control xsi:type="Button" id="PractoCore.OpenPane">
+                  <Label resid="OpenPane.Label" />
+                  <Supertip>
+                    <Title resid="OpenPane.Label" />
+                    <Description resid="OpenPane.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16" />
+                    <bt:Image size="32" resid="Icon.32" />
+                    <bt:Image size="80" resid="Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>PractoCorePane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://app.practocore.com/favicon-16x16.png" />
+        <bt:Image id="Icon.32" DefaultValue="https://app.practocore.com/favicon-32x32.png" />
+        <bt:Image id="Icon.80" DefaultValue="https://app.practocore.com/android-icon-96x96.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://app.practocore.com/word/taskpane" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Group.Label" DefaultValue="PractoCore" />
+        <bt:String id="OpenPane.Label" DefaultValue="Assistant" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="OpenPane.Tip" DefaultValue="Open the PractoCore assistant panel." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

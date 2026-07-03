@@ -92,10 +92,10 @@
         <div class="lg:hidden flex flex-col w-full gap-2">
           <div class="flex flex-row items-center justify-between">
             <h2 class="font-semibold">{{ selectedDateFormatted }}</h2>
-            <Badge variant="secondary">{{ currentDateDeadlines.length + currentDateReminders.length }} item(s)</Badge>
+            <Badge variant="secondary">{{ currentDateItemCount }} item(s)</Badge>
           </div>
 
-          <div v-if="currentDateDeadlines.length === 0 && currentDateReminders.length === 0" class="flex flex-col gap-3 text-center py-12 text-muted-foreground">
+          <div v-if="currentDateEmpty" class="flex flex-col gap-3 text-center py-12 text-muted-foreground">
             <CalendarOff class="size-12 mx-auto opacity-50" />
             <p class=" italic text-lg ibm-plex-serif">Nothing on this date</p>
             <Button @click="addEventOpen = true" size="sm" class="w-full">
@@ -117,16 +117,28 @@
               :key="r.id"
               :reminder="r"
               @changed="calendar.fetchReminders()" />
+
+          <SharedCalendarMilestoneCard
+              v-for="m in currentDateMilestones"
+              :key="m.id"
+              :milestone="m"
+              @changed="calendar.fetchMilestones()" />
+
+          <SharedCalendarComplianceCard
+              v-for="c in currentDateCompliance"
+              :key="c.id"
+              :obligation="c" />
         </div>
       </div>
       </div>
 
-    <!-- Desktop: Right Sidebar -->
-    <div class="hidden lg:flex flex-col w-96 h-full border-l bg-muted/30 overflow-hidden">
+    <!-- Desktop: Right Sidebar — yields to the assistant dock, which slides into its
+         place rather than squeezing alongside it. -->
+    <div v-if="!assistantReplacesToday" class="hidden lg:flex flex-col w-96 h-full border-l bg-muted/30 overflow-hidden">
       <div class="flex flex-col p-4 border-b bg-background">
         <div class="flex flex-row items-center justify-between mb-3">
           <h2 class="font-semibold">{{ selectedDateFormatted }}</h2>
-          <Badge variant="secondary">{{ currentDateDeadlines.length }}</Badge>
+          <Badge variant="secondary">{{ currentDateItemCount }}</Badge>
         </div>
 
         <!-- Status summary -->
@@ -149,7 +161,7 @@
           </div>
         </div>
 
-        <div v-else-if="currentDateDeadlines.length === 0 && currentDateReminders.length === 0" class="text-center py-12 text-muted-foreground">
+        <div v-else-if="currentDateEmpty" class="text-center py-12 text-muted-foreground">
           <CalendarOff class="size-12 mx-auto mb-2 opacity-50" aria-hidden="true" />
           <p class="text-sm">Nothing on this date</p>
           <p class="text-xs mt-1">Add an event or check your filters</p>
@@ -173,6 +185,17 @@
             :key="r.id"
             :reminder="r"
             @changed="calendar.fetchReminders()" />
+
+          <SharedCalendarMilestoneCard
+            v-for="m in currentDateMilestones"
+            :key="m.id"
+            :milestone="m"
+            @changed="calendar.fetchMilestones()" />
+
+          <SharedCalendarComplianceCard
+            v-for="c in currentDateCompliance"
+            :key="c.id"
+            :obligation="c" />
         </template>
       </div>
     </div>
@@ -210,7 +233,9 @@ import {
   Plus
 } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
+import { useMediaQuery } from '@vueuse/core';
 import { useCalendarStore } from '~/stores/calendar';
+import { useAssistantDock } from '~/composables/useAssistantDock';
 
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -226,7 +251,15 @@ definePageMeta({
 });
 
 const calendar = useCalendarStore();
-const { deadlines, reminders, selectedDate, loading } = storeToRefs(calendar);
+const { deadlines, reminders, milestones, compliance, selectedDate, loading } = storeToRefs(calendar);
+
+// On desktop the assistant dock slides in as an in-flow panel; rather than squeeze it
+// beside the "Today" sidebar, we drop that sidebar so the dock takes its place.
+const { isOpen: assistantOpen, context: assistantContext } = useAssistantDock();
+const isDesktop = useMediaQuery('(min-width: 1024px)');
+const assistantReplacesToday = computed(
+  () => isDesktop.value && assistantOpen.value && !!assistantContext.value
+);
 const addEventOpen = ref(false);
 const calendarRef = ref<{ goToday: () => void } | null>(null);
 
@@ -295,6 +328,46 @@ const filteredReminders = computed(() => {
   return list;
 });
 
+// Engagement milestones with a due date, filtered to match the active status
+// filter + search the same way deadlines and reminders are. This is what puts
+// non-litigation work onto the shared "what's due" calendar.
+const filteredMilestones = computed(() => {
+  let list = milestones.value || [];
+  const now = new Date();
+
+  if (activeFilter.value === 'pending') {
+    list = list.filter(m => m.status !== 'done' && (!m.dueDate || now <= new Date(m.dueDate)));
+  } else if (activeFilter.value === 'fulfilled') {
+    list = list.filter(m => m.status === 'done');
+  }
+
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    list = list.filter(m =>
+      m.label?.toLowerCase().includes(query) ||
+      m.expand?.engagement?.name?.toLowerCase().includes(query)
+    );
+  }
+
+  return list.filter(m => !!m.dueDate);
+});
+
+// Recurring compliance obligations (next occurrence), filtered by search. These
+// are always "pending" by nature (a rolling next due date), so the pending/done
+// filter only hides them under the "Completed" view.
+const filteredCompliance = computed(() => {
+  let list = compliance.value || [];
+  if (activeFilter.value === 'fulfilled') return [];
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    list = list.filter(c =>
+      c.label?.toLowerCase().includes(query) ||
+      c.expand?.engagement?.name?.toLowerCase().includes(query)
+    );
+  }
+  return list.filter(c => !!c.nextDueDate);
+});
+
 // Get events for calendar — deadlines + standalone reminder "events".
 const filteredEvents = computed(() => {
   const deadlineEvents = filteredDeadlines.value.map((d) => {
@@ -321,7 +394,31 @@ const filteredEvents = computed(() => {
     };
   });
 
-  return [...deadlineEvents, ...reminderEvents];
+  const milestoneEvents = filteredMilestones.value.map((m) => {
+    const idx = (calendar.accentIndexFor(m.id) % 4) + 1;
+    return {
+      id: m.id,
+      date: m.dueDate as string,
+      title: m.label,
+      color: `accent-${idx}`,
+      completed: m.status === 'done',
+      kind: 'milestone' as const,
+    };
+  });
+
+  const complianceEvents = filteredCompliance.value.map((c) => {
+    const idx = (calendar.accentIndexFor(c.id) % 4) + 1;
+    return {
+      id: c.id,
+      date: c.nextDueDate as string,
+      title: c.label,
+      color: `accent-${idx}`,
+      completed: false,
+      kind: 'compliance' as const,
+    };
+  });
+
+  return [...deadlineEvents, ...reminderEvents, ...milestoneEvents, ...complianceEvents];
 });
 
 // Current date deadlines
@@ -333,6 +430,23 @@ const currentDateDeadlines = computed(() => {
 const currentDateReminders = computed(() => {
   return filteredReminders.value.filter(r => toISO(r.targetDate) === currentDate.value);
 });
+
+// Current date engagement milestones
+const currentDateMilestones = computed(() => {
+  return filteredMilestones.value.filter(m => m.dueDate && toISO(m.dueDate) === currentDate.value);
+});
+
+// Current date compliance obligations
+const currentDateCompliance = computed(() => {
+  return filteredCompliance.value.filter(c => c.nextDueDate && toISO(c.nextDueDate) === currentDate.value);
+});
+
+// Total items on the selected date, across all sources.
+const currentDateItemCount = computed(() =>
+  currentDateDeadlines.value.length + currentDateReminders.value.length +
+  currentDateMilestones.value.length + currentDateCompliance.value.length
+);
+const currentDateEmpty = computed(() => currentDateItemCount.value === 0);
 
 // Status counts for selected date
 const statusCounts = computed(() => {
@@ -363,6 +477,20 @@ const selectedDateFormatted = computed(() => {
   return dayjs(date).format('dddd, MMMM D, YYYY');
 });
 
+// Floating assistant dock: one calendar-wide thread (per the per-context design), with
+// the currently-selected day + its item counts sent as a text header so "what's due?"
+// resolves against what the user is looking at.
+provideDockContext(() => {
+  const items = currentDateItemCount.value;
+  return {
+    key: 'calendar',
+    label: 'Calendar',
+    sublabel: selectedDateFormatted.value,
+    icon: CalendarClock,
+    contextText: `The user is on the Calendar, viewing ${selectedDateFormatted.value.toLowerCase()} (${currentDate.value}), which has ${items} item(s). Help with deadlines, reminders and scheduling.`,
+  };
+});
+
 const goToToday = () => {
   const today = new Date();
   currentDate.value = toISO(today);
@@ -378,6 +506,19 @@ function onDayClick(iso: string) {
 }
 
 function onEventClick(event: any) {
+  // Milestone/compliance events jump to their engagement; deadlines open the sheet.
+  if (event?.kind === 'milestone') {
+    const m = milestones.value.find(x => x.id === event.id);
+    const engId = m?.expand?.engagement?.id || m?.engagement;
+    if (engId) navigateTo(`/main/engagements/${engId}`);
+    return;
+  }
+  if (event?.kind === 'compliance') {
+    const c = compliance.value.find(x => x.id === event.id);
+    const engId = c?.expand?.engagement?.id || c?.engagement;
+    if (engId) navigateTo(`/main/engagements/${engId}`);
+    return;
+  }
   const deadline = deadlines.value.find(d => d.id === event.id);
   if (deadline) {
     selectedDeadline.value = {
@@ -413,6 +554,8 @@ onMounted(async () => {
   await Promise.all([
     calendar.fetchDeadlines(false),
     calendar.fetchReminders(),
+    calendar.fetchMilestones(),
+    calendar.fetchCompliance(),
   ]);
 });
 </script>

@@ -77,6 +77,8 @@
                 </div>
                 <div class="flex flex-row items-center gap-1 w-full overflow-hidden">
                   <Bell v-if="evt.kind === 'event'" class="size-2.5 shrink-0" aria-hidden="true" />
+                  <Briefcase v-else-if="evt.kind === 'milestone'" class="size-2.5 shrink-0" aria-hidden="true" />
+                  <RefreshCw v-else-if="evt.kind === 'compliance'" class="size-2.5 shrink-0" aria-hidden="true" />
                   <span class="truncate">{{ evt.title }}</span>
                 </div>
               </div>
@@ -102,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, Check, Bell } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, Check, Bell, Briefcase, RefreshCw } from 'lucide-vue-next';
 
 interface CalendarEvent {
   id: string
@@ -110,7 +112,7 @@ interface CalendarEvent {
   title: string
   color?: string
   completed?: boolean
-  kind?: 'deadline' | 'event'
+  kind?: 'deadline' | 'event' | 'milestone' | 'compliance'
 }
 
 const props = withDefaults(defineProps<{

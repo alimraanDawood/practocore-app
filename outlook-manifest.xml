@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PractoCore Outlook Add-in — PRODUCTION manifest.
+  Task pane is served by practocore-app at https://app.practocore.com/outlook/taskpane.
+
+  Use this file for:
+    • Microsoft 365 admin center ▸ Integrated Apps (org-wide / centralized deployment).
+    • "Add a custom add-in ▸ Add from URL/file" sideloading against production.
+    • AppSource submission via Partner Center (partner.microsoft.com).
+
+  Prerequisite for sign-in to work in production: register
+    https://app.practocore.com/word/auth/callback
+  as an authorized redirect URI in the Google Cloud OAuth client AND in the
+  PocketBase `google` auth provider (the Outlook pane reuses the Word OAuth routes).
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+
+  <!-- Production GUID (distinct from the dev manifest so both can coexist during rollout). -->
+  <Id>12c1ef45-58c8-45ea-915b-3a7f6a5838c8</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="PractoCore" />
+  <Description DefaultValue="Triage, summarise, and reply to correspondence against your PractoCore matters — inside Outlook. Draft matter-grounded replies, pull matter context, and file emails to the case." />
+  <IconUrl DefaultValue="https://app.practocore.com/favicon-32x32.png" />
+  <HighResolutionIconUrl DefaultValue="https://app.practocore.com/android-icon-96x96.png" />
+  <SupportUrl DefaultValue="https://www.practocore.com/contact" />
+
+  <AppDomains>
+    <AppDomain>https://app.practocore.com</AppDomain>
+    <AppDomain>https://accounts.google.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5" />
+    </Sets>
+  </Requirements>
+
+  <!-- Legacy fallback surface (required by the schema). -->
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://app.practocore.com/outlook/taskpane" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadWriteItem</Permissions>
+
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.5">
+          <bt:Set Name="Mailbox" />
+        </bt:Sets>
+      </Requirements>
+
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+            <FunctionFile resid="Taskpane.Url" />
+
+            <!-- Reading a message -->
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="PractoCore.GroupRead">
+                  <Label resid="Group.Label" />
+                  <Control xsi:type="Button" id="PractoCore.OpenPaneRead">
+                    <Label resid="OpenPane.Label" />
+                    <Supertip>
+                      <Title resid="OpenPane.Label" />
+                      <Description resid="OpenPane.Tip" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16" />
+                      <bt:Image size="32" resid="Icon.32" />
+                      <bt:Image size="80" resid="Icon.80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Taskpane.Url" />
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+
+            <!-- Composing / replying -->
+            <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="PractoCore.GroupCompose">
+                  <Label resid="Group.Label" />
+                  <Control xsi:type="Button" id="PractoCore.OpenPaneCompose">
+                    <Label resid="OpenPane.Label" />
+                    <Supertip>
+                      <Title resid="OpenPane.Label" />
+                      <Description resid="OpenPane.Tip" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16" />
+                      <bt:Image size="32" resid="Icon.32" />
+                      <bt:Image size="80" resid="Icon.80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Taskpane.Url" />
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+
+      <Resources>
+        <bt:Images>
+          <bt:Image id="Icon.16" DefaultValue="https://app.practocore.com/favicon-16x16.png" />
+          <bt:Image id="Icon.32" DefaultValue="https://app.practocore.com/favicon-32x32.png" />
+          <bt:Image id="Icon.80" DefaultValue="https://app.practocore.com/android-icon-96x96.png" />
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="Taskpane.Url" DefaultValue="https://app.practocore.com/outlook/taskpane" />
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="Group.Label" DefaultValue="PractoCore" />
+          <bt:String id="OpenPane.Label" DefaultValue="Assistant" />
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="OpenPane.Tip" DefaultValue="Open the PractoCore assistant panel." />
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>

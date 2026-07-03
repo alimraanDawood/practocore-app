@@ -63,7 +63,7 @@ const toggleMaximizeWindow = () => {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 lg:grid-cols-2 w-screen h-dvh divide-x">
+  <div class="flex flex-col w-screen h-dvh divide-x">
     <div class="flex flex-col w-full h-full col-span-1">
       <div class="flex flex-row p-3 border-b justify-between">
         <div></div>
@@ -90,17 +90,6 @@ const toggleMaximizeWindow = () => {
         </div>
       </div>
       <div class="flex flex-row p-3 border-t"></div>
-    </div>
-
-    <div class="bg-muted w-full h-full col-span-1 lg:flex overflow-hidden flex-col hidden">
-      <div class="flex flex-col w-full p-8">
-        <span class="font-semibold text-3xl ibm-plex-serif">Litigation Deadline Management made effortless</span>
-      </div>
-
-      <div class="relative w-full overflow-hidden pl-8  flex flex-col h-full items-end justify-end-safe">
-        <img src="@/assets/img/screenshots/home_desktop_dark_corner.png" class="hidden dark:block shadow border rounded-tl-xl" />
-        <img src="@/assets/img/screenshots/home_desktop_light_corner.png" class="dark:hidden border shadow rounded-tl-xl" />
-      </div>
     </div>
   </div>
 </template>

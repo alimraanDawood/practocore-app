@@ -21,13 +21,15 @@
 import {
   Loader2, TextSelect, ScanLine, PenLine, FileText, MessageSquareText,
   CheckCircle2, XCircle, AlertCircle, ChevronRight, X, CornerDownRight,
+  LogOut, UserRound, Building2, ChevronsUpDown,
+  Plus, History,
 } from 'lucide-vue-next';
 // Our brand mark (the square, orange logo the login screen uses) replaces the generic
 // Scale/Sparkles icons. Referenced inline in the template via the `@/assets` path.
 import { toast } from 'vue-sonner';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import { pb } from '~/lib/pocketbase';
-import { signInWithEmail, signUpWithGoogle } from '~/services/auth';
+import { signInWithEmail, signUpWithGoogle, signOut, getOrganisation } from '~/services/auth';
 import {
   ensureOffice, isWordHost, insertMarkdown, insertDocumentIr, getSelectionText, onSelectionChanged,
   getDocumentText, commentOnMatches, jumpToText,
@@ -47,6 +49,48 @@ function computeAuthed() {
 }
 const authed = ref(computeAuthed());
 let stopAuthWatch: (() => void) | null = null;
+
+// ── Account (avatar menu: who am I, which account, sign out) ─────────────────────
+// pb.authStore.record isn't a Vue ref, so mirror it and refresh on onChange.
+const authRecord = ref<any>(pb.authStore.record);
+const orgName = ref('');
+const orgBusy = ref(false);
+
+const accountName = computed(() => authRecord.value?.name || 'Your account');
+const accountEmail = computed(() => authRecord.value?.email || '');
+const accountAvatar = computed(() => authRecord.value?.avatar || '');
+const accountInitials = computed(() => {
+  const parts = String(authRecord.value?.name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return (authRecord.value?.email?.[0] || '?').toUpperCase();
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+});
+// Personal account = no organisation relation (mirrors composables/usePermissions isIndividual).
+const isPersonal = computed(() => !authRecord.value?.organisation);
+const accountContext = computed(() =>
+  isPersonal.value ? 'Personal account' : (orgName.value || 'Organisation account'));
+
+// Resolve the organisation's display name for the current account.
+async function loadOrg() {
+  const oid = pb.authStore.record?.organisation;
+  if (!oid) { orgName.value = ''; return; }
+  if (orgName.value && authRecord.value?.organisation === oid) return; // already resolved
+  orgBusy.value = true;
+  try {
+    const o: any = await getOrganisation(oid);
+    orgName.value = o?.name || '';
+  } catch {
+    orgName.value = '';
+  } finally {
+    orgBusy.value = false;
+  }
+}
+
+async function logout() {
+  await signOut(); // clears pb.authStore → onChange flips `authed` to false → back to sign-in gate
+  authRecord.value = null;
+  orgName.value = '';
+  toast('Signed out');
+}
 
 // ── Sign-in (inline email/password + Google via Office dialog) ──────────────────
 const email = ref('');
@@ -140,7 +184,12 @@ const contextLabel = computed(() => hasSelection.value
   : 'Editing the full document');
 
 onMounted(async () => {
-  stopAuthWatch = pb.authStore.onChange(() => { authed.value = computeAuthed(); });
+  stopAuthWatch = pb.authStore.onChange(() => {
+    authed.value = computeAuthed();
+    authRecord.value = pb.authStore.record;
+    if (authed.value) loadOrg();
+  });
+  if (authed.value) loadOrg();
   try {
     const res = await Promise.race([
       ensureOffice(),
@@ -182,6 +231,17 @@ const clientTool = {
 // ── Quick actions ──────────────────────────────────────────────────────────────
 const chat = ref<InstanceType<typeof ChatSurface> | null>(null);
 const hasSelection = computed(() => selectionWords.value > 0);
+// Conversation history lives in the top bar now (ChatSurface's own toolbar is hidden),
+// so we drive its Sheet from here via the exposed conversations/selectConversation.
+const historyOpen = ref(false);
+function selectConversationFromBar(id: string) {
+  chat.value?.selectConversation(id);
+  historyOpen.value = false;
+}
+function newChatFromBar() {
+  chat.value?.newChat();
+  historyOpen.value = false;
+}
 
 // Empty-state suggestions (Harvey-style): clicking one drops it into the composer for
 // the user to review and send. Tailored to whether there's a selection or not.
@@ -390,32 +450,147 @@ async function applyRedline() {
 
     <!-- The shared assistant, in the Word surface -->
     <template v-else>
-      <div v-if="!inWord" class="shrink-0 border-b bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-        Preview mode — open inside Microsoft Word to insert output and attach selections.
+      <!-- Single top bar. Two layers cross-fade in the same 44px strip:
+           • no selection → identity + chat nav (new chat, history) + avatar
+           • text selected → document actions (check citations, redline, summarise, explain)
+           ChatSurface's own toolbar is hidden (:hide-toolbar) so this is the only chrome. -->
+      <div class="relative h-11 shrink-0 border-b">
+        <!-- Layer A — PractoCore identity + chat nav + account (shown when nothing selected) -->
+        <div class="absolute inset-0 flex items-center gap-2 px-2.5 transition-opacity duration-200"
+             :class="hasSelection ? 'pointer-events-none opacity-0' : 'opacity-100'">
+          <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" alt="PractoCore" class="size-6 rounded-md" />
+          <span class="ibm-plex-serif text-sm font-semibold tracking-tight">PractoCore</span>
+
+          <TooltipProvider :delay-duration="300">
+          <div class="ml-auto flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button size="icon-sm" variant="ghost" @click="newChatFromBar">
+                  <Plus class="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>New chat</TooltipContent>
+            </Tooltip>
+
+            <!-- Conversation history (moved out of ChatSurface's toolbar into this bar) -->
+            <Sheet v-model:open="historyOpen">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <SheetTrigger as-child>
+                    <Button size="icon-sm" variant="ghost">
+                      <History class="size-4" />
+                    </Button>
+                  </SheetTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Chat history</TooltipContent>
+              </Tooltip>
+              <SheetContent side="right" class="w-72 p-0">
+                <SheetHeader class="border-b">
+                  <span class="text-sm font-semibold">Recent chats</span>
+                </SheetHeader>
+                <div v-if="chat?.historyLoading" class="flex justify-center py-6">
+                  <Loader2 class="size-4 animate-spin text-muted-foreground" />
+                </div>
+                <div v-else-if="chat?.conversations?.length" class="flex flex-col gap-1 overflow-y-auto py-1">
+                  <div class="flex flex-col gap-1">
+                    <button v-for="conv in chat.conversations" :key="conv.id"
+                            class="mx-1.5 flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                            :class="chat?.conversationId === conv.id ? 'bg-accent' : ''"
+                            @click="selectConversationFromBar(conv.id)">
+                      <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground" />
+                      <span class="truncate">{{ conv.title }}</span>
+                    </button>
+                  </div>
+                </div>
+                <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No conversations yet.</p>
+              </SheetContent>
+            </Sheet>
+
+            <!-- Account (avatar last) -->
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <button class="ml-0.5 flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 transition hover:bg-muted"
+                        title="Account">
+                  <Avatar class="size-7">
+                    <AvatarImage :src="accountAvatar" :alt="accountName" />
+                    <AvatarFallback class="bg-primary text-[11px] font-medium text-primary-foreground">
+                      {{ accountInitials }}
+                    </AvatarFallback>
+                  </Avatar>
+                  <ChevronsUpDown class="size-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" class="w-64">
+                <!-- Profile view: name, email, and the account you're operating in. -->
+                <DropdownMenuLabel class="p-0 font-normal">
+                  <div class="flex items-center gap-2 px-1 py-1.5">
+                    <Avatar class="size-9">
+                      <AvatarImage :src="accountAvatar" :alt="accountName" />
+                      <AvatarFallback class="bg-primary text-xs font-medium text-primary-foreground">
+                        {{ accountInitials }}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div class="grid min-w-0 flex-1 text-left leading-tight">
+                      <span class="truncate text-sm font-semibold">{{ accountName }}</span>
+                      <span class="truncate text-xs text-muted-foreground">{{ accountEmail }}</span>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+
+                <DropdownMenuSeparator />
+                <div class="px-2 py-1.5">
+                  <p class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Signed in to</p>
+                  <div class="flex items-center gap-2">
+                    <component :is="isPersonal ? UserRound : Building2" class="size-4 shrink-0 text-primary" />
+                    <span class="min-w-0 flex-1 truncate text-sm">
+                      <Loader2 v-if="orgBusy" class="inline size-3.5 animate-spin align-[-2px]" />
+                      <template v-else>{{ accountContext }}</template>
+                    </span>
+                    <Badge variant="secondary" class="shrink-0 text-[10px]">
+                      {{ isPersonal ? 'Personal' : 'Org' }}
+                    </Badge>
+                  </div>
+                </div>
+
+                <DropdownMenuSeparator />
+                <DropdownMenuItem class="text-destructive focus:text-destructive" @click="logout">
+                  <LogOut class="size-4" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          </TooltipProvider>
+        </div>
+
+        <!-- Layer B — document actions (fades in when text is selected). Cite-check
+             runs on the whole document; redline/summarise/explain act on the selection. -->
+        <div class="absolute inset-0 flex items-center gap-1.5 overflow-x-auto px-2 transition-opacity duration-200"
+             :class="hasSelection ? 'opacity-100' : 'pointer-events-none opacity-0'">
+          <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
+                  :disabled="citeBusy" @click="runCiteCheck('document')">
+            <Loader2 v-if="citeBusy && citeScope === 'document'" class="size-3.5 animate-spin" />
+            <ScanLine v-else class="size-3.5" />
+            Check citations
+          </Button>
+          <div class="h-4 w-px shrink-0 bg-border" />
+          <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
+                  :disabled="!hasSelection" @click="openRedline">
+            <PenLine class="size-3.5" /> Redline
+          </Button>
+          <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
+                  :disabled="!hasSelection" @click="quickAsk('Summarise the selected text.')">
+            <FileText class="size-3.5" /> Summarise
+          </Button>
+          <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
+                  :disabled="!hasSelection" @click="quickAsk('Explain the selected text in plain English.')">
+            <MessageSquareText class="size-3.5" /> Explain
+          </Button>
+        </div>
       </div>
 
-      <!-- Document-aware quick actions. Cite-check works on the whole document;
-           redline/summarise/explain act on the current selection. -->
-      <div class="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b px-2 py-1.5">
-        <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
-                :disabled="citeBusy" @click="runCiteCheck('document')">
-          <Loader2 v-if="citeBusy && citeScope === 'document'" class="size-3.5 animate-spin" />
-          <ScanLine v-else class="size-3.5" />
-          Check citations
-        </Button>
-        <div class="h-4 w-px shrink-0 bg-border" />
-        <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
-                :disabled="!hasSelection" @click="openRedline">
-          <PenLine class="size-3.5" /> Redline
-        </Button>
-        <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
-                :disabled="!hasSelection" @click="quickAsk('Summarise the selected text.')">
-          <FileText class="size-3.5" /> Summarise
-        </Button>
-        <Button size="sm" variant="ghost" class="h-7 shrink-0 gap-1.5 px-2 text-xs"
-                :disabled="!hasSelection" @click="quickAsk('Explain the selected text in plain English.')">
-          <MessageSquareText class="size-3.5" /> Explain
-        </Button>
+      <div v-if="!inWord" class="shrink-0 border-b bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+        Preview mode — open inside Microsoft Word to insert output and attach selections.
       </div>
 
       <div class="relative min-h-0 flex-1">
@@ -424,6 +599,7 @@ async function applyRedline() {
         class="absolute inset-0"
         surface="word"
         mode="word"
+        hide-toolbar
         :client-tool="clientTool"
         :context-provider="contextProvider"
         :on-locate="locateInDocument"

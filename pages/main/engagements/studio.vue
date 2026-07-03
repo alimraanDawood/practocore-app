@@ -35,7 +35,24 @@ async function loadList() {
   }
 }
 
-onMounted(loadList);
+const route = useRoute();
+const router = useRouter();
+
+onMounted(async () => {
+  await loadList();
+  // Deep-linked "Edit in Studio" from the playbook library: seed the chat with a
+  // refine request naming the playbook, then strip the query so a refresh doesn't
+  // re-fire it. The tool's upsert-by-name path updates the same playbook (or forks
+  // a firm copy of a global seed).
+  const editName = typeof route.query.edit === 'string' ? route.query.edit.trim() : '';
+  if (editName) {
+    await nextTick();
+    chatRef.value?.send(
+      `Let's refine my existing engagement playbook "${editName}". Load it with list_engagement_templates first, then walk me through what I'd like to change before you propose the update under the same name.`,
+    );
+    router.replace({ query: {} });
+  }
+});
 
 async function resume(id: string) {
   if (loadingId.value || id === activeId.value) { mobileHistoryOpen.value = false; return; }

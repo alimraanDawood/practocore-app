@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { getAllDeadlines, subscribeToDeadlines } from '~/services/matters';
 import { getReminders, subscribeToReminders } from '~/services/reminders';
+import { listCalendarMilestones, subscribeMilestones, listCalendarCompliance, subscribeCompliance, type EngagementMilestone, type ComplianceObligation } from '~/services/engagements';
 import { getSignedInUser } from '~/services/auth';
 import { Capacitor } from '@capacitor/core';
 import { db } from '~/lib/db';
@@ -22,6 +23,8 @@ export const useCalendarStore = defineStore('calendar', {
   state: () => ({
     deadlines: [] as Deadline[],
     reminders: [] as any[], // standalone calendar events (Reminders collection)
+    milestones: [] as EngagementMilestone[], // engagement milestones with a due date
+    compliance: [] as ComplianceObligation[], // recurring compliance obligations (next occurrence)
     loading: false as boolean,
     lastFetched: 0 as number,
     _subscribed: false as boolean,
@@ -89,11 +92,30 @@ export const useCalendarStore = defineStore('calendar', {
       if (!user?.id) return [];
       try {
         // Exclude cancelled reminders; keep pending + done so completed events show.
+        // Milestone-derived reminders (those linked to an engagement) are dropped
+        // here — the engagement milestone already renders on the calendar, so
+        // showing its reminder too would double it up.
         const list = await getReminders(user.id);
-        this.reminders = (list || []).filter((r: any) => r.status !== 'cancelled');
+        this.reminders = (list || []).filter((r: any) => r.status !== 'cancelled' && !r.engagement);
         return this.reminders;
       } catch {
         return this.reminders;
+      }
+    },
+    async fetchMilestones() {
+      try {
+        this.milestones = await listCalendarMilestones();
+        return this.milestones;
+      } catch {
+        return this.milestones;
+      }
+    },
+    async fetchCompliance() {
+      try {
+        this.compliance = await listCalendarCompliance();
+        return this.compliance;
+      } catch {
+        return this.compliance;
       }
     },
     ensureSubscribed() {
@@ -111,6 +133,8 @@ export const useCalendarStore = defineStore('calendar', {
         }
       });
       subscribeToReminders(() => { this.fetchReminders(); });
+      subscribeMilestones(() => { this.fetchMilestones(); });
+      subscribeCompliance(() => { this.fetchCompliance(); });
       this._subscribed = true;
     },
     setSelectedDate(iso: string) {

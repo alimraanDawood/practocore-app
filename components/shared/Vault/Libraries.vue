@@ -1,10 +1,12 @@
 <script lang="ts" setup>
-import { Building2, Briefcase, ChevronRight, Loader2, Search, Lock, Plus, Settings2, Users } from 'lucide-vue-next';
+import { Building2, Briefcase, ChevronRight, Loader2, Search, Lock, Plus, Settings2, Users, Workflow } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import {
   listVaults, subscribeVaults, createVault,
   type VaultScope, type Vault,
 } from '~/services/vault';
+import { listEngagements, type Engagement } from '~/services/engagements';
+import { getSignedInUser } from '~/services/auth';
 
 // The top-level library chooser: a "Firm Library" (org scope), the user's custom
 // vaults (membership scope), and a card per matter the user can access (matter
@@ -32,8 +34,29 @@ async function loadVaults() {
   }
 }
 
+// ── Engagements (non-litigation matter type; scope="engagement") ─────────────
+// Each engagement has its own document library, reachable from the engagement
+// page. Surface them here too so the Vault page lists every library the user has.
+const engagements = ref<Engagement[]>([]);
+const engagementsLoading = ref(true);
+
+async function loadEngagements() {
+  engagementsLoading.value = true;
+  try {
+    const uid = getSignedInUser()?.id;
+    const filter = uid ? `owner = "${uid}" || members ~ "${uid}"` : undefined;
+    const res = await listEngagements(1, 100, { filter, sort: '-updated' });
+    engagements.value = res?.items ?? [];
+  } catch {
+    /* listing fails silently — the section just stays empty */
+  } finally {
+    engagementsLoading.value = false;
+  }
+}
+
 onMounted(async () => {
   refresh();
+  await loadEngagements();
   await loadVaults();
   try {
     unsubVaults = await subscribeVaults((action, record) => {
@@ -110,6 +133,15 @@ function pickPersonal() {
 function pickMatter(m: MatterLite) {
   emit('select', { scope: 'matter', scopeId: m.id, label: m.name || 'Matter' });
 }
+function pickEngagement(e: Engagement) {
+  emit('select', { scope: 'engagement', scopeId: e.id, label: e.name || 'Engagement' });
+}
+
+const filteredEngagements = computed(() => {
+  const q = query.value.trim().toLowerCase();
+  if (!q) return engagements.value;
+  return engagements.value.filter((e) => (e.name || '').toLowerCase().includes(q));
+});
 </script>
 
 <template>
@@ -189,6 +221,32 @@ function pickMatter(m: MatterLite) {
         <span class="font-medium text-foreground">Create your first vault</span>
         <span class="text-xs">A private knowledge base you can share with chosen colleagues and query with the AI.</span>
       </button>
+    </div>
+
+    <!-- Engagements (non-litigation matter type — each has its own document library) -->
+    <div v-if="engagementsLoading || engagements.length">
+      <p class="mb-2 font-medium ibm-plex-serif tracking-wide text-muted-foreground text-sm">Engagements</p>
+
+      <div v-if="engagementsLoading" class="grid gap-2 grid-cols-1 md:grid-cols-2">
+        <Skeleton v-for="i in 2" :key="i" class="h-16 rounded-xl" />
+      </div>
+
+      <div v-else class="grid gap-2 grid-cols-1 md:grid-cols-2">
+        <button v-for="e in filteredEngagements" :key="e.id"
+          class="group flex items-center gap-3 rounded border p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+          @click="pickEngagement(e)">
+          <div class="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+            <Workflow class="size-4" />
+          </div>
+          <div class="flex min-w-0 flex-1 flex-col">
+            <span class="truncate text-sm font-medium">{{ e.name || 'Engagement' }}</span>
+            <span v-if="e.expand?.template?.name" class="truncate text-xs text-muted-foreground">
+              {{ e.expand.template.name }}
+            </span>
+          </div>
+          <ChevronRight class="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      </div>
     </div>
 
     <!-- Matters -->

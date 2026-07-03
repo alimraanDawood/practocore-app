@@ -287,6 +287,20 @@ export interface AiContext {
   matterIds?: string[];
   deadlineIds?: string[];
   userIds?: string[];
+  engagementIds?: string[];
+}
+
+// A single structured context reference the user (or the floating dock) attaches to a
+// chat — a matter, deadline, user or engagement. Selected chips are folded into
+// AiContext at send time (see ChatSurface.buildContext) so the backend receives
+// matterIds/deadlineIds/userIds/engagementIds. Shared here so the assistant dock can
+// pre-seed the current page's context.
+export type ContextType = 'matter' | 'deadline' | 'user' | 'engagement';
+export interface ContextItem {
+  type: ContextType;
+  id: string;
+  label: string;
+  sublabel?: string;
 }
 
 export interface AiActionResult {
@@ -541,6 +555,55 @@ export interface ProposeSkillPreview {
   currentStatus?: string;
 }
 
+// Engagement Studio (ENGAGEMENT_STUDIO_OVERHAUL.md §3): the non-litigation
+// playbook the assistant proposes to author. Mirrors
+// previewProposeEngagementTemplate in practocore-backend/ai/preview.go.
+export interface EngagementStageOutline {
+  id: string;
+  label: string;
+  order: number;
+}
+export interface EngagementMilestoneOutline {
+  label: string;
+  stageId: string;
+  /** Resolved stage label (empty for a stageless/lightweight playbook). */
+  stageLabel: string;
+  /** Plain due phrase, e.g. "14 day(s) before the target date". */
+  due: string;
+  reminder: boolean;
+}
+export interface EngagementFieldOutline {
+  section: string;
+  label: string;
+  type: string;
+  required: boolean;
+}
+export interface EngagementDocumentOutline {
+  label: string;
+  optional: boolean;
+}
+/** One recurring obligation rendered as a trust sentence via DescribeCompliance. */
+export interface EngagementComplianceOutline {
+  label: string;
+  /** e.g. "Yearly, on the completion anniversary · reminders on · starts when completed". */
+  schedule: string;
+}
+export interface ProposeEngagementTemplatePreview {
+  kind: 'propose_engagement_template';
+  name: string;
+  description: string;
+  /** True when the playbook has no stages (a lightweight advisory playbook). */
+  lightweight: boolean;
+  stages: EngagementStageOutline[];
+  milestones: EngagementMilestoneOutline[];
+  documents: EngagementDocumentOutline[];
+  compliance: EngagementComplianceOutline[];
+  fields: EngagementFieldOutline[];
+  roles: string[];
+  /** True when this updates one of the caller's existing playbooks of the same name. */
+  isUpdate: boolean;
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -556,6 +619,7 @@ export type ProposalPreview =
   | ReminderPreview
   | GenerateDocumentPreview
   | ProposeSkillPreview
+  | ProposeEngagementTemplatePreview
   | GenericPreview;
 
 export interface AiConversationSummary {
@@ -679,6 +743,13 @@ export function sendAiMessageStream(
     attachmentsMeta?: AiAttachmentMeta[];
     mode?: string;
     surface?: string;
+    /** Floating-dock per-page partition key (e.g. "matter:<id>"). Stamped on the
+     *  conversation so each page context keeps its own thread. Empty elsewhere. */
+    contextKey?: string;
+    /** Ambient page context (the dock's "The user is viewing matter X…"). Injected
+     *  server-side as a volatile preamble — seen by the model each turn but never
+     *  persisted or shown in the transcript. Empty off the dock. */
+    pageContext?: string;
     /** Speed/cost tier: 'auto' (default), 'fast' (cheapest model) or 'deep'
      *  (premium model for hard synthesis). Forwarded to the backend router. */
     tier?: 'auto' | 'fast' | 'deep';
@@ -704,11 +775,16 @@ export function sendAiMessageStream(
       matterIds: context?.matterIds,
       deadlineIds: context?.deadlineIds,
       userIds: context?.userIds,
+      engagementIds: context?.engagementIds,
       conversationId: conversationId ?? '',
       voiceMode: false,
       attachmentsMeta: opts.attachmentsMeta ?? [],
       // Constrains the backend tool set + system prompt, e.g. "skill_studio".
       mode: opts.mode ?? '',
+      // Per-page dock partition key — stamped on the conversation on create.
+      contextKey: opts.contextKey ?? '',
+      // Ambient page context → volatile preamble (not persisted, not displayed).
+      pageContext: opts.pageContext ?? '',
       // Client surface, e.g. "word" — gates client-fulfilled tools (independent of mode).
       surface: opts.surface ?? '',
       // Speed/cost tier ('auto' default) — picks the serving model on the backend.
@@ -730,7 +806,8 @@ export function sendAiMessageVoiceStream(
   messages: AiMessage[],
   context: AiContext | undefined,
   conversationId: string | undefined,
-  opts: { onText?: (delta: string) => void; onStep?: (step: AiStreamStep) => void } = {},
+  opts: { onText?: (delta: string) => void; onStep?: (step: AiStreamStep) => void;
+    mode?: string; contextKey?: string; pageContext?: string } = {},
 ): Promise<AiResponse> {
   return aiStreamPost(
     '/api/practocore/ai/chat',
@@ -740,8 +817,12 @@ export function sendAiMessageVoiceStream(
       matterIds: context?.matterIds,
       deadlineIds: context?.deadlineIds,
       userIds: context?.userIds,
+      engagementIds: context?.engagementIds,
       conversationId: conversationId ?? '',
       voiceMode: true,
+      mode: opts.mode ?? '',
+      contextKey: opts.contextKey ?? '',
+      pageContext: opts.pageContext ?? '',
     },
     opts.onStep,
     opts.onText,
@@ -823,6 +904,7 @@ export function confirmAiProposal(
   voiceMode?: boolean,
   attachmentsMeta?: AiAttachmentMeta[],
   mode?: string,
+  contextKey?: string,
 ): Promise<AiResponse> {
   return aiPost('/api/practocore/ai/chat/confirm', {
     pendingMessages: proposal.pendingMessages ?? [],
@@ -833,11 +915,13 @@ export function confirmAiProposal(
     matterIds: context?.matterIds,
     deadlineIds: context?.deadlineIds,
     userIds: context?.userIds,
+    engagementIds: context?.engagementIds,
     conversationId: conversationId ?? '',
     conversationMessages: conversationMessages ?? [],
     voiceMode: voiceMode ?? false,
     attachmentsMeta: attachmentsMeta ?? [],
     mode: mode ?? '',
+    contextKey: contextKey ?? '',
   });
 }
 
@@ -905,11 +989,14 @@ async function aiGet<T>(path: string): Promise<T | null> {
   }
 }
 
-export function listConversations(page = 1, perPage = 20, mode = ''): Promise<AiConversationPage | null> {
+export function listConversations(page = 1, perPage = 20, mode = '', contextKey = ''): Promise<AiConversationPage | null> {
   // mode scopes the surface: '' = normal assistant (excludes studio threads),
   // 'skill_studio' = Skill Studio history. Mirrors the chat `mode` field.
+  // contextKey further partitions within a surface (the floating dock's per-page
+  // threads, e.g. "matter:<id>"); empty = no per-page scoping.
   const q = mode ? `&mode=${encodeURIComponent(mode)}` : '';
-  return aiGet(`/api/practocore/ai/conversations?page=${page}&perPage=${perPage}${q}`);
+  const ck = contextKey ? `&contextKey=${encodeURIComponent(contextKey)}` : '';
+  return aiGet(`/api/practocore/ai/conversations?page=${page}&perPage=${perPage}${q}${ck}`);
 }
 
 export function getConversation(id: string): Promise<AiConversation | null> {

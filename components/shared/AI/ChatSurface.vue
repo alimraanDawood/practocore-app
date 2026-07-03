@@ -18,12 +18,14 @@ import {
   type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
   type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
   type AiConversationSummary, type AiArtifact,
+  type ContextType, type ContextItem,
 } from '~/services/ai';
 import { useMediaQuery } from '@vueuse/core';
 import MessageAttachments, { type AttachmentView } from '~/components/shared/AI/MessageAttachments.vue';
 import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
 import {getMatters, getAllDeadlines} from '~/services/matters';
 import {getOrganisationUsers} from '~/services/admin';
+import {listEngagements} from '~/services/engagements';
 
 // ChatSurface is the single, reusable PractoAI chat — the whole conversational engine
 // (streaming steps, proposals, attachments, citations, voice, history) lifted out of
@@ -58,10 +60,24 @@ const props = withDefaults(defineProps<{
   clientTool?: ChatClientTool;
   label?: string;
   hideToolbar?: boolean;
+  // Per-page dock partition key (e.g. "matter:<id>"). Sent each turn and used to
+  // list/resume only this context's threads. Empty = no per-page partitioning.
+  contextKey?: string;
+  // Structured context chips to pre-select on mount (the dock passes the current
+  // page's matter/deadline). Folded into the sent AiContext like manual selections.
+  initialContext?: ContextItem[];
+  // When true (and not a shared/URL-driven mode), auto-load the most recent thread
+  // for this surface/context on mount, so the dock "resumes where you left off".
+  autoResumeLatest?: boolean;
   // Returns ambient context to attach to the SENT payload of the next text turn
   // (e.g. the Word document selection). The bubble still shows only what the user
   // typed. Resolved at send time; return '' to attach nothing.
   contextProvider?: () => Promise<string>;
+  // Like contextProvider, but for AMBIENT page context (e.g. the dock's "The user is
+  // viewing matter X"). Unlike contextProvider it is NOT folded into the user message —
+  // it's sent as a separate `pageContext` field the backend injects as a volatile
+  // preamble, so it's seen by the model each turn but never displayed or persisted.
+  pageContextProvider?: () => Promise<string> | string;
   // Click handler for "jump to passage" (doc:) links the assistant emits in the Word
   // surface — receives the verbatim snippet so the host can scroll the document to it.
   onLocate?: (text: string) => void;
@@ -234,7 +250,8 @@ const branches = useChatBranches<ChatMessage>();
 const messages = branches.messages;
 const conversationId = ref('');
 watch(conversationId, (id) => emit('conversationChange', id));
-defineExpose({ ask: askAbout, send: (text: string) => send(text), conversationId, loadConversation, newChat });
+// defineExpose is called once, lower in the file (after the history-related consts
+// like `conversations`/`historyLoading` are initialized) to avoid a TDZ error.
 const pendingProposal = ref<AiResponse | null>(null);
 const loading = ref(false);
 const proposalLoading = ref(false);
@@ -297,12 +314,20 @@ function messageText(content: AiMessage['content']): string {
   ).join(' ');
 }
 
+// Resolve the ambient page context for this turn (empty when no provider / on error).
+// Sent as a separate field, never mixed into the message, so it can't be persisted.
+async function resolvePageContext(): Promise<string> {
+  if (!props.pageContextProvider) return '';
+  try { return (await props.pageContextProvider())?.trim() || ''; } catch { return ''; }
+}
+
 function buildContext(): AiContext | undefined {
   if (selectedItems.value.length === 0) return undefined;
   return {
     matterIds: selectedItems.value.filter(i => i.type === 'matter').map(i => i.id),
     deadlineIds: selectedItems.value.filter(i => i.type === 'deadline').map(i => i.id),
     userIds: selectedItems.value.filter(i => i.type === 'user').map(i => i.id),
+    engagementIds: selectedItems.value.filter(i => i.type === 'engagement').map(i => i.id),
   };
 }
 
@@ -410,6 +435,7 @@ async function send(explicit?: string) {
   scrollToBottom();
 
   turnAbort = new AbortController();
+  const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => {
       activeSteps.value = [...activeSteps.value, s];
@@ -417,6 +443,8 @@ async function send(explicit?: string) {
     },
     attachmentsMeta: sentAttachmentsMeta.value,
     mode: props.mode,
+    contextKey: props.contextKey,
+    pageContext,
     surface: props.surface,
     tier: chatTier.value,
     workflowContext: props.workflowContext,
@@ -500,10 +528,13 @@ async function retryTurn() {
   scrollToBottom();
 
   turnAbort = new AbortController();
+  const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
     attachmentsMeta: sentAttachmentsMeta.value,
     mode: props.mode,
+    contextKey: props.contextKey,
+    pageContext,
     surface: props.surface,
     workflowContext: props.workflowContext,
     signal: turnAbort.signal,
@@ -547,9 +578,12 @@ async function saveEdit(index: number) {
   scrollToBottom();
 
   turnAbort = new AbortController();
+  const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
     mode: props.mode,
+    contextKey: props.contextKey,
+    pageContext,
     surface: props.surface,
     workflowContext: props.workflowContext,
     signal: turnAbort.signal,
@@ -760,9 +794,13 @@ async function runVoiceTurn(text: string) {
   // The first text delta flips us into 'speaking'; arm barge-in once we're talking.
   beginStreamingSpeech();
   let started = false;
+  const voicePageContext = await resolvePageContext();
   const response = await sendAiMessageVoiceStream(
     apiMessages.value, buildContext(), conversationId.value || undefined,
     {
+      mode: props.mode,
+      contextKey: props.contextKey,
+      pageContext: voicePageContext,
       onText: (delta) => {
         if (!voiceOpen.value) return;
         if (!started) {
@@ -887,6 +925,7 @@ async function approveProposal() {
       false,
       sentAttachmentsMeta.value,
       props.mode,
+      props.contextKey,
   );
   loading.value = false;
   proposalLoading.value = false;
@@ -923,6 +962,7 @@ async function autoFulfillProposal(proposal: AiResponse) {
       false,
       sentAttachmentsMeta.value,
       props.mode,
+      props.contextKey,
   );
   loading.value = false;
   proposalLoading.value = false;
@@ -1053,17 +1093,11 @@ function openFilePicker() {
 }
 
 // ── Context picker (matters / deadlines / lawyers) ──────────────────────────
-type ContextType = 'matter' | 'deadline' | 'user';
-
-interface ContextItem {
-  type: ContextType;
-  id: string;
-  label: string;
-  sublabel?: string
-}
-
-const selectedItems = ref<ContextItem[]>([]);
-const contextIcons: Record<ContextType, LucideIcon> = {matter: Building2, deadline: Clock, user: User};
+// ContextType / ContextItem are imported from ~/services/ai (shared with the dock).
+// Pre-seeded from props.initialContext so the floating dock can attach the current
+// page's matter/deadline the moment it opens.
+const selectedItems = ref<ContextItem[]>(props.initialContext ? [...props.initialContext] : []);
+const contextIcons: Record<ContextType, LucideIcon> = {matter: Building2, deadline: Clock, user: User, engagement: Briefcase};
 
 const contextDrawerOpen = ref(false);
 const contextTab = ref<ContextType>('matter');
@@ -1071,6 +1105,7 @@ const contextSearch = ref('');
 const mattersList = ref<{ id: string; name: string; caseNumber: string }[]>([]);
 const deadlinesList = ref<{ id: string; name: string; matterName: string }[]>([]);
 const usersList = ref<{ id: string; name: string; role: string; avatar?: string }[]>([]);
+const engagementsList = ref<{ id: string; name: string; sublabel: string }[]>([]);
 const contextLoading = ref(false);
 
 watch(contextDrawerOpen, async (isOpen) => {
@@ -1081,7 +1116,7 @@ watch(contextDrawerOpen, async (isOpen) => {
   if (mattersList.value.length > 0) return;
   contextLoading.value = true;
   try {
-    const [mattersRes, deadlinesRes, usersRes] = await Promise.all([
+    const [mattersRes, deadlinesRes, usersRes, engagementsRes] = await Promise.all([
       getMatters(1, 100, {sort: '-created'}),
       getAllDeadlines({
         sort: '-date',
@@ -1090,8 +1125,16 @@ watch(contextDrawerOpen, async (isOpen) => {
         fields: 'id,name,date,expand.matter.name'
       }),
       getOrganisationUsers(1, 100, {}),
+      // Non-litigation matters. Tolerate a disabled/empty Engagements feature by
+      // swallowing errors — the tab just shows nothing rather than breaking the drawer.
+      listEngagements(1, 100, {sort: '-created'}).catch(() => ({items: []})),
     ]);
     mattersList.value = (mattersRes.items ?? []).map((m: any) => ({id: m.id, name: m.name, caseNumber: m.caseNumber}));
+    engagementsList.value = ((engagementsRes as any)?.items ?? []).map((e: any) => ({
+      id: e.id,
+      name: e.name,
+      sublabel: e.expand?.template?.name ?? (e.status ? `Engagement · ${e.status}` : 'Engagement'),
+    }));
     deadlinesList.value = (deadlinesRes ?? []).map((d: any) => ({
       id: d.id,
       name: d.name,
@@ -1112,6 +1155,7 @@ const q = computed(() => contextSearch.value.toLowerCase());
 const filteredMatters = computed(() => q.value ? mattersList.value.filter(m => m.name.toLowerCase().includes(q.value) || m.caseNumber?.toLowerCase().includes(q.value)) : mattersList.value);
 const filteredDeadlines = computed(() => q.value ? deadlinesList.value.filter(d => d.name.toLowerCase().includes(q.value) || d.matterName.toLowerCase().includes(q.value)) : deadlinesList.value);
 const filteredUsers = computed(() => q.value ? usersList.value.filter(u => u.name.toLowerCase().includes(q.value)) : usersList.value);
+const filteredEngagements = computed(() => q.value ? engagementsList.value.filter(e => e.name.toLowerCase().includes(q.value) || e.sublabel.toLowerCase().includes(q.value)) : engagementsList.value);
 
 function isSelected(id: string) {
   return selectedItems.value.some(i => i.id === id);
@@ -1181,7 +1225,7 @@ async function refreshHistory(force = false) {
   if (localLoaded.value && !force) return;
   localLoading.value = true;
   try {
-    const page = await listConversations(1, 30, props.mode);
+    const page = await listConversations(1, 30, props.mode, props.contextKey);
     localConversations.value = page?.items ?? [];
     localLoaded.value = true;
   } finally {
@@ -1283,10 +1327,31 @@ onMounted(async () => {
   if (isShared.value) {
     const initial = route.query.c;
     if (typeof initial === 'string' && initial) loadConversation(initial);
+  } else if (props.autoResumeLatest && !props.seed?.trim()) {
+    // Dock: resume the most recent thread for this page-context so returning to a
+    // matter picks up where the user left off. Skipped when a seed prompt is set
+    // (a seeded turn always starts a fresh thread). History is newest-first.
+    const latest = localConversations.value[0];
+    if (latest) loadConversation(latest.id);
   }
   // A seeded prompt (e.g. a builder deep link) auto-sends once on mount.
   const s = props.seed?.trim();
   if (s) send(s);
+});
+
+// Exposed API. Declared here (not near the top) so every referenced binding —
+// including the `conversations`/`historyLoading` consts and `selectConversation` —
+// is already initialized (avoids a temporal-dead-zone error at setup time). Hosts
+// that hide the built-in toolbar (e.g. the Word pane) drive history from these.
+defineExpose({
+  ask: askAbout,
+  send: (text: string) => send(text),
+  conversationId,
+  loadConversation,
+  newChat,
+  conversations,
+  historyLoading,
+  selectConversation,
 });
 </script>
 
@@ -1299,7 +1364,7 @@ onMounted(async () => {
       <!-- Only the main assistant lives inside the app shell's SidebarProvider;
            other modes (e.g. the blank-layout workflow builder) must NOT mount
            SidebarTrigger, which throws without a provider. -->
-      <SidebarTrigger class="lg:hidden" />
+      <SidebarTrigger v-if="isMain" class="lg:hidden" />
       <span class="text-sm font-semibold">{{ label }}</span>
       <div class="ml-auto flex items-center gap-1">
         <!-- Conversation history -->
@@ -1704,6 +1769,10 @@ onMounted(async () => {
                 <User class="size-3"/>
                 Lawyers
               </TabsTrigger>
+              <TabsTrigger value="engagement" class="gap-1.5 text-xs">
+                <Briefcase class="size-3"/>
+                Engagements
+              </TabsTrigger>
             </TabsList>
             <div v-if="contextLoading" class="flex items-center justify-center p-8">
               <Loader2 class="size-5 animate-spin text-muted-foreground"/>
@@ -1753,6 +1822,19 @@ onMounted(async () => {
                 </button>
                 <p v-if="!filteredUsers.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No lawyers
                   found.</p>
+              </TabsContent>
+              <TabsContent value="engagement" class="mt-0 flex-1 overflow-y-auto pb-8">
+                <button v-for="e in filteredEngagements" :key="e.id"
+                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
+                        :class="isSelected(e.id) ? 'bg-accent' : ''"
+                        @click="toggleItem({ type: 'engagement', id: e.id, label: e.name, sublabel: e.sublabel })">
+                  <div class="flex min-w-0 flex-1 flex-col"><span class="truncate text-sm font-medium">{{
+                      e.name
+                    }}</span><span class="truncate text-xs text-muted-foreground">{{ e.sublabel }}</span></div>
+                  <Check v-if="isSelected(e.id)" class="size-4 shrink-0 text-primary"/>
+                </button>
+                <p v-if="!filteredEngagements.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No
+                  engagements found.</p>
               </TabsContent>
             </template>
           </Tabs>

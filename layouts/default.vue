@@ -5,7 +5,7 @@
 import {
   ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
   Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
-  type LucideIcon, Plus, Workflow, Scroll, Telescope, Briefcase,
+  type LucideIcon, Plus, Workflow, Scroll, Telescope, Briefcase, ShieldCheck,
 } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
 import AICreditGauge from '~/components/shared/AI/AICreditGauge.vue';
@@ -62,8 +62,9 @@ const hasOrg = computed(() => !!getSignedInUser()?.organisation);
 const appNav: NavLink[] = [
   // { label: 'Home', icon: Home, to: '/main', exact: true },
   {label: 'Assistant', icon: MessageSquareText, to: '/main', exact: true},
-  {label: 'Matters', icon: Scale, to: '/main/matters'},
+  {label: 'Litigation', icon: Scale, to: '/main/matters'},
   {label: 'Engagements', icon: Briefcase, to: '/main/engagements', beta: true},
+  {label: 'Compliance', icon: ShieldCheck, to: '/main/compliance', beta: true},
   {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
   {label: 'Skills', icon: Scroll, to: '/main/skills'},
@@ -129,6 +130,8 @@ function isActive(item: NavLink): boolean {
                   <span>New Chat</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <!-- Unified entry into the two matter systems (litigation vs engagement). -->
+              <SharedNewWork />
             </SidebarMenu>
           </SidebarGroup>
           <SidebarGroup>
@@ -175,14 +178,14 @@ function isActive(item: NavLink): boolean {
                 </NuxtLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton as-child tooltip="Help" :is-active="route.path.startsWith('/main/help')">
-                <NuxtLink to="/main/help">
-                  <LifeBuoy/>
-                  <span>Help</span>
-                </NuxtLink>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+<!--            <SidebarMenuItem>-->
+<!--              <SidebarMenuButton as-child tooltip="Help" :is-active="route.path.startsWith('/main/help')">-->
+<!--                <NuxtLink to="/main/help">-->
+<!--                  <LifeBuoy/>-->
+<!--                  <span>Help</span>-->
+<!--                </NuxtLink>-->
+<!--              </SidebarMenuButton>-->
+<!--            </SidebarMenuItem>-->
             <!-- Theme toggle — collapses away in icon mode. -->
             <SidebarMenuItem class="group-data-[collapsible=icon]:hidden">
               <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground">
@@ -269,6 +272,12 @@ function isActive(item: NavLink): boolean {
 <!--          <SharedMobileNavigation class="w-full xs:hidden"/>-->
         </div>
       </SidebarInset>
+
+      <!-- Floating assistant dock — a flex sibling AFTER <SidebarInset> so, on desktop,
+           its slide-in panel occupies the far right and pushes the page left instead of
+           covering it. Renders a launcher/panel only on pages that register a context
+           (matter/vault/engagement/calendar) via provideDockContext(). -->
+      <SharedAIAssistantDock />
     </SidebarProvider>
   </div>
 </template>

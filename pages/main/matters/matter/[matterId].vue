@@ -238,7 +238,7 @@
                     />
                   </div>
 
-                  <div class="hidden lg:flex flex-col max-w-sm w-full h-full gap-5 p-3">
+                  <div v-if="!assistantHidesDeadlines" class="hidden lg:flex flex-col max-w-sm w-full h-full gap-5 p-3">
                     <div class="flex flex-col" v-if="latestDeadline">
                       <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
                       <span
@@ -334,6 +334,7 @@ import {
   Users,
   FolderLock,
   FileType2,
+  Scale,
 } from 'lucide-vue-next';
 import {
   subscribeToDeadline,
@@ -342,8 +343,9 @@ import {
   unsubscribeToDeadline,
   unsubscribeToMatter,
 } from '~/services/matters';
-import { useDebounceFn } from '@vueuse/core';
+import { useDebounceFn, useMediaQuery } from '@vueuse/core';
 import { useMattersStore } from '~/stores/matters';
+import { useAssistantDock } from '~/composables/useAssistantDock';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
@@ -363,6 +365,16 @@ const route = useRoute();
 const router = useRouter();
 const mattersStore = useMattersStore();
 const currentApplicationOption = ref('all');
+
+// When the assistant dock slides in it pushes the timeline column narrower. To avoid a
+// cramped three-column squeeze we drop the timeline's deadline sidebar while the dock is
+// open — but only when horizontal room is actually tight. On really wide screens (2xl+)
+// there's space for both, so we leave the sidebar in place.
+const { isOpen: assistantOpen, context: assistantContext } = useAssistantDock();
+const hasRoomForBoth = useMediaQuery('(min-width: 1536px)');
+const assistantHidesDeadlines = computed(
+  () => assistantOpen.value && !!assistantContext.value && !hasRoomForBoth.value
+);
 
 // Tab selection is URL-backed (`?tab=`) so links can deep-link into a matter's
 // Case Documents or AI Drafts (e.g. the assistant handing off to a tab).
@@ -418,6 +430,30 @@ const latestDeadline = computed(() => {
     ?.filter(d => d.status === 'pending')
     ?.sort((a, b) => new Date(a.date) - new Date(b.date))
     ?.at(0) ?? null;
+});
+
+// Floating assistant dock: while this page is mounted, the "Ask AI" launcher opens a
+// chat anchored to the matter the user is looking at. The matter rides along both as a
+// structured chip (→ matterIds, so matter tools resolve it) and a short text header.
+provideDockContext(() => {
+  const m = currentMatterOrApplication.value;
+  if (!m?.id) return null;
+  const next = latestDeadline.value;
+  const bits = [`The user is currently viewing the matter "${m.name}"${m.caseNumber ? ` (case no. ${m.caseNumber})` : ''} in PractoCore.`];
+  if (next?.name) {
+    const tz = currentUser.value?.timezone;
+    const when = next.date ? (tz ? dayjs(next.date).tz(tz) : dayjs(next.date)).format('D MMM YYYY') : '';
+    bits.push(`Its next pending deadline is "${next.name}"${when ? ` on ${when}` : ''}.`);
+  }
+  bits.push('Scope answers and actions to this matter unless told otherwise.');
+  return {
+    key: `matter:${m.id}`,
+    label: m.name || 'Matter',
+    sublabel: m.caseNumber || 'Matter',
+    icon: Scale,
+    chips: [{ type: 'matter', id: m.id, label: m.name || 'Matter', sublabel: m.caseNumber }],
+    contextText: bits.join(' '),
+  };
 });
 
 const missedDeadlines = computed(() => {
