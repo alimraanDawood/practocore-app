@@ -147,7 +147,7 @@ const visibleFields = computed(() =>
 
     <!-- Warnings — red callout for anything the user should notice before approving -->
     <div
-      v-if="preview.warnings.length"
+      v-if="preview.warnings?.length"
       class="flex gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2"
     >
       <AlertTriangle class="size-3.5 mt-0.5 shrink-0 text-red-500" />

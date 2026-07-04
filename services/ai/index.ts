@@ -473,8 +473,9 @@ export interface CreateMatterPreview {
   matter: CreateMatterDraft;
   fields: ExtractedField[];
   /** Warnings the user should notice before approving (missing required fields,
-   *  unknown role IDs, model-supplied extraction notes). */
-  warnings: string[];
+   *  unknown role IDs, model-supplied extraction notes). Backend omits this
+   *  (serialises to null) when there are none. */
+  warnings?: string[] | null;
 }
 
 export interface ReminderTouchpoint {
