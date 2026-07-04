@@ -2,8 +2,8 @@
 import {
   Sparkles, Plus, MessageSquareText, History, Search, Globe,
   Loader2, Check, X, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, ArrowUpIcon, Trash2,
-  Briefcase, FileText, BookOpen, AtSign, Paperclip, Building2, Clock, User,
-  Library, Zap, Gauge,
+  Briefcase, FileText, FileType2, BookOpen, AtSign, Paperclip, Building2, Clock, User,
+  Library, Zap, Gauge, Files, Eye, Download,
   Mic, MicOff, AudioLines, VolumeX, Headphones,
   type LucideIcon,
 } from 'lucide-vue-next';
@@ -17,7 +17,7 @@ import {
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
   type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
-  type AiConversationSummary, type AiArtifact,
+  type AiConversationSummary, type AiArtifact, type AiActionResult,
   type ContextType, type ContextItem,
 } from '~/services/ai';
 import { useMediaQuery } from '@vueuse/core';
@@ -26,6 +26,10 @@ import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/Docu
 import {getMatters, getAllDeadlines} from '~/services/matters';
 import {getOrganisationUsers} from '~/services/admin';
 import {listEngagements} from '~/services/engagements';
+import {
+  listConversationDocuments, subscribeConversationDocuments, documentFileUrl,
+  downloadDocument, documentKindLabel, type GeneratedDocument,
+} from '~/services/documents';
 
 // ChatSurface is the single, reusable PractoAI chat — the whole conversational engine
 // (streaming steps, proposals, attachments, citations, voice, history) lifted out of
@@ -132,7 +136,18 @@ type DisplayAiMessage = AiMessage & {
   steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[];
   attachments?: ConvAttachment[]; sendContent?: string; failed?: boolean; stopped?: boolean;
 };
-type ChatMessage = DisplayAiMessage | ToolEvent;
+// UI-only affordance card: a freshly generated .docx the user can preview/download.
+// Carries the GeneratedDocuments row id; never sent to the model or the flat
+// transcript (see apiMessages/convMessages), but persisted in the branch tree so it
+// survives a reload. The durable, DB-backed surface is the Documents panel.
+type DocumentGenerated = {
+  role: 'document-generated'; documentId: string; title?: string; kind?: string; filename?: string;
+};
+type ChatMessage = DisplayAiMessage | ToolEvent | DocumentGenerated;
+
+// Affordance-card roles that are never part of the model's context or the saved
+// flat transcript (they live only in the UI / branch tree).
+const UI_ONLY_ROLES = ['document-generated'];
 
 // sha256 → resolved open/download URL for attachments in the open conversation. Blob
 // URLs for files sent this session; token URLs resolved from AiChatAttachments on reload.
@@ -150,20 +165,36 @@ function messageChips(msg: DisplayAiMessage): AttachmentView[] {
   }));
 }
 
-// ── Attachment preview (reuses the vault DocumentPreview viewer) ───────────────
+// ── Document preview (reuses the vault DocumentPreview viewer) ─────────────────
+// The single preview sheet serves two sources: chat attachments (previewTarget) and
+// AI-generated documents from the Documents panel (previewGenDoc). Only one is set
+// at a time; previewDoc/resolvePreviewUrl pick whichever is active.
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const previewTarget = ref<AttachmentView | null>(null);
+const previewGenDoc = ref<GeneratedDocument | null>(null);
 const previewOpen = computed({
-  get: () => !!previewTarget.value,
-  set: (v) => { if (!v) previewTarget.value = null; },
+  get: () => !!previewTarget.value || !!previewGenDoc.value,
+  set: (v) => { if (!v) { previewTarget.value = null; previewGenDoc.value = null; } },
 });
-const previewDoc = computed<PreviewDoc | null>(() => previewTarget.value
-    ? { id: previewTarget.value.id, filename: previewTarget.value.name, file: previewTarget.value.name, mime: previewTarget.value.mime }
-    : null);
-function openPreview(att: AttachmentView) { previewTarget.value = att; }
-// Thunk for DocumentPreview's resolveUrl — defined here because bare `Promise`
-// isn't in template scope. The URL is already resolved (blob: live / token URL on reload).
-const resolvePreviewUrl = () => Promise.resolve(previewTarget.value?.url ?? '');
+const previewDoc = computed<PreviewDoc | null>(() => {
+  if (previewGenDoc.value) {
+    const d = previewGenDoc.value;
+    return { id: d.id, filename: d.filename, file: d.file, mime: '' };
+  }
+  if (previewTarget.value) {
+    const a = previewTarget.value;
+    return { id: a.id, filename: a.name, file: a.name, mime: a.mime };
+  }
+  return null;
+});
+function openPreview(att: AttachmentView) { previewGenDoc.value = null; previewTarget.value = att; }
+function openGenDocPreview(doc: GeneratedDocument) { previewTarget.value = null; previewGenDoc.value = doc; }
+// Thunk for DocumentPreview's resolveUrl — defined here because bare `Promise` isn't
+// in template scope. Attachments already carry a resolved URL (blob: live / token URL
+// on reload); generated docs need a fresh short-lived file token.
+const resolvePreviewUrl = () => previewGenDoc.value
+    ? documentFileUrl(previewGenDoc.value)
+    : Promise.resolve(previewTarget.value?.url ?? '');
 
 /** Strip the bracketed attachment placeholders so the bubble shows only the caption. */
 function stripAttachmentPlaceholders(text: string): string {
@@ -252,6 +283,94 @@ const conversationId = ref('');
 watch(conversationId, (id) => emit('conversationChange', id));
 // defineExpose is called once, lower in the file (after the history-related consts
 // like `conversations`/`historyLoading` are initialized) to avoid a TDZ error.
+
+// ── Documents panel (chat-level "artifacts") ──────────────────────────────────
+// Every .docx the assistant drafts in this conversation, listed in a slide-in
+// Sheet accessible from the toolbar (and a floating pill where the toolbar is
+// hidden) — so a generated document stays reachable after its in-thread card
+// scrolls away or the chat is reloaded. Backed by the GeneratedDocuments.conversation
+// link and kept live via a realtime subscription so a freshly drafted doc appears
+// (and the count increments) without a reload.
+const documentsOpen = ref(false);
+const conversationDocs = ref<GeneratedDocument[]>([]);
+const docsLoading = ref(false);
+const downloadingDocId = ref<string | null>(null);
+let docsUnsub: (() => void) | null = null;
+
+function upsertDoc(rec: GeneratedDocument) {
+  const i = conversationDocs.value.findIndex(d => d.id === rec.id);
+  if (i >= 0) conversationDocs.value[i] = rec;
+  else conversationDocs.value = [rec, ...conversationDocs.value];
+}
+
+async function loadConversationDocs(id: string) {
+  if (docsUnsub) { docsUnsub(); docsUnsub = null; }
+  conversationDocs.value = [];
+  if (!id) { documentsOpen.value = false; return; }
+  docsLoading.value = true;
+  try {
+    const rows = await listConversationDocuments(id);
+    if (conversationId.value === id) conversationDocs.value = rows;
+  } catch { /* best-effort */ }
+  finally { docsLoading.value = false; }
+  // Live updates: a doc drafted later (or in another tab) appears without a reload.
+  try {
+    docsUnsub = await subscribeConversationDocuments(id, (action, rec) => {
+      if (conversationId.value !== id) return;
+      if (action === 'delete') conversationDocs.value = conversationDocs.value.filter(d => d.id !== rec.id);
+      else upsertDoc(rec);
+    });
+  } catch { /* realtime optional */ }
+}
+
+// One place reacts to a change of the active conversation (send, load, new chat).
+watch(conversationId, (id) => { loadConversationDocs(id); }, { immediate: true });
+onBeforeUnmount(() => { if (docsUnsub) { docsUnsub(); docsUnsub = null; } });
+
+function openDocument(doc: GeneratedDocument) { openGenDocPreview(doc); documentsOpen.value = false; }
+
+async function downloadDoc(doc: GeneratedDocument) {
+  downloadingDocId.value = doc.id;
+  try { await downloadDocument(doc); }
+  catch { toast.error('Could not download the document. Please try again.'); }
+  finally { downloadingDocId.value = null; }
+}
+
+// Resolve the full row for an in-thread card, preferring the already-loaded panel
+// list (no round-trip) and falling back to a fetch by id.
+async function resolveGeneratedDocument(documentId: string): Promise<GeneratedDocument | null> {
+  const cached = conversationDocs.value.find(d => d.id === documentId);
+  if (cached) return cached;
+  try {
+    const { pb } = await import('~/lib/pocketbase');
+    return await pb.collection('GeneratedDocuments').getOne<GeneratedDocument>(documentId);
+  } catch { return null; }
+}
+
+// In-thread card primary action: open the .docx inline in the preview sheet.
+async function viewGeneratedDocument(documentId: string) {
+  if (!documentId) return;
+  const doc = await resolveGeneratedDocument(documentId);
+  if (!doc) { toast.error('Could not open the document. Please try again.'); return; }
+  openGenDocPreview(doc);
+}
+
+async function downloadGeneratedDocument(documentId: string) {
+  if (!documentId) return;
+  downloadingDocId.value = documentId;
+  try {
+    const doc = await resolveGeneratedDocument(documentId);
+    if (!doc) throw new Error('not found');
+    await downloadDocument(doc);
+  } catch { toast.error('Could not download the document. Please try again.'); }
+  finally { downloadingDocId.value = null; }
+}
+
+// Short date label for a document row (no shared relativeTime helper on this surface).
+function docDate(created: string): string {
+  const d = new Date(created);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 const pendingProposal = ref<AiResponse | null>(null);
 const loading = ref(false);
 const proposalLoading = ref(false);
@@ -286,16 +405,18 @@ const hasThread = computed(() => messages.value.length > 0);
 // Only {role, content} turns are sent back to the model — drop tool-events + UI step metadata.
 const apiMessages = computed<AiMessage[]>(() =>
     messages.value
-        // Drop tool-events and the failed/stopped UI placeholders — the latter are
-        // session-only notes, never part of the model's context.
-        .filter((m): m is DisplayAiMessage => m.role !== 'tool-event' && !m.failed && !m.stopped)
+        // Drop tool-events, UI-only affordance cards, and the failed/stopped UI
+        // placeholders — the last are session-only notes, never part of the model's context.
+        .filter((m): m is DisplayAiMessage => m.role !== 'tool-event' && !UI_ONLY_ROLES.includes(m.role)
+            && !(m as DisplayAiMessage).failed && !(m as DisplayAiMessage).stopped)
         .map(m => ({role: m.role, content: m.sendContent ?? m.content})),
 );
 
 const convMessages = computed<ConvDisplayMessage[]>(() =>
     messages.value
-        // failed/stopped placeholders aren't part of the saved transcript either.
-        .filter(m => m.role === 'tool-event' || (!(m as DisplayAiMessage).failed && !(m as DisplayAiMessage).stopped))
+        // failed/stopped placeholders + UI-only cards aren't part of the saved transcript either.
+        .filter((m): m is DisplayAiMessage | ToolEvent => !UI_ONLY_ROLES.includes(m.role)
+            && (m.role === 'tool-event' || (!(m as DisplayAiMessage).failed && !(m as DisplayAiMessage).stopped)))
         .map(m =>
             m.role === 'tool-event'
                 ? {role: `tool-event:${m.status}`, content: m.content}
@@ -472,6 +593,10 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
   // Surface any tool-produced client artifact (e.g. the builder canvas's drafted
   // workflow) to the parent, regardless of reply type.
   if (response.artifact) emit('artifact', response.artifact);
+  // Surface a just-executed write-tool's structured result (e.g. a drafted document)
+  // as an in-thread affordance card — independent of whether the reply is text or
+  // another proposal, so it never gets dropped.
+  if (response.actionResult) applyActionResult(response.actionResult);
   if (response.type === 'text') {
     branches.append({
       role: 'assistant',
@@ -506,6 +631,26 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
   } else {
     // Session-only error placeholder (not persisted) — offers Retry.
     branches.append({role: 'assistant', content: response.error ?? 'Something went wrong.', failed: true});
+  }
+}
+
+// Append the in-thread affordance card for a successfully executed write-tool. Driven
+// by the backend's structured actionResult so it works whether the follow-up reply is
+// text or another proposal. Currently handles drafted documents; the realtime
+// subscription mirrors the row into the Documents panel.
+function applyActionResult(action: AiActionResult) {
+  if (action.tool === 'generate_document' && action.data?.success) {
+    const d = action.data;
+    const title = d?.title as string | undefined;
+    toast('Document drafted', { description: title ? `"${title}" is ready.` : 'Your document is ready.' });
+    branches.append({
+      role: 'document-generated',
+      documentId: d?.documentId as string,
+      title,
+      kind: d?.kind as string | undefined,
+      filename: d?.filename as string | undefined,
+    });
+    persistTree();
   }
 }
 
@@ -1367,6 +1512,15 @@ defineExpose({
       <SidebarTrigger v-if="isMain" class="lg:hidden" />
       <span class="text-sm font-semibold">{{ label }}</span>
       <div class="ml-auto flex items-center gap-1">
+        <!-- Documents (chat-level artifacts) — only when the conversation has any -->
+        <Button v-if="conversationDocs.length" size="icon-sm" variant="ghost" class="relative"
+                :class="documentsOpen ? 'text-primary' : ''" title="Documents"
+                @click="documentsOpen = true">
+          <Files class="size-4"/>
+          <span class="absolute -right-0.5 -top-0.5 h-3.5 min-w-3.5 rounded-full bg-primary px-0.5 text-[9px] font-medium leading-[14px] tabular-nums text-primary-foreground">
+            {{ conversationDocs.length }}
+          </span>
+        </Button>
         <!-- Conversation history -->
         <Sheet>
           <SheetTrigger as-child>
@@ -1417,6 +1571,19 @@ defineExpose({
       </div>
     </div>
 
+    <!-- Floating Documents pill: on desktop /main the toolbar is hidden (the app
+         sidebar owns nav), so surface the chat-level artifacts here instead. -->
+    <button
+        v-if="isMain && isDesktop && conversationDocs.length"
+        type="button"
+        class="absolute right-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border bg-background/90 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-colors hover:bg-muted"
+        title="Documents drafted in this chat"
+        @click="documentsOpen = true">
+      <Files class="size-3.5 text-primary"/>
+      Documents
+      <span class="min-w-4 rounded-full bg-primary px-1 text-center text-[10px] leading-4 text-primary-foreground tabular-nums">{{ conversationDocs.length }}</span>
+    </button>
+
     <!-- ░░ Scrollable content ░░ -->
     <div class="min-h-0 flex-1 overflow-y-auto">
       <!-- Empty (no-thread) state — owned by the host page via the #empty slot, so
@@ -1437,6 +1604,29 @@ defineExpose({
                                 <X v-else class="size-3"/>
                                 {{ msg.status === 'approved' ? 'Approved' : 'Dismissed' }}: {{ msg.content }}
                             </span>
+          </div>
+
+          <!-- Document card: shown after the assistant drafts a .docx. Primary tap
+               opens the inline preview (artifact view); the trailing button downloads.
+               Every one of these is also listed in the Documents panel. -->
+          <div v-else-if="msg.role === 'document-generated'" class="flex">
+            <div class="group/doc flex max-w-[80%] items-center gap-3 rounded-lg border bg-background py-2 pl-3 pr-1.5 transition-colors hover:bg-muted">
+              <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="viewGeneratedDocument(msg.documentId)">
+                <div class="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                  <FileType2 class="size-4"/>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium">{{ msg.title || 'New document' }}</p>
+                  <p class="text-xs capitalize text-muted-foreground">{{ msg.kind ? `${msg.kind} · ` : '' }}Tap to preview</p>
+                </div>
+              </button>
+              <Button size="icon-sm" variant="ghost" class="shrink-0" title="Download .docx"
+                      :disabled="downloadingDocId === msg.documentId"
+                      @click="downloadGeneratedDocument(msg.documentId)">
+                <Loader2 v-if="downloadingDocId === msg.documentId" class="size-4 animate-spin"/>
+                <Download v-else class="size-4"/>
+              </Button>
+            </div>
           </div>
 
           <!-- User -->
@@ -1940,10 +2130,54 @@ defineExpose({
           class="flex flex-col gap-0 p-0"
           :class="isDesktop ? 'w-full sm:max-w-xl' : 'h-[88dvh]'"
       >
-        <SheetTitle class="sr-only">Attachment preview</SheetTitle>
+        <SheetTitle class="sr-only">Document preview</SheetTitle>
         <DocumentPreview v-if="previewDoc" :doc="previewDoc"
                          :resolve-url="resolvePreviewUrl"
                          class="min-h-0 flex-1" @close="previewOpen = false"/>
+      </SheetContent>
+    </Sheet>
+
+    <!-- ── Documents panel (chat-level artifacts): every .docx drafted in this
+         conversation, previewable/downloadable long after its card scrolls away ── -->
+    <Sheet v-model:open="documentsOpen">
+      <SheetContent :side="isDesktop ? 'right' : 'bottom'" class="w-full p-0 sm:max-w-sm" :class="isDesktop ? '' : 'h-[80dvh]'">
+        <SheetHeader class="border-b">
+          <SheetTitle class="flex items-center gap-1.5 text-sm font-semibold">
+            <Files class="size-4"/> Documents
+          </SheetTitle>
+          <p class="text-xs text-muted-foreground">Drafted by the assistant in this conversation.</p>
+        </SheetHeader>
+
+        <div v-if="docsLoading && !conversationDocs.length" class="flex justify-center py-8">
+          <Loader2 class="size-4 animate-spin text-muted-foreground"/>
+        </div>
+        <div v-else-if="conversationDocs.length" class="flex flex-col overflow-y-auto py-1">
+          <div v-for="doc in conversationDocs" :key="doc.id"
+               class="group/doc flex items-start gap-2 border-b px-3 py-2.5 transition-colors last:border-0 hover:bg-accent">
+            <button type="button" class="flex min-w-0 flex-1 items-start gap-2 text-left" @click="openDocument(doc)">
+              <div class="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                <FileType2 class="size-3.5"/>
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-xs font-medium leading-snug">{{ doc.title || doc.filename || 'Document' }}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                  {{ documentKindLabel(doc.kind) }}<template v-if="docDate(doc.created)"> · {{ docDate(doc.created) }}</template>
+                </p>
+              </div>
+            </button>
+            <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/doc:opacity-100">
+              <button class="p-1 text-muted-foreground hover:text-foreground" title="Preview" @click.stop="openDocument(doc)">
+                <Eye class="size-3.5"/>
+              </button>
+              <button class="p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      title="Download .docx" :disabled="downloadingDocId === doc.id" @click.stop="downloadDoc(doc)">
+                <Loader2 v-if="downloadingDocId === doc.id" class="size-3.5 animate-spin"/>
+                <Download v-else class="size-3.5"/>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No documents yet.</p>
       </SheetContent>
     </Sheet>
   </div>

@@ -212,6 +212,57 @@ export async function reindex(): Promise<{ fts_indexed: number; embedded: number
   return res.json();
 }
 
+// ── Harvester → corpus catalogue sync (superuser) ───────────────────────────
+// The incremental bridge that ingests judgments the harvester mirrored to S3,
+// WITHOUT storing the PDFs here (see practocore-backend/ai/corpus/catalogue.go).
+// A court-priority × newest-year-first sweep, self-paced by the ingestion backlog,
+// with an operator on/off toggle. These endpoints are 404 unless the backend has
+// the harvester link configured (HARVESTER_URL + creds).
+
+export interface CatalogueSyncStatus {
+  enabled: boolean;
+  phase: 'not started' | 'backfill' | 'other courts' | 'tail' | string;
+  court: string;
+  year: string;
+  imported: number;
+  skipped: number;
+  last_error: string;
+  last_run: string;
+  imported_now?: number;
+  /** false when the backend returned 404 (bridge not configured). */
+  configured?: boolean;
+}
+
+export async function getCatalogueSync(): Promise<CatalogueSyncStatus> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/caselaw/sync-catalogue`, {
+    headers: { Authorization: adminPb.authStore.token },
+  });
+  if (res.status === 404) {
+    return { enabled: false, phase: 'not started', court: '', year: '', imported: 0, skipped: 0, last_error: '', last_run: '', configured: false };
+  }
+  if (!res.ok) throw new Error(`Sync status failed (${res.status})`);
+  return { ...(await res.json()), configured: true };
+}
+
+export async function toggleCatalogueSync(enabled: boolean): Promise<CatalogueSyncStatus> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/caselaw/sync-catalogue/toggle`, {
+    method: 'POST',
+    headers: { Authorization: adminPb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`Toggle failed (${res.status})`);
+  return { ...(await res.json()), configured: true };
+}
+
+export async function runCatalogueSync(): Promise<CatalogueSyncStatus> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/caselaw/sync-catalogue/run`, {
+    method: 'POST',
+    headers: { Authorization: adminPb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Sync run failed (${res.status})`);
+  return { ...(await res.json()), configured: true };
+}
+
 /**
  * Backfill/refresh the semantic vectors on AiMemories (vault facts, recalled
  * memories). Superuser-only — run once after provisioning or changing the

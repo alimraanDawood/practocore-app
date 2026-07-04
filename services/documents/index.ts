@@ -20,6 +20,8 @@ export interface GeneratedDocument {
   matter: string;
   /** Engagements id this document relates to, or "" if standalone/matter-filed. */
   engagement: string;
+  /** AiConversations id this document was drafted in, or "" if standalone. */
+  conversation: string;
   /** Users id who generated it. */
   author: string;
   /** plaint | contract | letter | affidavit | ... */
@@ -52,6 +54,19 @@ export function listEngagementDocuments(engagementId: string): Promise<Generated
   });
 }
 
+/**
+ * All generated documents drafted in a chat conversation, newest first — the
+ * source for the chat-level "Documents" artifact panel. Empty conversation id
+ * yields nothing (a new/unsaved thread has no persisted documents yet).
+ */
+export function listConversationDocuments(conversationId: string): Promise<GeneratedDocument[]> {
+  if (!conversationId) return Promise.resolve([]);
+  return pb.collection(COLLECTION).getFullList<GeneratedDocument>({
+    filter: pb.filter('conversation = {:conversationId}', { conversationId }),
+    sort: '-created',
+  });
+}
+
 // ── Realtime ──────────────────────────────────────────────────────────────────
 // Watch a matter's documents so a freshly drafted one appears without a reload.
 // PB realtime ignores the list rule's row filter for *which* events arrive, so we
@@ -73,6 +88,16 @@ export async function subscribeEngagementDocuments(
 ): Promise<() => void> {
   return pb.collection(COLLECTION).subscribe<GeneratedDocument>('*', (e) => {
     if (e.record?.engagement === engagementId) cb(e.action, e.record);
+  });
+}
+
+/** Same as subscribeMatterDocuments, scoped to a chat conversation instead. */
+export async function subscribeConversationDocuments(
+  conversationId: string,
+  cb: (action: string, record: GeneratedDocument) => void,
+): Promise<() => void> {
+  return pb.collection(COLLECTION).subscribe<GeneratedDocument>('*', (e) => {
+    if (e.record?.conversation === conversationId) cb(e.action, e.record);
   });
 }
 
