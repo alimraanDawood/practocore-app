@@ -64,6 +64,10 @@ function openFor(c: AiCitation, anchor: DOMRect) {
   active.value = { citation: c, index: indexById.value.get(c.citeId) ?? 0, anchor };
 }
 
+// Case-law reader state (authority/legislation citation drill-down).
+const readerOpen = ref(false);
+const reader = ref<{ sourceId: string; anchor?: string; citation?: string; title?: string }>({ sourceId: '' });
+
 // Delegated click on an inline chip inside the v-html prose.
 function onProseClick(e: MouseEvent) {
   // "Jump to passage" links (doc: scheme) — the Word surface scrolls the document to
@@ -99,7 +103,18 @@ function pageFromLocator(locator?: string): number | undefined {
 async function open(c: AiCitation) {
   const meta = c.meta ?? {};
   active.value = null;
-  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority' || c.kind === 'legislation') && meta.url) {
+  // Case-law / legislation: open the in-app reader at the exact cited paragraph/section
+  // (verbatim, highlighted, with markdown + original PDF). Fall back to the external URL
+  // for older citations that predate the sourceId pointer.
+  if (c.kind === 'authority' || c.kind === 'legislation') {
+    if (meta.sourceId) {
+      reader.value = { sourceId: meta.sourceId, anchor: meta.anchor, citation: meta.citation, title: c.title };
+      readerOpen.value = true;
+      return;
+    }
+    if (meta.url) { window.open(meta.url, '_blank', 'noopener'); return; }
+  }
+  if ((c.kind === 'legal' || c.kind === 'web') && meta.url) {
     window.open(meta.url, '_blank', 'noopener');
     return;
   }
@@ -142,6 +157,15 @@ async function open(c: AiCitation) {
       :anchor="active.anchor"
       @close="active = null"
       @open="open"
+    />
+
+    <!-- Case-law / legislation reader: the exact cited paragraph in the whole judgment. -->
+    <SharedAICitationsCaseLawReader
+      v-model:open="readerOpen"
+      :source-id="reader.sourceId"
+      :anchor="reader.anchor"
+      :citation="reader.citation"
+      :title="reader.title"
     />
 
     <!-- Source document preview (vault doc the cited fact was distilled from). -->

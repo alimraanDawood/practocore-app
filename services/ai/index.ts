@@ -260,6 +260,7 @@ export interface AiCitation {
     // authority (case-law corpus): the verbatim paragraph is the snippet; meta
     // pins it to the exact judgment paragraph for the verify trail.
     provisionId?: string;
+    globalId?: string;      // stable cross-deployment key (future central corpus)
     anchor?: string;        // e.g. "para 23"
     citation?: string;      // neutral citation, e.g. [2020] UGSC 1
     court?: string;

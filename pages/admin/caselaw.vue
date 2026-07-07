@@ -100,7 +100,8 @@ const stats = computed(() => {
   const ingested = sources.value.filter((s) => s.status === 'ingested').length;
   const working = sources.value.filter((s) => s.status === 'pending' || s.status === 'processing').length;
   const failed = sources.value.filter((s) => s.status === 'failed').length;
-  return { total, ingested, working, failed };
+  const review = sources.value.filter((s) => s.status === 'needs_review').length;
+  return { total, ingested, working, failed, review };
 });
 
 // Poll while anything is still ingesting (collections have no SDK realtime rules).
@@ -266,7 +267,13 @@ async function doReindexMemory() {
 function statusColor(s: CaseLawStatus): string {
   return s === 'ingested' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
     : s === 'failed' ? 'bg-red-500/15 text-red-600 dark:text-red-400'
+    : s === 'needs_review' ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400'
     : 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
+}
+
+// Human label for a status (the raw value has an underscore).
+function statusLabel(s: CaseLawStatus): string {
+  return s === 'needs_review' ? 'needs review' : s;
 }
 
 onMounted(() => {
@@ -408,6 +415,7 @@ onMounted(() => {
               <SelectItem value="ingested">Ingested</SelectItem>
               <SelectItem value="processing">Processing</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="needs_review">Needs review</SelectItem>
               <SelectItem value="failed">Failed</SelectItem>
             </SelectContent>
           </Select>
@@ -427,6 +435,7 @@ onMounted(() => {
           <span>{{ stats.total }} judgments</span>
           <span class="text-emerald-600 dark:text-emerald-400">{{ stats.ingested }} ingested</span>
           <span v-if="stats.working" class="text-amber-600 dark:text-amber-400">{{ stats.working }} processing</span>
+          <span v-if="stats.review" class="text-orange-600 dark:text-orange-400">{{ stats.review }} needs review</span>
           <span v-if="stats.failed" class="text-red-600 dark:text-red-400">{{ stats.failed }} failed</span>
         </div>
 
@@ -458,7 +467,7 @@ onMounted(() => {
                     <span v-if="s.provisions_count">· {{ s.provisions_count }} paras</span>
                   </div>
                 </button>
-                <span :class="['rounded px-1.5 py-0.5 text-[10px] font-medium capitalize', statusColor(s.status)]">{{ s.status }}</span>
+                <span :class="['rounded px-1.5 py-0.5 text-[10px] font-medium capitalize', statusColor(s.status)]">{{ statusLabel(s.status) }}</span>
                 <Button variant="ghost" size="icon" class="size-7 opacity-0 group-hover:opacity-100" @click.stop="removeSource(s)">
                   <Icon name="lucide:trash-2" class="size-3.5 text-muted-foreground" />
                 </Button>

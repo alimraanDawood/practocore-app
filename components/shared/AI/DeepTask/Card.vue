@@ -214,10 +214,22 @@ function openFor(c: AiCitation, anchor: DOMRect) {
 // vault document preview for a distilled memory.
 const previewDoc = ref<VaultDocument | null>(null);
 const loadingDoc = ref(false);
+// Case-law reader state (authority/legislation citation drill-down).
+const readerOpen = ref(false);
+const reader = ref<{ sourceId: string; anchor?: string; citation?: string; title?: string }>({ sourceId: '' });
+
 async function openSource(c: AiCitation) {
   const meta = c.meta ?? {};
   active.value = null;
-  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority' || c.kind === 'legislation') && meta.url) {
+  if (c.kind === 'authority' || c.kind === 'legislation') {
+    if (meta.sourceId) {
+      reader.value = { sourceId: String(meta.sourceId), anchor: meta.anchor, citation: meta.citation, title: c.title };
+      readerOpen.value = true;
+      return;
+    }
+    if (meta.url) { window.open(String(meta.url), '_blank', 'noopener'); return; }
+  }
+  if ((c.kind === 'legal' || c.kind === 'web') && meta.url) {
     window.open(String(meta.url), '_blank', 'noopener');
     return;
   }
@@ -471,6 +483,15 @@ async function openSource(c: AiCitation) {
       :anchor="active.anchor"
       @close="active = null"
       @open="openSource"
+    />
+
+    <!-- Case-law / legislation reader: the exact cited paragraph in the whole judgment. -->
+    <SharedAICitationsCaseLawReader
+      v-model:open="readerOpen"
+      :source-id="reader.sourceId"
+      :anchor="reader.anchor"
+      :citation="reader.citation"
+      :title="reader.title"
     />
 
     <!-- Source document preview (vault doc a cited memory was distilled from). -->

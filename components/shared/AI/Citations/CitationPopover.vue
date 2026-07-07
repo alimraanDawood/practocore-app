@@ -46,13 +46,24 @@ const openLabel = computed<string | null>(() => {
   const c = props.citation;
   if (c.kind === 'memory') return m.value.sourceDocId ? 'View source document' : null;
   if (c.kind === 'matter') return m.value.matterId ? 'Open matter' : null;
-  if ((c.kind === 'legal' || c.kind === 'web' || c.kind === 'authority' || c.kind === 'legislation') && m.value.url) return 'Open source';
+  // Case-law / legislation: the in-app reader opens at the exact cited passage when we
+  // have the source pointer; otherwise fall back to the external source link.
+  if (c.kind === 'authority' || c.kind === 'legislation') {
+    if (m.value.sourceId) return m.value.anchor ? `View passage (${m.value.anchor})` : 'View in document';
+    return m.value.url ? 'Open source' : null;
+  }
+  if ((c.kind === 'legal' || c.kind === 'web') && m.value.url) return 'Open source';
   if (c.kind === 'help' && m.value.slug) return 'Open help article';
   return null;
 });
-const opensExternally = computed(() =>
-  props.citation.kind === 'legal' || props.citation.kind === 'web'
-  || props.citation.kind === 'authority' || props.citation.kind === 'legislation');
+// External (new-tab) vs in-app. Authority/legislation open the in-app reader when a
+// source pointer exists; only the URL fallback is external.
+const opensExternally = computed(() => {
+  const c = props.citation;
+  if (c.kind === 'legal' || c.kind === 'web') return true;
+  if ((c.kind === 'authority' || c.kind === 'legislation')) return !m.value.sourceId && !!m.value.url;
+  return false;
+});
 
 const provenanceLine = computed(() => {
   const p = m.value.provenance;

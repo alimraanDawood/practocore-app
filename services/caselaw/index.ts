@@ -9,10 +9,15 @@ import { pb, SERVER_URL } from '~/lib/pocketbase';
 // session and must stay intact for navigation. Reads (list/get) are open to any
 // authenticated user and use the main token.
 
-export type CaseLawStatus = 'pending' | 'processing' | 'ingested' | 'failed';
+export type CaseLawStatus = 'pending' | 'processing' | 'ingested' | 'failed' | 'needs_review';
 
 export interface CaseLawSource {
   id: string;
+  // Stable, deployment-independent id (ULII mirror key stem). A future centralized
+  // corpus service resolves content by this; today the local `id` is what's fetched.
+  global_id?: string;
+  has_pdf?: boolean;      // an original PDF is available to view/download
+  has_markdown?: boolean; // AI-readable markdown is stored
   type: string;
   citation: string;
   title: string;
@@ -150,6 +155,43 @@ export async function sourceFileUrl(detail: CaseLawDetail): Promise<string> {
   if (!detail.file) return '';
   const token = await pb.files.getToken();
   return `${SERVER_URL}/api/files/${detail.collectionId}/${detail.id}/${detail.file}?token=${token}`;
+}
+
+// ── User-facing reader (citation drill-down) ─────────────────────────────────
+// These use the normal Users token — the corpus is a global, read-only authority axis
+// any authed user can read. Endpoints are shaped as the content API a future centralized
+// corpus service will expose, so the same calls can later re-point at that service.
+
+export interface CaseLawMarkdown {
+  id: string;
+  global_id: string;
+  citation: string;
+  title: string;
+  court: string;
+  markdown: string;
+}
+
+/** The AI-readable markdown for a source (the in-app reader's raw view). */
+export async function getCaseLawMarkdown(id: string): Promise<CaseLawMarkdown> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/caselaw/sources/${id}/markdown`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Markdown unavailable (${res.status})`);
+  return res.json();
+}
+
+/**
+ * Fetches the original PDF (streamed from the mirror) and returns an object URL for an
+ * <iframe>/<a>. The endpoint is header-authenticated, so we fetch as a blob rather than
+ * linking directly. Caller must URL.revokeObjectURL when done.
+ */
+export async function caseLawPdfObjectUrl(id: string, download = false): Promise<string> {
+  const q = download ? '?download=1' : '';
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/caselaw/sources/${id}/pdf${q}`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`PDF unavailable (${res.status})`);
+  return URL.createObjectURL(await res.blob());
 }
 
 // ── Writes (superuser only) ─────────────────────────────────────────────────
