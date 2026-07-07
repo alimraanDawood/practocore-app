@@ -56,6 +56,15 @@ export default defineNuxtPlugin((nuxtApp) => {
         autocapture: true,
         capture_pageview: true,
         capture_pageleave: true,
+        // Error tracking: autocapture unhandled exceptions and promise
+        // rejections so runtime errors surface in PostHog. Console-error
+        // capture stays OFF — console lines can contain client/matter data,
+        // and stack traces are scrubbed by sanitize_properties below.
+        capture_exceptions: {
+            capture_unhandled_errors: true,
+            capture_unhandled_rejections: true,
+            capture_console_errors: false,
+        },
         // Session recording: BETA ONLY, env-gated. On prod (flag unset) this stays
         // true and nothing is ever recorded.
         disable_session_recording: !enableReplay,
