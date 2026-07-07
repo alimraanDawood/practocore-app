@@ -140,8 +140,11 @@ export default defineNuxtConfig({
             pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'http://127.0.0.1:8090',
             // PostHog product analytics. Leave the key empty to disable entirely
             // (e.g. local dev). EU ingestion only — never point posthogHost at US.
+            // Default host is the first-party reverse proxy (portal.practocore.com),
+            // which forwards to EU ingestion — keeps analytics same-origin and
+            // resilient to ad/tracker blockers. ui_host stays eu.posthog.com.
             posthogKey: process.env.NUXT_PUBLIC_POSTHOG_KEY || '',
-            posthogHost: process.env.NUXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com',
+            posthogHost: process.env.NUXT_PUBLIC_POSTHOG_HOST || 'https://portal.practocore.com',
             // Session replay — BETA ONLY. Off unless explicitly enabled. To turn
             // it off for production, simply do NOT set this var in the prod env.
             // Replays capture on-screen text (matter/client names); typed input

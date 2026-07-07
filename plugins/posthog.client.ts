@@ -48,8 +48,12 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
 
     posthog.init(key, {
+        // api_host is the first-party reverse proxy (portal.practocore.com),
+        // forwarding to EU ingestion. ui_host must stay the real PostHog app
+        // so in-app links (toolbar, replays) resolve correctly.
         api_host: host,
         ui_host: 'https://eu.posthog.com',
+        defaults: '2026-05-30',
         // We create profiles only for logged-in users.
         person_profiles: 'identified_only',
         // Autocapture clicks/navigation, but never record sessions or inputs.
