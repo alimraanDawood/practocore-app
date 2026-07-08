@@ -3,7 +3,6 @@ import {
   Loader2, CheckCircle2, XCircle, FileText, Download, Sparkles, Pencil, Plus, Trash2, RotateCw,
   Pause, Play, Square, CircleSlash, BookOpen,
 } from 'lucide-vue-next';
-import { marked } from 'marked';
 import { toast } from 'vue-sonner';
 import {
   type DeepTask, type Outline, type OutlineSection,
@@ -188,11 +187,6 @@ async function download() {
   }
 }
 
-// ── Report-first: the compiled report rendered inline ─────────────────────────
-// The deliverable is the cited report shown in the card; the .docx is an export.
-marked.use({ breaks: true, gfm: true });
-const reportHtml = computed(() => (task.value?.report ? marked.parse(task.value.report) as string : ''));
-
 // ── Research findings + sources ───────────────────────────────────────────────
 // The gather sweep's output, surfaced the moment it finishes (was previously kept
 // internal). `sources` reuses the same SourcesFooter/CitationPopover the chat answer
@@ -371,8 +365,10 @@ async function openSource(c: AiCitation) {
           </li>
         </ul>
 
-        <!-- Research findings + sources (surfaced once the gather sweep produces them) -->
-        <div v-if="task.findings || sources.length" class="rounded-md border p-3 space-y-2">
+        <!-- Research findings + sources (surfaced once the gather sweep produces them).
+             Once the report is done it carries its own clickable sources footer, so we
+             drop the standalone list here to avoid showing every source twice. -->
+        <div v-if="task.findings || (sources.length && !isDone)" class="rounded-md border p-3 space-y-2">
           <div class="flex items-center gap-1.5 text-sm font-medium">
             <BookOpen class="size-4 text-muted-foreground" /> Research
           </div>
@@ -391,7 +387,7 @@ async function openSource(c: AiCitation) {
             >{{ task.findings }}</p>
           </template>
           <SharedAICitationsSourcesFooter
-            v-if="sources.length"
+            v-if="sources.length && !isDone"
             :citations="sources"
             @select="openFor"
           />
@@ -453,9 +449,12 @@ async function openSource(c: AiCitation) {
           </div>
         </div>
 
-        <!-- Result: the compiled report shown inline (report-first); the .docx is an export when available. -->
+        <!-- Result: the compiled report shown inline as a real document (report-first).
+             Rendered through CitedAnswer so the inline [[cite:cN]] markers become
+             clickable, verifiable citation chips (with the sources footer, case-law
+             reader and vault preview) — the .docx is an export when available. -->
         <div v-if="isDone" class="rounded-md border">
-          <div class="flex items-center justify-between gap-3 p-3 border-b">
+          <div class="sticky top-0 z-10 flex items-center justify-between gap-3 p-3 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
             <div class="flex items-center gap-2 min-w-0">
               <FileText class="size-5 text-primary shrink-0" />
               <span class="text-sm font-medium truncate">{{ task.outline?.title || 'Research report' }}</span>
@@ -466,11 +465,9 @@ async function openSource(c: AiCitation) {
               Export (.docx)
             </Button>
           </div>
-          <div
-            v-if="reportHtml"
-            class="prose prose-pink prose-sm dark:prose-invert max-w-none p-3 max-h-[28rem] overflow-y-auto"
-            v-html="reportHtml"
-          />
+          <div v-if="task.report" class="p-4">
+            <SharedAICitationsCitedAnswer :content="task.report" :citations="sources" />
+          </div>
         </div>
       </template>
     </CardContent>

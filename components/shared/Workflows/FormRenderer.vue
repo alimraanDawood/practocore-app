@@ -10,6 +10,7 @@ import {
 } from '~/services/workflows';
 import { getOrganisationMembers } from '~/services/admin';
 import { getSignedInUser } from '~/services/auth';
+import { getMatters } from '~/services/matters';
 import { toast } from 'vue-sonner';
 
 // Renders a FormDef's fields into a real, validated form and submits it. On a
@@ -58,7 +59,11 @@ function reset() {
   for (const f of props.form.fields) values[f.key] = blankValue(f);
 }
 reset();
-watch(() => props.form.id, reset);
+watch(() => props.form.id, () => {
+  reset();
+  loadDraft();
+  currentStep.value = 0;
+});
 
 function onFilePick(f: Field, e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -85,15 +90,31 @@ interface Member { id: string; name: string; email: string; avatar?: string }
 const members = ref<Member[]>([]);
 const membersLoading = ref(false);
 
+// Build the current user as a pickable "You" entry so an approver picker is never
+// empty — critical for a solo/individual account (no organisation), where the
+// signed-in lawyer IS the approver and must be able to route a required approval
+// gate to themselves. Firms get "You" first, then colleagues.
+function selfMember(): Member | null {
+  const me = getSignedInUser();
+  if (!me) return null;
+  return { id: me.id, name: me.name ? `${me.name} (You)` : 'You', email: me.email || '' };
+}
+
 async function loadMembers() {
-  const orgId = getSignedInUser()?.organisation;
-  if (!orgId) return;
+  const me = getSignedInUser();
+  const self = selfMember();
+  const orgId = me?.organisation;
   membersLoading.value = true;
   try {
-    const res = await getOrganisationMembers(orgId);
-    members.value = res?.members ?? [];
+    let others: Member[] = [];
+    if (orgId) {
+      const res = await getOrganisationMembers(orgId);
+      others = (res?.members ?? []).filter((m) => m.id !== me?.id);
+    }
+    members.value = self ? [self, ...others] : others;
   } catch {
-    members.value = [];
+    // Org lookup failed — a solo/individual can still self-approve.
+    members.value = self ? [self] : [];
   } finally {
     membersLoading.value = false;
   }
@@ -101,6 +122,8 @@ async function loadMembers() {
 
 onMounted(() => {
   if (hasPeoplePicker.value) loadMembers();
+  if (showMatterPicker.value) loadMatters();
+  loadDraft();
 });
 
 function togglePerson(f: Field, id: string) {
@@ -123,10 +146,149 @@ function memberInitials(name: string): string {
   return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase() || 'U';
 }
 
+// ── Matter linkage ───────────────────────────────────────────────────────────
+// When the form's link_matter setting is "attach", let the submitter pick the
+// matter the run (and its drafted documents) should belong to — otherwise the
+// drafts are orphaned from the case file. Skipped when the renderer is already
+// scoped to a matter (props.matterId, e.g. embedded on a matter page) or when
+// collecting sample values for a dry-run.
+const showMatterPicker = computed(
+  () => !props.collectOnly && !props.matterId && props.form.settings?.link_matter === 'attach',
+);
+interface MatterOption { id: string; name: string }
+const matters = ref<MatterOption[]>([]);
+const mattersLoading = ref(false);
+const selectedMatterId = ref<string>(props.matterId ?? '');
+// reka-ui Select forbids an empty-string item value, so bind to a sentinel and
+// map "__none__" back to "" (standalone, no matter).
+const matterChoice = computed({
+  get: () => selectedMatterId.value || '__none__',
+  set: (v: string) => { selectedMatterId.value = v === '__none__' ? '' : v; },
+});
+
+async function loadMatters() {
+  mattersLoading.value = true;
+  try {
+    const res = await getMatters(1, 100, { sort: '-created' });
+    matters.value = (res?.items ?? []).map((m: any) => ({ id: m.id, name: m.name || 'Untitled matter' }));
+  } catch {
+    matters.value = [];
+  } finally {
+    mattersLoading.value = false;
+  }
+}
+
 // Field-level errors keyed by field key (server validation; "group" errors use the
 // group key as a coarse marker).
 const errors = reactive<Record<string, string>>({});
 const submitting = ref(false);
+
+// ── Step-by-step mode ─────────────────────────────────────────────────────────
+// A runtime toggle that turns a long single-page form into a one-thing-at-a-time
+// wizard, so it doesn't feel overwhelming. Off by default (power users keep the
+// single page). Each step is one top-level field, preceded by the matter picker
+// when shown. All fields stay mounted (v-show) so nothing is lost between steps.
+const stepMode = ref(false);
+const currentStep = ref(0);
+const stepKeys = computed<string[]>(() => {
+  const keys: string[] = [];
+  if (showMatterPicker.value) keys.push('__matter__');
+  for (const f of props.form.fields) keys.push(f.key);
+  return keys;
+});
+const stepCount = computed(() => stepKeys.value.length);
+const currentKey = computed(() => stepKeys.value[currentStep.value]);
+const isLastStep = computed(() => currentStep.value >= stepCount.value - 1);
+// Only worth offering the toggle when the form is long enough to benefit.
+const canStep = computed(() => !props.collectOnly && stepKeys.value.length > 3);
+
+function fieldVisible(key: string): boolean {
+  return !stepMode.value || currentKey.value === key;
+}
+const matterStepVisible = computed(() => !stepMode.value || currentKey.value === '__matter__');
+
+function fieldByKey(key: string): Field | undefined {
+  return props.form.fields.find((f) => f.key === key);
+}
+function isEmptyValue(f: Field): boolean {
+  const v = values[f.key];
+  if (f.type === 'multiselect' || f.type === 'group') return !Array.isArray(v) || v.length === 0;
+  if (f.type === 'bool') return false; // a boolean is always answered
+  if (f.type === 'number' || f.type === 'currency') return v === undefined || v === null || v === '';
+  return v === undefined || v === null || String(v).trim() === '';
+}
+// Validate the current step client-side before advancing (final server-side
+// validation still runs on submit). The matter step is always optional.
+function validateStep(): boolean {
+  const key = currentKey.value;
+  if (key === '__matter__') return true;
+  const f = fieldByKey(key);
+  if (f) {
+    if (f.required && isEmptyValue(f)) {
+      errors[f.key] = `${f.label} is required`;
+      return false;
+    }
+    delete errors[f.key];
+  }
+  return true;
+}
+function nextStep() {
+  if (!validateStep()) return;
+  if (currentStep.value < stepCount.value - 1) currentStep.value++;
+}
+function prevStep() {
+  if (currentStep.value > 0) currentStep.value--;
+}
+watch(stepMode, () => { currentStep.value = 0; });
+watch(stepCount, (n) => { if (currentStep.value >= n) currentStep.value = Math.max(0, n - 1); });
+
+// ── Auto-saved draft ──────────────────────────────────────────────────────────
+// Persist the (JSON) answers to localStorage so a long form survives a reload or
+// an accidental navigation — the "save as draft" the workspace lacked. Files can't
+// be persisted, so uploads are re-attached on return. Cleared on a real submit.
+const draftKey = computed(() => `wf-draft:${props.form.id}`);
+const draftSaved = ref(false);
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+
+function loadDraft() {
+  if (props.collectOnly || !props.form.id) return;
+  try {
+    const raw = localStorage.getItem(draftKey.value);
+    if (!raw) return;
+    const saved = JSON.parse(raw) as Record<string, unknown>;
+    for (const f of props.form.fields) {
+      if (saved[f.key] !== undefined) values[f.key] = saved[f.key];
+    }
+    draftSaved.value = true;
+  } catch { /* ignore malformed draft */ }
+}
+function saveDraft() {
+  if (props.collectOnly || !props.form.id) return;
+  // Only persist once the user has actually entered something (ignore toggled
+  // booleans) — so discarding or emptying the form doesn't recreate a blank draft.
+  const hasInput = props.form.fields.some((f) => f.type !== 'bool' && !isEmptyValue(f));
+  if (!hasInput) {
+    clearDraft();
+    return;
+  }
+  try {
+    localStorage.setItem(draftKey.value, JSON.stringify(values));
+    draftSaved.value = true;
+  } catch { /* storage full / disabled — non-fatal */ }
+}
+function clearDraft() {
+  try { localStorage.removeItem(draftKey.value); } catch { /* noop */ }
+  draftSaved.value = false;
+}
+function discardDraft() {
+  clearDraft();
+  reset();
+  currentStep.value = 0;
+}
+watch(values, () => {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraft, 400);
+}, { deep: true });
 
 function addGroupRow(f: Field) {
   const row: Record<string, unknown> = {};
@@ -145,6 +307,13 @@ function toggleMulti(key: string, option: string) {
 }
 
 async function onSubmit() {
+  // In step mode, a submit/Enter before the last step just advances the wizard
+  // (and the final step is validated before the real submit).
+  if (stepMode.value && !isLastStep.value) {
+    nextStep();
+    return;
+  }
+  if (stepMode.value && !validateStep()) return;
   for (const k of Object.keys(errors)) delete errors[k];
   if (props.collectOnly) {
     emit('collect', { ...values });
@@ -156,7 +325,7 @@ async function onSubmit() {
     for (const [k, f] of Object.entries(files)) if (f) pickedFiles[k] = f;
     const result = await submitForm({
       formId: props.form.id,
-      matterId: props.matterId,
+      matterId: selectedMatterId.value || props.matterId,
       values: { ...values },
       files: pickedFiles,
     });
@@ -165,6 +334,7 @@ async function onSubmit() {
     } else {
       toast.message(result.message || 'Submission saved.');
     }
+    clearDraft(); // submitted for real — drop the saved draft
     emit('submitted', result);
   } catch (err) {
     if (err instanceof SubmitValidationFailed) {
@@ -183,11 +353,54 @@ async function onSubmit() {
 
 <template>
   <form class="flex flex-col gap-5" @submit.prevent="onSubmit">
-    <div v-if="form.description" class="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+    <!-- Controls: step-by-step toggle + saved-draft state -->
+    <div v-if="canStep || draftSaved" class="flex flex-wrap items-center justify-between gap-2">
+      <label v-if="canStep" class="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+        <Switch v-model="stepMode" />
+        Step by step
+      </label>
+      <span v-else />
+      <button
+        v-if="draftSaved"
+        type="button"
+        class="text-xs text-muted-foreground underline-offset-2 hover:underline"
+        @click="discardDraft"
+      >
+        Draft saved · discard
+      </button>
+    </div>
+
+    <!-- Step progress -->
+    <div v-if="stepMode" class="flex flex-col gap-1.5">
+      <div class="flex items-center justify-between text-xs text-muted-foreground">
+        <span>Step {{ currentStep + 1 }} of {{ stepCount }}</span>
+      </div>
+      <Progress :model-value="((currentStep + 1) / stepCount) * 100" />
+    </div>
+
+    <div v-if="form.description && !stepMode" class="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
       {{ form.description }}
     </div>
 
-    <div v-for="f in form.fields" :key="f.key" class="flex flex-col gap-1.5">
+    <!-- Matter linkage: attach the run + its drafts to a case file -->
+    <div v-if="showMatterPicker" v-show="matterStepVisible" class="flex flex-col gap-1.5">
+      <Label for="wf-matter" class="text-sm font-medium">Matter</Label>
+      <p class="text-xs text-muted-foreground">Link this run to a matter so drafted documents are filed under the case.</p>
+      <div v-if="mattersLoading" class="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 class="size-3.5 animate-spin" /> Loading matters…
+      </div>
+      <Select v-else v-model="matterChoice">
+        <SelectTrigger id="wf-matter">
+          <SelectValue placeholder="No matter (standalone)" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">No matter (standalone)</SelectItem>
+          <SelectItem v-for="m in matters" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+
+    <div v-for="f in form.fields" v-show="fieldVisible(f.key)" :key="f.key" class="flex flex-col gap-1.5">
       <Label :for="`f-${f.key}`" class="text-sm font-medium">
         {{ f.label }}
         <span v-if="f.required" class="text-red-500">*</span>
@@ -367,7 +580,20 @@ async function onSubmit() {
     </div>
 
     <div class="flex items-center gap-2 pt-2">
-      <Button type="submit" :disabled="submitting">
+      <template v-if="stepMode">
+        <Button type="button" variant="outline" :disabled="currentStep === 0" @click="prevStep">
+          Back
+        </Button>
+        <Button v-if="!isLastStep" type="button" @click="nextStep">
+          Next
+        </Button>
+        <Button v-else type="submit" :disabled="submitting">
+          <Loader2 v-if="submitting" class="size-4 animate-spin" />
+          <Send v-else class="size-4" />
+          {{ submitting ? 'Starting…' : (submitLabel || 'Submit & run') }}
+        </Button>
+      </template>
+      <Button v-else type="submit" :disabled="submitting">
         <Loader2 v-if="submitting" class="size-4 animate-spin" />
         <Send v-else class="size-4" />
         {{ submitting ? 'Starting…' : (submitLabel || 'Submit & run') }}

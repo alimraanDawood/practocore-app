@@ -69,7 +69,7 @@ const appNav: NavLink[] = [
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
   {label: 'Skills', icon: Scroll, to: '/main/skills'},
   // Workflows + Deep Research hidden from the UI for now (routes/backend remain intact).
-  // {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
+  {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
   {label: 'Research', icon: Telescope, to: '/main/research', beta: true},
   {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
   // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },

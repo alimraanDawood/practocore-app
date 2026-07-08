@@ -20,7 +20,7 @@ const progressSummary = computed(() => {
   const task = activeTask.value;
   if (!task) return activePlan.value ? 'Research plan ready to launch' : '';
   if (task.phase === 'done') return 'Research complete';
-  if (task.phase === 'failed') return 'Research failed';
+  if (task.phase === 'error') return 'Research failed';
   if (task.phase === 'outline_review') return 'Outline awaiting your approval';
   if (isLivePhase(task.phase)) {
     const pct = task.progress > 0 ? ` — ${task.progress}%` : '';

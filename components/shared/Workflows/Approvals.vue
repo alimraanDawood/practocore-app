@@ -1,10 +1,13 @@
 <script lang="ts" setup>
-import { Loader2, Stamp, RefreshCw, Check, X, FileText, Download } from 'lucide-vue-next';
+import { Loader2, Stamp, RefreshCw, Check, X, FileText, Eye, TriangleAlert } from 'lucide-vue-next';
 import {
   type ApprovalItem, type OutcomeDocument,
-  listMyApprovals, decideRun, downloadOutcomeDocument, WorkflowsDisabledError,
+  listMyApprovals, decideRun, documentDownloadUrl, WorkflowsDisabledError,
 } from '~/services/workflows';
+import type { PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
 import { toast } from 'vue-sonner';
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 // The "lawyer approves a pending action" inbox: each item is a parked run whose
 // approval gate is routed to me. Approving/rejecting resumes (or stops) the run.
@@ -54,12 +57,22 @@ function docs(item: ApprovalItem): OutcomeDocument[] {
   return item.outcome?.documents ?? [];
 }
 
-async function download(doc: OutcomeDocument) {
-  try {
-    await downloadOutcomeDocument(doc);
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Download failed');
-  }
+// ── In-app document preview at the gate ───────────────────────────────────────
+// A partner reviews the drafted pack inline (docx → mammoth) instead of downloading
+// every file. Reuses the shared Vault/DocumentPreview viewer.
+const previewing = ref<OutcomeDocument | null>(null);
+const previewDoc = computed<PreviewDoc | null>(() => {
+  const d = previewing.value;
+  if (!d) return null;
+  const title = d.title || 'Document';
+  return {
+    id: d.documentId,
+    filename: `${title}.docx`,
+    mime: DOCX_MIME,
+  };
+});
+function resolvePreviewUrl(): Promise<string> {
+  return previewing.value ? documentDownloadUrl(previewing.value) : Promise.resolve('');
 }
 </script>
 
@@ -109,17 +122,34 @@ async function download(doc: OutcomeDocument) {
           </button>
         </div>
 
-        <!-- Documents under review -->
+        <!-- Soft-failed drafts in this pack: warn before sign-off (the prompt itself
+             also carries this banner, but a partner should see it distinctly). -->
+        <div
+          v-if="item.warnings && item.warnings.length"
+          class="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs"
+        >
+          <p class="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-500">
+            <TriangleAlert class="size-3.5" /> Some documents didn't draft cleanly — review carefully
+          </p>
+          <ul class="ml-5 list-disc text-muted-foreground">
+            <li v-for="w in item.warnings" :key="w.step">
+              <span class="font-medium text-foreground">{{ w.title }}</span> — {{ w.message }}
+            </li>
+          </ul>
+        </div>
+
+        <!-- Documents under review (click to preview inline) -->
         <div v-if="docs(item).length" class="flex flex-wrap gap-2">
           <button
             v-for="doc in docs(item)"
             :key="doc.documentId"
             class="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-muted"
-            @click="download(doc)"
+            title="Preview this document"
+            @click="previewing = doc"
           >
             <FileText class="size-3.5 text-primary" />
             <span class="max-w-[12rem] truncate">{{ doc.title || 'Document' }}</span>
-            <Download class="size-3.5 text-muted-foreground" />
+            <Eye class="size-3.5 text-muted-foreground" />
           </button>
         </div>
 
@@ -142,5 +172,23 @@ async function download(doc: OutcomeDocument) {
         </div>
       </li>
     </ul>
+
+    <!-- In-app document preview (drafted pack under review). -->
+    <Teleport to="body">
+      <div
+        v-if="previewDoc"
+        class="fixed inset-0 z-[130] flex"
+        @keydown.esc="previewing = null"
+      >
+        <div class="absolute inset-0 bg-black/40" @click="previewing = null" />
+        <div class="ml-auto flex h-full w-full max-w-2xl z-10 flex-col border-l bg-background shadow-xl">
+          <SharedVaultDocumentPreview
+            :doc="previewDoc"
+            :resolve-url="resolvePreviewUrl"
+            @close="previewing = null"
+          />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

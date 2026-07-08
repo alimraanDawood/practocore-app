@@ -198,12 +198,21 @@ export interface ApprovalRecord {
   outcome: 'pending' | 'approved' | 'rejected';
 }
 
+/** A draft/action step that soft-failed upstream of an approval gate. */
+export interface SoftFailure {
+  step: string;
+  title: string;
+  message: string;
+}
+
 /** A pending approval gate routed to the current user (GET /approvals). */
 export interface ApprovalItem {
   runId: string;
   stepId: string;
   prompt: string;
   policy: string;
+  /** Set when a document in the pack under review did not draft cleanly. */
+  warnings?: SoftFailure[] | null;
   decisions: ApprovalDecisionEntry[];
   started: string;
   outcome: RunOutcome | null;
@@ -458,6 +467,21 @@ export function decideRun(
     body: JSON.stringify({ decision, comment }),
   }).then((r) => {
     track(decision === 'approved' ? 'workflow_approved' : 'workflow_rejected', { has_comment: Boolean(comment) });
+    return r;
+  });
+}
+
+// cancelRun terminates an in-flight run (running or parked at an approval gate).
+export function cancelRun(
+  runId: string,
+  reason?: string,
+): Promise<{ runId: string; status: RunStatus; outcome: RunOutcome | null }> {
+  return api(`/runs/${runId}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }).then((r) => {
+    track('workflow_cancelled', {});
     return r;
   });
 }

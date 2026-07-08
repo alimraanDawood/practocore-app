@@ -33,7 +33,7 @@ export function stepTypeLabel(type: StepType): string {
 // ── Curated, workflow-safe tools (WORKFLOWS_EDITOR_HANDOFF §6) ──────────────────
 // No free-text tool names — these run under the submitter's permissions.
 export const TOOL_OPTIONS = [
-  'send_notification', 'schedule_reminder', 'create_matter_draft',
+  'send_notification', 'schedule_reminder', 'compute_deadline', 'create_matter_draft',
   'update_matter_details', 'add_party', 'fulfill_deadline', 'generate_document',
 ] as const;
 
@@ -61,6 +61,13 @@ export const TOOL_HINTS: Record<string, ToolHint[]> = {
     { key: 'title', label: 'Reminder title', placeholder: 'Follow up on {{ form.company_name }}' },
     { key: 'due_date', label: 'Due date', placeholder: '{{ form.target_date }}' },
     { key: 'note', label: 'Note', placeholder: 'Optional details' },
+  ],
+  compute_deadline: [
+    { key: 'trigger_date', label: 'Trigger date', placeholder: '{{ form.decision_date }}' },
+    { key: 'offset_days', label: 'Offset (days)', placeholder: '15' },
+    { key: 'count', label: 'Count', placeholder: 'calendar | business | court' },
+    { key: 'landing', label: 'Landing', placeholder: 'forward | backward | none' },
+    { key: 'rule', label: 'Rule (provenance)', placeholder: 'Rule 83(1) Court of Appeal Rules — 15 days from decision' },
   ],
   create_matter_draft: [
     { key: 'title', label: 'Matter title', placeholder: '{{ form.company_name }} — Incorporation' },
