@@ -3,7 +3,7 @@ import {
   Workflow, Lock, Loader2, ArrowLeft, FileText, Plus, Play, Pencil, ChevronRight, Copy, Wand2,
 } from 'lucide-vue-next';
 import {
-  type FormDef, type WorkflowDef, listForms, listWorkflows, getEntitlements, WorkflowsDisabledError,
+  type FormDef, type WorkflowDef, listForms, listWorkflows, startManualRun, getEntitlements, WorkflowsDisabledError,
 } from '~/services/workflows';
 import { toast } from 'vue-sonner';
 
@@ -124,6 +124,31 @@ function onDisabled() {
 function onFormSubmitted(runId?: string) {
   if (runId) patch({ tab: 'runs', form: '', run: runId });
   else patch({ form: '' });
+}
+
+// One-line summary of what starts a workflow, for the Manage list.
+function triggerSummary(w: WorkflowDef): string {
+  const t = w.trigger?.type ?? 'form';
+  if (t === 'schedule') return 'On a schedule';
+  if (t === 'manual') return 'Run on demand';
+  if (t === 'event') return `On event: ${w.trigger?.event || '—'}`;
+  return `Form /${w.trigger?.form_slug || '—'}`;
+}
+
+// ── Run now (manual/schedule/any enabled workflow) ─────────────────────────────
+const runningId = ref('');
+async function runNow(w: WorkflowDef) {
+  runningId.value = w.id;
+  try {
+    const res = await startManualRun({ workflowId: w.id });
+    toast.success('Workflow started');
+    patch({ tab: 'runs', run: res.runId });
+  } catch (err) {
+    if (err instanceof WorkflowsDisabledError) enabled.value = false;
+    else toast.error(err instanceof Error ? err.message : 'Could not start the workflow');
+  } finally {
+    runningId.value = '';
+  }
 }
 </script>
 
@@ -292,9 +317,21 @@ function onFormSubmitted(runId?: string) {
                         <span v-if="!w.enabled" class="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Disabled</span>
                       </p>
                       <p class="truncate text-xs text-muted-foreground">
-                        {{ w.steps.length }} step(s) · trigger /{{ w.trigger?.form_slug || '—' }}
+                        {{ w.steps.length }} step(s) · {{ triggerSummary(w) }}
                       </p>
                     </div>
+                    <Button
+                      v-if="w.enabled"
+                      size="sm"
+                      variant="ghost"
+                      :disabled="runningId === w.id"
+                      title="Run now"
+                      @click="runNow(w)"
+                    >
+                      <Loader2 v-if="runningId === w.id" class="size-4 animate-spin" />
+                      <Play v-else class="size-4" />
+                      Run
+                    </Button>
                     <Button size="sm" variant="outline" @click="navigateTo(`/main/workflows/edit/${w.id}`)">
                       <Pencil class="size-4" /> Edit
                     </Button>

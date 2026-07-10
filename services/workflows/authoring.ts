@@ -185,13 +185,22 @@ export interface WorkflowDraftMeta {
   slug: string;
   formSlug: string;
   steps: Step[];
+  /** Trigger kind; defaults to 'form' when omitted (back-compat). */
+  triggerType?: 'form' | 'schedule' | 'manual' | 'event';
+  /** Cron expression, required when triggerType === 'schedule'. */
+  cron?: string;
+  /** Event name, required when triggerType === 'event'. */
+  event?: string;
 }
 
 // Returns null when valid, else a human-readable error for the first problem.
 export function validateWorkflow(d: WorkflowDraftMeta): string | null {
   if (!d.name.trim()) return 'Workflow name is required';
   if (!d.slug.trim()) return 'Slug is required';
-  if (!d.formSlug) return 'Pick the form that triggers this workflow';
+  const trigger = d.triggerType ?? 'form';
+  if (trigger === 'form' && !d.formSlug) return 'Pick the form that triggers this workflow';
+  if (trigger === 'schedule' && !d.cron?.trim()) return 'Add a schedule (how often it runs)';
+  if (trigger === 'event' && !d.event?.trim()) return 'Choose the event that starts this workflow';
   if (!d.steps.length) return 'Add at least one step';
   const ids = new Set<string>();
   for (const s of d.steps) {

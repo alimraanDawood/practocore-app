@@ -94,12 +94,27 @@ export interface Step {
   prompt?: string;
 }
 
+export type Autonomy = '' | 'notify_only' | 'gated' | 'full';
+
 export interface WorkflowSettings {
-  autonomy?: string;
+  autonomy?: Autonomy;
   step_cap?: number;
   credit_budget?: number;
-  actor_policy?: 'submitter' | string;
+  /** Schedule/event only: max credits across all runs per period; 0 = unbounded. */
+  period_budget?: number;
+  actor_policy?: 'submitter' | 'owner' | 'system' | string;
 }
+
+/** Allowlist an org-scoped workflow carries — it can only narrow a run's reach. */
+export interface ResourceAccess {
+  /** 'all' | matter ids | a filter expression. */
+  matters?: 'all' | string[] | string;
+  vaults?: string[];
+  tools?: string[];
+}
+
+export type WorkflowScope = 'org' | 'user';
+export type WorkflowVisibility = 'admin' | 'members';
 
 export interface WorkflowDef {
   id: string;
@@ -107,8 +122,12 @@ export interface WorkflowDef {
   slug: string;
   org: string;
   description: string;
+  scope?: WorkflowScope;
+  visibility?: WorkflowVisibility;
   trigger: Trigger;
   steps: Step[];
+  settings?: WorkflowSettings;
+  resource_access?: ResourceAccess;
   enabled: boolean;
   published: boolean;
 }
@@ -500,15 +519,39 @@ export function saveWorkflow(input: {
   name: string;
   slug: string;
   description?: string;
+  scope?: WorkflowScope;
+  visibility?: WorkflowVisibility;
   trigger: Trigger;
   steps: Step[];
   settings?: WorkflowSettings;
+  resource_access?: ResourceAccess;
   enabled: boolean;
 }): Promise<{ id: string; slug: string }> {
   return api('', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Start a workflow on demand — the "Run now" button (WORKFLOWS_TRIGGERS.md §5.2).
+ * Works for any trigger kind; the run executes in the background and appears in the
+ * Runs inbox. `input` seeds the {{ input.* }} namespace for a manual trigger.
+ */
+export function startManualRun(input: {
+  workflowId: string;
+  matterId?: string;
+  input?: Record<string, unknown>;
+}): Promise<{ started: boolean; runId: string; status: RunStatus }> {
+  return api('/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workflowId: input.workflowId,
+      matterId: input.matterId,
+      input: input.input,
+    }),
   });
 }
 

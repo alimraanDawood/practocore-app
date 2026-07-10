@@ -40,8 +40,46 @@ const name = ref(isClone ? `${seed?.name ?? ''} (copy)` : seed?.name ?? '');
 const slug = ref(props.workflow?.slug ?? props.draft?.slug ?? '');
 const description = ref(seed?.description ?? '');
 const enabled = ref(props.workflow ? props.workflow.enabled : props.draft ? props.draft.enabled : true);
+
+// ── Trigger (form | schedule | manual) ───────────────────────────────────────
+// `event` triggers are defined in the backend but not yet wired to emit sites, so
+// they're intentionally not offered here (see WORKFLOWS_TRIGGERS.md T3).
+type TriggerKind = 'form' | 'schedule' | 'manual';
+const triggerType = ref<TriggerKind>((seed?.trigger?.type as TriggerKind) ?? 'form');
 const formSlug = ref(seed?.trigger?.form_slug ?? '');
+const cron = ref(seed?.trigger?.cron ?? '');
 const triggerFilter = ref(seed?.trigger?.filter ?? '');
+
+// ── Access & automation (WORKFLOWS_TRIGGERS.md §6) ────────────────────────────
+const scope = ref<'org' | 'user'>(seed?.scope ?? 'org');
+const visibility = ref<'admin' | 'members'>(seed?.visibility ?? 'members');
+const autonomy = ref<'' | 'notify_only' | 'gated' | 'full'>(seed?.settings?.autonomy ?? '');
+const actorPolicy = ref<'submitter' | 'owner' | 'system'>(
+  (seed?.settings?.actor_policy as 'submitter' | 'owner' | 'system') ?? (seed?.trigger?.type && seed.trigger.type !== 'form' ? 'owner' : 'submitter'),
+);
+
+// Cron presets — a friendly picker that compiles to a 5-field cron string. "custom"
+// reveals the raw input for anything the presets don't cover.
+const CRON_PRESETS: { label: string; value: string }[] = [
+  { label: 'Every Monday, 8:00 AM', value: '0 8 * * 1' },
+  { label: 'Every weekday, 8:00 AM', value: '0 8 * * 1-5' },
+  { label: 'Every day, 8:00 AM', value: '0 8 * * *' },
+  { label: 'First of the month, 8:00 AM', value: '0 8 1 * *' },
+  { label: 'Custom…', value: 'custom' },
+];
+const cronPreset = ref(
+  CRON_PRESETS.some((p) => p.value === cron.value) ? cron.value : (cron.value ? 'custom' : '0 8 * * 1'),
+);
+watch(cronPreset, (v) => { if (v !== 'custom') cron.value = v; });
+// Seed the cron value from the default preset when switching to a schedule trigger
+// with nothing set yet, so a new schedule workflow is valid out of the box.
+watch(triggerType, (t) => {
+  if (t === 'schedule' && !cron.value) cron.value = cronPreset.value === 'custom' ? '0 8 * * 1' : cronPreset.value;
+  // Non-form triggers have no human submitter — default the actor to the owner.
+  if (t !== 'form' && actorPolicy.value === 'submitter') actorPolicy.value = 'owner';
+  if (t === 'form' && actorPolicy.value !== 'submitter') actorPolicy.value = 'submitter';
+});
+
 const steps = ref<EditorStep[]>(toEditorSteps(seed?.steps ?? []));
 const saving = ref(false);
 const slugTouched = ref(!!props.workflow?.slug || !!props.draft?.slug);
@@ -63,6 +101,11 @@ const formList = ref<FormDef[]>([...props.forms]);
 watch(() => props.forms, (v) => { formList.value = [...v]; });
 
 const triggerLabel = computed(() => {
+  if (triggerType.value === 'schedule') {
+    const p = CRON_PRESETS.find((x) => x.value === cron.value);
+    return p && p.value !== 'custom' ? `Schedule: ${p.label}` : (cron.value ? `Schedule: ${cron.value}` : 'On a schedule');
+  }
+  if (triggerType.value === 'manual') return 'Manual — run on demand';
   const f = formList.value.find((x) => x.slug === formSlug.value);
   if (f) return `Form: ${f.name}`;
   return formSlug.value ? `Form: /${formSlug.value}` : 'No form selected yet';
@@ -80,6 +123,7 @@ const formEditorSeed = ref<FormDef | null>(null);
 // Literal template-token shown in help text; kept as a constant so the Vue compiler
 // doesn't try to parse the inner {{ }} as an interpolation.
 const fieldTokenExample = '{{ form.field }}';
+const scheduleTokenExample = '{{ today }}';
 
 function newForm() {
   formEditorSeed.value = null; // FormBuilder treats a null seed as a blank new form
@@ -127,24 +171,39 @@ function moveSelected(dir: -1 | 1) {
 }
 
 // ── Validate + save (reuse shared authoring logic) ───────────────────────────
+// Build the Trigger payload from the current trigger-type selection.
+function buildTrigger(): Trigger {
+  const t: Trigger = { type: triggerType.value };
+  if (triggerType.value === 'form') t.form_slug = formSlug.value;
+  if (triggerType.value === 'schedule') t.cron = cron.value.trim();
+  if (triggerFilter.value.trim()) t.filter = triggerFilter.value.trim();
+  return t;
+}
+
 async function persist(silent = false): Promise<string | null> {
-  const err = validateWorkflow({ name: name.value, slug: slug.value, formSlug: formSlug.value, steps: steps.value });
+  const err = validateWorkflow({
+    name: name.value, slug: slug.value, formSlug: formSlug.value, steps: steps.value,
+    triggerType: triggerType.value, cron: cron.value,
+  });
   if (err) {
     toast.error(err);
     return null;
   }
   saving.value = true;
   try {
-    const trigger: Trigger = { type: 'form', form_slug: formSlug.value };
-    if (triggerFilter.value.trim()) trigger.filter = triggerFilter.value.trim();
     const res = await saveWorkflow({
       id: editingId || undefined,
       name: name.value.trim(),
       slug: slug.value.trim(),
       description: description.value.trim(),
-      trigger,
+      scope: scope.value,
+      visibility: scope.value === 'org' ? visibility.value : undefined,
+      trigger: buildTrigger(),
       steps: cleanSteps(steps.value),
-      settings: { actor_policy: 'submitter' },
+      settings: {
+        actor_policy: actorPolicy.value,
+        ...(autonomy.value ? { autonomy: autonomy.value } : {}),
+      },
       enabled: enabled.value,
     });
     if (!silent) toast.success(editingId ? 'Workflow updated' : 'Workflow created');
@@ -196,8 +255,11 @@ const currentDef = computed<WorkflowDef>(() => ({
   name: name.value.trim(),
   slug: slug.value.trim(),
   description: description.value.trim(),
-  trigger: { type: 'form', form_slug: formSlug.value, ...(triggerFilter.value.trim() ? { filter: triggerFilter.value.trim() } : {}) },
+  scope: scope.value,
+  visibility: scope.value === 'org' ? visibility.value : undefined,
+  trigger: buildTrigger(),
   steps: cleanSteps(steps.value),
+  settings: { actor_policy: actorPolicy.value, ...(autonomy.value ? { autonomy: autonomy.value } : {}) },
   enabled: enabled.value,
   published: props.workflow?.published ?? false,
 }));
@@ -209,7 +271,9 @@ function applyDef(def: WorkflowDef) {
   if (def.name) name.value = def.name;
   if (def.slug) { slug.value = def.slug; slugTouched.value = true; }
   description.value = def.description ?? description.value;
+  if (def.trigger?.type) triggerType.value = def.trigger.type as TriggerKind;
   if (def.trigger?.form_slug) formSlug.value = def.trigger.form_slug;
+  if (def.trigger?.cron) { cron.value = def.trigger.cron; cronPreset.value = CRON_PRESETS.some((p) => p.value === def.trigger!.cron) ? def.trigger!.cron! : 'custom'; }
   triggerFilter.value = def.trigger?.filter ?? '';
   steps.value = toEditorSteps(def.steps ?? []);
   selectedId.value = 'trigger';
@@ -346,8 +410,22 @@ function onArtifact(a: AiArtifact) {
             <h2 class="text-sm font-semibold">Workflow settings</h2>
           </div>
 
+          <!-- Trigger type -->
           <div class="flex flex-col gap-1.5">
-            <Label class="text-xs">Trigger — runs when this form is submitted</Label>
+            <Label class="text-xs">Trigger — what starts this workflow</Label>
+            <Select v-model="triggerType">
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="form">A form is submitted</SelectItem>
+                <SelectItem value="schedule">On a schedule</SelectItem>
+                <SelectItem value="manual">Manually (run on demand)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <!-- Form trigger config -->
+          <div v-if="triggerType === 'form'" class="flex flex-col gap-1.5">
+            <Label class="text-xs">Form</Label>
             <Select v-model="formSlug">
               <SelectTrigger><SelectValue placeholder="Pick a form…" /></SelectTrigger>
               <SelectContent>
@@ -377,9 +455,80 @@ function onArtifact(a: AiArtifact) {
             </p>
           </div>
 
+          <!-- Schedule trigger config -->
+          <div v-else-if="triggerType === 'schedule'" class="flex flex-col gap-1.5">
+            <Label class="text-xs">How often</Label>
+            <Select v-model="cronPreset">
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="p in CRON_PRESETS" :key="p.value" :value="p.value">{{ p.label }}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              v-if="cronPreset === 'custom'"
+              v-model="cron"
+              class="font-mono text-xs"
+              placeholder="0 8 * * 1"
+            />
+            <p class="text-[11px] text-muted-foreground">
+              Runs in the owner's timezone. Steps can read <code class="rounded bg-muted px-1">{{ scheduleTokenExample }}</code>.
+            </p>
+          </div>
+
+          <!-- Manual trigger config -->
+          <div v-else class="rounded-lg border border-dashed bg-muted/30 px-3 py-2.5">
+            <p class="text-[11px] text-muted-foreground">
+              This workflow only runs when someone presses <span class="font-medium text-foreground">Run now</span>
+              from the Workflows list. Great for on-demand tasks and for testing schedule/event logic.
+            </p>
+          </div>
+
           <div class="flex flex-col gap-1.5">
             <Label class="text-xs">Only run when (optional filter)</Label>
-            <Input v-model="triggerFilter" class="font-mono text-xs" placeholder="form.share_capital > 50000000" />
+            <Input v-model="triggerFilter" class="font-mono text-xs" :placeholder="triggerType === 'form' ? 'form.share_capital > 50000000' : 'today != \'\''" />
+          </div>
+
+          <!-- Access & automation (non-form triggers have no human, so guardrails matter) -->
+          <div class="flex flex-col gap-3 border-t pt-4">
+            <Label class="text-xs font-semibold text-foreground">Access &amp; automation</Label>
+
+            <div class="flex flex-col gap-1.5">
+              <Label class="text-xs">Who owns it</Label>
+              <Select v-model="scope">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="org">Whole organisation</SelectItem>
+                  <SelectItem value="user">Just me (private)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div v-if="scope === 'org'" class="flex flex-col gap-1.5">
+              <Label class="text-xs">Who can start it</Label>
+              <Select v-model="visibility">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="members">Any member</SelectItem>
+                  <SelectItem value="admin">Admins only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div v-if="triggerType !== 'form'" class="flex flex-col gap-1.5">
+              <Label class="text-xs">How far it may go on its own</Label>
+              <Select v-model="autonomy">
+                <SelectTrigger><SelectValue placeholder="Default (notify only)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="notify_only">Read &amp; notify only (safest)</SelectItem>
+                  <SelectItem value="gated">Take actions, but require approval</SelectItem>
+                  <SelectItem value="full">Take actions automatically</SelectItem>
+                </SelectContent>
+              </Select>
+              <p class="text-[11px] text-muted-foreground">
+                An unattended run defaults to read &amp; notify only — it can look things up and send messages,
+                but won't file, create, or send anything outward unless you widen this.
+              </p>
+            </div>
           </div>
 
           <div class="flex flex-col gap-1.5 border-t pt-4">
