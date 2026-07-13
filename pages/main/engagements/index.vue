@@ -200,7 +200,7 @@ async function deleteSelected() {
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b p-3">
       <div class="flex flex-col gap-1">
         <h1 class="text-xl font-semibold flex items-center gap-2 ibm-plex-serif">
-          <SidebarTrigger />
+          <SidebarTrigger class="lg:hidden" />
           Engagements
         </h1>
         <p class="text-sm text-muted-foreground">

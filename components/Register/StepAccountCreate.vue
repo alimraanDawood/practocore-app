@@ -176,8 +176,11 @@ const onGoogleSignIn = async () => {
     store.firmContact.fullName = result.record?.name ?? ''
     store.firmContact.emailAddress = result.record?.email ?? ''
     await store.advance('account-create')
-  } catch {
-    toast.error('Google sign-in failed. Please try again.')
+  } catch (e: any) {
+    // Ignore user-cancelled Google picker; only surface real failures.
+    if (e?.code !== 'CANCELLED') {
+      toast.error('Google sign-in failed. Please try again.')
+    }
   } finally {
     isGoogleLoading.value = false
   }

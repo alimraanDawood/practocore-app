@@ -40,12 +40,15 @@ async function continueWithGoogle() {
     if (result) {
       emits('success', result);
     }
-  } catch (e) {
-    console.error(e);
-
-    toast.error('We were unable to sign you in at this time!');
+  } catch (e: any) {
+    // User backed out of the Google picker — not an error, just reset the button.
+    if (e?.code !== 'CANCELLED') {
+      console.error(e);
+      toast.error('We were unable to sign you in at this time!');
+    }
+  } finally {
+    isGoogleLoading.value = false;
   }
-  isGoogleLoading.value = false;
 }
 </script>
 

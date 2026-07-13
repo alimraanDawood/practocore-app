@@ -2,42 +2,120 @@ import {pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
 export { pocketbase, SERVER_URL };
 
 
-import { Browser } from '@capacitor/browser';
-import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
+/**
+ * Thrown when the user backs out of the native Google account picker.
+ * Call sites should treat this as a no-op (no error toast), just clear their
+ * loading flag. Distinguishing it is what stops the "button spins forever after
+ * I cancel" bug: the native plugin rejects on cancel, so `await` unwinds and
+ * `finally` runs — we just don't want to shout at the user for cancelling.
+ */
+export class GoogleAuthCancelledError extends Error {
+    readonly code = 'CANCELLED';
+    constructor() {
+        super('Google sign-in was cancelled');
+        this.name = 'GoogleAuthCancelledError';
+    }
+}
+
+// The Capgo plugin's `initialize` is only valid once per process. Guard it so
+// repeated login attempts don't re-init (and so we don't pay the import cost on
+// web, where the native module isn't bundled).
+let socialLoginInitialized = false;
+
+async function ensureNativeGoogleInitialized() {
+    const config = useRuntimeConfig();
+    const webClientId = config.public.googleWebClientId as string;
+    const iosClientId = config.public.googleIosClientId as string;
+
+    if (!webClientId) {
+        throw new Error(
+            'Native Google Sign-In is not configured: set NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID.'
+        );
+    }
+
+    if (socialLoginInitialized) return;
+
+    const { SocialLogin } = await import('@capgo/capacitor-social-login');
+    await SocialLogin.initialize({
+        google: {
+            webClientId,
+            // iOS reads its own client id; harmless/ignored on Android.
+            ...(iosClientId ? { iOSClientId: iosClientId } : {}),
+            // 'online' returns the idToken + profile we exchange with the backend.
+            mode: 'online',
+        },
+    });
+    socialLoginInitialized = true;
+}
+
+/**
+ * Native Google Sign-In for Capacitor (Android/iOS).
+ *
+ * Gets a Google idToken via the OS account picker (no browser hop, no blank
+ * tab, OS-managed cancel), exchanges it at the backend for a PocketBase auth
+ * token, and hydrates `pb.authStore` so the rest of the app behaves exactly as
+ * it does after the web OAuth flow.
+ */
+async function signInWithGoogleNative() {
+    await ensureNativeGoogleInitialized();
+
+    const { SocialLogin } = await import('@capgo/capacitor-social-login');
+
+    let idToken: string | null = null;
+    try {
+        const response = await SocialLogin.login({
+            provider: 'google',
+            options: { scopes: ['email', 'profile'] },
+        });
+        const result = response.result as { idToken?: string | null };
+        idToken = result?.idToken ?? null;
+    } catch (err: any) {
+        // Capgo surfaces user cancellation as a thrown error whose message/code
+        // varies by platform. Normalise it so callers can suppress the toast.
+        const raw = `${err?.code ?? ''} ${err?.message ?? err ?? ''}`.toLowerCase();
+        if (raw.includes('cancel') || raw.includes('12501') /* Android SIGN_IN_CANCELLED */) {
+            throw new GoogleAuthCancelledError();
+        }
+        throw err;
+    }
+
+    if (!idToken) {
+        throw new Error('Google did not return an identity token.');
+    }
+
+    const response = await fetch(`${SERVER_URL}/api/practocore/auth/google/native`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ idToken }),
+    });
+
+    if (!response.ok) {
+        let message = 'Google sign-in could not be completed.';
+        try {
+            const body = await response.json();
+            message = body?.message || message;
+        } catch { /* non-JSON error body */ }
+        throw new Error(message);
+    }
+
+    const data = await response.json();
+    // Mirror the PocketBase SDK: persist the token + record so authStore.isValid
+    // and the auth.global middleware (which checks collectionName === 'Users')
+    // both work downstream.
+    pocketbase.authStore.save(data.token, data.record);
+
+    return { token: data.token, record: data.record };
+}
+
 export async function signUpWithGoogle() {
-    const isTauri = '__TAURI_INTERNALS__' in window;
-    const isNative = Capacitor.isNativePlatform();
+    if (Capacitor.isNativePlatform()) {
+        return signInWithGoogleNative();
+    }
 
-    // if (isNative) {
-    //     // 1. Listen for the specific PocketBase redirect URL
-    //     const urlListener = await App.addListener('appUrlOpen', async (data) => {
-    //         // Check if the URL being opened is your PocketBase redirect handler
-    //         if (data.url.includes('/api/oauth2-redirect')) {
-    //             await Browser.close(); // Close the Chrome Custom Tab
-    //             urlListener.remove();  // Cleanup the listener
-    //         }
-    //     });
-    //
-    //     return pocketbase.collection('Users').authWithOAuth2({
-    //         provider: 'google',
-    //         // Use the standard HTTPS redirect that PocketBase expects
-    //         redirectTo: 'https://your-pocketbase-url.com',
-    //         urlCallback: async (url) => {
-    //             await Browser.open({ url });
-    //         }
-    //     });
-    // }
-    //
-    // if (isTauri) {
-    //     return pocketbase.collection('Users').authWithOAuth2({
-    //         provider: 'google',
-    //         urlCallback: (url) => openUrl(url)
-    //     });
-    // }
-
-    // Default Web Flow
+    // Default Web Flow (popup + realtime redirect) — only reliable in a real
+    // browser, never inside the Capacitor webview.
     return pocketbase.collection('Users').authWithOAuth2({ provider: 'google' });
 }
 
@@ -152,6 +230,14 @@ export async function sendOTP(userId : string) {
 
 export async function signInWithEmail(email : string, password: string) {
     return pocketbase.collection('Users').authWithPassword(email, password, {});
+}
+
+export async function requestPasswordReset(email : string) {
+    return pocketbase.collection('Users').requestPasswordReset(email);
+}
+
+export async function confirmPasswordReset(token : string, password : string, passwordConfirm : string) {
+    return pocketbase.collection('Users').confirmPasswordReset(token, password, passwordConfirm);
 }
 
 export async function inviteUsers(emails : string[]) {

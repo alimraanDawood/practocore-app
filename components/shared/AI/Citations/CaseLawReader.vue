@@ -9,11 +9,15 @@
 // resolve against it without changing the citation shape.
 import { ref, watch, nextTick, computed, onBeforeUnmount } from 'vue';
 import { toast } from 'vue-sonner';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import {
   getSource, getCaseLawMarkdown, caseLawPdfObjectUrl, courtLabel,
   type CaseLawDetail,
 } from '~/services/caselaw';
 import { cleanCitationLabel } from '~/services/ai';
+
+marked.use({ breaks: true, gfm: true });
 
 const props = defineProps<{
   open: boolean;
@@ -31,6 +35,8 @@ const detail = ref<CaseLawDetail | null>(null);
 const loading = ref(false);
 
 const markdown = ref('');
+const markdownHtml = computed(() =>
+  markdown.value ? DOMPurify.sanitize(marked.parse(markdown.value) as string) : '');
 const markdownLoaded = ref(false);
 const pdfUrl = ref('');
 const pdfLoading = ref(false);
@@ -175,8 +181,12 @@ watch(() => props.open, (o) => { if (o && props.sourceId) load(); });
           </div>
         </div>
 
-        <!-- Raw markdown -->
-        <pre v-else-if="tab === 'markdown'" class="whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{{ markdown }}</pre>
+        <!-- Rendered markdown -->
+        <div
+          v-else-if="tab === 'markdown'"
+          class="prose prose-pink prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-pre:bg-muted prose-pre:text-foreground"
+          v-html="markdownHtml"
+        />
 
         <!-- Original PDF -->
         <div v-else-if="tab === 'pdf'" class="h-full">

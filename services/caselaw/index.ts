@@ -191,7 +191,11 @@ export async function caseLawPdfObjectUrl(id: string, download = false): Promise
     headers: { Authorization: pb.authStore.token },
   });
   if (!res.ok) throw new Error(`PDF unavailable (${res.status})`);
-  return URL.createObjectURL(await res.blob());
+  // Force application/pdf on the view path: a blob URL whose type is octet-stream
+  // (which some storage backends report) makes an <iframe> download instead of render.
+  const blob = await res.blob();
+  const pdf = download ? blob : new Blob([blob], { type: 'application/pdf' });
+  return URL.createObjectURL(pdf);
 }
 
 // ── Writes (superuser only) ─────────────────────────────────────────────────

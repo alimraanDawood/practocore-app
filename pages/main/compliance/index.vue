@@ -120,7 +120,7 @@ function openEngagement(o: ComplianceObligation) {
       <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h1 class="text-xl font-semibold flex items-center gap-2 ibm-plex-serif">
-            <SidebarTrigger class="hidden lg:block" />
+            <SidebarTrigger class="lg:hidden" />
             Compliance Calendar
           </h1>
           <p class="text-sm text-muted-foreground">

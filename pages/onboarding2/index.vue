@@ -675,9 +675,12 @@ const onGoogleSignIn = async () => {
     isGoogleAuth.value = true
     googleUserId.value = result.record?.id ?? ''
     advanceStep()
-  } catch (e) {
-    console.error(e)
-    toast.error('Google sign-in failed. Please try again.')
+  } catch (e: any) {
+    // User cancelled the Google picker — reset silently, no error toast.
+    if (e?.code !== 'CANCELLED') {
+      console.error(e)
+      toast.error('Google sign-in failed. Please try again.')
+    }
   } finally {
     isGoogleLoading.value = false
   }

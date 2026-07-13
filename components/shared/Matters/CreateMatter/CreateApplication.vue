@@ -264,7 +264,17 @@
                         </FormControl>
 
                         <!-- date -->
-                        <DateInput v-else-if="field.type === 'date'" v-bind="componentField" />
+                        <template v-else-if="field.type === 'date'">
+                          <DateInput v-bind="componentField" />
+                          <!-- Provisional trigger: prepare an application before it's filed. -->
+                          <div v-if="field.id === 'date'" class="mt-2 flex items-start gap-2 rounded-md border border-dashed p-2">
+                            <Checkbox id="app-provisional-trigger" :model-value="isProvisional" @update:model-value="(v) => (isProvisional = !!v)" class="mt-0.5" />
+                            <label for="app-provisional-trigger" class="text-sm text-muted-foreground cursor-pointer select-none">
+                              This date hasn't happened yet — it's an estimate.
+                              <span class="block text-xs">We'll build a <b>projected</b> timeline. Reminders stay off until you confirm the real date.</span>
+                            </label>
+                          </div>
+                        </template>
 
                         <!-- fallback -->
                         <span v-else class="italic text-muted-foreground">
@@ -597,6 +607,10 @@ const formSchema = computed(() => {
 
 const inheritParties = ref(false);
 
+// Provisional trigger date: prepare the application before it is filed. The
+// timeline is projected and reminders stay off until the real date is confirmed.
+const isProvisional = ref(false);
+
 const __formSchema = computed(() => {
   const step3Schema = buildStep3Schema();
 
@@ -858,7 +872,9 @@ const onSubmit = async (values: any) => {
         parties: cleanedParties,
         representing: representing.value,
       }),
-      inheritParties: inheritParties.value
+      inheritParties: inheritParties.value,
+      applicationType: selectedTemplate.value?.name || '',
+      triggerStatus: isProvisional.value ? 'provisional' : 'confirmed',
     });
 
     if (result) toast.success("Application Created Successfully!");

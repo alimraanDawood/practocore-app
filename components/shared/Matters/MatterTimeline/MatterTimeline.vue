@@ -391,8 +391,22 @@ watch(
 );
 
 // ── Urgency helpers ───────────────────────────────────────────────────────────
+// A deadline is "projected" when its matter's trigger date is still provisional
+// (an estimate). Projected deadlines are a planning view: even if their computed
+// date is in the past, they must NOT render as overdue/urgent, and no reminders
+// exist for them yet. The owning matter is the parent when deadline.application is
+// unset, otherwise the child application identified by deadline.application.
+const isProjected = (deadline) => {
+  if (deadline?.application) {
+    const app = props.matter?.expand?.applications?.find((a) => a.id === deadline.application);
+    return app?.triggerStatus === "provisional";
+  }
+  return props.matter?.triggerStatus === "provisional";
+};
+
 const urgencyOf = (deadline) => {
   if (deadline.status === "fulfilled") return "done";
+  if (isProjected(deadline)) return "projected";
   const days = dayjs(deadline.date).diff(dayjs(), "day");
   if (days < 0) return "overdue";
   if (days <= 7) return "urgent";
@@ -402,6 +416,7 @@ const urgencyOf = (deadline) => {
 const nodeClass = (deadline) => {
   const u = urgencyOf(deadline);
   if (u === "done") return "bg-primary text-primary-foreground";
+  if (u === "projected") return "bg-muted border-2 border-dashed border-border text-muted-foreground";
   if (u === "overdue") return "bg-destructive/10 border-2 border-destructive text-destructive";
   if (u === "urgent") return "bg-accent-warning/10 border-2 border-accent-warning text-accent-warning";
   return "bg-muted border-2 border-border text-muted-foreground";
@@ -416,6 +431,7 @@ const lineClass = (deadline) => {
 
 const urgencyTextClass = (deadline) => {
   const u = urgencyOf(deadline);
+  if (u === "projected") return "text-muted-foreground";
   if (u === "overdue") return "text-destructive";
   if (u === "urgent") return "text-accent-warning";
   if (u === "done") return "text-muted-foreground";
@@ -426,6 +442,7 @@ const nodeIconComponent = (deadline) => {
   if (deadline.collectionName !== "Deadlines") return Asterisk;
   if (deadline.status === "fulfilled") return CalendarCheck;
   const u = urgencyOf(deadline);
+  if (u === "projected") return CalendarClock;
   if (u === "overdue") return AlertTriangle;
   if (u === "urgent") return Clock;
   return CalendarClock;
@@ -433,6 +450,7 @@ const nodeIconComponent = (deadline) => {
 
 const deadlineDateDisplay = (deadline) => {
   if (deadline.status === "fulfilled") return dayjs(deadline.date).format("D MMM YYYY");
+  if (isProjected(deadline)) return deadline.date ? `Projected · ${dayjs(deadline.date).format("D MMM YYYY")}` : "Projected";
   const days = dayjs(deadline.date).diff(dayjs(), "day");
   if (days < 0) return `${Math.abs(days)}d overdue`;
   if (days === 0) return "Due today";

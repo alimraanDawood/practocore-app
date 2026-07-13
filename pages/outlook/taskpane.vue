@@ -15,7 +15,7 @@
 //  • contextProvider — attaches the open email (subject/from/to/body) to each message.
 import {
   Loader2, TextSelect, FileText, Reply, CalendarClock, MessageSquareText, CornerDownRight,
-  LogOut, UserRound, Building2, ChevronsUpDown, Plus, History,
+  LogOut, UserRound, Building2, ChevronsUpDown, Plus, History, Eye, EyeOff,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
@@ -84,6 +84,7 @@ async function logout() {
 // ── Sign-in (inline email/password + Google via Office dialog) ──────────────────
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const signingIn = ref(false);
 const googleBusy = ref(false);
 const authError = ref('');
@@ -292,8 +293,9 @@ const suggestions = computed<string[]>(() => composing.value
           </p>
         </div>
 
-        <Button variant="outline" :disabled="googleBusy" @click="signInGoogle">
+        <Button variant="outline" class="gap-2" :disabled="googleBusy" @click="signInGoogle">
           <Loader2 v-if="googleBusy" class="size-4 animate-spin" />
+          <svg v-else class="size-4" viewBox="-3 0 262 262" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid"><path d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027" fill="#4285F4"/><path d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1" fill="#34A853"/><path d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782" fill="#FBBC05"/><path d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251" fill="#EB4335"/></svg>
           {{ googleBusy ? 'Connecting to Google…' : 'Continue with Google' }}
         </Button>
 
@@ -304,17 +306,45 @@ const suggestions = computed<string[]>(() => composing.value
         <form class="space-y-3" @submit.prevent="signInPassword">
           <div class="space-y-1.5">
             <label class="text-xs font-medium">Email</label>
-            <Input v-model="email" type="email" autocomplete="username" required />
+            <Input v-model="email" type="email" placeholder="you@firm.com" autocomplete="username" required />
           </div>
           <div class="space-y-1.5">
-            <label class="text-xs font-medium">Password</label>
-            <Input v-model="password" type="password" autocomplete="current-password" required />
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-medium">Password</label>
+              <a href="https://app.practocore.com/auth/forgot-password" target="_blank" rel="noopener"
+                 class="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Forgot password?</a>
+            </div>
+            <div class="relative">
+              <Input
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                class="pr-10"
+                required
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground transition hover:text-foreground"
+                :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                @click="showPassword = !showPassword"
+              >
+                <EyeOff v-if="showPassword" class="size-4" />
+                <Eye v-else class="size-4" />
+              </button>
+            </div>
           </div>
           <Button type="submit" class="w-full" :disabled="signingIn">
             {{ signingIn ? 'Signing in…' : 'Sign in' }}
           </Button>
           <p v-if="authError" class="text-sm text-destructive">{{ authError }}</p>
         </form>
+
+        <p class="mt-4 text-center text-xs text-muted-foreground">
+          Don't have an account?
+          <a href="https://app.practocore.com/auth/register" target="_blank" rel="noopener"
+             class="font-medium text-foreground underline-offset-4 hover:underline">Create one</a>
+        </p>
       </div>
     </div>
 

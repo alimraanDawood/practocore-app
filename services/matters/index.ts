@@ -66,7 +66,8 @@ export async function createMatter(options: {
     date: string,
     fieldValues: any[],
     parties?: Record<string, any[]>,
-    representing?: { role_id: string, party_member_ids: string[] }
+    representing?: { role_id: string, party_member_ids: string[] },
+    triggerStatus?: 'confirmed' | 'provisional'
 }) {
     const res = await fetch(`${SERVER_URL}/api/de/v1/create-matter`, {
         method: 'POST',
@@ -125,16 +126,24 @@ export async function createApplication(matterId: string, options: {
     date: string,
     fieldValues: any[],
     parties?: Record<string, any[]>,  // Party data organized by role ID
-    representing?: { role_id: string, party_member_ids: string[] }  // Representation data
+    representing?: { role_id: string, party_member_ids: string[] },  // Representation data
+    inheritParties?: boolean,
+    applicationType?: string,
+    triggerStatus?: 'confirmed' | 'provisional'
 }) {
-    return fetch(`${SERVER_URL}/api/practocore/create-application/${matterId}`, {
+    const res = await fetch(`${SERVER_URL}/api/practocore/create-application/${matterId}`, {
         method: 'POST',
         body: JSON.stringify(options),
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
         }
-    }).then((e) => e.json());
+    });
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`createApplication failed (${res.status}): ${body}`);
+    }
+    return res.json();
 }
 
 export async function updateMatter(matterId: string, data: any) {
@@ -235,26 +244,6 @@ export async function adjournDeadline(deadline: Deadline, date: string, force = 
                     adjournedDate: date,
                     force: force,
                     reason: reason,
-                }
-            }
-        }),
-        headers: {
-            'Authorization': pocketbase.authStore.token,
-            'Content-Type': 'application/json'
-        }
-    }).then((e) => e.json())
-}
-
-export async function applyApplication(deadline: Deadline, template: any, fieldValues: any) {
-    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}`, {
-        method: 'POST',
-        body: JSON.stringify({
-            action: {
-                action: "SPAWN",
-                meta: {
-                    targetId: deadline?.t_id,
-                    template: template,
-                    fieldValues: fieldValues,
                 }
             }
         }),
@@ -400,6 +389,30 @@ export async function resetDeadline(deadlineId: string) {
             'Content-Type': 'application/json'
         }
     }).then((e) => e.json());
+}
+
+/**
+ * Confirm a provisional matter's trigger date: pins the real date, flips
+ * triggerStatus to confirmed, and materialises the (previously-suppressed) reminders.
+ * @param matterId - Matter ID
+ * @param date - Confirmed trigger date (ISO string or Date)
+ */
+export async function confirmTriggerDate(matterId: string, date: string | Date) {
+    const res = await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/trigger-date/confirm`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            date: typeof date === 'string' ? date : date.toISOString(),
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    });
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`confirmTriggerDate failed (${res.status}): ${body}`);
+    }
+    return res.json();
 }
 
 /**

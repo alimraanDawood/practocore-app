@@ -54,9 +54,21 @@
   <div v-else class="flex flex-col w-full h-full items-center overflow-y-scroll">
     <div class="flex flex-col w-full lg:flex-row h-full">
       <div class="flex flex-col w-full overflow-y-scroll">
+        <!-- Interlocutory-application breadcrumb: this matter is an application of
+             another suit — link back to the parent. -->
+        <button
+            v-if="matter?.parent && matter?.expand?.parent"
+            type="button"
+            class="flex items-center gap-1.5 px-3 pt-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            @click="router.push(`/main/matters/matter/${matter.parent}${currentUser?.organisation ? `?org=${currentUser.organisation}` : ''}`)"
+        >
+          <ChevronLeft class="size-4" />
+          <span>Interlocutory application in <b>{{ matter.expand.parent.name }}</b></span>
+        </button>
+
         <!-- Title -->
         <div class="xs:flex flex-col w-full hidden p-3">
-          <Badge variant="secondary" v-if="currentMatterOrApplication?.collectionName === 'Applications'">Application</Badge>
+          <Badge variant="secondary" v-if="matter?.parent">Application</Badge>
           <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
@@ -126,8 +138,10 @@
 
         <Separator />
 
-        <!-- Tabs (Applications: to be moved to another place) (Replace) -->
-        <div v-if="false" class="flex flex-row gap-2 p-2">
+        <!-- Interlocutory applications: each is a child matter (parent-linked). The
+             "All" tab shows the suit + its applications merged; selecting one filters
+             the timeline to that application and offers a link to its full matter page. -->
+        <div v-if="!matter?.parent" class="flex flex-row gap-2 p-2 items-center">
           <div class="flex flex-row flex-wrap gap-1 items-center">
             <Tabs default-value="all" v-model="currentApplicationOption">
               <TabsList class="gap-2 items-center">
@@ -138,15 +152,15 @@
                   :key="application.id"
                   :value="application.id"
                 >
-                  {{ application.caseNumber }}
+                  {{ application.applicationType || application.caseNumber || application.name }}
                 </TabsTrigger>
 
-                <!-- Interlocutory applications are dropped pending the v2 SPAWN/toll
-                     decision (toll Q#1). The entry point is disabled (v-if="false")
-                     so nothing calls the removed create-application endpoint. The
-                     CreateApplication.vue component is left dormant for a future revisit. -->
-                <SharedMattersCreateMatterCreateApplication v-if="false" :parent-matter="matter">
-                  <Button size="sm">
+                <SharedMattersCreateMatterCreateApplication
+                  v-if="hasPermission('canCreateApplications') || !currentUser?.organisation"
+                  :parent-matter="matter"
+                  @created="reloadMatter"
+                >
+                  <Button size="sm" variant="outline">
                     <Plus />
                     Add Application
                   </Button>
@@ -154,6 +168,17 @@
               </TabsList>
             </Tabs>
           </div>
+
+          <!-- Open the selected application as its own matter (vault, dock, docs, …). -->
+          <Button
+              v-if="currentApplicationOption !== 'all'"
+              size="sm"
+              variant="ghost"
+              @click="router.push(`/main/matters/matter/${currentApplicationOption}${currentUser?.organisation ? `?org=${currentUser.organisation}` : ''}`)"
+          >
+            <ExternalLink class="size-4" />
+            Open full view
+          </Button>
         </div>
 
         <div class="flex flex-row gap-2 p-2 h-full">
@@ -169,18 +194,54 @@
               <div class="flex flex-col h-full">
                 <Separator />
 
+                <!-- Provisional (projected) timeline banner. Shown when the trigger date
+                     is an estimate: reminders are off until a supervisor confirms it. -->
+                <div
+                    v-if="currentMatterOrApplication?.triggerStatus === 'provisional'"
+                    class="m-3 flex flex-col gap-2 rounded-lg border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 p-3"
+                >
+                  <div class="flex items-start gap-2">
+                    <ClockIcon class="size-4 mt-0.5 text-amber-600 shrink-0" />
+                    <div class="text-sm">
+                      <span class="font-semibold">Projected timeline</span> — based on an estimated
+                      trigger date of <b>{{ formatDate(currentMatterOrApplication?.triggerDate || currentMatterOrApplication?.date) }}</b>.
+                      Reminders are off until you confirm the real date.
+                    </div>
+                  </div>
+                  <div v-if="isSupervisor" class="flex">
+                    <SharedMattersChangeTriggerDateConfirmTriggerDate
+                        :matter="currentMatterOrApplication"
+                        @updated="reloadMatter"
+                    >
+                      <Button size="sm" variant="default">Confirm trigger date</Button>
+                    </SharedMattersChangeTriggerDateConfirmTriggerDate>
+                  </div>
+                </div>
+
                 <!-- Mobile deadline summary (the desktop sidebar is hidden on mobile) -->
                 <div
                     v-if="latestDeadline || missedDeadlines.length > 0 || pendingEvents.length > 0"
                     class="lg:hidden flex flex-col gap-3 p-3"
                 >
-                  <div v-if="latestDeadline" class="border rounded-lg p-3 bg-muted flex flex-col gap-1">
-                    <span class="text-sm font-semibold ibm-plex-serif">Upcoming Deadline</span>
-                    <span
-                        class="text-sm italic text-muted-foreground ibm-plex-serif"
-                        v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
-                    ></span>
-                  </div>
+                  <SharedDeadlineCompleteDeadline
+                      v-if="latestDeadline"
+                      :deadline="latestDeadline"
+                      @updated="reloadMatter"
+                  >
+                    <button
+                        type="button"
+                        class="w-full text-left border rounded-lg p-3 bg-muted flex flex-col gap-1 active:opacity-80 transition-opacity"
+                    >
+                      <span class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-semibold ibm-plex-serif">Upcoming Deadline</span>
+                        <CalendarIcon class="size-4 text-muted-foreground shrink-0" />
+                      </span>
+                      <span
+                          class="text-sm italic text-muted-foreground ibm-plex-serif"
+                          v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
+                      ></span>
+                    </button>
+                  </SharedDeadlineCompleteDeadline>
 
                   <div
                       v-if="missedDeadlines.length > 0"
@@ -335,6 +396,8 @@ import {
   FolderLock,
   FileType2,
   Scale,
+  Clock as ClockIcon,
+  ExternalLink,
 } from 'lucide-vue-next';
 import {
   subscribeToDeadline,
@@ -365,6 +428,14 @@ const route = useRoute();
 const router = useRouter();
 const mattersStore = useMattersStore();
 const currentApplicationOption = ref('all');
+
+// Human-friendly date for banners (handles ISO and "YYYY-MM-DD HH:mm:ss.sssZ").
+function formatDate(dateString) {
+  if (!dateString) return '—';
+  const d = new Date(String(dateString).replace(' ', 'T'));
+  if (isNaN(d.getTime())) return String(dateString).slice(0, 10);
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
 
 // When the assistant dock slides in it pushes the timeline column narrower. To avoid a
 // cramped three-column squeeze we drop the timeline's deadline sidebar while the dock is
@@ -457,6 +528,9 @@ provideDockContext(() => {
 });
 
 const missedDeadlines = computed(() => {
+  // A provisional (projected) timeline is a planning view — its past-dated deadlines
+  // are estimates, not missed obligations.
+  if (currentMatterOrApplication.value?.triggerStatus === 'provisional') return [];
   return currentMatterOrApplication.value?.expand?.deadlines
     ?.filter(d => new Date(d.date) < new Date() && d.status !== 'fulfilled')
     ?.sort((a, b) => new Date(a.date) - new Date(b.date)) ?? [];

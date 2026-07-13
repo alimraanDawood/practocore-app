@@ -1,23 +1,18 @@
 /**
  * Firebase Configuration for Web
  *
- * To get your web app credentials:
- * 1. Go to Firebase Console: https://console.firebase.google.com/
- * 2. Select your project: practocore-72f49
- * 3. Go to Project Settings (gear icon) > General tab
- * 4. Scroll down to "Your apps" section
- * 5. If you don't have a web app, click "Add app" and select the web icon (</>)
- * 6. Register the app and copy the firebaseConfig object
- * 7. Replace the placeholder values below with your actual values
+ * Project: `practocore` (number 286763366119). Migrated 2026-07-13 off the old,
+ * now-deleted `practocore-72f49` project. Values from Firebase console →
+ * Project settings → General → Your apps → PractoCore Web.
  */
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyBSm3eD990RoE5tNKeIFKfDfZM9fZawVd4",
-  authDomain: "practocore-72f49.firebaseapp.com",
-  projectId: "practocore-72f49",
-  storageBucket: "practocore-72f49.firebasestorage.app",
-  messagingSenderId: "488964126042",
-  appId: "1:488964126042:web:fce9b12cbfb30f8c6d6f63" // TODO: Replace with your actual web app ID
+  apiKey: "AIzaSyAGKffo43bOn50uiIL3pUwwlmLqL0VZplM",
+  authDomain: "practocore.firebaseapp.com",
+  projectId: "practocore",
+  storageBucket: "practocore.firebasestorage.app",
+  messagingSenderId: "286763366119",
+  appId: "1:286763366119:web:31033600a1710a618a5442"
 };
 
 /**
@@ -31,4 +26,4 @@ export const firebaseConfig = {
  * 5. Copy the "Key pair" value
  * 6. Replace the placeholder below
  */
-export const vapidKey = "BHkxKUv724JShHnTzaZDBIzlIf6eAmmsVSqMIjZY6LFG4yjEtXnMBUQFwf7eoHM743_x6E8jdVC0i-lfA2UDbAE"; // TODO: Replace with your actual VAPID key
+export const vapidKey = "BMIOiNuO-aqA-ysUxB6zE6CFjOw11joT6e3bDVdLN-Tvyz7d12UbOvA4bQjGKQUIxDS272Edg_JIm40EbZ8BGsY";

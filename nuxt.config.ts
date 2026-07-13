@@ -150,6 +150,13 @@ export default defineNuxtConfig({
             // Replays capture on-screen text (matter/client names); typed input
             // values are masked. Keep the PostHog replay audience tight.
             posthogSessionReplay: process.env.NUXT_PUBLIC_POSTHOG_SESSION_REPLAY === 'true',
+            // Native Google Sign-In (Capacitor). The idToken minted by the
+            // native plugin carries `aud = webClientId`, so the SAME web client
+            // id must also be listed in the backend's GOOGLE_OAUTH_CLIENT_IDS.
+            // iOS additionally needs its own OAuth client id. Both are safe to
+            // ship in the client bundle (they are not secrets).
+            googleWebClientId: process.env.NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+            googleIosClientId: process.env.NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
         }
     },
     plugins: [

@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "488964126042",
-    "project_id": "practocore-72f49",
-    "storage_bucket": "practocore-72f49.firebasestorage.app"
+    "project_number": "286763366119",
+    "project_id": "practocore",
+    "storage_bucket": "practocore.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:488964126042:android:703f92c028dd64ca6d6f63",
+        "mobilesdk_app_id": "1:286763366119:android:d81a17aba66bcab38a5442",
         "android_client_info": {
           "package_name": "com.practocore.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBSm3eD990RoE5tNKeIFKfDfZM9fZawVd4"
+          "current_key": "AIzaSyBmOQc7t-xD1jwRNHIBXgjtzue05OSbk98"
         }
       ],
       "services": {
