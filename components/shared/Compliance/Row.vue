@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RefreshCw, Briefcase, Pause, Play, X, CheckCircle2, FileCheck2, ChevronDown, Paperclip, CircleAlert } from 'lucide-vue-next';
+import { RefreshCw, Briefcase, Pause, Play, X, CheckCircle2, FileCheck2, ChevronDown, Paperclip, CircleAlert, MoreVertical } from 'lucide-vue-next';
 import {
   listObligationFilings, filingEvidenceUrl,
   type ComplianceObligation, type ComplianceStatus, type ComplianceFiling,
@@ -55,6 +55,23 @@ defineExpose({ reloadHistory });
 function fmt(d?: string) {
   return d ? new Date(d).toLocaleDateString() : '—';
 }
+
+// Secondary row actions, defined once so the inline buttons (sm+) and the mobile
+// overflow menu stay in sync. `disabled` follows the busy flag for status changes;
+// history toggling is always available. `run` fires the same behaviour as before.
+const secondaryActions = computed(() => {
+  const acts: { key: string; label: string; icon: any; danger?: boolean; disabled?: boolean; run: () => void }[] = [];
+  if (props.obligation.status === 'active') {
+    acts.push({ key: 'pause', label: 'Pause', icon: Pause, disabled: props.busy, run: () => emit('status', 'paused') });
+  } else if (props.obligation.status === 'paused') {
+    acts.push({ key: 'resume', label: 'Resume', icon: Play, disabled: props.busy, run: () => emit('status', 'active') });
+  }
+  if (props.obligation.status !== 'ended') {
+    acts.push({ key: 'end', label: 'End', icon: X, danger: true, disabled: props.busy, run: () => emit('status', 'ended') });
+  }
+  acts.push({ key: 'history', label: 'Filing history', icon: ChevronDown, run: toggleHistory });
+  return acts;
+});
 </script>
 
 <template>
@@ -62,8 +79,8 @@ function fmt(d?: string) {
     class="flex flex-col gap-2 p-3 border rounded-lg bg-background"
     :class="{ 'opacity-60': obligation.status !== 'active', 'border-destructive/30': overdue }"
   >
-    <div class="flex flex-row items-center gap-3">
-      <RefreshCw class="size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
+    <div class="flex flex-row items-start gap-3">
+      <RefreshCw class="mt-0.5 size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
 
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
@@ -84,7 +101,8 @@ function fmt(d?: string) {
         </div>
       </div>
 
-      <div class="flex items-center gap-1 shrink-0">
+      <div class="flex shrink-0 items-center gap-1">
+        <!-- Primary action: record a filing (all sizes). -->
         <Button
           v-if="filing && obligation.status === 'active'"
           variant="outline" size="sm" class="h-8 gap-1.5"
@@ -94,37 +112,41 @@ function fmt(d?: string) {
           <FileCheck2 class="size-4" />
           <span class="hidden sm:inline">Record filing</span>
         </Button>
+
+        <!-- Secondary actions inline on sm+ … -->
         <Button
-          v-if="obligation.status === 'active'"
-          variant="ghost" size="icon" class="size-8 text-muted-foreground"
-          :disabled="busy" title="Pause"
-          @click="emit('status', 'paused')"
+          v-for="a in secondaryActions" :key="a.key"
+          variant="ghost" size="icon"
+          class="hidden size-8 text-muted-foreground sm:inline-flex"
+          :class="a.danger ? 'hover:text-destructive' : ''"
+          :disabled="a.disabled" :title="a.label"
+          @click="a.run"
         >
-          <Pause class="size-4" />
+          <component
+            :is="a.icon" class="size-4"
+            :class="a.key === 'history' ? ['transition-transform', { 'rotate-180': expanded }] : ''"
+          />
         </Button>
-        <Button
-          v-else-if="obligation.status === 'paused'"
-          variant="ghost" size="icon" class="size-8 text-muted-foreground"
-          :disabled="busy" title="Resume"
-          @click="emit('status', 'active')"
-        >
-          <Play class="size-4" />
-        </Button>
-        <Button
-          v-if="obligation.status !== 'ended'"
-          variant="ghost" size="icon" class="size-8 text-muted-foreground hover:text-destructive"
-          :disabled="busy" title="End"
-          @click="emit('status', 'ended')"
-        >
-          <X class="size-4" />
-        </Button>
-        <Button
-          variant="ghost" size="icon" class="size-8 text-muted-foreground"
-          title="Filing history"
-          @click="toggleHistory"
-        >
-          <ChevronDown class="size-4 transition-transform" :class="{ 'rotate-180': expanded }" />
-        </Button>
+
+        <!-- … and folded into an overflow menu on mobile so they can't crowd the title. -->
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-8 text-muted-foreground sm:hidden" title="More actions">
+              <MoreVertical class="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              v-for="a in secondaryActions" :key="a.key"
+              :disabled="a.disabled"
+              :class="a.danger ? 'text-destructive focus:text-destructive' : ''"
+              @click="a.run"
+            >
+              <component :is="a.icon" class="size-4" />
+              {{ a.label }}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
 
