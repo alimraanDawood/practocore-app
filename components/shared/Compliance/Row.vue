@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RefreshCw, Briefcase, Pause, Play, X, CheckCircle2, FileCheck2, ChevronDown, Paperclip, CircleAlert, MoreVertical } from 'lucide-vue-next';
+import { RefreshCw, Briefcase, Pause, Play, X, CheckCircle2, FileCheck2, ChevronDown, Paperclip, CircleAlert } from 'lucide-vue-next';
 import {
   listObligationFilings, filingEvidenceUrl,
   type ComplianceObligation, type ComplianceStatus, type ComplianceFiling,
@@ -79,30 +79,34 @@ const secondaryActions = computed(() => {
     class="flex flex-col gap-2 p-3 border rounded-lg bg-background"
     :class="{ 'opacity-60': obligation.status !== 'active', 'border-destructive/30': overdue }"
   >
-    <div class="flex flex-row items-start gap-3">
-      <RefreshCw class="mt-0.5 size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
-
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 flex-wrap">
-          <p class="text-sm font-medium">{{ obligation.label }}</p>
-          <Badge variant="outline" class="capitalize text-[10px]">{{ obligation.recurrence }}</Badge>
-          <Badge v-if="obligation.status !== 'active'" variant="secondary" class="capitalize text-[10px]">{{ obligation.status }}</Badge>
-        </div>
-        <div class="flex items-center gap-2 mt-0.5">
-          <button
-            type="button"
-            class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground min-w-0"
-            @click="emit('open')"
-          >
-            <Briefcase class="size-3 shrink-0" />
-            <span class="truncate">{{ obligation.expand?.engagement?.name || 'Engagement' }}</span>
-          </button>
-          <span class="text-xs" :class="overdue ? 'text-destructive font-medium' : 'text-muted-foreground'">· {{ dueLabel }}</span>
+    <!-- Stacks on mobile (info, then an actions row) and sits side-by-side on sm+. -->
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <!-- Info -->
+      <div class="flex min-w-0 flex-1 items-start gap-3">
+        <RefreshCw class="mt-0.5 size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-sm font-medium break-words">{{ obligation.label }}</p>
+            <Badge variant="outline" class="capitalize text-[10px]">{{ obligation.recurrence }}</Badge>
+            <Badge v-if="obligation.status !== 'active'" variant="secondary" class="capitalize text-[10px]">{{ obligation.status }}</Badge>
+          </div>
+          <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <button
+              type="button"
+              class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              @click="emit('open')"
+            >
+              <Briefcase class="size-3 shrink-0" />
+              <span class="truncate">{{ obligation.expand?.engagement?.name || 'Engagement' }}</span>
+            </button>
+            <span class="text-xs" :class="overdue ? 'text-destructive font-medium' : 'text-muted-foreground'">· {{ dueLabel }}</span>
+          </div>
         </div>
       </div>
 
-      <div class="flex shrink-0 items-center gap-1">
-        <!-- Primary action: record a filing (all sizes). -->
+      <!-- Actions: their own right-aligned row under the content on mobile; inline on sm+. -->
+      <div class="flex shrink-0 items-center justify-end gap-1 pl-7 sm:pl-0">
+        <!-- Primary action: record a filing. -->
         <Button
           v-if="filing && obligation.status === 'active'"
           variant="outline" size="sm" class="h-8 gap-1.5"
@@ -110,14 +114,13 @@ const secondaryActions = computed(() => {
           @click="emit('file', filing)"
         >
           <FileCheck2 class="size-4" />
-          <span class="hidden sm:inline">Record filing</span>
+          <span>Record filing</span>
         </Button>
 
-        <!-- Secondary actions inline on sm+ … -->
         <Button
           v-for="a in secondaryActions" :key="a.key"
           variant="ghost" size="icon"
-          class="hidden size-8 text-muted-foreground sm:inline-flex"
+          class="size-8 text-muted-foreground"
           :class="a.danger ? 'hover:text-destructive' : ''"
           :disabled="a.disabled" :title="a.label"
           @click="a.run"
@@ -127,26 +130,6 @@ const secondaryActions = computed(() => {
             :class="a.key === 'history' ? ['transition-transform', { 'rotate-180': expanded }] : ''"
           />
         </Button>
-
-        <!-- … and folded into an overflow menu on mobile so they can't crowd the title. -->
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon" class="size-8 text-muted-foreground sm:hidden" title="More actions">
-              <MoreVertical class="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              v-for="a in secondaryActions" :key="a.key"
-              :disabled="a.disabled"
-              :class="a.danger ? 'text-destructive focus:text-destructive' : ''"
-              @click="a.run"
-            >
-              <component :is="a.icon" class="size-4" />
-              {{ a.label }}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </div>
 
