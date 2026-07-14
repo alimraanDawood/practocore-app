@@ -12,10 +12,13 @@ import { toast } from 'vue-sonner';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import {
-  getSource, getCaseLawMarkdown, caseLawPdfObjectUrl, courtLabel,
+  getSource, getCaseLawMarkdown, caseLawPdfObjectUrl, caseLawPdfBlob, courtLabel,
   type CaseLawDetail,
 } from '~/services/caselaw';
 import { cleanCitationLabel } from '~/services/ai';
+
+// vue-pdf-embed is heavy (pulls in pdfjs) — load it lazily, client-only.
+const VuePdfEmbed = defineAsyncComponent(() => import('vue-pdf-embed'));
 
 marked.use({ breaks: true, gfm: true });
 
@@ -38,8 +41,28 @@ const markdown = ref('');
 const markdownHtml = computed(() =>
   markdown.value ? DOMPurify.sanitize(marked.parse(markdown.value) as string) : '');
 const markdownLoaded = ref(false);
-const pdfUrl = ref('');
+
+// ── PDF viewer state ──────────────────────────────────────────────────────────
+const pdfUrl = ref('');           // object URL for the downloaded blob
 const pdfLoading = ref(false);
+const pdfProgress = ref(0);       // 0..1 download progress
+const pdfIndeterminate = ref(false);
+const pdfError = ref('');
+const pdfPage = ref(1);           // 1-based current page (single-page view)
+const pdfPageCount = ref(0);
+const pdfZoom = ref(1);           // 0.5 .. 3
+
+function onPdfLoaded(doc: any) {
+  pdfPageCount.value = doc?.numPages ?? 0;
+  pdfPage.value = Math.min(pdfPage.value, pdfPageCount.value || 1);
+}
+function goPage(delta: number) {
+  const next = pdfPage.value + delta;
+  if (next >= 1 && next <= (pdfPageCount.value || 1)) pdfPage.value = next;
+}
+function zoomBy(delta: number) {
+  pdfZoom.value = Math.min(3, Math.max(0.5, +(pdfZoom.value + delta).toFixed(2)));
+}
 
 const paraRefs = new Map<string, HTMLElement>();
 function setParaRef(anchor: string, el: any) {
@@ -95,11 +118,17 @@ async function showPdf() {
   tab.value = 'pdf';
   if (pdfUrl.value) return;
   pdfLoading.value = true;
+  pdfError.value = '';
+  pdfProgress.value = 0;
+  pdfIndeterminate.value = false;
   try {
-    pdfUrl.value = await caseLawPdfObjectUrl(props.sourceId);
-  } catch {
-    toast.error('The original PDF could not be retrieved.');
-    tab.value = 'paragraphs';
+    const blob = await caseLawPdfBlob(props.sourceId, (fraction, ind) => {
+      pdfIndeterminate.value = ind;
+      if (!ind) pdfProgress.value = fraction;
+    });
+    pdfUrl.value = URL.createObjectURL(blob);
+  } catch (e: any) {
+    pdfError.value = e?.message || 'The original PDF could not be retrieved.';
   } finally {
     pdfLoading.value = false;
   }
@@ -123,6 +152,10 @@ function revokePdf() {
     URL.revokeObjectURL(pdfUrl.value);
     pdfUrl.value = '';
   }
+  pdfError.value = '';
+  pdfPage.value = 1;
+  pdfPageCount.value = 0;
+  pdfZoom.value = 1;
 }
 onBeforeUnmount(revokePdf);
 
@@ -189,11 +222,69 @@ watch(() => props.open, (o) => { if (o && props.sourceId) load(); });
         />
 
         <!-- Original PDF -->
-        <div v-else-if="tab === 'pdf'" class="h-full">
-          <div v-if="pdfLoading" class="flex justify-center py-12">
-            <Icon name="lucide:loader-circle" class="size-6 animate-spin text-muted-foreground" />
+        <div v-else-if="tab === 'pdf'" class="flex h-full min-h-0 flex-col">
+          <!-- Download progress -->
+          <div v-if="pdfLoading" class="flex flex-col items-center justify-center gap-3 py-12">
+            <div class="flex items-center gap-2 text-sm text-muted-foreground">
+              <Icon name="lucide:loader-circle" class="size-4 animate-spin" />
+              {{ pdfIndeterminate ? 'Loading PDF…' : `Loading PDF… ${Math.round(pdfProgress * 100)}%` }}
+            </div>
+            <Progress v-if="!pdfIndeterminate" :model-value="Math.round(pdfProgress * 100)" class="w-56" />
+            <div v-else class="h-2 w-56 overflow-hidden rounded-full bg-primary/20">
+              <div class="h-full w-1/2 rounded-full bg-primary animate-pulse" />
+            </div>
           </div>
-          <iframe v-else-if="pdfUrl" :src="pdfUrl" class="h-[70vh] w-full rounded border" title="Original PDF" />
+
+          <!-- Error -->
+          <div v-else-if="pdfError" class="flex flex-col items-center justify-center gap-3 py-12 text-center">
+            <Icon name="lucide:triangle-alert" class="size-6 text-destructive" />
+            <p class="text-sm font-medium">Couldn't load the PDF</p>
+            <p class="max-w-xs text-xs text-muted-foreground">{{ pdfError }}</p>
+            <Button size="sm" variant="outline" @click="downloadPdf">
+              <Icon name="lucide:download" class="size-3.5" /> Download instead
+            </Button>
+          </div>
+
+          <!-- Rendered PDF with page + zoom tools -->
+          <template v-else-if="pdfUrl">
+            <!-- Toolbar -->
+            <div class="mb-2 flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1.5">
+              <Button size="icon-sm" variant="ghost" :disabled="pdfPage <= 1" title="Previous page" @click="goPage(-1)">
+                <Icon name="lucide:chevron-left" class="size-4" />
+              </Button>
+              <span class="min-w-20 text-center text-xs tabular-nums text-muted-foreground">
+                Page {{ pdfPage }} / {{ pdfPageCount || '…' }}
+              </span>
+              <Button size="icon-sm" variant="ghost" :disabled="pdfPage >= pdfPageCount" title="Next page" @click="goPage(1)">
+                <Icon name="lucide:chevron-right" class="size-4" />
+              </Button>
+              <div class="mx-1 h-4 w-px bg-border" />
+              <Button size="icon-sm" variant="ghost" :disabled="pdfZoom <= 0.5" title="Zoom out" @click="zoomBy(-0.25)">
+                <Icon name="lucide:zoom-out" class="size-4" />
+              </Button>
+              <span class="min-w-10 text-center text-xs tabular-nums text-muted-foreground">{{ Math.round(pdfZoom * 100) }}%</span>
+              <Button size="icon-sm" variant="ghost" :disabled="pdfZoom >= 3" title="Zoom in" @click="zoomBy(0.25)">
+                <Icon name="lucide:zoom-in" class="size-4" />
+              </Button>
+            </div>
+
+            <!-- Page canvas (fits width; zoom widens the wrapper so it scrolls) -->
+            <div class="min-h-0 flex-1 overflow-auto rounded border bg-muted/30 p-3">
+              <ClientOnly>
+                <div
+                  class="mx-auto [&_canvas]:!h-auto [&_canvas]:!w-full"
+                  :style="{ width: `${pdfZoom * 100}%`, maxWidth: pdfZoom === 1 ? '42rem' : 'none' }"
+                >
+                  <VuePdfEmbed :source="pdfUrl" :page="pdfPage" @loaded="onPdfLoaded" />
+                </div>
+                <template #fallback>
+                  <div class="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                    <Icon name="lucide:loader-circle" class="size-4 animate-spin" /> Rendering PDF…
+                  </div>
+                </template>
+              </ClientOnly>
+            </div>
+          </template>
         </div>
       </div>
     </SheetContent>

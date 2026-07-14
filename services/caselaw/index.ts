@@ -198,6 +198,38 @@ export async function caseLawPdfObjectUrl(id: string, download = false): Promise
   return URL.createObjectURL(pdf);
 }
 
+// Download the original PDF via XHR so we get real byte progress for a determinate
+// loader (the in-app reader renders it with vue-pdf-embed). The endpoint needs the
+// auth header, so we can't hand a plain URL to the renderer — we fetch here and
+// return a normalized application/pdf blob. onProgress receives (fraction 0..1,
+// indeterminate) — indeterminate is true when the server omits Content-Length.
+export function caseLawPdfBlob(
+  id: string,
+  onProgress?: (fraction: number, indeterminate: boolean) => void,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', `${SERVER_URL}/api/practocore/ai/caselaw/sources/${id}/pdf`);
+    xhr.responseType = 'blob';
+    xhr.setRequestHeader('Authorization', pb.authStore.token);
+    xhr.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total, false);
+      else onProgress?.(0, true);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const blob = xhr.response as Blob;
+        // Normalize to application/pdf: some storage backends report octet-stream.
+        resolve(blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' }));
+      } else {
+        reject(new Error(`PDF unavailable (${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error while loading the PDF.'));
+    xhr.send();
+  });
+}
+
 // ── Writes (superuser only) ─────────────────────────────────────────────────
 
 export interface UploadOverrides {
