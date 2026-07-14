@@ -54,10 +54,24 @@ export default defineNuxtConfig({
         }
     },
 
+    // iOS Universal Links: the file itself lives at public/.well-known/apple-app-site-association
+    // (no extension, so Nitro can't infer a mime type) — force the content-type Apple's
+    // AASA fetcher expects. No-op if app.practocore.com isn't served by this Nitro instance.
+    routeRules: {
+        '/.well-known/apple-app-site-association': {
+            headers: { 'content-type': 'application/json' },
+        },
+    },
+
     vite: {
         plugins: [
             tailwindcss(),
         ],
+        server: {
+            watch: {
+                ignored: ['**/src-tauri/target/**', '**/src-tauri/gen/**'],
+            },
+        },
     },
 
     modules: [

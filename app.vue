@@ -20,11 +20,26 @@ const SystemBars = registerPlugin('SystemBars')
 // Back button handling is auto-initialized by the composable
 useBackButton();
 
-onMounted(async () => {
-  console.log(await App.getLaunchUrl());
-});
-
 const router = useRouter();
+
+// Universal Links (https://app.practocore.com/...) land here as a full URL —
+// route to just the path/query/hash. `appUrlOpen` fires while the app is
+// already running; `getLaunchUrl` covers a cold start via the same link.
+function routeToDeepLink(rawUrl) {
+  if (!rawUrl) return;
+  try {
+    const url = new URL(rawUrl);
+    const target = `${url.pathname}${url.search}${url.hash}`;
+    if (target && target !== '/') router.push(target);
+  } catch (e) {
+    console.error('Failed to parse deep link URL:', rawUrl, e);
+  }
+}
+
+onMounted(async () => {
+  const launch = await App.getLaunchUrl();
+  routeToDeepLink(launch?.url);
+});
 
 
 const colorMode = useColorMode()
@@ -49,15 +64,7 @@ async function updateSystemBars(mode) {
 
 
 App.addListener('appUrlOpen', (event) => {
-  const slug = event.url.split('.com').pop();
-  console.log("Tried opening")
-
-  // We only push to the route if there is a slug present
-  if (slug) {
-    router.push({
-      path: slug,
-    });
-  }
+  routeToDeepLink(event.url);
 });
 
 onUnmounted(() => {

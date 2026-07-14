@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "MXTY27437P.com.practocore.app",
+        "paths": ["*"]
+      }
+    ]
+  }
+}
