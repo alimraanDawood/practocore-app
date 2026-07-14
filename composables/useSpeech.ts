@@ -1,4 +1,4 @@
-import { VoiceRecorder } from 'capacitor-voice-recorder';
+import { VoiceRecorder } from '@independo/capacitor-voice-recorder';
 import { Capacitor } from '@capacitor/core';
 import { pb, SERVER_URL } from '~/lib/pocketbase';
 
