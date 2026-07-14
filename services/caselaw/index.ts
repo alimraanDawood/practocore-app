@@ -1,4 +1,4 @@
-import PocketBase from 'pocketbase';
+import PocketBase, { LocalAuthStore } from 'pocketbase';
 import { pb, SERVER_URL } from '~/lib/pocketbase';
 
 // ── Case-law corpus service ─────────────────────────────────────────────────
@@ -71,31 +71,14 @@ export function courtLabel(code: string): string {
 
 // ── Superuser session (separate client) ─────────────────────────────────────
 // A dedicated client so signing in as a superuser never clobbers the app's Users
-// session. authStore persists in localStorage under a distinct key so the admin
-// stays signed in across reloads.
-const adminPb = new PocketBase(SERVER_URL);
+// session. CRITICAL: it MUST use its own auth-store key. The default PocketBase
+// store persists to "pocketbase_auth" — the same key the app's `pb` uses — so a
+// shared/default store here would let the superuser session overwrite (or, on
+// clear, wipe) the normal Users session, silently logging the user out and forcing
+// a re-login on the next reload. A LocalAuthStore with a distinct key keeps the two
+// sessions fully isolated and persists the admin login across reloads on its own.
+const adminPb = new PocketBase(SERVER_URL, new LocalAuthStore('pc_caselaw_admin_auth'));
 adminPb.autoCancellation(false);
-if (typeof window !== 'undefined') {
-  // Persist the superuser auth separately from the app session.
-  const KEY = 'pc_caselaw_admin_auth';
-  const saved = window.localStorage.getItem(KEY);
-  if (saved) {
-    try {
-      const { token, record } = JSON.parse(saved);
-      adminPb.authStore.save(token, record);
-    } catch { /* ignore */ }
-  }
-  adminPb.authStore.onChange(() => {
-    if (adminPb.authStore.isValid) {
-      window.localStorage.setItem(KEY, JSON.stringify({
-        token: adminPb.authStore.token,
-        record: adminPb.authStore.record,
-      }));
-    } else {
-      window.localStorage.removeItem(KEY);
-    }
-  });
-}
 
 export function isSuperuserSignedIn(): boolean {
   return adminPb.authStore.isValid && adminPb.authStore.record?.collectionName === '_superusers';
