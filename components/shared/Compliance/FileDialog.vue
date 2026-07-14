@@ -17,6 +17,9 @@ function toISO(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+// Shared body for the Dialog (desktop) and Drawer (mobile) shells.
+const [DefineBody, ReuseBody] = createReusableTemplate();
+
 const filedDate = ref(toISO(new Date()));
 const reference = ref('');
 const note = ref('');
@@ -61,7 +64,38 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog v-model:open="open">
+  <DefineBody>
+    <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-1.5">
+        <Label for="filed-date">Date filed</Label>
+        <Input id="filed-date" v-model="filedDate" type="date" />
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <Label for="filed-ref">Reference <span class="text-muted-foreground font-normal">(receipt / registration no.)</span></Label>
+        <Input id="filed-ref" v-model="reference" placeholder="e.g. URSB/AR/2026/00421" />
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <Label>Evidence <span class="text-muted-foreground font-normal">(optional)</span></Label>
+        <label class="flex items-center gap-2 border rounded-md px-3 py-2 text-sm cursor-pointer hover:bg-secondary/50">
+          <Paperclip class="size-4 text-muted-foreground shrink-0" />
+          <span class="truncate">{{ evidence?.name || 'Attach the filed receipt or document…' }}</span>
+          <input type="file" class="hidden" @change="onFile" />
+        </label>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <Label for="filed-note">Note <span class="text-muted-foreground font-normal">(optional)</span></Label>
+        <Textarea id="filed-note" v-model="note" rows="2" placeholder="Anything worth recording about this filing…" />
+      </div>
+
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+    </div>
+  </DefineBody>
+
+  <!-- Desktop: Dialog -->
+  <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
     <DialogContent class="sm:max-w-md">
       <DialogHeader>
         <DialogTitle>Record filing</DialogTitle>
@@ -70,32 +104,8 @@ async function submit() {
         </DialogDescription>
       </DialogHeader>
 
-      <div class="flex flex-col gap-4 py-2">
-        <div class="flex flex-col gap-1.5">
-          <Label for="filed-date">Date filed</Label>
-          <Input id="filed-date" v-model="filedDate" type="date" />
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <Label for="filed-ref">Reference <span class="text-muted-foreground font-normal">(receipt / registration no.)</span></Label>
-          <Input id="filed-ref" v-model="reference" placeholder="e.g. URSB/AR/2026/00421" />
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <Label>Evidence <span class="text-muted-foreground font-normal">(optional)</span></Label>
-          <label class="flex items-center gap-2 border rounded-md px-3 py-2 text-sm cursor-pointer hover:bg-secondary/50">
-            <Paperclip class="size-4 text-muted-foreground shrink-0" />
-            <span class="truncate">{{ evidence?.name || 'Attach the filed receipt or document…' }}</span>
-            <input type="file" class="hidden" @change="onFile" />
-          </label>
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <Label for="filed-note">Note <span class="text-muted-foreground font-normal">(optional)</span></Label>
-          <Textarea id="filed-note" v-model="note" rows="2" placeholder="Anything worth recording about this filing…" />
-        </div>
-
-        <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+      <div class="py-2">
+        <ReuseBody />
       </div>
 
       <DialogFooter>
@@ -107,4 +117,28 @@ async function submit() {
       </DialogFooter>
     </DialogContent>
   </Dialog>
+
+  <!-- Mobile: bottom Drawer -->
+  <Drawer v-else v-model:open="open">
+    <DrawerContent class="max-h-[92dvh]">
+      <DrawerHeader class="text-left">
+        <DrawerTitle>Record filing</DrawerTitle>
+        <DrawerDescription>
+          {{ filing?.label }}<span v-if="filing?.dueDate"> · due {{ new Date(filing.dueDate).toLocaleDateString() }}</span>
+        </DrawerDescription>
+      </DrawerHeader>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-4">
+        <ReuseBody />
+      </div>
+
+      <DrawerFooter class="flex-row justify-end gap-2">
+        <Button variant="ghost" :disabled="busy" @click="open = false">Cancel</Button>
+        <Button :disabled="busy" @click="submit">
+          <Loader2 v-if="busy" class="size-4 animate-spin mr-1.5" />
+          Mark filed
+        </Button>
+      </DrawerFooter>
+    </DrawerContent>
+  </Drawer>
 </template>
