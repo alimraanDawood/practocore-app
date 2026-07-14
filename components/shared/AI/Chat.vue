@@ -1830,7 +1830,7 @@ function formatToolName(tool: string): string {
                     <ul v-if="msg.stepsOpen" class="mt-1.5 ml-1 flex flex-col gap-1 border-l border-border pl-3">
                       <li v-for="step in msg.steps" :key="step.id" class="flex items-center gap-2 text-xs text-muted-foreground">
                         <component :is="stepIcon(step.tool)" class="size-3 shrink-0 opacity-70" />
-                        <span class="truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span></span>
+                        <span class="min-w-0 truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span></span>
                       </li>
                     </ul>
                   </div>
@@ -1883,7 +1883,7 @@ function formatToolName(tool: string): string {
               <div class="size-6 bg-primary text-primary-foreground dark:bg-secondary dark:text-secondary-foreground grid place-items-center rounded-full shrink-0 mt-0.5">
                 <Sparkles class="size-3" />
               </div>
-              <div class="min-w-[11rem] pt-1">
+              <div class="min-w-0 flex-1 pt-1">
                 <div class="flex items-center gap-1.5 text-xs font-medium text-foreground">
                   <Loader2 class="size-3.5 animate-spin text-muted-foreground" />
                   <span>Working…</span>
@@ -1897,7 +1897,7 @@ function formatToolName(tool: string): string {
                     <Loader2 v-if="idx === activeSteps.length - 1" class="size-3 shrink-0 animate-spin text-muted-foreground" />
                     <Check v-else class="size-3 shrink-0 text-emerald-500" />
                     <span
-                      class="truncate"
+                      class="min-w-0 truncate"
                       :class="idx === activeSteps.length - 1 ? 'text-foreground' : 'text-muted-foreground'"
                     >
                       {{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span>
