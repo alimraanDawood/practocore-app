@@ -1693,7 +1693,7 @@ defineExpose({
                   <li v-for="step in msg.steps" :key="step.id"
                       class="flex items-center gap-2 text-xs text-muted-foreground">
                     <component :is="stepIcon(step.tool)" class="size-3 shrink-0 opacity-70"/>
-                    <span class="truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{
+                    <span class="min-w-0 truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{
                         step.detail
                       }}</span></span>
                   </li>
@@ -1727,7 +1727,7 @@ defineExpose({
           <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
             <Sparkles class="size-3.5"/>
           </div>
-          <div class="min-w-[11rem] pt-1">
+          <div class="min-w-0 flex-1 pt-1">
             <div class="flex items-center gap-1.5 text-xs font-medium">
               <Loader2 class="size-3.5 animate-spin text-muted-foreground"/>
               <span>Working…</span>
@@ -1738,7 +1738,7 @@ defineExpose({
                 <Loader2 v-if="idx === activeSteps.length - 1"
                          class="size-3 shrink-0 animate-spin text-muted-foreground"/>
                 <Check v-else class="size-3 shrink-0 text-emerald-500"/>
-                <span class="truncate"
+                <span class="min-w-0 truncate"
                       :class="idx === activeSteps.length - 1 ? 'text-foreground' : 'text-muted-foreground'">
                                         {{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{
                     step.detail
