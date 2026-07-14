@@ -79,62 +79,59 @@ const secondaryActions = computed(() => {
     class="flex flex-col gap-2 p-3 border rounded-lg bg-background"
     :class="{ 'opacity-60': obligation.status !== 'active', 'border-destructive/30': overdue }"
   >
-    <!-- Stacks on mobile (info, then an actions row) and sits side-by-side on sm+. -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
-      <!-- Info -->
-      <div class="flex min-w-0 flex-1 items-start gap-3">
-        <RefreshCw class="mt-0.5 size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <p class="text-sm font-medium break-words">{{ obligation.label }}</p>
-            <Badge variant="outline" class="capitalize text-[10px]">{{ obligation.recurrence }}</Badge>
-            <Badge v-if="obligation.status !== 'active'" variant="secondary" class="capitalize text-[10px]">{{ obligation.status }}</Badge>
-          </div>
-          <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <button
-              type="button"
-              class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              @click="emit('open')"
-            >
-              <Briefcase class="size-3 shrink-0" />
-              <span class="truncate">{{ obligation.expand?.engagement?.name || 'Engagement' }}</span>
-            </button>
-            <span class="text-xs" :class="overdue ? 'text-destructive font-medium' : 'text-muted-foreground'">· {{ dueLabel }}</span>
-          </div>
+    <!-- Header: left-aligned info, recurrence icon pinned top-right. -->
+    <div class="flex items-start gap-2">
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="text-sm font-medium break-words">{{ obligation.label }}</p>
+          <Badge variant="outline" class="capitalize text-[10px]">{{ obligation.recurrence }}</Badge>
+          <Badge v-if="obligation.status !== 'active'" variant="secondary" class="capitalize text-[10px]">{{ obligation.status }}</Badge>
+        </div>
+        <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <button
+            type="button"
+            class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            @click="emit('open')"
+          >
+            <Briefcase class="size-3 shrink-0" />
+            <span class="truncate">{{ obligation.expand?.engagement?.name || 'Engagement' }}</span>
+          </button>
+          <span class="text-xs" :class="overdue ? 'text-destructive font-medium' : 'text-muted-foreground'">· {{ dueLabel }}</span>
         </div>
       </div>
+      <RefreshCw class="mt-0.5 size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
+    </div>
 
-      <!-- Actions: their own right-aligned row under the content on mobile; inline on sm+. -->
-      <div class="flex shrink-0 items-center justify-end gap-1 pl-7 sm:pl-0">
-        <!-- Primary action: record a filing. -->
-        <Button
-          v-if="filing && obligation.status === 'active'"
-          variant="outline" size="sm" class="h-8 gap-1.5"
-          :disabled="busy" title="Record this occurrence as filed"
-          @click="emit('file', filing)"
-        >
-          <FileCheck2 class="size-4" />
-          <span>Record filing</span>
-        </Button>
+    <!-- Actions, left-aligned. -->
+    <div class="flex flex-wrap items-center gap-1">
+      <!-- Primary action: record a filing. -->
+      <Button
+        v-if="filing && obligation.status === 'active'"
+        variant="outline" size="sm" class="h-8 gap-1.5"
+        :disabled="busy" title="Record this occurrence as filed"
+        @click="emit('file', filing)"
+      >
+        <FileCheck2 class="size-4" />
+        <span>Record filing</span>
+      </Button>
 
-        <Button
-          v-for="a in secondaryActions" :key="a.key"
-          variant="ghost" size="icon"
-          class="size-8 text-muted-foreground"
-          :class="a.danger ? 'hover:text-destructive' : ''"
-          :disabled="a.disabled" :title="a.label"
-          @click="a.run"
-        >
-          <component
-            :is="a.icon" class="size-4"
-            :class="a.key === 'history' ? ['transition-transform', { 'rotate-180': expanded }] : ''"
-          />
-        </Button>
-      </div>
+      <Button
+        v-for="a in secondaryActions" :key="a.key"
+        variant="ghost" size="icon"
+        class="size-8 text-muted-foreground"
+        :class="a.danger ? 'hover:text-destructive' : ''"
+        :disabled="a.disabled" :title="a.label"
+        @click="a.run"
+      >
+        <component
+          :is="a.icon" class="size-4"
+          :class="a.key === 'history' ? ['transition-transform', { 'rotate-180': expanded }] : ''"
+        />
+      </Button>
     </div>
 
     <!-- Register: the durable record of each occurrence. -->
-    <div v-if="expanded" class="pl-7 pr-1 pb-1">
+    <div v-if="expanded" class="pb-1">
       <div v-if="historyLoading" class="text-xs text-muted-foreground py-2">Loading history…</div>
       <div v-else-if="history.length === 0" class="text-xs text-muted-foreground py-2">No occurrences recorded yet.</div>
       <ul v-else class="flex flex-col divide-y">
