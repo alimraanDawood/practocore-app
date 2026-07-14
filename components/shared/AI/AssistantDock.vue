@@ -61,7 +61,7 @@ function openFull() {
 
     <!-- Touch: bottom sheet overlay instead of a page-push. -->
     <Sheet v-if="!isDesktop" :open="isOpen && !!context" @update:open="(v) => { if (!v) close() }">
-      <SheetContent side="bottom" class="flex h-[100dvh] flex-col gap-0 p-0" :hide-x="true">
+      <SheetContent side="bottom" class="flex h-[100dvh] flex-col gap-0 p-0 pt-(--safe-area-top)" :hide-x="true">
         <SharedAIAssistantDockPanel
           v-if="context"
           :context="context"

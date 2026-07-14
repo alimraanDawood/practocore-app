@@ -282,7 +282,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col overflow-y-scroll w-full h-full">
+  <div class="flex flex-col overflow-y-scroll w-full h-full safe-area-shell">
     <div class="mx-auto  w-full max-w-6xl p-4 md:p-8">
       <!-- Header -->
       <div class="mb-6 flex items-center justify-between">

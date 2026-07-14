@@ -182,7 +182,7 @@ const _rejectInvitation = async () => {
     </div>
   </div>
 
-  <div v-else class="flex flex-col w-full h-[100dvh]">
+  <div v-else class="flex flex-col w-full h-[100dvh] safe-area-shell">
     <div class="flex flex-row p-3 border-b"></div>
     <div class="flex flex-col w-full h-full gap-5 items-center justify-center">
       <div class="flex flex-col w-[95vw] items-center justify-center  max-w-xl  p-3 border-x h-full">

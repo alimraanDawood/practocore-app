@@ -171,7 +171,7 @@ function createEmptyTemplateData(options: { name: string, description?: string, 
       <slot/>
     </SheetTrigger>
 
-    <SheetContent side="bottom" class="h-[100dvh] flex flex-col items-center w-screen">
+    <SheetContent side="bottom" class="h-[100dvh] flex flex-col items-center w-screen pt-(--safe-area-top)">
       <div class="flex flex-col w-full xs:max-w-[80vw] lg:max-w-[50vw] h-full overflow-y-hidden">
         <SheetHeader>
           <SheetTitle>Create Template</SheetTitle>

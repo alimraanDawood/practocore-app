@@ -186,7 +186,7 @@ const articlesByCategory = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-svh flex-col overflow-hidden bg-background">
+  <div class="flex h-svh flex-col overflow-hidden bg-background safe-area-shell">
     <!-- Not signed in: the superuser middleware normally redirects to the case-law
          sign-in, but guard anyway. -->
     <div v-if="!signedIn" class="m-auto flex max-w-sm flex-col items-center gap-4 p-8 text-center">

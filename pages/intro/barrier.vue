@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-dvh overflow-hidden">
+  <div class="flex flex-col h-dvh overflow-hidden safe-area-shell">
     <!-- Header -->
     <div class="shrink-0 flex flex-row w-full p-3 border-b items-center justify-between">
       <div class="flex flex-row gap-2 items-center">

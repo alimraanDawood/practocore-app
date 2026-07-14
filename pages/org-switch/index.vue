@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-[100dvh] w-full items-center gap-3 justify-center">
+  <div class="flex flex-col h-[100dvh] w-full items-center gap-3 justify-center safe-area-shell">
     <span class="text-3xl ibm-plex-serif font-semibold">Changing Organisation</span>
     <Loader class="animate-spin" v-if="loading" />
     <NuxtLink v-else to="/">

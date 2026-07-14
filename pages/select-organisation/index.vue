@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-[100dvh] w-full items-center justify-center gap-8 p-6">
+  <div class="flex flex-col h-[100dvh] w-full items-center justify-center gap-8 p-6 safe-area-shell">
     <div class="flex flex-col items-center gap-2 text-center max-w-md">
       <Scale class="size-12 text-muted-foreground opacity-50" aria-hidden="true" />
       <h1 class="text-2xl ibm-plex-serif font-semibold">Choose your workspace</h1>

@@ -46,7 +46,7 @@ const _acknowledgeReminder = async () => {
 
 <template>
   <div
-      class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5">
+      class="flex flex-col w-full overflow-hidden items-center justify-center h-[100dvh] px-5 safe-area-shell">
     <div class="flex flex-col w-full lg:max-w-md items-center py-5 gap-3 border h-full justify-center">
       <div v-if="loading" class="flex flex-col items-center p-5 justify-center h-full w-full gap-3 border-y">
         <Loader class="animate-spin"/>

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col w-screen bg-primary h-screen items-center justify-center">
+  <div class="flex flex-col w-screen bg-primary h-screen items-center justify-center safe-area-shell">
     <div class="flex flex-col items-center justify-center w-full h-full">
       <img src="@/assets/img/logos/Practo%20Core%20Square%20--%20orange.png" class="size-32" alt="logo" />
       <div class="flex flex-col items-center gap-1">

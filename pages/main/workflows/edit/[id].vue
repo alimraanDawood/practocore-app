@@ -84,7 +84,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex h-full w-full flex-col overflow-hidden border-x">
+  <div class="flex h-full w-full flex-col overflow-hidden border-x safe-area-shell">
     <!-- Header -->
     <div class="flex items-center gap-3 border-b p-3">
       <Button variant="outline" size="icon" aria-label="Back" @click="backToList">

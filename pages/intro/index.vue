@@ -5,7 +5,7 @@ definePageMeta({
 </script>
 
 <template>
-  <div class="flex flex-col md:items-center w-full h-dvh relative overflow-hidden">
+  <div class="flex flex-col md:items-center w-full h-dvh relative overflow-hidden safe-area-shell">
     <div class="flex flex-row justify-between items-center p-3 border-b pc-enter">
       <div class="flex items-center gap-2">
         <img

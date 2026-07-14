@@ -33,11 +33,28 @@ const delegatedProps = reactiveOmit(props, 'class', 'side')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 
+// A Sheet is a `fixed`-position panel, so it sits outside any ancestor's
+// safe-area padding (fixed positioning is relative to the viewport, not a
+// padded parent) — pad whichever edges of each side actually sit flush
+// against the physical screen boundary so content clears the status bar,
+// home indicator, and any landscape display cutouts.
 const sideClasses: Record<string, string> = {
   right: 'inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm',
   left: 'inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm',
   top: 'inset-x-0 top-0 h-auto border-b',
   bottom: 'inset-x-0 bottom-0 h-auto border-t',
+}
+
+// Applied as inline style rather than utility classes: consumers routinely pass
+// `p-0`/`p-4` etc. in their own `class` prop, and since that's merged in after
+// `sideClasses` via `cn()` (tailwind-merge), any `pt-*`/`pb-*`/etc. utility here
+// would get silently stripped the moment a consumer's shorthand `p-*` conflicts
+// with it. Inline style has no such conflict resolution, so it always survives.
+const safeAreaStyle: Record<string, Partial<Record<'paddingTop' | 'paddingBottom' | 'paddingLeft' | 'paddingRight', string>>> = {
+  right: { paddingTop: 'var(--safe-area-top)', paddingBottom: 'var(--safe-area-bottom)', paddingRight: 'var(--safe-area-right)' },
+  left: { paddingTop: 'var(--safe-area-top)', paddingBottom: 'var(--safe-area-bottom)', paddingLeft: 'var(--safe-area-left)' },
+  top: { paddingTop: 'var(--safe-area-top)' },
+  bottom: { paddingBottom: 'var(--safe-area-bottom)' },
 }
 </script>
 
@@ -55,13 +72,19 @@ const sideClasses: Record<string, string> = {
           sideClasses[side],
           props.class,
         )"
+        :style="safeAreaStyle[side]"
         v-bind="{ ...forwarded, ...$attrs }"
       >
         <slot />
 
         <DialogClose
           v-if="!props.hideX"
-          class="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"
+          :class="cn(
+            'ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none',
+            // top/left/right sheets sit flush against the physical top edge —
+            // offset the close button past the status bar instead of under it.
+            side === 'bottom' ? 'top-4' : 'top-[calc(1rem+var(--safe-area-top))]',
+          )"
         >
           <X class="size-4" />
           <span class="sr-only">Close</span>

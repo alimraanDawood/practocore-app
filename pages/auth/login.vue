@@ -63,7 +63,7 @@ const toggleMaximizeWindow = () => {
 </script>
 
 <template>
-  <div class="flex flex-col w-screen h-dvh divide-x">
+  <div class="flex flex-col w-screen h-dvh divide-x safe-area-shell">
     <div class="flex flex-col w-full h-full col-span-1">
       <div class="flex flex-row p-3 border-b justify-between">
         <div></div>

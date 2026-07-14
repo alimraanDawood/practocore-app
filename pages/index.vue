@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full h-dvh flex flex-col items-center justify-center">
+  <div class="w-full h-dvh flex flex-col items-center justify-center safe-area-shell">
     <Loader class="animate-spin" />
   </div>
 </template>

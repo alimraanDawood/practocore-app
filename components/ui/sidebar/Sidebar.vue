@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
       data-mobile="true"
       role="dialog"
       aria-modal="true"
-      class="sidebar-drawer-panel bg-sidebar text-sidebar-foreground fixed inset-y-0 left-0 z-50 flex h-svh w-(--sidebar-width) flex-col md:hidden"
+      class="sidebar-drawer-panel bg-sidebar text-sidebar-foreground fixed inset-y-0 left-0 z-50 flex h-svh w-(--sidebar-width) flex-col md:hidden safe-area-shell"
       :style="{ '--sidebar-width': SIDEBAR_WIDTH_MOBILE }"
       v-bind="$attrs"
     >
