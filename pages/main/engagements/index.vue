@@ -4,8 +4,8 @@ import { vOnLongPress } from '@vueuse/components';
 import { Capacitor } from '@capacitor/core';
 import { Haptics } from '@capacitor/haptics';
 import {
-  listEngagements, listEngagementTemplates, createEngagement, deleteEngagement,
-  type Engagement, type EngagementTemplate,
+  listEngagements, deleteEngagement,
+  type Engagement,
 } from '~/services/engagements';
 
 definePageMeta({ layout: 'default' });
@@ -70,57 +70,13 @@ onMounted(() => {
 
 // ── Playbook library ───────────────────────────────────────────────────────
 const libraryOpen = ref(false);
-// A duplicated/deleted playbook changes the create dialog's template list, so drop
-// the cache to force a reload next time the dialog opens.
-function onLibraryChanged() { templates.value = []; }
+// CreateEngagement reloads its own template list each time it opens, so a
+// duplicated/deleted playbook is always reflected — nothing to invalidate here.
+function onLibraryChanged() { /* no-op: create flow reloads templates on open */ }
 
-// ── Create dialog ────────────────────────────────────────────────────────
+// ── Create flow (multi-step Drawer on mobile, Dialog on desktop) ─────────────
 const createOpen = ref(false);
-const templates = ref<EngagementTemplate[]>([]);
-const templatesLoading = ref(false);
-const form = reactive({ templateId: '', name: '', targetDate: '' });
-const creating = ref(false);
-const createError = ref('');
-
-async function openCreate() {
-  createOpen.value = true;
-  createError.value = '';
-  form.templateId = '';
-  form.name = '';
-  form.targetDate = '';
-  if (templates.value.length === 0) {
-    templatesLoading.value = true;
-    try {
-      templates.value = await listEngagementTemplates();
-      if (templates.value[0]) form.templateId = templates.value[0].id;
-    } catch (e: any) {
-      createError.value = e?.message || 'Could not load templates.';
-    } finally {
-      templatesLoading.value = false;
-    }
-  } else if (templates.value[0]) {
-    form.templateId = templates.value[0].id;
-  }
-}
-
-async function submitCreate() {
-  if (!form.templateId || !form.name.trim()) return;
-  creating.value = true;
-  createError.value = '';
-  try {
-    const res = await createEngagement({
-      templateId: form.templateId,
-      name: form.name.trim(),
-      targetDate: form.targetDate || undefined,
-    });
-    createOpen.value = false;
-    await router.push(`/main/engagements/${res.engagement.id}`);
-  } catch (e: any) {
-    createError.value = e?.message || 'Could not create engagement.';
-  } finally {
-    creating.value = false;
-  }
-}
+function openCreate() { createOpen.value = true; }
 
 // ── Multi-select + delete ──────────────────────────────────────────────────
 // Mirrors the Matters grid: long-press (or the "Select" toggle) enters a
@@ -207,7 +163,7 @@ async function deleteSelected() {
           Advisory, transactional, and regulatory work — anything that isn't a court case.
         </p>
       </div>
-      <div class="flex flex-col lg:flex-row lg:items-center gap-2 w-full lg:w-fit">
+      <div class="flex flex-row lg:items-center gap-2 w-full lg:w-fit">
         <Button
           v-if="engagements.length > 0"
           :variant="selectionActive ? 'secondary' : 'outline'"
@@ -221,10 +177,10 @@ async function deleteSelected() {
           <Layers class="size-4 mr-1.5" />
           Playbooks
         </Button>
-        <Button variant="outline" class="flex-1" @click="router.push('/main/engagements/studio')">
-          <Wand2 class="size-4 mr-1.5" />
-          Build a playbook
-        </Button>
+<!--        <Button variant="outline" class="flex-1" @click="router.push('/main/engagements/studio')">-->
+<!--          <Wand2 class="size-4 mr-1.5" />-->
+<!--          Build a playbook-->
+<!--        </Button>-->
         <Button @click="openCreate" class="flex-1">
           <Plus class="size-4 mr-1.5" />
           New engagement
@@ -303,49 +259,7 @@ async function deleteSelected() {
       </div>
     </template>
 
-    <Dialog v-model:open="createOpen">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New engagement</DialogTitle>
-          <DialogDescription>Pick a playbook, name the engagement, and set a target date if you have one.</DialogDescription>
-        </DialogHeader>
-        <div class="flex flex-col gap-4 py-2">
-          <div class="flex flex-col gap-1.5">
-            <Label>Playbook</Label>
-            <Select v-model="form.templateId" :disabled="templatesLoading">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Select a template" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label>Name</Label>
-            <Input v-model="form.name" placeholder="e.g. Nakato Ltd — Incorporation" />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label>Target date (optional)</Label>
-            <Input v-model="form.targetDate" type="date" />
-          </div>
-          <p v-if="createError" class="text-sm text-destructive">{{ createError }}</p>
-          <p class="text-xs text-muted-foreground">
-            Don't see your work type?
-            <button class="text-primary hover:underline" @click="createOpen = false; router.push('/main/engagements/studio')">
-              Build a playbook →
-            </button>
-          </p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" @click="createOpen = false">Cancel</Button>
-          <Button :disabled="creating || !form.templateId || !form.name.trim()" @click="submitCreate">
-            <Loader2 v-if="creating" class="size-4 animate-spin mr-1.5" />
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <SharedEngagementsCreateEngagement v-model:open="createOpen" />
 
     <SharedEngagementsPlaybookLibrary v-model:open="libraryOpen" @changed="onLibraryChanged" />
 
