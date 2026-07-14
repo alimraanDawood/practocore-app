@@ -12,7 +12,7 @@ import {
 } from 'lucide-vue-next';
 import {
   listEngagementTemplates, createEngagement,
-  type EngagementTemplate,
+  type EngagementTemplate, type TemplateField,
 } from '~/services/engagements';
 
 const open = defineModel<boolean>('open', { default: false });
@@ -27,6 +27,8 @@ const step = ref<1 | 2>(1);
 const search = ref('');
 const selected = ref<EngagementTemplate | null>(null);
 const form = reactive({ name: '', targetDate: '' });
+// Values for the picked playbook's input fields, keyed by field id (→ fieldValues).
+const fieldValues = reactive<Record<string, any>>({});
 
 const templates = ref<EngagementTemplate[]>([]);
 const templatesLoading = ref(false);
@@ -42,6 +44,7 @@ watch(open, async (v) => {
   selected.value = null;
   form.name = '';
   form.targetDate = '';
+  clearFieldValues();
   error.value = '';
   templatesLoading.value = true;
   try {
@@ -71,21 +74,55 @@ function scopeOf(t: EngagementTemplate): { icon: any; text: string } {
   return { icon: Lock, text: 'Personal' };
 }
 
+function clearFieldValues() {
+  for (const k of Object.keys(fieldValues)) delete fieldValues[k];
+}
+
 function pick(t: EngagementTemplate) {
   selected.value = t;
+  clearFieldValues();
   step.value = 2;
 }
 
-// ── Step 2: name + create ────────────────────────────────────────────────────
+// ── Step 2: name + fields + create ───────────────────────────────────────────
+// The picked playbook's sections define the intake form for this engagement; each
+// field's value is collected into fieldValues keyed by field id.
+const sections = computed(() => selected.value?.data?.sections?.filter((s) => s.fields?.length) ?? []);
+const allFields = computed<TemplateField[]>(() => sections.value.flatMap((s) => s.fields));
+
+// A required field is missing when its value is blank. Booleans are exempt: a
+// switch always carries an answer (unset = false = "No"), so it's never "missing".
+const missingRequired = computed(() =>
+  allFields.value.filter((f) => {
+    if (!f.required || f.type === 'boolean') return false;
+    const v = fieldValues[f.id];
+    return v === undefined || v === null || v === '';
+  }));
+
+// Strip blank values so we never persist empty keys.
+function cleanedFieldValues(): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(fieldValues)) {
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
+  return out;
+}
+
 async function submit() {
   if (!selected.value || !form.name.trim()) return;
+  if (missingRequired.value.length) {
+    error.value = `Please fill in: ${missingRequired.value.map((f) => f.label).join(', ')}`;
+    return;
+  }
   creating.value = true;
   error.value = '';
   try {
+    const values = cleanedFieldValues();
     const res = await createEngagement({
       templateId: selected.value.id,
       name: form.name.trim(),
       targetDate: form.targetDate || undefined,
+      fieldValues: Object.keys(values).length ? values : undefined,
     });
     open.value = false;
     emit('created', res.engagement.id);
@@ -202,6 +239,21 @@ function goStudio() {
               <Label>Target date (optional)</Label>
               <Input v-model="form.targetDate" type="date" />
             </div>
+
+            <!-- Playbook intake fields, grouped by section. -->
+            <section v-for="s in sections" :key="s.id" class="flex flex-col gap-3">
+              <Separator />
+              <h3 v-if="s.label" class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {{ s.label }}
+              </h3>
+              <SharedEngagementsFieldInput
+                v-for="f in s.fields"
+                :key="f.id"
+                :field="f"
+                v-model="fieldValues[f.id]"
+              />
+            </section>
+
             <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
           </div>
         </div>

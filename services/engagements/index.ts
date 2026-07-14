@@ -104,6 +104,12 @@ export interface Engagement {
   status: EngagementStatus;
   targetDate?: string;
   fieldValues: Record<string, any>;
+  /**
+   * Ad-hoc field DEFINITIONS added to this one engagement after creation, beyond
+   * the playbook's `data.sections`. Their values live in `fieldValues` keyed by
+   * field id — this only records the shape so the UI can render/label them.
+   */
+  extraFields?: TemplateField[];
   parties: Record<string, any>;
   stageStatus?: { currentStageId?: string; completedStageIds?: string[] };
   created: string;
@@ -520,7 +526,7 @@ export async function createEngagement(input: CreateEngagementInput) {
   return res.json() as Promise<{ engagement: { id: string; name: string }; milestoneIds: string[] }>;
 }
 
-export function updateEngagement(id: string, data: Partial<Pick<Engagement, 'name' | 'status' | 'targetDate' | 'fieldValues' | 'parties' | 'stageStatus' | 'members'>>) {
+export function updateEngagement(id: string, data: Partial<Pick<Engagement, 'name' | 'status' | 'targetDate' | 'fieldValues' | 'extraFields' | 'parties' | 'stageStatus' | 'members'>>) {
   return pb.collection('Engagements').update<Engagement>(id, data, { expand: 'template,members,owner' });
 }
 

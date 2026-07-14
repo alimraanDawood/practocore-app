@@ -225,6 +225,12 @@ async function doDeleteMilestone() {
   }
 }
 
+// The Details panel saves fieldValues/extraFields through the SDK and hands back
+// the refreshed engagement — adopt it so the view reflects the edit immediately.
+function onEngagementUpdated(updated: Engagement) {
+  engagement.value = updated;
+}
+
 function onMilestoneSaved(saved: EngagementMilestone) {
   const idx = milestones.value.findIndex((x) => x.id === saved.id);
   if (idx >= 0) milestones.value[idx] = saved;
@@ -574,17 +580,11 @@ const goBackOrHome = () => {
                 </div>
               </div>
 
-              <div v-if="Object.keys(engagement.fieldValues || {}).length > 0">
-                <h2 class="text-sm font-medium text-muted-foreground mb-3">Details</h2>
-                <Card class="p-4">
-                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div v-for="(value, key) in engagement.fieldValues" :key="key">
-                      <dt class="text-muted-foreground">{{ key }}</dt>
-                      <dd>{{ value }}</dd>
-                    </div>
-                  </dl>
-                </Card>
-              </div>
+              <SharedEngagementsEngagementFields
+                :engagement="engagement"
+                :template="template"
+                @updated="onEngagementUpdated"
+              />
 
               <!-- Compliance tail — recurring obligations + the per-occurrence register -->
               <div v-if="compliance.length > 0 || hasComplianceRules">
