@@ -95,6 +95,7 @@ function isActive(item: NavLink): boolean {
            swipe-back closes it, and navigation auto-closes it. -->
       <LayoutSidebarMobileGestures />
       <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+      <LayoutSidebarCloseMobileOnClick v-slot="{ close }">
       <Sidebar collapsible="icon">
         <SidebarHeader>
           <SidebarMenu>
@@ -125,7 +126,7 @@ function isActive(item: NavLink): boolean {
           <SidebarGroup>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton class="border" tooltip="New chat" @click="$router.push('/main')">
+                <SidebarMenuButton class="border" tooltip="New chat" @click="close(); $router.push('/main')">
                   <Plus/>
                   <span>New Chat</span>
                 </SidebarMenuButton>
@@ -140,7 +141,7 @@ function isActive(item: NavLink): boolean {
               <SidebarMenu>
                 <SidebarMenuItem v-for="item in visibleNav" :key="item.to">
                   <SidebarMenuButton as-child :tooltip="item.label" :is-active="isActive(item)">
-                    <NuxtLink :to="item.to">
+                    <NuxtLink :to="item.to" @click="close">
                       <component :is="item.icon"/>
                       <span>{{ item.label }}</span>
                     </NuxtLink>
@@ -172,7 +173,7 @@ function isActive(item: NavLink): boolean {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton as-child tooltip="Settings" :is-active="route.path.startsWith('/main/settings')">
-                <NuxtLink to="/main/settings">
+                <NuxtLink to="/main/settings" @click="close">
                   <Settings/>
                   <span>Settings</span>
                 </NuxtLink>
@@ -228,13 +229,13 @@ function isActive(item: NavLink): boolean {
                   </div>
                   <DropdownMenuSeparator/>
                   <DropdownMenuItem as-child>
-                    <NuxtLink to="/main/settings">
+                    <NuxtLink to="/main/settings" @click="close">
                       <UserIcon class="size-4"/>
                       <span>Account</span>
                     </NuxtLink>
                   </DropdownMenuItem>
                   <DropdownMenuItem as-child>
-                    <NuxtLink to="/main/settings">
+                    <NuxtLink to="/main/settings" @click="close">
                       <Settings class="size-4"/>
                       <span>Settings</span>
                     </NuxtLink>
@@ -253,6 +254,7 @@ function isActive(item: NavLink): boolean {
         <!-- Edge rail: click/drag to toggle in any state (expanded or collapsed). -->
         <SidebarRail/>
       </Sidebar>
+      </LayoutSidebarCloseMobileOnClick>
 
       <!-- ── Main panel ──────────────────────────────────────────────── -->
       <SidebarInset class="relative min-h-0">
