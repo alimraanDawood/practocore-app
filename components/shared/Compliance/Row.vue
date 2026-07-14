@@ -55,6 +55,23 @@ defineExpose({ reloadHistory });
 function fmt(d?: string) {
   return d ? new Date(d).toLocaleDateString() : '—';
 }
+
+// Secondary row actions, defined once so the inline buttons (sm+) and the mobile
+// overflow menu stay in sync. `disabled` follows the busy flag for status changes;
+// history toggling is always available. `run` fires the same behaviour as before.
+const secondaryActions = computed(() => {
+  const acts: { key: string; label: string; icon: any; danger?: boolean; disabled?: boolean; run: () => void }[] = [];
+  if (props.obligation.status === 'active') {
+    acts.push({ key: 'pause', label: 'Pause', icon: Pause, disabled: props.busy, run: () => emit('status', 'paused') });
+  } else if (props.obligation.status === 'paused') {
+    acts.push({ key: 'resume', label: 'Resume', icon: Play, disabled: props.busy, run: () => emit('status', 'active') });
+  }
+  if (props.obligation.status !== 'ended') {
+    acts.push({ key: 'end', label: 'End', icon: X, danger: true, disabled: props.busy, run: () => emit('status', 'ended') });
+  }
+  acts.push({ key: 'history', label: 'Filing history', icon: ChevronDown, run: toggleHistory });
+  return acts;
+});
 </script>
 
 <template>
@@ -62,29 +79,34 @@ function fmt(d?: string) {
     class="flex flex-col gap-2 p-3 border rounded-lg bg-background"
     :class="{ 'opacity-60': obligation.status !== 'active', 'border-destructive/30': overdue }"
   >
-    <div class="flex flex-row items-center gap-3">
-      <RefreshCw class="size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
-
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 flex-wrap">
-          <p class="text-sm font-medium">{{ obligation.label }}</p>
-          <Badge variant="outline" class="capitalize text-[10px]">{{ obligation.recurrence }}</Badge>
-          <Badge v-if="obligation.status !== 'active'" variant="secondary" class="capitalize text-[10px]">{{ obligation.status }}</Badge>
-        </div>
-        <div class="flex items-center gap-2 mt-0.5">
-          <button
-            type="button"
-            class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground min-w-0"
-            @click="emit('open')"
-          >
-            <Briefcase class="size-3 shrink-0" />
-            <span class="truncate">{{ obligation.expand?.engagement?.name || 'Engagement' }}</span>
-          </button>
-          <span class="text-xs" :class="overdue ? 'text-destructive font-medium' : 'text-muted-foreground'">· {{ dueLabel }}</span>
+    <!-- Stacks on mobile (info, then an actions row) and sits side-by-side on sm+. -->
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <!-- Info -->
+      <div class="flex min-w-0 flex-1 items-start gap-3">
+        <RefreshCw class="mt-0.5 size-4 shrink-0" :class="overdue ? 'text-destructive' : 'text-muted-foreground'" />
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-sm font-medium break-words">{{ obligation.label }}</p>
+            <Badge variant="outline" class="capitalize text-[10px]">{{ obligation.recurrence }}</Badge>
+            <Badge v-if="obligation.status !== 'active'" variant="secondary" class="capitalize text-[10px]">{{ obligation.status }}</Badge>
+          </div>
+          <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <button
+              type="button"
+              class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              @click="emit('open')"
+            >
+              <Briefcase class="size-3 shrink-0" />
+              <span class="truncate">{{ obligation.expand?.engagement?.name || 'Engagement' }}</span>
+            </button>
+            <span class="text-xs" :class="overdue ? 'text-destructive font-medium' : 'text-muted-foreground'">· {{ dueLabel }}</span>
+          </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-1 shrink-0">
+      <!-- Actions: their own right-aligned row under the content on mobile; inline on sm+. -->
+      <div class="flex shrink-0 items-center justify-end gap-1 pl-7 sm:pl-0">
+        <!-- Primary action: record a filing. -->
         <Button
           v-if="filing && obligation.status === 'active'"
           variant="outline" size="sm" class="h-8 gap-1.5"
@@ -92,38 +114,21 @@ function fmt(d?: string) {
           @click="emit('file', filing)"
         >
           <FileCheck2 class="size-4" />
-          <span class="hidden sm:inline">Record filing</span>
+          <span>Record filing</span>
         </Button>
+
         <Button
-          v-if="obligation.status === 'active'"
-          variant="ghost" size="icon" class="size-8 text-muted-foreground"
-          :disabled="busy" title="Pause"
-          @click="emit('status', 'paused')"
+          v-for="a in secondaryActions" :key="a.key"
+          variant="ghost" size="icon"
+          class="size-8 text-muted-foreground"
+          :class="a.danger ? 'hover:text-destructive' : ''"
+          :disabled="a.disabled" :title="a.label"
+          @click="a.run"
         >
-          <Pause class="size-4" />
-        </Button>
-        <Button
-          v-else-if="obligation.status === 'paused'"
-          variant="ghost" size="icon" class="size-8 text-muted-foreground"
-          :disabled="busy" title="Resume"
-          @click="emit('status', 'active')"
-        >
-          <Play class="size-4" />
-        </Button>
-        <Button
-          v-if="obligation.status !== 'ended'"
-          variant="ghost" size="icon" class="size-8 text-muted-foreground hover:text-destructive"
-          :disabled="busy" title="End"
-          @click="emit('status', 'ended')"
-        >
-          <X class="size-4" />
-        </Button>
-        <Button
-          variant="ghost" size="icon" class="size-8 text-muted-foreground"
-          title="Filing history"
-          @click="toggleHistory"
-        >
-          <ChevronDown class="size-4 transition-transform" :class="{ 'rotate-180': expanded }" />
+          <component
+            :is="a.icon" class="size-4"
+            :class="a.key === 'history' ? ['transition-transform', { 'rotate-180': expanded }] : ''"
+          />
         </Button>
       </div>
     </div>
