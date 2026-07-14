@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "PractoCore: Litigation Deadline Management",
+        "title": "PractoCore: AI Powered Legal Practice",
         "width": 800,
         "height": 600,
         "resizable": true,
