@@ -48,17 +48,74 @@ const pdfLoading = ref(false);
 const pdfProgress = ref(0);       // 0..1 download progress
 const pdfIndeterminate = ref(false);
 const pdfError = ref('');
-const pdfPage = ref(1);           // 1-based current page (single-page view)
+const pdfPage = ref(1);           // 1-based current page (paged view) / scroll position indicator
 const pdfPageCount = ref(0);
 const pdfZoom = ref(1);           // 0.5 .. 3
+const pdfHost = ref<HTMLElement | null>(null);
+
+// Continuous scroll (all pages stacked, like a normal PDF reader) is the default —
+// "click next" paging is opt-in and remembered per-browser.
+const PDF_MODE_KEY = 'practoai_citation_pdf_mode';
+type PdfMode = 'scroll' | 'paged';
+const pdfMode = ref<PdfMode>('scroll');
+if (import.meta.client) {
+  try {
+    const saved = localStorage.getItem(PDF_MODE_KEY);
+    if (saved === 'scroll' || saved === 'paged') pdfMode.value = saved;
+  } catch { /* noop */ }
+}
+// A page to jump to once the (re-)render triggered by a mode switch or a
+// goPage() call in scroll mode has produced its canvases.
+let pendingPdfScrollPage: number | null = null;
+
+function setPdfMode(mode: PdfMode) {
+  if (pdfMode.value === mode) return;
+  pdfMode.value = mode;
+  try { localStorage.setItem(PDF_MODE_KEY, mode); } catch { /* noop */ }
+  // Switching modes re-renders the PDF (single canvas <-> all canvases) — carry
+  // the current page across so the reader doesn't jump back to the top.
+  if (mode === 'scroll') pendingPdfScrollPage = pdfPage.value;
+}
 
 function onPdfLoaded(doc: any) {
   pdfPageCount.value = doc?.numPages ?? 0;
   pdfPage.value = Math.min(pdfPage.value, pdfPageCount.value || 1);
 }
+function onPdfRendered() {
+  if (pdfMode.value !== 'scroll' || pendingPdfScrollPage == null) return;
+  const page = pendingPdfScrollPage;
+  pendingPdfScrollPage = null;
+  scrollToPdfPage(page, false);
+}
+function scrollToPdfPage(page: number, smooth = true) {
+  nextTick(() => {
+    const el = pdfHost.value?.querySelectorAll<HTMLElement>('.vue-pdf-embed__page')?.[page - 1];
+    el?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+  });
+}
 function goPage(delta: number) {
   const next = pdfPage.value + delta;
-  if (next >= 1 && next <= (pdfPageCount.value || 1)) pdfPage.value = next;
+  if (next < 1 || next > (pdfPageCount.value || 1)) return;
+  pdfPage.value = next;
+  if (pdfMode.value === 'scroll') scrollToPdfPage(next);
+}
+// In scroll mode, keep the page indicator (and prev/next bounds) in sync with
+// what's actually in view — the page whose top has scrolled past the container's.
+let pdfScrollRaf = 0;
+function onPdfScroll(e: Event) {
+  if (pdfMode.value !== 'scroll' || pdfScrollRaf) return;
+  pdfScrollRaf = requestAnimationFrame(() => {
+    pdfScrollRaf = 0;
+    const container = e.target as HTMLElement;
+    const pages = pdfHost.value?.querySelectorAll<HTMLElement>('.vue-pdf-embed__page');
+    if (!container || !pages?.length) return;
+    const containerTop = container.getBoundingClientRect().top;
+    let current = 1;
+    pages.forEach((el, i) => {
+      if (el.getBoundingClientRect().top - containerTop <= 100) current = i + 1;
+    });
+    pdfPage.value = current;
+  });
 }
 function zoomBy(delta: number) {
   pdfZoom.value = Math.min(3, Math.max(0.5, +(pdfZoom.value + delta).toFixed(2)));
@@ -156,6 +213,7 @@ function revokePdf() {
   pdfPage.value = 1;
   pdfPageCount.value = 0;
   pdfZoom.value = 1;
+  pendingPdfScrollPage = null;
 }
 onBeforeUnmount(revokePdf);
 
@@ -266,16 +324,33 @@ watch(() => props.open, (o) => { if (o && props.sourceId) load(); });
               <Button size="icon-sm" variant="ghost" :disabled="pdfZoom >= 3" title="Zoom in" @click="zoomBy(0.25)">
                 <Icon name="lucide:zoom-in" class="size-4" />
               </Button>
+              <div class="mx-1 h-4 w-px bg-border" />
+              <Button
+                size="icon-sm" :variant="pdfMode === 'scroll' ? 'secondary' : 'ghost'"
+                title="Continuous scroll" @click="setPdfMode('scroll')"
+              >
+                <Icon name="lucide:scroll-text" class="size-4" />
+              </Button>
+              <Button
+                size="icon-sm" :variant="pdfMode === 'paged' ? 'secondary' : 'ghost'"
+                title="One page at a time" @click="setPdfMode('paged')"
+              >
+                <Icon name="lucide:file" class="size-4" />
+              </Button>
             </div>
 
-            <!-- Page canvas (fits width; zoom widens the wrapper so it scrolls) -->
-            <div class="min-h-0 flex-1 overflow-auto rounded border bg-muted/30 p-3">
+            <!-- Page canvas(es) (fit width; zoom widens the wrapper so it scrolls) -->
+            <div class="min-h-0 flex-1 overflow-auto rounded border bg-muted/30 p-3" @scroll="onPdfScroll">
               <ClientOnly>
                 <div
+                  ref="pdfHost"
                   class="mx-auto [&_canvas]:!h-auto [&_canvas]:!w-full"
                   :style="{ width: `${pdfZoom * 100}%`, maxWidth: pdfZoom === 1 ? '42rem' : 'none' }"
                 >
-                  <VuePdfEmbed :source="pdfUrl" :page="pdfPage" @loaded="onPdfLoaded" />
+                  <VuePdfEmbed
+                    :source="pdfUrl" :page="pdfMode === 'paged' ? pdfPage : undefined"
+                    @loaded="onPdfLoaded" @rendered="onPdfRendered"
+                  />
                 </div>
                 <template #fallback>
                   <div class="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
