@@ -184,6 +184,14 @@ const runSignupFlow = async () => {
 
   const subscriptionId = signupResult?.subscription?.id
 
+  // FREE_TRIAL: the backend waived the upfront fee and provisioned the term
+  // already active. No payment to collect or wait for — go straight in,
+  // regardless of the chosen payment method.
+  if (subscriptionId && signupResult?.subscription?.active) {
+    await proceedAfterSignup()
+    return
+  }
+
   // CARD: hand off to the MarzPay-hosted card page.
   if (paymentMethod === 'CARD' && subscriptionId) {
     await redirectToCardPayment(subscriptionId)

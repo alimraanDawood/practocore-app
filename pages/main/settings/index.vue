@@ -7,8 +7,8 @@
       </div>
     </div>
 
-    <div class="flex flex-col h-full w-full">
-      <div class="flex flex-col lg:flex-row w-full gap-3 h-full overflow-hidden">
+    <div class="flex flex-col flex-1 min-h-0 w-full">
+      <div class="flex flex-col lg:flex-row w-full gap-3 flex-1 min-h-0 overflow-hidden">
         <!-- Desktop: Tabs Layout -->
         <div
             class="hidden lg:flex flex-row border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[200px] lg:h-full gap-3">
@@ -62,7 +62,7 @@
         </div>
 
         <!-- Desktop: Tab Content -->
-        <div class="hidden lg:flex flex-col w-full h-full overflow-y-scroll p-3">
+        <div class="hidden lg:flex flex-col w-full flex-1 min-h-0 overflow-y-auto p-3">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
           <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
@@ -81,7 +81,7 @@
         </div>
 
         <!-- Mobile: List Layout -->
-        <div class="flex lg:hidden flex-col w-full p-5 h-full overflow-y-scroll gap-5">
+        <div class="flex lg:hidden flex-col w-full p-5 flex-1 min-h-0 overflow-y-auto gap-5">
           <!-- Profile Card -->
           <div class="flex flex-col rounded-lg gap-2">
             <div class="flex flex-row items-center gap-2">

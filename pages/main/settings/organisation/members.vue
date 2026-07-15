@@ -5,7 +5,7 @@
 
         <!-- Back button for mobile -->
         <div class="flex flex-row items-center gap-3 p-3 border-b lg:hidden">
-          <Button variant="outline" size="icon-sm" @click="$router.back()">
+          <Button variant="outline" size="icon-sm" @click="goBack">
             <ArrowLeft class="size-5" />
           </Button>
           <span class="text-lg font-semibold">Organisation Members</span>
@@ -24,6 +24,8 @@
 <script setup>
 import { ArrowLeft, Headset, Mail, MessageCircle, ExternalLink, Copy } from "lucide-vue-next";
 import { toast } from 'vue-sonner';
+
+const { goBack } = useTabHistory();
 
 definePageMeta({
   layout: 'blank'

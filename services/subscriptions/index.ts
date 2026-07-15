@@ -45,6 +45,21 @@ export async function getSubscriptionStatus(subscriptionId: string) {
     }).then(r => r.json());
 }
 
+// Public: whether the upfront trial fee is currently waived (backend FREE_TRIAL).
+// Drives the pre-signup TrialPayment step. Defaults to false (fee on) on error.
+export async function getSignupConfig(): Promise<{ freeTrial: boolean }> {
+    try {
+        const res = await fetch(`${SERVER_URL}/api/practocore/signup-config`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+        const data = await res.json();
+        return { freeTrial: !!data?.freeTrial };
+    } catch {
+        return { freeTrial: false };
+    }
+}
+
 export async function subscribeAsIndividual(options: IndividualSubscriptionOptions) {
     const endpoint = `${SERVER_URL}/api/individual/subscribe`
     return await fetch(endpoint, {

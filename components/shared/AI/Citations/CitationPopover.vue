@@ -62,7 +62,7 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
       <DrawerHeader class="sr-only">
         <DrawerTitle>Citation {{ index }}</DrawerTitle>
       </DrawerHeader>
-      <div class="pb-[env(safe-area-inset-bottom)]">
+      <div class="pb-[var(--safe-area-bottom)]">
         <SharedAICitationsCitationDetail
           :citation="citation"
           :index="index"

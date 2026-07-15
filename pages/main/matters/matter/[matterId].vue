@@ -617,11 +617,9 @@ onBeforeUnmount(() => {
   subscribedDeadlineIds.value.clear();
 });
 
+const { goBack } = useTabHistory();
+
 const goBackOrHome = () => {
-  if (window.history.state.back) {
-    useRouter().back();
-  } else {
-    useRouter().push('/');
-  }
+  goBack();
 };
 </script>

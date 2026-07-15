@@ -40,8 +40,9 @@ const onTrialPaymentComplete = async (payload: { phone?: string; paymentMethod: 
   await navigateTo('/auth/register/creating')
 }
 
+const freeTrial = computed(() => trialPaymentRef.value?.freeTrial ?? false)
 const footerLabel = computed(() =>
-  isSubmitting.value ? 'Processing…' : 'Continue to Payment'
+  isSubmitting.value ? 'Processing…' : (freeTrial.value ? 'Start Free Trial' : 'Continue to Payment')
 )
 
 watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })

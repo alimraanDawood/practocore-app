@@ -37,6 +37,12 @@ function routeToDeepLink(rawUrl) {
 }
 
 onMounted(async () => {
+  // Mark native platforms so CSS can draw the status-bar separator only where
+  // the safe-area insets actually exist (see .native .safe-area-shell::before).
+  if (Capacitor.isNativePlatform()) {
+    document.documentElement.classList.add('native');
+  }
+
   const launch = await App.getLaunchUrl();
   routeToDeepLink(launch?.url);
 });

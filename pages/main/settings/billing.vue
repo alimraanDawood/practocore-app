@@ -4,7 +4,7 @@
       <div class="flex flex-col w-full h-full overflow-y-scroll">
         <!-- Back button for mobile -->
         <div class="flex flex-row items-center gap-3 p-3 border-b lg:hidden">
-          <Button variant="outline" size="icon-sm" @click="$router.back()">
+          <Button variant="outline" size="icon-sm" @click="goBack">
             <ArrowLeft class="size-5" />
           </Button>
           <span class="text-lg font-semibold">Billing</span>
@@ -26,6 +26,8 @@
 
 <script setup>
 import { ArrowLeft } from "lucide-vue-next";
+
+const { goBack } = useTabHistory();
 import { getSignedInUser } from "~/services/auth";
 
 definePageMeta({

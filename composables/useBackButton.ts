@@ -68,7 +68,7 @@ export const useBackButton = () => {
         return true
     }
 
-    const { goBackInTab } = useTabHistory()
+    const { back } = useTabHistory()
 
     const handleBackButton = useDebounceFn(async () => {
         // await triggerHaptic()
@@ -85,18 +85,23 @@ export const useBackButton = () => {
 
         const currentRoute = router.currentRoute.value
         const currentRouteName = currentRoute.name as string
+        const currentPath = currentRoute.path
 
         if (DEBUG_BACK) toast(`↪️ no overlay → navigating (route: ${currentRouteName})`)
 
-        if (isExitRoute(currentRouteName)) {
+        // Priority 2: The tab model is the source of truth for the tabbed shell.
+        // It unwinds within-tab history first, then across tabs.
+        if (back()) return
+
+        // back() only returns false when there's nothing left to unwind. If we
+        // were inside a tab, that means the last tab is at its root → exit.
+        if (getTabForPath(currentPath) !== null) {
             App.minimizeApp()
             return
         }
 
-        // Priority 2: Navigate back within the current tab's history stack
-        if (goBackInTab()) return
-
-        // Priority 3: Fall back to router history
+        // Priority 3: Orphan routes outside the tab shell (auth, onboarding, and
+        // /main pages not mapped to a tab) fall back to native history.
         if (canNavigateBack()) {
             router.go(-1)
             return

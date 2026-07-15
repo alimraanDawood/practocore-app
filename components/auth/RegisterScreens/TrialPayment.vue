@@ -2,15 +2,16 @@
   <div class="flex flex-col w-full h-full gap-6 justify-center-safe">
     <!-- Pricing Display -->
     <div class="flex flex-col items-center py-8 gap-3">
-      <Badge variant="secondary" class="mb-2">Trial Offer</Badge>
+      <Badge variant="secondary" class="mb-2">{{ freeTrial ? 'Free Trial' : 'Trial Offer' }}</Badge>
       <span class="text-muted-foreground text-sm">Try PractoCore</span>
-      <span class="text-center text-5xl font-bold ibm-plex-serif">UGX {{ trialAmount.toLocaleString() }} </span>
+      <span v-if="freeTrial" class="text-center text-5xl font-bold ibm-plex-serif">Free</span>
+      <span v-else class="text-center text-5xl font-bold ibm-plex-serif">UGX {{ trialAmount.toLocaleString() }} </span>
       <div class="flex flex-row items-center gap-2">
         <span class="text-muted-foreground text-sm">1 Month</span>
         <div class="size-1 bg-muted-foreground rounded-full"></div>
-        <span class="text-muted-foreground text-sm">Billed Once</span>
+        <span class="text-muted-foreground text-sm">{{ freeTrial ? 'No payment required' : 'Billed Once' }}</span>
       </div>
-      <p v-if="accType === 'ORG'" class="text-xs text-muted-foreground text-center max-w-sm">
+      <p v-if="!freeTrial && accType === 'ORG'" class="text-xs text-muted-foreground text-center max-w-sm">
         Flat trial fee • seats are computed automatically based on members you onboard
       </p>
       <p class="text-xs text-muted-foreground text-center max-w-sm mt-2">
@@ -18,8 +19,21 @@
       </p>
     </div>
 
+    <!-- Free trial: no payment step -->
+    <div v-if="freeTrial" class="flex flex-col gap-6">
+      <div class="flex flex-row gap-3 p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
+        <Info class="size-4 mt-0.5 shrink-0 text-primary" />
+        <span>No payment required to start. You'll only choose a plan when your 30-day trial ends.</span>
+      </div>
+      <p class="text-xs text-muted-foreground text-center">
+        By continuing, you agree to our
+        <a href="#" class="underline hover:text-foreground">Terms of Service</a> and
+        <a href="#" class="underline hover:text-foreground">Privacy Policy</a>
+      </p>
+    </div>
+
     <!-- Form -->
-    <form @submit="onSubmit" class="flex flex-col gap-6">
+    <form v-else @submit="onSubmit" class="flex flex-col gap-6">
       <!-- Payment method tabs -->
       <div class="grid grid-cols-3 gap-2">
         <button
@@ -105,11 +119,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
 import { AlertCircle, Smartphone, CreditCard, Receipt, Info } from 'lucide-vue-next';
+import { getSignupConfig } from '~/services/subscriptions/index.ts';
 
 const emit = defineEmits<{
   complete: [payload: { phone?: string; paymentMethod: 'MOBILE_MONEY' | 'CARD' | 'MANUAL' }]
@@ -120,6 +135,13 @@ const props = defineProps(['accType'])
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const paymentMethod = ref<'MOBILE_MONEY' | 'CARD' | 'MANUAL'>('MOBILE_MONEY');
+
+// Backend FREE_TRIAL waiver: when on, the trial fee is waived and this whole
+// payment step collapses to a "start free trial" confirmation.
+const freeTrial = ref(false);
+onMounted(async () => {
+  freeTrial.value = (await getSignupConfig()).freeTrial;
+});
 
 const trialAmount = computed(() => {
   return props.accType === 'ORG' ? 50000 : 10000;
@@ -166,10 +188,22 @@ const onSubmit = handleSubmit(async (values) => {
   }
 });
 
+// Free trial: no fee, no method to pick — confirm and move on without running
+// the payment-form validation (which would require a mobile-money number).
+const submitFreeTrial = () => {
+  if (props.accType === 'IND') {
+    umTrackRevenue("individual-trial-signup", 0, "UGX")
+  } else {
+    umTrackRevenue("organisation-trial-signup", 0, "UGX")
+  }
+  emit('complete', { paymentMethod: 'MOBILE_MONEY' });
+};
+
 defineExpose({
   resetForm,
-  triggerSubmit: () => onSubmit(),
+  triggerSubmit: () => (freeTrial.value ? submitFreeTrial() : onSubmit()),
   isSubmitting,
   paymentMethod,
+  freeTrial,
 });
 </script>
