@@ -49,5 +49,14 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PractoCore uses your microphone to transcribe dictated prompts and voice queries to the assistant.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.286763366119-d5gbju720bdoahn01k1vuo69l5hqkan5</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

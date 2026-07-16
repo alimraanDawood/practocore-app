@@ -4,7 +4,7 @@ import {
   Loader2, Check, X, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, ArrowUpIcon, Trash2,
   Briefcase, FileText, FileType2, BookOpen, AtSign, Paperclip, Building2, Clock, User,
   Library, Zap, Gauge, Files, Eye, Download,
-  Mic, MicOff, AudioLines, VolumeX, Headphones,
+  Mic, MicOff, AudioLines, VolumeX, Headphones, Copy,
   type LucideIcon,
 } from 'lucide-vue-next';
 import {toast} from 'vue-sonner';
@@ -14,13 +14,14 @@ import {
   sendAiMessageStream, sendAiMessageVoiceStream, confirmAiProposal, improvePrompt,
   getConversation, deleteConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
+  buildCopyText,
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
   type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
   type AiConversationSummary, type AiArtifact, type AiActionResult,
   type ContextType, type ContextItem,
 } from '~/services/ai';
-import { useMediaQuery } from '@vueuse/core';
+import { useMediaQuery, useClipboard } from '@vueuse/core';
 import MessageAttachments, { type AttachmentView } from '~/components/shared/AI/MessageAttachments.vue';
 import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
 import {getMatters, getAllDeadlines} from '~/services/matters';
@@ -751,6 +752,20 @@ function switchBranch(index: number, dir: -1 | 1) {
   branches.switchSibling(index, dir);
   persistTree();
   scrollToBottom();
+}
+
+// Copy a message to the clipboard. Assistant answers keep their citation trail —
+// inline [[cite:id]] markers become [n] and every source is listed below — since
+// the rendered chip markup they'd otherwise copy from the DOM carries no source info.
+const { copy: copyToClipboard } = useClipboard();
+const copiedIdx = ref<number | null>(null);
+async function copyMessage(index: number, msg: DisplayAiMessage) {
+  const text = msg.role === 'assistant'
+    ? buildCopyText(messageText(msg.content), msg.citations)
+    : stripAttachmentPlaceholders(messageText(msg.content));
+  await copyToClipboard(text);
+  copiedIdx.value = index;
+  setTimeout(() => { if (copiedIdx.value === index) copiedIdx.value = null; }, 1500);
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -1652,7 +1667,7 @@ defineExpose({
                 {{ stripAttachmentPlaceholders(messageText(msg.content)) }}
               </div>
               <!-- Branch switcher + edit affordance -->
-              <div class="flex items-center gap-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+              <div class="flex items-center gap-1 text-muted-foreground opacity-40 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                    :class="branches.siblings(i).count > 1 ? '!opacity-100' : ''">
                 <template v-if="branches.siblings(i).count > 1">
                   <button class="rounded p-0.5 transition-colors hover:text-foreground disabled:opacity-40"
@@ -1670,12 +1685,17 @@ defineExpose({
                         @click="startEdit(i, stripAttachmentPlaceholders(messageText(msg.content)))">
                   <Pencil class="size-3.5"/>
                 </button>
+                <button class="rounded p-0.5 transition-colors hover:text-foreground"
+                        title="Copy message" @click="copyMessage(i, msg as DisplayAiMessage)">
+                  <Check v-if="copiedIdx === i" class="size-3.5 text-primary"/>
+                  <Copy v-else class="size-3.5"/>
+                </button>
               </div>
             </div>
           </div>
 
           <!-- Assistant -->
-          <div v-else class="flex items-start gap-2.5">
+          <div v-else class="flex items-start gap-2.5 group/msg">
             <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
               <Sparkles class="size-3.5"/>
             </div>
@@ -1717,6 +1737,15 @@ defineExpose({
                       @click="retryTurn">
                 <RotateCcw class="size-3"/>
                 Retry
+              </button>
+              <button v-else-if="!(msg as DisplayAiMessage).stopped"
+                      type="button"
+                      class="mt-0.5 inline-flex w-fit items-center gap-1 text-muted-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100"
+                      :class="copiedIdx === i ? '!opacity-100 text-primary' : ''"
+                      title="Copy message"
+                      @click="copyMessage(i, msg as DisplayAiMessage)">
+                <Check v-if="copiedIdx === i" class="size-3"/>
+                <Copy v-else class="size-3"/>
               </button>
             </div>
           </div>
@@ -1887,7 +1916,7 @@ defineExpose({
             </Button>
           </InputGroupAddon>
 
-          <InputGroupTextarea v-model="draft" placeholder="Ask, Search or Chat…" @keydown="handleKeydown"/>
+          <InputGroupTextarea v-model="draft" class="max-h-48 overflow-y-auto" placeholder="Ask, Search or Chat…" @keydown="handleKeydown"/>
 
           <InputGroupAddon align="block-end">
             <InputGroupButton variant="outline" size="icon-sm" title="Attach a PDF or image"
