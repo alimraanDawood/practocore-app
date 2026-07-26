@@ -195,6 +195,23 @@
               <div class="flex flex-col h-full">
                 <Separator />
 
+                <!-- Firm-authored procedure marker. A matter built on the firm's own
+                     procedure must never read as though the court set these dates:
+                     PractoCore's procedures carry statutory deadlines and cite them,
+                     and this one does not. Same principle as L1's "Added by your firm"
+                     on an individual deadline, applied to the whole timeline. -->
+                <div
+                    v-if="onFirmProcedure"
+                    class="m-3 flex items-start gap-2 rounded-lg border bg-muted/40 p-3"
+                >
+                  <ScaleIcon class="size-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <div class="text-sm text-muted-foreground">
+                    This timeline follows
+                    <b class="text-foreground">{{ matter?.expand?.template?.name }}</b>, a procedure your
+                    firm wrote. The dates are your firm's own practice, not statutory deadlines.
+                  </div>
+                </div>
+
                 <!-- Provisional (projected) timeline banner. Shown when the trigger date
                      is an estimate: reminders for the COURT deadlines are off until a supervisor
                      confirms it. Ad-hoc deadlines (origin=adhoc) are the firm's own facts rather
@@ -414,6 +431,7 @@ import {
   FolderLock,
   FileType2,
   Scale,
+  Scale as ScaleIcon,
   Clock as ClockIcon,
   ExternalLink,
 } from 'lucide-vue-next';
@@ -567,6 +585,12 @@ const isSupervisor = computed(() => {
 // Mirrors the Matters collection update rule, so a viewer who can only READ the
 // matter (an org colleague with canViewExternalMatters) is shown the details but
 // not an Edit button that would 403.
+// True when this matter's procedure was written by the firm rather than published
+// (and maintained, and cited) by PractoCore.
+const onFirmProcedure = computed(
+    () => currentMatterOrApplication.value?.expand?.template?.provenance === 'firm',
+);
+
 const canEditMatterFields = computed(() => {
   const user = currentUser.value;
   const m = currentMatterOrApplication.value;

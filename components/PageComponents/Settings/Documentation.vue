@@ -116,8 +116,8 @@
           </AccordionTrigger>
           <AccordionContent class="text-sm text-muted-foreground pb-4 flex flex-col gap-2">
             <p>A <strong>template</strong> encodes the complete procedural lifecycle of a matter type — all deadlines, their dependencies, counting rules, holiday adjustments, and reminders.</p>
-            <p>Built-in templates include: Appeal, Ordinary Plaint, Summary Suit, Employment, Chamber Summons. Your firm can also create custom templates for your specific practice areas and court rules.</p>
-            <p>Templates can be kept <strong>private</strong> (only you), shared with your <strong>organisation</strong>, or (coming soon) published to the community <strong>marketplace</strong>.</p>
+            <p><strong>PractoCore procedures</strong> — Ordinary Plaint, Notice of Motion, Chamber Summons, Civil Appeal, Employment — carry the statutory deadlines and cite the authority for each. They are maintained by us, so a rule change reaches every firm.</p>
+            <p><strong>Your firm's procedures</strong> are authored in Matter Studio, by describing how your firm runs a kind of case. They capture your process — your steps, your timings, your reminders — and are visible only to your firm. They are not presented as verified law and cannot state what a rule requires; that distinction is deliberate, and it is what lets you shape your workflow without anyone mistaking your practice for statute.</p>
           </AccordionContent>
         </AccordionItem>
 
