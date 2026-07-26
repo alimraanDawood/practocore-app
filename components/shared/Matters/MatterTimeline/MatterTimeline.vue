@@ -75,9 +75,22 @@
         </div>
         <div class="flex flex-col py-1 pb-3 pl-2 gap-0.5">
           <span class="text-sm font-semibold ibm-plex-serif leading-snug">{{ matter?.triggerDateName || 'Trigger Date' }}</span>
-          <span class="text-xs text-muted-foreground">
-            {{ dayjs(matter.triggerDate).format('D MMM YYYY') }}
-          </span>
+          <div class="flex flex-row items-center gap-2">
+            <span class="text-xs text-muted-foreground">
+              {{ dayjs(matter.triggerDate).format('D MMM YYYY') }}
+            </span>
+            <!-- Every date on this timeline is computed from this one, so it has to
+                 be correctable. Provisional matters are excluded: their banner owns
+                 the date through "Confirm trigger date", which also switches
+                 reminders on. Supervisor-gated to match the server rule. -->
+            <SharedMattersChangeTriggerDate
+              v-if="canChangeTriggerDate"
+              :matter="matter"
+              @updated="emits('updated')"
+            >
+              <span class="text-xs text-primary hover:underline">Change</span>
+            </SharedMattersChangeTriggerDate>
+          </div>
         </div>
       </div>
 
@@ -601,6 +614,17 @@ const canAddDeadline = computed(() => {
     props.matter.members?.includes(userId) ||
     false
   );
+});
+
+// Changing the trigger date recomputes the entire timeline, so the server limits
+// it to supervisors — mirrored here so nobody is offered a control that 403s.
+// While the matter is provisional the banner's "Confirm trigger date" owns this
+// date instead (it also flips reminders on), so we stay out of its way.
+const canChangeTriggerDate = computed(() => {
+  const userId = pb.authStore.record?.id;
+  if (!userId || !props.matter) return false;
+  if (props.matter.triggerStatus === 'provisional') return false;
+  return props.matter.supervisors?.includes(userId) ?? false;
 });
 
 function openAddDeadline() {

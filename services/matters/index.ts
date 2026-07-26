@@ -491,12 +491,11 @@ export async function confirmTriggerDate(matterId: string, date: string | Date) 
  * @param matterId - Matter ID
  * @param date - New trigger date (ISO string or Date)
  */
-export async function changeMatterTriggerDate(matterId: string, date: string | Date, resetCompleted: boolean = false) {
+export async function changeMatterTriggerDate(matterId: string, date: string | Date) {
     return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/trigger-date`, {
         method: 'PUT',
         body: JSON.stringify({
             date: typeof date === 'string' ? date : date.toISOString(),
-            reset_completed: resetCompleted
         }),
         headers: {
             'Authorization': pocketbase.authStore.token,

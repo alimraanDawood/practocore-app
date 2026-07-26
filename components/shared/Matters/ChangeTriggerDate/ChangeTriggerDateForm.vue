@@ -7,7 +7,6 @@ import { useForm } from "vee-validate"
 import { computed, h, ref } from "vue"
 import { z } from "zod"
 import { cn } from "@/lib/utils"
-import { Checkbox } from "@/components/ui/checkbox"
 
 const emits = defineEmits(['complete']);
 const props = defineProps(['currentDate']);
@@ -16,25 +15,34 @@ const df = new DateFormatter("en-US", {
   dateStyle: "long",
 })
 
+// No "reset completed deadlines" option: the v2 engine records a fulfilment as an
+// event carrying the date it actually happened, so replaying against a new trigger
+// date leaves those alone by design. The switch that used to sit here was never
+// read by the server, so it silently did nothing.
 const formSchema = toTypedSchema(z.object({
   date: z
     .string()
     .refine(v => v, { message: "A trigger date is required." }),
-  reset_completed: z.boolean().default(false).optional(),
 }));
 
 const placeholder = ref()
 
+// PocketBase stores dates as "2026-03-02 00:00:00.000Z" — a SPACE, not a "T". The
+// old `split('T')[0]` therefore returned the whole string and parseDate threw
+// "Invalid ISO 8601 date string", killing the form's render the moment it was
+// opened on a matter that had a date. Take the first 10 characters instead, which
+// is correct for both separators.
+const isoDay = (d?: string) => (d ? String(d).slice(0, 10) : undefined);
+
 const { handleSubmit, setFieldValue, values } = useForm({
   validationSchema: formSchema,
   initialValues: {
-    date: props.currentDate || undefined,
-    reset_completed: false
+    date: isoDay(props.currentDate),
   },
 })
 
 const value = computed({
-  get: () => values.date ? parseDate(values.date.split('T')[0]) : undefined,
+  get: () => (values.date ? parseDate(isoDay(values.date)!) : undefined),
   set: val => val,
 })
 
@@ -89,19 +97,11 @@ const onSubmit = handleSubmit((values) => {
       </FormItem>
     </FormField>
 
-    <FormField v-slot="{ value, handleChange }" name="reset_completed">
-      <FormItem class="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-        <FormControl>
-          <Switch :model-value="value" @update:model-value="handleChange" />
-        </FormControl>
-        <div class="space-y-1 leading-none">
-          <FormLabel>Reset Completed Deadlines</FormLabel>
-          <FormDescription>
-            If checked, completed deadlines will be un-completed and recalculated based on the new trigger date.
-          </FormDescription>
-        </div>
-      </FormItem>
-    </FormField>
+    <p class="text-xs text-muted-foreground">
+      Deadlines you have already completed keep the dates you recorded — those are
+      facts, not calculations. Everything still outstanding is recomputed from the
+      new date.
+    </p>
 
     <Button type="submit">
       Update Trigger Date
