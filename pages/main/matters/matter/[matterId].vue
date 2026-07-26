@@ -185,6 +185,7 @@
           <Tabs class="w-full h-full" v-model="activeTab">
             <TabsList>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="details">Details</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="drafts">AI Drafts</TabsTrigger>
             </TabsList>
@@ -341,6 +342,20 @@
               </div>
             </TabsContent>
 
+            <!-- Details — the blueprint's intake fields plus the firm's own -->
+            <TabsContent value="details">
+              <template v-if="currentMatterOrApplication?.id">
+                <Separator />
+                <div class="flex flex-col gap-3 p-3 max-w-3xl">
+                  <SharedMattersMatterFields
+                    :matter="currentMatterOrApplication"
+                    :can-edit="canEditMatterFields"
+                    @updated="reloadMatter"
+                  />
+                </div>
+              </template>
+            </TabsContent>
+
             <!-- Case Documents — vault files scoped to this matter (upload + live ingestion) -->
             <TabsContent value="documents">
               <template v-if="matter?.id">
@@ -452,7 +467,7 @@ const assistantHidesDeadlines = computed(
 
 // Tab selection is URL-backed (`?tab=`) so links can deep-link into a matter's
 // Case Documents or AI Drafts (e.g. the assistant handing off to a tab).
-const MATTER_TABS = ['timeline', 'documents', 'drafts'];
+const MATTER_TABS = ['timeline', 'details', 'documents', 'drafts'];
 const activeTab = computed({
   get() {
     const t = route.query.tab;
@@ -547,6 +562,20 @@ const isSupervisor = computed(() => {
   const userId = currentUser.value?.id;
   if (!userId || !matter.value) return false;
   return matter.value.supervisors?.includes(userId) ?? false;
+});
+
+// Mirrors the Matters collection update rule, so a viewer who can only READ the
+// matter (an org colleague with canViewExternalMatters) is shown the details but
+// not an Edit button that would 403.
+const canEditMatterFields = computed(() => {
+  const user = currentUser.value;
+  const m = currentMatterOrApplication.value;
+  if (!user?.id || !m) return false;
+  if (m.organisation) {
+    return m.organisation === user.organisation
+      && (m.owner === user.id || (m.members ?? []).includes(user.id));
+  }
+  return m.owner === user.id;
 });
 
 const formatDeadlinePrompt = (prompt, date) => {

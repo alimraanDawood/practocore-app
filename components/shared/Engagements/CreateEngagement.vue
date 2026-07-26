@@ -246,7 +246,7 @@ function goStudio() {
               <h3 v-if="s.label" class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 {{ s.label }}
               </h3>
-              <SharedEngagementsFieldInput
+              <SharedFieldsFieldInput
                 v-for="f in s.fields"
                 :key="f.id"
                 :field="f"

@@ -255,6 +255,20 @@ export async function adjournDeadline(deadline: Deadline, date: string, force = 
 }
 
 /**
+ * Detail fields on a matter. `fieldValues` holds the values for BOTH the
+ * blueprint's fields and the firm's own ad-hoc ones; `extraFields` holds the
+ * ad-hoc DEFINITIONS. Written through the collection's own update rule (owner or
+ * member), the same way engagements do it — no custom endpoint, because nothing
+ * here touches the deadline engine.
+ */
+export async function updateMatterFields(
+    matterId: string,
+    data: { fieldValues: Record<string, any>; extraFields: any[] },
+) {
+    return pocketbase.collection('Matters').update(matterId, data);
+}
+
+/**
  * Ad-hoc deadlines — rows the firm added to a matter itself (origin: 'adhoc'),
  * as opposed to the court deadlines generated from the matter's procedure.
  * Only ad-hoc rows can be edited or deleted; the backend refuses the rest.
