@@ -195,7 +195,9 @@
                 <Separator />
 
                 <!-- Provisional (projected) timeline banner. Shown when the trigger date
-                     is an estimate: reminders are off until a supervisor confirms it. -->
+                     is an estimate: reminders for the COURT deadlines are off until a supervisor
+                     confirms it. Ad-hoc deadlines (origin=adhoc) are the firm's own facts rather
+                     than projections, so they keep reminding — hence the qualified copy. -->
                 <div
                     v-if="currentMatterOrApplication?.triggerStatus === 'provisional'"
                     class="m-3 flex flex-col gap-2 rounded-lg border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 p-3"
@@ -205,7 +207,8 @@
                     <div class="text-sm">
                       <span class="font-semibold">Projected timeline</span> — based on an estimated
                       trigger date of <b>{{ formatDate(currentMatterOrApplication?.triggerDate || currentMatterOrApplication?.date) }}</b>.
-                      Reminders are off until you confirm the real date.
+                      Court reminders are off until you confirm the real date. Deadlines your
+                      firm added itself still remind as normal — they aren't projections.
                     </div>
                   </div>
                   <div v-if="isSupervisor" class="flex">

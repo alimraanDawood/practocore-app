@@ -254,6 +254,63 @@ export async function adjournDeadline(deadline: Deadline, date: string, force = 
     }).then((e) => e.json())
 }
 
+/**
+ * Ad-hoc deadlines — rows the firm added to a matter itself (origin: 'adhoc'),
+ * as opposed to the court deadlines generated from the matter's procedure.
+ * Only ad-hoc rows can be edited or deleted; the backend refuses the rest.
+ */
+export interface AdhocDeadlineInput {
+    name: string
+    date?: string
+    description?: string
+    note?: string
+    assignees?: string[]
+    reminderOffsets?: number[]
+}
+
+export async function createAdhocDeadline(matterId: string, input: AdhocDeadlineInput) {
+    return await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/deadlines`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function updateAdhocDeadline(deadlineId: string, input: Partial<AdhocDeadlineInput>) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function deleteAdhocDeadline(deadlineId: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function completeAdhocDeadline(deadlineId: string, undo = false) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ undo }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
 export function subscribeToDeadlines(fn: (data: RecordSubscription<RecordModel>) => void) {
     return pocketbase.collection('Deadlines').subscribe('*', fn);
 }
