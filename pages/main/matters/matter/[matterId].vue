@@ -206,9 +206,17 @@
                 >
                   <ScaleIcon class="size-4 mt-0.5 text-muted-foreground shrink-0" />
                   <div class="text-sm text-muted-foreground">
-                    This timeline follows
-                    <b class="text-foreground">{{ matter?.expand?.template?.name }}</b>, a procedure your
-                    firm wrote. The dates are your firm's own practice, not statutory deadlines.
+                    <template v-if="extendedProcedure">
+                      This timeline follows
+                      <b class="text-foreground">{{ extendedProcedure }}</b>, with steps your firm added
+                      on top. The court deadlines are PractoCore's and carry their authority; your firm's
+                      own steps sit alongside them.
+                    </template>
+                    <template v-else>
+                      This timeline follows
+                      <b class="text-foreground">{{ matter?.expand?.template?.name }}</b>, a procedure your
+                      firm wrote. The dates are your firm's own practice, not statutory deadlines.
+                    </template>
                   </div>
                 </div>
 
@@ -589,6 +597,13 @@ const isSupervisor = computed(() => {
 // (and maintained, and cited) by PractoCore.
 const onFirmProcedure = computed(
     () => currentMatterOrApplication.value?.expand?.template?.provenance === 'firm',
+);
+
+// A firm procedure may EXTEND one of ours, in which case the statutory deadlines on
+// this timeline really are statutory and it would be wrong to disclaim them. Names
+// the base procedure when so.
+const extendedProcedure = computed(
+    () => currentMatterOrApplication.value?.expand?.template?.extends?.name || '',
 );
 
 const canEditMatterFields = computed(() => {

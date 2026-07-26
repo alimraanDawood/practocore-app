@@ -42,7 +42,15 @@
             class="border p-2 flex flex-row w-full text-left rounded items-center gap-2"
             :class="{ 'bg-primary/10 text-primary ring ring-primary border-primary': template?.id === modelValue?.id }"
           >
-            <span class="w-full">{{ template.name }}</span>
+            <span class="flex flex-col w-full min-w-0">
+              <span class="truncate">{{ template.name }}</span>
+              <!-- Built on one of ours: the statutory deadlines are still PractoCore's
+                   and still maintained. Worth saying, because it is the difference
+                   between a procedure that tracks the rules and one that guesses. -->
+              <span v-if="baseNameOf(template)" class="text-[11px] text-muted-foreground truncate">
+                Builds on {{ baseNameOf(template) }} — statutory deadlines included
+              </span>
+            </span>
             <Badge variant="secondary" class="shrink-0 text-[10px] font-normal">Your firm</Badge>
             <Check v-if="template.id === modelValue?.id" class="size-4 shrink-0"/>
           </button>
@@ -100,6 +108,20 @@ const filteredTemplates = computed(() => {
 // PractoCore's — the migration backfills them, so this is belt-and-braces for a
 // client talking to an older backend.
 const isFirmAuthored = (t: RecordModel) => t.provenance === 'firm';
+
+// A firm procedure may extend a signed one. The pointer lives in the stored blob
+// ({"extends": {...}}) rather than a column, so there is exactly one source of
+// truth for it — the same JSON the engine composes from.
+function baseNameOf(t: RecordModel): string {
+  try {
+    const raw = typeof t.template === 'string' ? JSON.parse(t.template) : t.template;
+    const id = raw?.extends?.templateId;
+    if (!id) return '';
+    return templates.value.find((x) => x.id === id)?.name ?? 'a PractoCore procedure';
+  } catch {
+    return '';
+  }
+}
 const signedTemplates = computed(() => filteredTemplates.value.filter(t => !isFirmAuthored(t)));
 const firmTemplates = computed(() => filteredTemplates.value.filter(isFirmAuthored));
 
@@ -119,7 +141,9 @@ const openStudio = () => navigateTo('/main/matters/studio');
 const selectTemplate = (template: RecordModel) => {
   // Normalize to v1-compatible .data shape so all consumers work regardless of
   // whether the stored blob is a v1 template or a v2-IR bundle.
-  const normalized = normalizeTemplateRecord(template)
+  // Pass the loaded list so an extension can be composed with its base for the
+  // create form (trigger prompt + the base's intake fields).
+  const normalized = normalizeTemplateRecord(template, templates.value)
   const data = normalized?.template?.data
   emits('templateSelected', normalized)
   emits('update:modelValue', {

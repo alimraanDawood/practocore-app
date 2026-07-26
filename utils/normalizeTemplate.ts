@@ -6,13 +6,50 @@
  * Call this on any template record before storing in state or emitting to form
  * components. It returns a new record object; the original is not mutated.
  */
-export function normalizeTemplateRecord(record: any): any {
+function safeParse(raw: string): any {
+  try { return JSON.parse(raw) } catch { return null }
+}
+
+// A v1-shaped base exposes the two things the create form needs under different
+// names; lift just those rather than running the whole v1→IR conversion client-side.
+function v1DataToIRish(data: any): any {
+  return {
+    trigger: { prompt: data?.triggerDatePrompt ?? '', id: data?.triggerDateName ?? '' },
+    fields: data?.fields ?? [],
+    partyRoles: [],
+  }
+}
+
+export function normalizeTemplateRecord(record: any, allTemplates: any[] = []): any {
   const tpl = record?.template
   if (!tpl) return record
   if (tpl.data) return record // already v1-shaped
 
-  const ir = tpl.ir
+  let ir = tpl.ir
   if (!ir) return record // unrecognised shape — pass through
+
+  // A firm procedure that EXTENDS a PractoCore one stores only its own additions:
+  // no trigger, and only the fields the firm added. Creating a matter from it must
+  // ask the base's intake questions too — otherwise the form has no trigger-date
+  // prompt and silently drops every field the statutory timeline depends on.
+  // Composition proper happens server-side; this mirrors it for the create form.
+  const baseId = tpl.extends?.templateId
+  if (baseId) {
+    const baseRec = allTemplates.find((t) => t?.id === baseId)
+    const baseTpl = typeof baseRec?.template === 'string'
+      ? safeParse(baseRec.template)
+      : baseRec?.template
+    const baseIR = baseTpl?.ir ?? (baseTpl?.data ? v1DataToIRish(baseTpl.data) : null)
+    if (baseIR) {
+      ir = {
+        ...baseIR,
+        ...ir,
+        trigger: baseIR.trigger,                                       // the anchor is the base's
+        fields: [...(baseIR.fields ?? []), ...(ir.fields ?? [])],
+        partyRoles: [...(baseIR.partyRoles ?? []), ...(ir.partyRoles ?? [])],
+      }
+    }
+  }
 
   const fields = (ir.fields ?? []).map((f: any) => ({
     id: f.id,
