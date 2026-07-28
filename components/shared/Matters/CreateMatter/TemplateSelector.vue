@@ -150,6 +150,9 @@ const selectTemplate = (template: RecordModel) => {
     id: normalized.id,
     fields: data?.fields ?? [],
     triggerDatePrompt: data?.triggerDatePrompt ?? '',
+    // L6: the ways this procedure can be entered. Empty unless the template
+    // declares more than one, so the wizard asks nothing extra by default.
+    triggers: data?.triggers ?? [],
     partyConfig: data?.parties,
   })
 }

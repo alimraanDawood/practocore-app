@@ -155,6 +155,39 @@
         <p class="text-sm text-muted-foreground">Enter the key dates to calculate all deadlines for this matter.</p>
       </div>
 
+      <!--
+        L6 — entry anchor. A procedure can be entered from either side, and the
+        two sides know different dates: the firm that filed the plaint knows the
+        filing date, the firm served with one does not. Asked immediately above
+        the date question it governs, and only when the template offers a choice.
+        Pre-selected from who the firm said it represents on the parties step.
+      -->
+      <div v-if="store.hasAnchorChoice" class="rounded-lg border border-border p-4 space-y-3">
+        <div class="space-y-1">
+          <p class="text-sm font-medium">How did this matter reach you?</p>
+          <p class="text-xs text-muted-foreground">
+            This decides which date we ask for. The rest of the timeline is calculated the same way either way.
+          </p>
+        </div>
+        <div class="grid gap-2">
+          <button
+            v-for="opt in store.anchorOptions"
+            :key="opt.id"
+            type="button"
+            class="text-left rounded-md border px-3 py-2 text-sm transition-colors"
+            :class="store.selectedAnchorId === opt.id
+              ? 'border-primary bg-primary/5'
+              : 'border-border hover:bg-muted/50'"
+            @click="store.selectAnchor(opt.id)"
+          >
+            <span class="font-medium">{{ opt.label }}</span>
+            <span v-if="opt.roleLabel" class="text-muted-foreground">
+              — acting for the {{ opt.roleLabel.toLowerCase() }}
+            </span>
+          </button>
+        </div>
+      </div>
+
       <div class="space-y-4">
         <FormField
           v-for="field in templateFields"
@@ -238,7 +271,9 @@ const templateFields = computed(() => {
   return [
     {
       id: 'date',
-      label: data?.triggerDatePrompt || 'Enter Date',
+      // The chosen anchor's own question wins — asking a defendant's lawyer when
+      // the plaint was "presented to the registry" is the defect L6 exists to fix.
+      label: store.selectedAnchor?.prompt || data?.triggerDatePrompt || 'Enter Date',
       required: true,
       type: 'date',
     },
@@ -404,6 +439,9 @@ const onSubmit = async () => {
       members: values.members ? values.members.map((m: any) => m?.id) : [],
       templateId: values.template?.id,
       date: values.fields?.date,
+      // L6: which question `date` answers. Empty for single-anchor templates,
+      // which the backend reads as "the template default".
+      triggerId: store.hasAnchorChoice ? store.selectedAnchorId : '',
       fieldValues: values.fields,
       court: values.court,
       judges: values.judges || [],

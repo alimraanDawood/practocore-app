@@ -64,6 +64,9 @@ export async function createMatter(options: {
     members?: string[],
     templateId: string,
     date: string,
+    // L6: which entry anchor `date` answers ("we filed it" vs "we were served
+    // with it"). Omitted or empty means the template's default anchor.
+    triggerId?: string,
     fieldValues: any[],
     parties?: Record<string, any[]>,
     representing?: { role_id: string, party_member_ids: string[] },

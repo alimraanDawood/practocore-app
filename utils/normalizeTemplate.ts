@@ -15,6 +15,7 @@ function safeParse(raw: string): any {
 function v1DataToIRish(data: any): any {
   return {
     trigger: { prompt: data?.triggerDatePrompt ?? '', id: data?.triggerDateName ?? '' },
+    triggers: [], // a v1 template has one way in, by construction
     fields: data?.fields ?? [],
     partyRoles: [],
   }
@@ -45,6 +46,7 @@ export function normalizeTemplateRecord(record: any, allTemplates: any[] = []): 
         ...baseIR,
         ...ir,
         trigger: baseIR.trigger,                                       // the anchor is the base's
+        triggers: baseIR.triggers ?? [],                               // …and so are the alternatives
         fields: [...(baseIR.fields ?? []), ...(ir.fields ?? [])],
         partyRoles: [...(baseIR.partyRoles ?? []), ...(ir.partyRoles ?? [])],
       }
@@ -96,6 +98,11 @@ export function normalizeTemplateRecord(record: any, allTemplates: any[] = []): 
         deadDays: [],
         triggerDatePrompt: ir.trigger?.prompt ?? '',
         triggerDateName: ir.trigger?.label ?? '',
+        // L6 entry anchors. A procedure can be entered from more than one side —
+        // the firm that filed the plaint knows the filing date, the firm served
+        // with it does not. Empty for every single-anchor template, which is what
+        // the create wizard checks before asking the extra question at all.
+        triggers: ir.triggers ?? [],
         parties,
       },
     },

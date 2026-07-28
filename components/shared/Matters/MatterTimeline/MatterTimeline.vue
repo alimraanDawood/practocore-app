@@ -155,6 +155,16 @@
                 </span>
               </div>
 
+              <!-- L6: the other side's step. Shown because a litigator has to plan
+                   against it, marked because it is not this firm's work — no
+                   countdown, no urgency colour, no reminder. -->
+              <div v-if="isOtherSide(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
+                <Users class="size-2.5 text-muted-foreground shrink-0"/>
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {{ otherSideRoleLabel(deadline) || 'Other party' }}'s step
+                </span>
+              </div>
+
               <!-- Firm-added marker: never let a firm's own note read as a court date -->
               <div v-if="isAdhoc(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
                 <CalendarPlus class="size-2.5 text-muted-foreground shrink-0"/>
@@ -384,6 +394,7 @@ import {
   ChevronDown,
   CheckCheck,
   UserX,
+  Users,
 } from "lucide-vue-next";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
 import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
@@ -452,11 +463,46 @@ const filterTabs = computed(() => [
 ]);
 
 // ── Unassigned deadlines (supervisor concern) ─────────────────────────────────
+// ── L6: whose obligation is this? ─────────────────────────────────────────────
+// The engine generates the WHOLE two-sided timeline, because the other side's
+// steps are real dates a litigator has to plan against — a plaintiff needs to know
+// when the defence falls due. But they are not the firm's own work, and rendering
+// them in the firm's alarm colours would put a red "overdue" on a step nobody in
+// the office was ever going to do.
+//
+// The comparison is done here, at read time, rather than in the engine: the firm
+// can change who it acts for, and that must never require rebuilding a schedule.
+// A deadline with no role (the mediation and scheduling steps, which bind both
+// sides) is always ours.
+const representedRoleId = computed(() => {
+  const r = props.matter?.representing;
+  if (!r) return "";
+  return r.role_id ?? r.roleId ?? "";
+});
+
+const isOtherSide = (deadline) => {
+  const role = deadline?.role;
+  if (!role) return false;
+  // Until the firm says who it acts for, claim nothing — showing every step as
+  // the other side's would empty the timeline.
+  if (!representedRoleId.value) return false;
+  return role !== representedRoleId.value;
+};
+
+const otherSideRoleLabel = (deadline) => {
+  const roles = normalizePartyConfig(props.matter?.partyConfig)?.roles ?? [];
+  return roles.find((r) => r.id === deadline?.role)?.name ?? "";
+};
+
 // A deadline needs an assignee when it's an actionable (non-fulfilled) Deadline
 // record with no one assigned — only assignees receive reminders for it.
+// The other side's steps are excluded: nobody in this firm is going to do them,
+// so flagging them to a supervisor as "needs an assignee" is a false alarm that
+// would grow with every two-sided matter.
 const isUnassigned = (deadline) =>
   deadline.collectionName === "Deadlines" &&
   deadline.status !== "fulfilled" &&
+  !isOtherSide(deadline) &&
   (deadline.assignees?.length ?? 0) === 0;
 
 const unassignedDeadlines = computed(() => allDeadlines.value.filter(isUnassigned));
@@ -506,6 +552,9 @@ const isProjected = (deadline) => {
 
 const urgencyOf = (deadline) => {
   if (deadline.status === "fulfilled") return "done";
+  // Checked before the date arithmetic: the other side's step is context, so it
+  // must never render as this firm's overdue or urgent work.
+  if (isOtherSide(deadline)) return "theirs";
   if (isProjected(deadline)) return "projected";
   if (!deadline.date) return "pending"; // undated ad-hoc task
 
@@ -518,6 +567,7 @@ const urgencyOf = (deadline) => {
 const nodeClass = (deadline) => {
   const u = urgencyOf(deadline);
   if (u === "done") return "bg-primary text-primary-foreground";
+  if (u === "theirs") return "bg-transparent border-2 border-dotted border-border text-muted-foreground";
   if (u === "projected") return "bg-muted border-2 border-dashed border-border text-muted-foreground";
   if (u === "overdue") return "bg-destructive/10 border-2 border-destructive text-destructive";
   if (u === "urgent") return "bg-accent-warning/10 border-2 border-accent-warning text-accent-warning";
@@ -527,12 +577,14 @@ const nodeClass = (deadline) => {
 const lineClass = (deadline) => {
   const u = urgencyOf(deadline);
   if (u === "done") return "bg-primary/60";
+  if (u === "theirs") return "bg-border/50";
   if (u === "overdue") return "bg-destructive/30";
   return "bg-border";
 };
 
 const urgencyTextClass = (deadline) => {
   const u = urgencyOf(deadline);
+  if (u === "theirs") return "text-muted-foreground";
   if (u === "projected") return "text-muted-foreground";
   if (u === "overdue") return "text-destructive";
   if (u === "urgent") return "text-accent-warning";
@@ -544,6 +596,7 @@ const nodeIconComponent = (deadline) => {
   if (deadline.collectionName !== "Deadlines") return Asterisk;
   if (deadline.status === "fulfilled") return CalendarCheck;
   const u = urgencyOf(deadline);
+  if (u === "theirs") return CalendarClock;
   if (u === "projected") return CalendarClock;
   if (u === "overdue") return AlertTriangle;
   if (u === "urgent") return Clock;
@@ -555,6 +608,9 @@ const deadlineDateDisplay = (deadline) => {
   // Every other branch here does date arithmetic, so bail out first.
   if (!deadline.date) return "No date";
   if (deadline.status === "fulfilled") return dayjs(deadline.date).format("D MMM YYYY");
+  // The other side's step is a plain date, not a countdown. "3 days" reads as an
+  // instruction to this firm; it is not one.
+  if (isOtherSide(deadline)) return dayjs(deadline.date).format("D MMM YYYY");
   if (isProjected(deadline)) return deadline.date ? `Projected · ${dayjs(deadline.date).format("D MMM YYYY")}` : "Projected";
   const days = dayjs(deadline.date).diff(dayjs(), "day");
   if (days < 0) return `${Math.abs(days)}d overdue`;

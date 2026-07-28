@@ -540,9 +540,21 @@ const currentMatterOrApplication = computed(() => {
     : matter.value?.expand?.applications?.find(ap => ap.id === currentApplicationOption.value);
 });
 
+// L6: a deadline that names a role other than the one this firm represents is the
+// OTHER side's obligation. It belongs on the timeline as context, but never here —
+// this panel says "your next deadline", and the plaintiff's step is not ours. It
+// also frequently has no date at all (a defendant does not know when the plaint was
+// filed), which is how "Serve summons and plaint by Invalid Date" reached the page.
+const isOtherSideDeadline = (d) => {
+  const role = d?.role;
+  if (!role) return false;
+  const mine = currentMatterOrApplication.value?.representing?.role_id ?? '';
+  return !!mine && role !== mine;
+};
+
 const latestDeadline = computed(() => {
   return currentMatterOrApplication.value?.expand?.deadlines
-    ?.filter(d => d.status === 'pending')
+    ?.filter(d => d.status === 'pending' && !!d.date && !isOtherSideDeadline(d))
     ?.sort((a, b) => new Date(a.date) - new Date(b.date))
     ?.at(0) ?? null;
 });
@@ -576,7 +588,9 @@ const missedDeadlines = computed(() => {
   // are estimates, not missed obligations.
   if (currentMatterOrApplication.value?.triggerStatus === 'provisional') return [];
   return currentMatterOrApplication.value?.expand?.deadlines
-    ?.filter(d => new Date(d.date) < new Date() && d.status !== 'fulfilled')
+    // Same reasoning as latestDeadline: the other side missing their own step is
+    // not this firm's missed deadline. An undated step was never due.
+    ?.filter(d => !!d.date && new Date(d.date) < new Date() && d.status !== 'fulfilled' && !isOtherSideDeadline(d))
     ?.sort((a, b) => new Date(a.date) - new Date(b.date)) ?? [];
 });
 
