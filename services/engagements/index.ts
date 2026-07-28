@@ -126,7 +126,9 @@ export interface EngagementMember {
 
 export interface EngagementMilestone {
   id: string;
+  /** L4: exactly one of `engagement` / `matter` is set. */
   engagement: string;
+  matter?: string;
   label: string;
   stageId: string;
   owner: string;
@@ -140,7 +142,7 @@ export interface EngagementMilestone {
   reminderChannels?: string[];
   created: string;
   updated: string;
-  expand?: { engagement?: Engagement };
+  expand?: { engagement?: Engagement; matter?: { id: string; name: string } };
 }
 
 // The reminder plan the schedule dialog sends: due date + incremental (or single)
@@ -270,6 +272,37 @@ export function listMilestones(engagementId: string) {
   });
 }
 
+/**
+ * L4 — the milestone track on a litigation matter: the firm's own tasks, alongside
+ * the procedure's computed deadlines. Same collection, same hooks, same reminder
+ * pipeline as engagement milestones; only the parent differs.
+ */
+export function listMatterMilestones(matterId: string) {
+  return pb.collection('EngagementMilestones').getFullList<EngagementMilestone>({
+    filter: `matter = '${matterId}'`,
+    sort: 'dueDate',
+  });
+}
+
+export function addMatterMilestone(matterId: string, input: { label: string; dueDate?: string; remind?: boolean; owner?: string }) {
+  return pb.collection('EngagementMilestones').create<EngagementMilestone>({
+    matter: matterId,
+    label: input.label,
+    dueDate: input.dueDate || undefined,
+    remind: !!input.remind,
+    owner: input.owner || undefined,
+    // stageId is an engagement-playbook concept; a matter has no stage spine.
+    stageId: '',
+    status: 'pending',
+    source: '',
+  });
+}
+
+/** Patch any field on a milestone (used for the matter track's inline date edit). */
+export function updateMilestone(milestoneId: string, patch: Partial<EngagementMilestone>) {
+  return pb.collection('EngagementMilestones').update<EngagementMilestone>(milestoneId, patch);
+}
+
 export function updateMilestoneStatus(milestoneId: string, status: MilestoneStatus) {
   return pb.collection('EngagementMilestones').update<EngagementMilestone>(milestoneId, { status });
 }
@@ -334,11 +367,17 @@ export function deleteMilestone(milestoneId: string) {
 // unified calendar "what's due" view. The collection's own membership read rule
 // scopes this to the caller; skipped milestones are excluded, done ones kept so
 // they render as completed (mirrors how reminders/deadlines behave).
+/**
+ * Every dated, live milestone the caller can see — across BOTH engagements and
+ * litigation matters (L4). There is deliberately no parent filter: the collection's
+ * access rule already scopes rows to the caller, and a lawyer's calendar should not
+ * be split by which product a task happens to hang off.
+ */
 export function listCalendarMilestones() {
   return pb.collection('EngagementMilestones').getFullList<EngagementMilestone>({
     filter: "dueDate != '' && status != 'skipped'",
     sort: 'dueDate',
-    expand: 'engagement',
+    expand: 'engagement,matter',
   });
 }
 

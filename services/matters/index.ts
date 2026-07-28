@@ -64,6 +64,9 @@ export async function createMatter(options: {
     members?: string[],
     templateId: string,
     date: string,
+    // L6: which entry anchor `date` answers ("we filed it" vs "we were served
+    // with it"). Omitted or empty means the template's default anchor.
+    triggerId?: string,
     fieldValues: any[],
     parties?: Record<string, any[]>,
     representing?: { role_id: string, party_member_ids: string[] },
@@ -233,6 +236,35 @@ export async function fulfillEvent(event: any, date: string) {
     }).then((e) => e.json())
 }
 
+/**
+ * Correct a deadline whose computed date is not the real date.
+ *
+ * Distinct from adjournDeadline: nothing was adjourned. The record and the
+ * notification say "corrected", not "adjourned", so a lawyer fixing a date the
+ * registry gave orally no longer has to file a false adjournment to do it. The
+ * reason is mandatory — it is the audit record explaining why this date stopped
+ * matching the rule the timeline still cites.
+ */
+export async function overrideDeadline(deadline: Deadline, date: string, reason: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: {
+                action: "OVERRIDE",
+                meta: {
+                    targetId: deadline?.t_id,
+                    overriddenDate: date,
+                    reason: reason,
+                }
+            }
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
 export async function adjournDeadline(deadline: Deadline, date: string, force = false, reason = "") {
     return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
         method: 'POST',
@@ -247,6 +279,77 @@ export async function adjournDeadline(deadline: Deadline, date: string, force = 
                 }
             }
         }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+/**
+ * Detail fields on a matter. `fieldValues` holds the values for BOTH the
+ * blueprint's fields and the firm's own ad-hoc ones; `extraFields` holds the
+ * ad-hoc DEFINITIONS. Written through the collection's own update rule (owner or
+ * member), the same way engagements do it — no custom endpoint, because nothing
+ * here touches the deadline engine.
+ */
+export async function updateMatterFields(
+    matterId: string,
+    data: { fieldValues: Record<string, any>; extraFields: any[] },
+) {
+    return pocketbase.collection('Matters').update(matterId, data);
+}
+
+/**
+ * Ad-hoc deadlines — rows the firm added to a matter itself (origin: 'adhoc'),
+ * as opposed to the court deadlines generated from the matter's procedure.
+ * Only ad-hoc rows can be edited or deleted; the backend refuses the rest.
+ */
+export interface AdhocDeadlineInput {
+    name: string
+    date?: string
+    description?: string
+    note?: string
+    assignees?: string[]
+    reminderOffsets?: number[]
+}
+
+export async function createAdhocDeadline(matterId: string, input: AdhocDeadlineInput) {
+    return await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/deadlines`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function updateAdhocDeadline(deadlineId: string, input: Partial<AdhocDeadlineInput>) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function deleteAdhocDeadline(deadlineId: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function completeAdhocDeadline(deadlineId: string, undo = false) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ undo }),
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
@@ -420,12 +523,11 @@ export async function confirmTriggerDate(matterId: string, date: string | Date) 
  * @param matterId - Matter ID
  * @param date - New trigger date (ISO string or Date)
  */
-export async function changeMatterTriggerDate(matterId: string, date: string | Date, resetCompleted: boolean = false) {
+export async function changeMatterTriggerDate(matterId: string, date: string | Date) {
     return fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/trigger-date`, {
         method: 'PUT',
         body: JSON.stringify({
             date: typeof date === 'string' ? date : date.toISOString(),
-            reset_completed: resetCompleted
         }),
         headers: {
             'Authorization': pocketbase.authStore.token,

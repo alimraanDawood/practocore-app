@@ -24,7 +24,7 @@
     </div>
 
     <!-- Filter bar -->
-    <div class="flex flex-row gap-1">
+    <div class="flex flex-row gap-1 items-center">
       <button
         v-for="tab in filterTabs"
         :key="tab.value"
@@ -40,7 +40,27 @@
           :class="activeFilter === tab.value ? 'bg-background/20 text-background' : 'bg-muted text-muted-foreground'"
         >{{ tab.count }}</span>
       </button>
+
+      <!-- Add a deadline the firm tracks itself, alongside the court's own dates. -->
+      <Button
+        v-if="canAddDeadline"
+        size="sm"
+        variant="outline"
+        class="ml-auto shrink-0"
+        @click="openAddDeadline"
+      >
+        <CalendarPlus class="size-3.5"/>
+        Add deadline
+      </Button>
     </div>
+
+    <AdhocDeadlineDialog
+      v-if="canAddDeadline"
+      v-model:open="adhocDialogOpen"
+      :matter-id="matter.id"
+      :deadline="adhocEditing"
+      @saved="emits('updated')"
+    />
 
     <!-- Timeline -->
     <div class="flex flex-col">
@@ -55,9 +75,22 @@
         </div>
         <div class="flex flex-col py-1 pb-3 pl-2 gap-0.5">
           <span class="text-sm font-semibold ibm-plex-serif leading-snug">{{ matter?.triggerDateName || 'Trigger Date' }}</span>
-          <span class="text-xs text-muted-foreground">
-            {{ dayjs(matter.triggerDate).format('D MMM YYYY') }}
-          </span>
+          <div class="flex flex-row items-center gap-2">
+            <span class="text-xs text-muted-foreground">
+              {{ dayjs(matter.triggerDate).format('D MMM YYYY') }}
+            </span>
+            <!-- Every date on this timeline is computed from this one, so it has to
+                 be correctable. Provisional matters are excluded: their banner owns
+                 the date through "Confirm trigger date", which also switches
+                 reminders on. Supervisor-gated to match the server rule. -->
+            <SharedMattersChangeTriggerDate
+              v-if="canChangeTriggerDate"
+              :matter="matter"
+              @updated="emits('updated')"
+            >
+              <span class="text-xs text-primary hover:underline">Change</span>
+            </SharedMattersChangeTriggerDate>
+          </div>
         </div>
       </div>
 
@@ -122,6 +155,35 @@
                 </span>
               </div>
 
+              <!-- L6: the other side's step. Shown because a litigator has to plan
+                   against it, marked because it is not this firm's work — no
+                   countdown, no urgency colour, no reminder. -->
+              <div v-if="isOtherSide(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
+                <Users class="size-2.5 text-muted-foreground shrink-0"/>
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {{ otherSideRoleLabel(deadline) || 'Other party' }}'s step
+                </span>
+              </div>
+
+              <!-- L2: a corrected date must never quietly replace the computed
+                   one. The rule still applies; this row simply departs from it,
+                   and anyone reading the file has to be able to see that at a
+                   glance rather than by expanding the row. -->
+              <div v-if="overrideOf(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
+                <PencilLine class="size-2.5 text-muted-foreground shrink-0"/>
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Corrected — computed {{ dayjs(overrideOf(deadline).from).format('D MMM YYYY') }}
+                </span>
+              </div>
+
+              <!-- Firm-added marker: never let a firm's own note read as a court date -->
+              <div v-if="isAdhoc(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
+                <CalendarPlus class="size-2.5 text-muted-foreground shrink-0"/>
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Added by your firm
+                </span>
+              </div>
+
               <span
                 class="text-sm font-medium leading-snug truncate"
                 :class="deadline.status === 'fulfilled' ? 'text-muted-foreground' : 'text-foreground'"
@@ -144,7 +206,7 @@
               <span class="text-xs font-semibold tabular-nums" :class="urgencyTextClass(deadline)">
                 {{ deadlineDateDisplay(deadline) }}
               </span>
-              <span class="text-[10px] text-muted-foreground">{{ dayjs(deadline.date).format('D MMM') }}</span>
+              <span v-if="deadline.date" class="text-[10px] text-muted-foreground">{{ dayjs(deadline.date).format('D MMM') }}</span>
             </div>
 
             <ChevronDown
@@ -156,8 +218,55 @@
           <!-- Expanded detail -->
           <div v-if="isExpanded(deadline.id)" class="flex flex-col gap-3 pb-5 pt-1 pr-1">
 
+            <!-- Firm-added (ad-hoc) deadline. Handled before the court branches
+                 because it is not an engine node: it has no prompts to render and
+                 must never be routed through fulfill/adjourn, which target the
+                 matter's event log. -->
+            <template v-if="isAdhoc(deadline)">
+              <p v-if="deadline.description" class="text-sm text-muted-foreground">
+                {{ deadline.description }}
+              </p>
+              <p v-else class="text-sm italic text-muted-foreground ibm-plex-serif">
+                A deadline your firm is tracking on this matter.
+              </p>
+
+              <div class="flex flex-row gap-2 flex-wrap">
+                <Button
+                  v-if="deadline.status !== 'fulfilled'"
+                  size="sm"
+                  :disabled="adhocBusy === deadline.id"
+                  @click="completeAdhoc(deadline)"
+                >
+                  <CheckCheck class="size-3"/>
+                  Mark done
+                </Button>
+                <Button
+                  v-else
+                  size="sm"
+                  variant="outline"
+                  :disabled="adhocBusy === deadline.id"
+                  @click="completeAdhoc(deadline, true)"
+                >
+                  Reopen
+                </Button>
+
+                <Button size="sm" variant="outline" @click="openEditDeadline(deadline)">
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="text-destructive hover:text-destructive"
+                  :disabled="adhocBusy === deadline.id"
+                  @click="removeAdhoc(deadline)"
+                >
+                  Delete
+                </Button>
+              </div>
+            </template>
+
             <!-- Fulfilled deadline -->
-            <template v-if="deadline.status === 'fulfilled'">
+            <template v-else-if="deadline.status === 'fulfilled'">
               <p
                 v-if="deadline.fulfilled_prompt"
                 class="text-sm italic text-muted-foreground ibm-plex-serif"
@@ -202,6 +311,13 @@
                 <AdjournDeadline @updated="emits('updated')" :deadline="deadline">
                   <Button size="sm" variant="outline">Adjourn</Button>
                 </AdjournDeadline>
+
+                <!-- L2: nothing was adjourned — the computed date is simply not
+                     the real one. A separate action, because filing a false
+                     adjournment to fix a date is what lawyers were doing instead. -->
+                <OverrideDeadline @updated="emits('updated')" :deadline="deadline">
+                  <Button size="sm" variant="outline">Correct date</Button>
+                </OverrideDeadline>
               </div>
             </template>
 
@@ -234,7 +350,9 @@
               >
                 <div class="flex flex-row items-center gap-1.5 text-xs font-medium text-foreground">
                   <CalendarSync class="size-3 text-muted-foreground shrink-0"/>
-                  <span class="text-muted-foreground">Adjourned</span>
+                  <!-- Rows written before L2 carry no kind; they were all
+                       adjournments, which is what the migration backfilled. -->
+                  <span class="text-muted-foreground">{{ adj.kind === 'override' ? 'Corrected' : 'Adjourned' }}</span>
                   <span>{{ dayjs(adj.from).format('D MMM YYYY') }}</span>
                   <ArrowRight class="size-3 text-muted-foreground shrink-0"/>
                   <span>{{ dayjs(adj.to).format('D MMM YYYY') }}</span>
@@ -256,6 +374,17 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- L4: the second track. Deliberately BELOW the timeline and visually
+         separate — a matter's court dates and a firm's own tasks are different
+         kinds of thing, and interleaving them would invite reading an internal
+         task as a court date. -->
+    <div class="border-t border-border pt-4">
+      <SharedMattersMatterMilestones
+        :matter-id="matter.id"
+        :can-edit="canAddDeadline"
+      />
     </div>
   </div>
 
@@ -284,6 +413,7 @@
 import { computed, ref, watch } from "vue";
 import {
   CalendarIcon,
+  CalendarPlus,
   CalendarClock,
   CalendarCheck,
   ArrowRight,
@@ -295,10 +425,14 @@ import {
   ChevronDown,
   CheckCheck,
   UserX,
+  Users,
+  PencilLine,
 } from "lucide-vue-next";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
+import OverrideDeadline from "../../Deadline/OverrideDeadline/OverrideDeadline.vue";
+import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
 import { pb } from "~/lib/pocketbase";
-import { resetDeadline } from "~/services/matters";
+import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline } from "~/services/matters";
 import { toast } from "vue-sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -362,11 +496,46 @@ const filterTabs = computed(() => [
 ]);
 
 // ── Unassigned deadlines (supervisor concern) ─────────────────────────────────
+// ── L6: whose obligation is this? ─────────────────────────────────────────────
+// The engine generates the WHOLE two-sided timeline, because the other side's
+// steps are real dates a litigator has to plan against — a plaintiff needs to know
+// when the defence falls due. But they are not the firm's own work, and rendering
+// them in the firm's alarm colours would put a red "overdue" on a step nobody in
+// the office was ever going to do.
+//
+// The comparison is done here, at read time, rather than in the engine: the firm
+// can change who it acts for, and that must never require rebuilding a schedule.
+// A deadline with no role (the mediation and scheduling steps, which bind both
+// sides) is always ours.
+const representedRoleId = computed(() => {
+  const r = props.matter?.representing;
+  if (!r) return "";
+  return r.role_id ?? r.roleId ?? "";
+});
+
+const isOtherSide = (deadline) => {
+  const role = deadline?.role;
+  if (!role) return false;
+  // Until the firm says who it acts for, claim nothing — showing every step as
+  // the other side's would empty the timeline.
+  if (!representedRoleId.value) return false;
+  return role !== representedRoleId.value;
+};
+
+const otherSideRoleLabel = (deadline) => {
+  const roles = normalizePartyConfig(props.matter?.partyConfig)?.roles ?? [];
+  return roles.find((r) => r.id === deadline?.role)?.name ?? "";
+};
+
 // A deadline needs an assignee when it's an actionable (non-fulfilled) Deadline
 // record with no one assigned — only assignees receive reminders for it.
+// The other side's steps are excluded: nobody in this firm is going to do them,
+// so flagging them to a supervisor as "needs an assignee" is a false alarm that
+// would grow with every two-sided matter.
 const isUnassigned = (deadline) =>
   deadline.collectionName === "Deadlines" &&
   deadline.status !== "fulfilled" &&
+  !isOtherSide(deadline) &&
   (deadline.assignees?.length ?? 0) === 0;
 
 const unassignedDeadlines = computed(() => allDeadlines.value.filter(isUnassigned));
@@ -396,7 +565,27 @@ watch(
 // date is in the past, they must NOT render as overdue/urgent, and no reminders
 // exist for them yet. The owning matter is the parent when deadline.application is
 // unset, otherwise the child application identified by deadline.application.
+// A firm-added deadline (origin 'adhoc') is an ordinary Deadlines row with no
+// t_id — see the ad-hoc block below and internal/deadlinev2/adhoc.go. Declared
+// here because isProjected/urgencyOf depend on it.
+const isAdhoc = (deadline) => deadline?.origin === "adhoc";
+
+// L2: the most recent correction on a deadline, if any. Returns the row rather
+// than a boolean because the computed date it superseded (adj.from) is the part
+// that has to stay on screen — a correction that hides the rule is worse than no
+// correction at all. Rows written before L2 carry no kind and are adjournments.
+const overrideOf = (deadline) => {
+  const rows = (deadline?.expand?.adjournments ?? []).filter((a) => a.kind === "override");
+  if (rows.length === 0) return null;
+  return [...rows].sort((a, b) => new Date(b.created) - new Date(a.created))[0];
+};
+
 const isProjected = (deadline) => {
+  // A firm-added deadline is a date the lawyer entered themselves, not one
+  // computed off an estimated trigger date — so it is never "projected", even on
+  // a provisional matter. This matches the backend, which materialises its
+  // reminders regardless of triggerStatus.
+  if (isAdhoc(deadline)) return false;
   if (deadline?.application) {
     const app = props.matter?.expand?.applications?.find((a) => a.id === deadline.application);
     return app?.triggerStatus === "provisional";
@@ -406,7 +595,12 @@ const isProjected = (deadline) => {
 
 const urgencyOf = (deadline) => {
   if (deadline.status === "fulfilled") return "done";
+  // Checked before the date arithmetic: the other side's step is context, so it
+  // must never render as this firm's overdue or urgent work.
+  if (isOtherSide(deadline)) return "theirs";
   if (isProjected(deadline)) return "projected";
+  if (!deadline.date) return "pending"; // undated ad-hoc task
+
   const days = dayjs(deadline.date).diff(dayjs(), "day");
   if (days < 0) return "overdue";
   if (days <= 7) return "urgent";
@@ -416,6 +610,7 @@ const urgencyOf = (deadline) => {
 const nodeClass = (deadline) => {
   const u = urgencyOf(deadline);
   if (u === "done") return "bg-primary text-primary-foreground";
+  if (u === "theirs") return "bg-transparent border-2 border-dotted border-border text-muted-foreground";
   if (u === "projected") return "bg-muted border-2 border-dashed border-border text-muted-foreground";
   if (u === "overdue") return "bg-destructive/10 border-2 border-destructive text-destructive";
   if (u === "urgent") return "bg-accent-warning/10 border-2 border-accent-warning text-accent-warning";
@@ -425,12 +620,14 @@ const nodeClass = (deadline) => {
 const lineClass = (deadline) => {
   const u = urgencyOf(deadline);
   if (u === "done") return "bg-primary/60";
+  if (u === "theirs") return "bg-border/50";
   if (u === "overdue") return "bg-destructive/30";
   return "bg-border";
 };
 
 const urgencyTextClass = (deadline) => {
   const u = urgencyOf(deadline);
+  if (u === "theirs") return "text-muted-foreground";
   if (u === "projected") return "text-muted-foreground";
   if (u === "overdue") return "text-destructive";
   if (u === "urgent") return "text-accent-warning";
@@ -442,6 +639,7 @@ const nodeIconComponent = (deadline) => {
   if (deadline.collectionName !== "Deadlines") return Asterisk;
   if (deadline.status === "fulfilled") return CalendarCheck;
   const u = urgencyOf(deadline);
+  if (u === "theirs") return CalendarClock;
   if (u === "projected") return CalendarClock;
   if (u === "overdue") return AlertTriangle;
   if (u === "urgent") return Clock;
@@ -449,7 +647,13 @@ const nodeIconComponent = (deadline) => {
 };
 
 const deadlineDateDisplay = (deadline) => {
+  // Ad-hoc deadlines may legitimately carry no date (a task not yet scheduled).
+  // Every other branch here does date arithmetic, so bail out first.
+  if (!deadline.date) return "No date";
   if (deadline.status === "fulfilled") return dayjs(deadline.date).format("D MMM YYYY");
+  // The other side's step is a plain date, not a countdown. "3 days" reads as an
+  // instruction to this firm; it is not one.
+  if (isOtherSide(deadline)) return dayjs(deadline.date).format("D MMM YYYY");
   if (isProjected(deadline)) return deadline.date ? `Projected · ${dayjs(deadline.date).format("D MMM YYYY")}` : "Projected";
   const days = dayjs(deadline.date).diff(dayjs(), "day");
   if (days < 0) return `${Math.abs(days)}d overdue`;
@@ -485,6 +689,90 @@ const isSupervisor = computed(() => {
 
 function handleAssigneesUpdated() {
   emits("updated");
+}
+
+// ── Ad-hoc deadlines ──────────────────────────────────────────────────────────
+// Rows the firm added itself (origin: 'adhoc'). They are ordinary Deadlines rows
+// with no t_id, so they arrive in the same expand.deadlines payload and need no
+// separate fetch — but they are NOT engine nodes, so fulfil/adjourn do not apply
+// to them and the backend refuses those verbs.
+
+const adhocDialogOpen = ref(false);
+const adhocEditing = ref(null);
+const adhocBusy = ref(null);
+
+// Anyone working the matter may add to it — matching the API, which allows the
+// owner, supervisors, and members (mutating an existing row is narrower: the
+// backend requires a supervisor or an assignee on that row).
+const canAddDeadline = computed(() => {
+  const userId = pb.authStore.record?.id;
+  if (!userId || !props.matter) return false;
+  return (
+    props.matter.owner === userId ||
+    props.matter.supervisors?.includes(userId) ||
+    props.matter.members?.includes(userId) ||
+    false
+  );
+});
+
+// Changing the trigger date recomputes the entire timeline, so the server limits
+// it to supervisors — mirrored here so nobody is offered a control that 403s.
+// While the matter is provisional the banner's "Confirm trigger date" owns this
+// date instead (it also flips reminders on), so we stay out of its way.
+const canChangeTriggerDate = computed(() => {
+  const userId = pb.authStore.record?.id;
+  if (!userId || !props.matter) return false;
+  if (props.matter.triggerStatus === 'provisional') return false;
+  return props.matter.supervisors?.includes(userId) ?? false;
+});
+
+function openAddDeadline() {
+  adhocEditing.value = null;
+  adhocDialogOpen.value = true;
+}
+
+function openEditDeadline(deadline) {
+  adhocEditing.value = deadline;
+  adhocDialogOpen.value = true;
+}
+
+async function completeAdhoc(deadline, undo = false) {
+  adhocBusy.value = deadline.id;
+  try {
+    const res = await completeAdhocDeadline(deadline.id, undo);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(undo ? "Deadline reopened" : "Deadline marked done");
+    emits("updated");
+  } catch (err) {
+    toast.error(err?.message || "Could not update deadline");
+  } finally {
+    adhocBusy.value = null;
+  }
+}
+
+async function removeAdhoc(deadline) {
+  const confirmed = confirm(
+    `Delete "${deadline.name}"? This removes it and its reminders. Court deadlines are unaffected.`
+  );
+  if (!confirmed) return;
+
+  adhocBusy.value = deadline.id;
+  try {
+    const res = await deleteAdhocDeadline(deadline.id);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Deadline deleted");
+    emits("updated");
+  } catch (err) {
+    toast.error(err?.message || "Could not delete deadline");
+  } finally {
+    adhocBusy.value = null;
+  }
 }
 
 // Kept for future use when reset is re-enabled

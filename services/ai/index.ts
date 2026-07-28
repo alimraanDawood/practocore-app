@@ -760,6 +760,11 @@ export function sendAiMessageStream(
     workflowContext?: unknown;
     /** Abort signal for the Stop button — aborting resolves to { type:'aborted' }. */
     signal?: AbortSignal;
+    /** Client-generated id for THIS turn, so it can be stopped explicitly.
+     *  Generation on the server no longer dies when the connection does (closing
+     *  the tab used to abort the answer and lose the whole exchange), so aborting
+     *  the fetch only stops us LISTENING — call stopAiTurn to actually stop it. */
+    turnId?: string;
   } = {},
 ): Promise<AiResponse> {
   track('ai_chat_message_sent', {
@@ -792,11 +797,41 @@ export function sendAiMessageStream(
       // Speed/cost tier ('auto' default) — picks the serving model on the backend.
       tier: opts.tier ?? 'auto',
       workflowContext: opts.workflowContext ?? null,
+      turnId: opts.turnId ?? '',
     },
     opts.onStep,
     undefined,
     opts.signal,
   );
+}
+
+/** A fresh id for one turn. Only ever used to stop that turn. */
+export function newTurnId(): string {
+  return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Ask the server to stop a turn.
+ *
+ * Aborting the fetch is no longer enough: the backend deliberately keeps
+ * generating after the client disconnects, so that a lawyer who switches apps
+ * mid-answer comes back to a saved answer instead of a lost exchange. Stopping is
+ * therefore something you ask for. Returns false when the turn had already
+ * finished — a normal outcome, not an error.
+ */
+export async function stopAiTurn(turnId: string): Promise<boolean> {
+  if (!turnId) return false;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/practocore/ai/chat/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: pb.authStore.token },
+      body: JSON.stringify({ turnId }),
+    });
+    if (!res.ok) return false;
+    return !!(await res.json())?.stopped;
+  } catch {
+    return false;
+  }
 }
 
 /**

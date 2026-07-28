@@ -185,6 +185,7 @@
           <Tabs class="w-full h-full" v-model="activeTab">
             <TabsList>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="details">Details</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="drafts">AI Drafts</TabsTrigger>
             </TabsList>
@@ -194,8 +195,35 @@
               <div class="flex flex-col h-full">
                 <Separator />
 
+                <!-- Firm-authored procedure marker. A matter built on the firm's own
+                     procedure must never read as though the court set these dates:
+                     PractoCore's procedures carry statutory deadlines and cite them,
+                     and this one does not. Same principle as L1's "Added by your firm"
+                     on an individual deadline, applied to the whole timeline. -->
+                <div
+                    v-if="onFirmProcedure"
+                    class="m-3 flex items-start gap-2 rounded-lg border bg-muted/40 p-3"
+                >
+                  <ScaleIcon class="size-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <div class="text-sm text-muted-foreground">
+                    <template v-if="extendedProcedure">
+                      This timeline follows
+                      <b class="text-foreground">{{ extendedProcedure }}</b>, with steps your firm added
+                      on top. The court deadlines are PractoCore's and carry their authority; your firm's
+                      own steps sit alongside them.
+                    </template>
+                    <template v-else>
+                      This timeline follows
+                      <b class="text-foreground">{{ matter?.expand?.template?.name }}</b>, a procedure your
+                      firm wrote. The dates are your firm's own practice, not statutory deadlines.
+                    </template>
+                  </div>
+                </div>
+
                 <!-- Provisional (projected) timeline banner. Shown when the trigger date
-                     is an estimate: reminders are off until a supervisor confirms it. -->
+                     is an estimate: reminders for the COURT deadlines are off until a supervisor
+                     confirms it. Ad-hoc deadlines (origin=adhoc) are the firm's own facts rather
+                     than projections, so they keep reminding — hence the qualified copy. -->
                 <div
                     v-if="currentMatterOrApplication?.triggerStatus === 'provisional'"
                     class="m-3 flex flex-col gap-2 rounded-lg border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 p-3"
@@ -205,7 +233,8 @@
                     <div class="text-sm">
                       <span class="font-semibold">Projected timeline</span> — based on an estimated
                       trigger date of <b>{{ formatDate(currentMatterOrApplication?.triggerDate || currentMatterOrApplication?.date) }}</b>.
-                      Reminders are off until you confirm the real date.
+                      Court reminders are off until you confirm the real date. Deadlines your
+                      firm added itself still remind as normal — they aren't projections.
                     </div>
                   </div>
                   <div v-if="isSupervisor" class="flex">
@@ -338,6 +367,20 @@
               </div>
             </TabsContent>
 
+            <!-- Details — the blueprint's intake fields plus the firm's own -->
+            <TabsContent value="details">
+              <template v-if="currentMatterOrApplication?.id">
+                <Separator />
+                <div class="flex flex-col gap-3 p-3 max-w-3xl">
+                  <SharedMattersMatterFields
+                    :matter="currentMatterOrApplication"
+                    :can-edit="canEditMatterFields"
+                    @updated="reloadMatter"
+                  />
+                </div>
+              </template>
+            </TabsContent>
+
             <!-- Case Documents — vault files scoped to this matter (upload + live ingestion) -->
             <TabsContent value="documents">
               <template v-if="matter?.id">
@@ -396,6 +439,7 @@ import {
   FolderLock,
   FileType2,
   Scale,
+  Scale as ScaleIcon,
   Clock as ClockIcon,
   ExternalLink,
 } from 'lucide-vue-next';
@@ -449,7 +493,7 @@ const assistantHidesDeadlines = computed(
 
 // Tab selection is URL-backed (`?tab=`) so links can deep-link into a matter's
 // Case Documents or AI Drafts (e.g. the assistant handing off to a tab).
-const MATTER_TABS = ['timeline', 'documents', 'drafts'];
+const MATTER_TABS = ['timeline', 'details', 'documents', 'drafts'];
 const activeTab = computed({
   get() {
     const t = route.query.tab;
@@ -496,9 +540,21 @@ const currentMatterOrApplication = computed(() => {
     : matter.value?.expand?.applications?.find(ap => ap.id === currentApplicationOption.value);
 });
 
+// L6: a deadline that names a role other than the one this firm represents is the
+// OTHER side's obligation. It belongs on the timeline as context, but never here —
+// this panel says "your next deadline", and the plaintiff's step is not ours. It
+// also frequently has no date at all (a defendant does not know when the plaint was
+// filed), which is how "Serve summons and plaint by Invalid Date" reached the page.
+const isOtherSideDeadline = (d) => {
+  const role = d?.role;
+  if (!role) return false;
+  const mine = currentMatterOrApplication.value?.representing?.role_id ?? '';
+  return !!mine && role !== mine;
+};
+
 const latestDeadline = computed(() => {
   return currentMatterOrApplication.value?.expand?.deadlines
-    ?.filter(d => d.status === 'pending')
+    ?.filter(d => d.status === 'pending' && !!d.date && !isOtherSideDeadline(d))
     ?.sort((a, b) => new Date(a.date) - new Date(b.date))
     ?.at(0) ?? null;
 });
@@ -532,7 +588,9 @@ const missedDeadlines = computed(() => {
   // are estimates, not missed obligations.
   if (currentMatterOrApplication.value?.triggerStatus === 'provisional') return [];
   return currentMatterOrApplication.value?.expand?.deadlines
-    ?.filter(d => new Date(d.date) < new Date() && d.status !== 'fulfilled')
+    // Same reasoning as latestDeadline: the other side missing their own step is
+    // not this firm's missed deadline. An undated step was never due.
+    ?.filter(d => !!d.date && new Date(d.date) < new Date() && d.status !== 'fulfilled' && !isOtherSideDeadline(d))
     ?.sort((a, b) => new Date(a.date) - new Date(b.date)) ?? [];
 });
 
@@ -544,6 +602,33 @@ const isSupervisor = computed(() => {
   const userId = currentUser.value?.id;
   if (!userId || !matter.value) return false;
   return matter.value.supervisors?.includes(userId) ?? false;
+});
+
+// Mirrors the Matters collection update rule, so a viewer who can only READ the
+// matter (an org colleague with canViewExternalMatters) is shown the details but
+// not an Edit button that would 403.
+// True when this matter's procedure was written by the firm rather than published
+// (and maintained, and cited) by PractoCore.
+const onFirmProcedure = computed(
+    () => currentMatterOrApplication.value?.expand?.template?.provenance === 'firm',
+);
+
+// A firm procedure may EXTEND one of ours, in which case the statutory deadlines on
+// this timeline really are statutory and it would be wrong to disclaim them. Names
+// the base procedure when so.
+const extendedProcedure = computed(
+    () => currentMatterOrApplication.value?.expand?.template?.extends?.name || '',
+);
+
+const canEditMatterFields = computed(() => {
+  const user = currentUser.value;
+  const m = currentMatterOrApplication.value;
+  if (!user?.id || !m) return false;
+  if (m.organisation) {
+    return m.organisation === user.organisation
+      && (m.owner === user.id || (m.members ?? []).includes(user.id));
+  }
+  return m.owner === user.id;
 });
 
 const formatDeadlinePrompt = (prompt, date) => {

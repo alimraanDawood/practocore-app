@@ -15,6 +15,12 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
   // screen (with Open Matter / Go back actions) instead of navigating away immediately.
   const createdMatter = ref<any>(null)
 
+  // L6 — which entry anchor the trigger date answers. A litigation procedure is
+  // one blueprint entered from more than one side: the firm that files a plaint
+  // knows the filing date, the firm served with one does not. Empty for every
+  // single-anchor template, which the backend reads as "the default".
+  const selectedAnchorId = ref('')
+
   // Synced by the page component (depends on vee-validate form values + partiesRef)
   const canProceed = ref(true)
 
@@ -58,6 +64,45 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
       { step: 3, id: 'field_values', title: 'Timeline' },
     ]
   })
+
+  // ── L6 entry anchors ─────────────────────────────────────────────────────────
+  const partyRoles = computed<any[]>(() => selectedTemplate.value?.template?.data?.parties?.roles ?? [])
+
+  const anchorOptions = computed<any[]>(() =>
+    (selectedTemplate.value?.template?.data?.triggers ?? []).map((t: any) => ({
+      id: t.id,
+      label: t.label,
+      prompt: t.prompt,
+      forRole: t.forRole ?? '',
+      // Named for the lawyer's benefit ("acting for the defendant"); never used
+      // to compute anything.
+      roleLabel: partyRoles.value.find((r: any) => r.id === t.forRole)?.name ?? '',
+    })),
+  )
+
+  const hasAnchorChoice = computed(() => anchorOptions.value.length > 1)
+  const selectedAnchor = computed(() => anchorOptions.value.find(a => a.id === selectedAnchorId.value) ?? null)
+
+  // Whether the lawyer has picked an anchor themselves. Until they have, the
+  // choice stays derived — otherwise the first default (made before the parties
+  // step has run) would stick, and a firm acting for the defendant would still be
+  // asked for the filing date, which is the whole defect L6 exists to fix.
+  const anchorTouched = ref(false)
+
+  // The parties step comes BEFORE the timeline step, so by the time the anchor
+  // question is asked we already know who the firm acts for — default to the
+  // matching anchor rather than making them state the same fact twice. Still
+  // changeable: a firm can enter a matter from an anchor that is not "its" side.
+  watch([anchorOptions, representing], ([opts, rep]) => {
+    if (anchorTouched.value && opts.some((o: any) => o.id === selectedAnchorId.value)) return
+    const roleId = (rep as any)?.role_id ?? ''
+    selectedAnchorId.value = opts.find((o: any) => o.forRole && o.forRole === roleId)?.id ?? opts[0]?.id ?? ''
+  }, { immediate: true })
+
+  const selectAnchor = (id: string) => {
+    anchorTouched.value = true
+    selectedAnchorId.value = id
+  }
 
   const isCreated = computed(() => !!createdMatter.value)
   const currentStep = computed(() => steps.value[stepIndex.value - 1])
@@ -105,6 +150,8 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
     selectedTemplate.value = null
     parties.value = {}
     representing.value = null
+    selectedAnchorId.value = ''
+    anchorTouched.value = false
     canProceed.value = true
     _submitFn.value = null
     createdMatter.value = null
@@ -116,6 +163,11 @@ export const useCreateMatterStore = defineStore('createMatter', () => {
     selectedTemplate,
     parties,
     representing,
+    selectedAnchorId,
+    anchorOptions,
+    hasAnchorChoice,
+    selectedAnchor,
+    selectAnchor,
     canProceed,
     createdMatter,
     isCreated,

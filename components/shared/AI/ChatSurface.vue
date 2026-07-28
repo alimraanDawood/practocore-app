@@ -14,6 +14,7 @@ import {
   sendAiMessageStream, sendAiMessageVoiceStream, confirmAiProposal, improvePrompt,
   getConversation, deleteConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
+  newTurnId, stopAiTurn,
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
   type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
@@ -376,10 +377,14 @@ const loading = ref(false);
 const proposalLoading = ref(false);
 const messagesEnd = ref<HTMLElement | null>(null);
 
-// Stop button: the controller for the in-flight streaming turn. Aborting it makes
-// the request resolve to { aborted:true }, which we drop silently.
+// Stop button. Aborting the fetch only stops us LISTENING: the server keeps
+// generating after a disconnect on purpose, so that closing the tab mid-answer no
+// longer throws the exchange away. So Stop has to ASK the server to stop, then
+// abort locally. `turnId` is what the server matches on.
 let turnAbort: AbortController | null = null;
+let turnId = '';
 function stopTurn() {
+  if (turnId) stopAiTurn(turnId);
   turnAbort?.abort();
 }
 
@@ -556,6 +561,7 @@ async function send(explicit?: string) {
   scrollToBottom();
 
   turnAbort = new AbortController();
+  turnId = newTurnId();
   const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => {
@@ -570,6 +576,7 @@ async function send(explicit?: string) {
     tier: chatTier.value,
     workflowContext: props.workflowContext,
     signal: turnAbort.signal,
+    turnId,
   });
   turnAbort = null;
 
@@ -673,6 +680,7 @@ async function retryTurn() {
   scrollToBottom();
 
   turnAbort = new AbortController();
+  turnId = newTurnId();
   const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
@@ -683,6 +691,7 @@ async function retryTurn() {
     surface: props.surface,
     workflowContext: props.workflowContext,
     signal: turnAbort.signal,
+    turnId,
   });
   turnAbort = null;
 
@@ -723,6 +732,7 @@ async function saveEdit(index: number) {
   scrollToBottom();
 
   turnAbort = new AbortController();
+  turnId = newTurnId();
   const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
@@ -732,6 +742,7 @@ async function saveEdit(index: number) {
     surface: props.surface,
     workflowContext: props.workflowContext,
     signal: turnAbort.signal,
+    turnId,
   });
   turnAbort = null;
 

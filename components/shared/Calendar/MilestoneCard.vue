@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Briefcase, Check, Loader2 } from 'lucide-vue-next';
+import { Briefcase, Check, Loader2, Scale } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { updateMilestoneStatus, type EngagementMilestone } from '~/services/engagements';
 
@@ -8,7 +8,16 @@ const emit = defineEmits<{ (e: 'changed'): void }>();
 
 const busy = ref(false);
 const isDone = computed(() => props.milestone.status === 'done');
-const engagement = computed(() => props.milestone.expand?.engagement);
+// L4: a milestone hangs off an engagement OR a litigation matter. Reduced to one
+// shape here so the card renders and links the same either way, with only the icon
+// distinguishing the two.
+const parent = computed(() => {
+  const matter = props.milestone.expand?.matter;
+  if (matter) return { kind: 'matter' as const, id: matter.id, name: matter.name };
+  const eng = props.milestone.expand?.engagement;
+  if (eng) return { kind: 'engagement' as const, id: eng.id, name: eng.name };
+  return null;
+});
 
 async function toggleDone() {
   if (busy.value || isDone.value) return;
@@ -24,8 +33,10 @@ async function toggleDone() {
   }
 }
 
-function openEngagement() {
-  if (engagement.value?.id) navigateTo(`/main/engagements/${engagement.value.id}`);
+function openParent() {
+  const p = parent.value;
+  if (!p?.id) return;
+  navigateTo(p.kind === 'matter' ? `/main/matters/matter/${p.id}` : `/main/engagements/${p.id}`);
 }
 </script>
 
@@ -47,13 +58,14 @@ function openEngagement() {
       <div class="flex flex-col flex-1 min-w-0">
         <p class="text-sm font-medium truncate" :class="{ 'line-through': isDone }">{{ milestone.label }}</p>
         <button
-          v-if="engagement"
+          v-if="parent"
           type="button"
           class="flex flex-row items-center gap-1.5 mt-1 text-xs text-muted-foreground hover:text-foreground w-fit"
-          @click.stop="openEngagement"
+          @click.stop="openParent"
         >
-          <Briefcase class="size-3 shrink-0" />
-          <span class="truncate">{{ engagement.name }}</span>
+          <Scale v-if="parent.kind === 'matter'" class="size-3 shrink-0" />
+          <Briefcase v-else class="size-3 shrink-0" />
+          <span class="truncate">{{ parent.name }}</span>
         </button>
       </div>
     </div>

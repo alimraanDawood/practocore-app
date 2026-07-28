@@ -204,6 +204,42 @@
                 <!-- STEP: COMPLETE (DYNAMIC FIELDS) -->
                 <template v-if="steps[stepIndex - 1]?.id === 'field_values'">
                   <div class="space-y-4">
+                    <!--
+                      L6 — entry anchor. A procedure can be entered from either
+                      side, and the two sides know different dates: the firm that
+                      filed the plaint knows the filing date, the firm served with
+                      one does not. Asked immediately above the date question it
+                      governs, and only when the template offers a choice.
+                    -->
+                    <div
+                      v-if="anchorOptions.length > 1"
+                      class="rounded-lg border border-border p-3 space-y-3"
+                    >
+                      <div class="space-y-1">
+                        <p class="text-sm font-medium">How did this matter reach you?</p>
+                        <p class="text-xs text-muted-foreground">
+                          This decides which date we ask for. The rest of the timeline is the same either way.
+                        </p>
+                      </div>
+                      <div class="grid gap-2">
+                        <button
+                          v-for="opt in anchorOptions"
+                          :key="opt.id"
+                          type="button"
+                          class="text-left rounded-md border px-3 py-2 text-sm transition-colors"
+                          :class="selectedAnchorId === opt.id
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:bg-muted/50'"
+                          @click="selectAnchor(opt.id)"
+                        >
+                          <span class="font-medium">{{ opt.label }}</span>
+                          <span v-if="opt.roleLabel" class="text-muted-foreground">
+                            — acting for the {{ opt.roleLabel.toLowerCase() }}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
                     <FormField
                       v-for="field in templateFields || []"
                       :key="field.name"
@@ -436,6 +472,42 @@ const partyConfig = computed(() => selectedTemplate.value?.template?.data?.parti
 const hasParties = computed(() => partyConfig.value?.enabled === true);
 const partyRoles = computed(() => partyConfig.value?.roles ?? []);
 
+// --- L6: entry anchors ---
+//
+// A litigation procedure is one blueprint entered from more than one side. The
+// anchor decides WHICH date we ask for; every downstream deadline is computed the
+// same way either way (the backend seeds the anchor's date into the field the
+// blueprint already keys off). A single-anchor template yields an empty list and
+// the wizard is unchanged.
+const selectedAnchorId = ref<string>('');
+
+const anchorOptions = computed(() =>
+  (selectedTemplate.value?.template?.data?.triggers ?? []).map((t: any) => ({
+    id: t.id,
+    label: t.label,
+    prompt: t.prompt,
+    // The role is named for the lawyer's benefit ("acting for the defendant"),
+    // never used to compute anything.
+    roleLabel: partyRoles.value.find((r: any) => r.id === t.forRole)?.name ?? '',
+  })),
+);
+
+const selectedAnchor = computed(
+  () => anchorOptions.value.find((a: any) => a.id === selectedAnchorId.value) ?? null,
+);
+
+function selectAnchor(id: string) {
+  selectedAnchorId.value = id;
+}
+
+// Default to the template's first anchor whenever the template changes, so the
+// date question always has a prompt and the user can simply proceed.
+watch(anchorOptions, (opts) => {
+  if (!opts.some((o: any) => o.id === selectedAnchorId.value)) {
+    selectedAnchorId.value = opts[0]?.id ?? '';
+  }
+}, { immediate: true });
+
 // Computed steps. The REQUIRED path is minimal — template + timeline (trigger
 // date + required fields). Everything else (matter details, parties, lawyers) is
 // optional and can be filled now or added later from the matter page. Required
@@ -484,7 +556,9 @@ const buildStep3Schema = () => {
   templateFields.value = [
     {
       id: "date",
-      label: template?.triggerDatePrompt || "Enter Date",
+      // The chosen anchor's own question wins — asking a defendant's lawyer when
+      // the plaint was "presented to the registry" is the defect L6 exists to fix.
+      label: selectedAnchor.value?.prompt || template?.triggerDatePrompt || "Enter Date",
       required: true,
       type: "date",
     },
@@ -709,6 +783,9 @@ const onSubmit = async (values: any) => {
       members: values.members ? values.members.map((m) => m?.id) : [],
       templateId: values.template?.id,
       date: values.fields.date,
+      // L6: which question `date` answers. Empty for single-anchor templates,
+      // which the backend reads as "the template default".
+      triggerId: anchorOptions.value.length > 1 ? selectedAnchorId.value : '',
       fieldValues: values.fields,
       triggerStatus: isProvisional.value ? 'provisional' : 'confirmed',
       // Include court, judges, firm, and opposing counsel

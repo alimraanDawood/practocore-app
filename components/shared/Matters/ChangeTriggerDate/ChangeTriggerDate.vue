@@ -3,7 +3,7 @@
         <div class="flex flex-col p-3 w-full">
             <ChangeTriggerDateForm
                 v-if="loading === false"
-                :current-date="matter?.date"
+                :current-date="matter?.triggerDate || matter?.date"
                 @complete="updateTriggerDate"
             />
             <div v-else class="grid place-items-center h-32 w-full">
@@ -63,7 +63,7 @@ const props = defineProps(['matter']);
 const updateTriggerDate = async (values) => {
     loading.value = true;
     try {
-        const result = await changeMatterTriggerDate(props?.matter?.id, values?.date, values?.reset_completed);
+        const result = await changeMatterTriggerDate(props?.matter?.id, values?.date);
 
         if (result.error) {
             toast.error(result.error);
