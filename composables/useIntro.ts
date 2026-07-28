@@ -15,10 +15,23 @@ export function useIntro() {
   };
 
   /**
+   * Tauri desktop. Treated the same as a native app: it is an installed shell
+   * with a first run, unlike a browser tab arriving from a link.
+   */
+  const isDesktopShell = () => {
+    return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+  };
+
+  /**
+   * Platforms that get the intro on first launch.
+   */
+  const isAppShell = () => isNativePlatform() || isDesktopShell();
+
+  /**
    * Check if the intro has been seen before
    */
   const hasSeenIntro = async (): Promise<boolean> => {
-    if (!isNativePlatform()) {
+    if (!isAppShell()) {
       return true; // Web users skip intro
     }
 
@@ -61,8 +74,8 @@ export function useIntro() {
    * Returns true if: native platform AND intro not seen AND user not authenticated
    */
   const shouldShowIntro = async (isAuthenticated: boolean): Promise<boolean> => {
-    // Only show intro on native platforms
-    if (!isNativePlatform()) {
+    // Installed shells only: native apps and Tauri desktop.
+    if (!isAppShell()) {
       return false;
     }
 
@@ -78,6 +91,8 @@ export function useIntro() {
 
   return {
     isNativePlatform,
+    isDesktopShell,
+    isAppShell,
     hasSeenIntro,
     markIntroSeen,
     resetIntro,

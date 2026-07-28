@@ -5,18 +5,17 @@
 </template>
 
 <script setup lang="ts">
-import { Capacitor } from "@capacitor/core";
 import { Loader } from 'lucide-vue-next';
 
-const { $pb, $viewport } = useNuxtApp();
-const { shouldShowIntro } = useIntro();
+const { $pb } = useNuxtApp();
+const { shouldShowIntro, isAppShell } = useIntro();
 const router = useRouter();
 
 definePageMeta({
   layout: 'blank'
 });
 
-async function routeMobile() {
+async function routeAppShell() {
   const isAuthenticated = $pb.authStore.isValid && $pb.authStore.record?.collectionName === 'Users';
   const showIntro = await shouldShowIntro(isAuthenticated);
 
@@ -25,21 +24,18 @@ async function routeMobile() {
     return;
   }
 
-  // on desktop, we should route users to the assistant page and not the main page.
-
-  await navigateTo(isAuthenticated ? '/main' : '/intro'); // also fixed your bug here
+  await navigateTo(isAuthenticated ? '/main' : '/intro');
 }
 
 onNuxtReady(async () => {
   await router.isReady();
 
-  console.log("Preparing redirection!");
-
-  if (Capacitor.isNativePlatform()) {
-    console.log("Redirecting mobile!");
-    await routeMobile();
+  // Installed shells — Capacitor and Tauri — get the intro on first launch.
+  // A browser tab does not: it has usually arrived from a link and should go
+  // straight where it was headed.
+  if (isAppShell()) {
+    await routeAppShell();
   } else {
-    console.log("Redirecting desktop/web!");
     await navigateTo("/main");
   }
 });
