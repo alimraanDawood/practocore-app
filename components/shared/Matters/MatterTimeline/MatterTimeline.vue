@@ -375,6 +375,17 @@
       </div>
 
     </div>
+
+    <!-- L4: the second track. Deliberately BELOW the timeline and visually
+         separate — a matter's court dates and a firm's own tasks are different
+         kinds of thing, and interleaving them would invite reading an internal
+         task as a court date. -->
+    <div class="border-t border-border pt-4">
+      <SharedMattersMatterMilestones
+        :matter-id="matter.id"
+        :can-edit="canAddDeadline"
+      />
+    </div>
   </div>
 
   <!-- Loading skeleton -->

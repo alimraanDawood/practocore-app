@@ -506,9 +506,15 @@ function onDayClick(iso: string) {
 }
 
 function onEventClick(event: any) {
-  // Milestone/compliance events jump to their engagement; deadlines open the sheet.
+  // Milestone events jump to their parent, which since L4 is an engagement OR a
+  // litigation matter; compliance is engagement-only; deadlines open the sheet.
   if (event?.kind === 'milestone') {
     const m = milestones.value.find(x => x.id === event.id);
+    const matterId = m?.expand?.matter?.id || m?.matter;
+    if (matterId) {
+      navigateTo(`/main/matters/matter/${matterId}`);
+      return;
+    }
     const engId = m?.expand?.engagement?.id || m?.engagement;
     if (engId) navigateTo(`/main/engagements/${engId}`);
     return;
