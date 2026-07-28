@@ -165,6 +165,17 @@
                 </span>
               </div>
 
+              <!-- L2: a corrected date must never quietly replace the computed
+                   one. The rule still applies; this row simply departs from it,
+                   and anyone reading the file has to be able to see that at a
+                   glance rather than by expanding the row. -->
+              <div v-if="overrideOf(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
+                <PencilLine class="size-2.5 text-muted-foreground shrink-0"/>
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Corrected — computed {{ dayjs(overrideOf(deadline).from).format('D MMM YYYY') }}
+                </span>
+              </div>
+
               <!-- Firm-added marker: never let a firm's own note read as a court date -->
               <div v-if="isAdhoc(deadline)" class="flex flex-row items-center gap-1 mb-0.5">
                 <CalendarPlus class="size-2.5 text-muted-foreground shrink-0"/>
@@ -300,6 +311,13 @@
                 <AdjournDeadline @updated="emits('updated')" :deadline="deadline">
                   <Button size="sm" variant="outline">Adjourn</Button>
                 </AdjournDeadline>
+
+                <!-- L2: nothing was adjourned — the computed date is simply not
+                     the real one. A separate action, because filing a false
+                     adjournment to fix a date is what lawyers were doing instead. -->
+                <OverrideDeadline @updated="emits('updated')" :deadline="deadline">
+                  <Button size="sm" variant="outline">Correct date</Button>
+                </OverrideDeadline>
               </div>
             </template>
 
@@ -332,7 +350,9 @@
               >
                 <div class="flex flex-row items-center gap-1.5 text-xs font-medium text-foreground">
                   <CalendarSync class="size-3 text-muted-foreground shrink-0"/>
-                  <span class="text-muted-foreground">Adjourned</span>
+                  <!-- Rows written before L2 carry no kind; they were all
+                       adjournments, which is what the migration backfilled. -->
+                  <span class="text-muted-foreground">{{ adj.kind === 'override' ? 'Corrected' : 'Adjourned' }}</span>
                   <span>{{ dayjs(adj.from).format('D MMM YYYY') }}</span>
                   <ArrowRight class="size-3 text-muted-foreground shrink-0"/>
                   <span>{{ dayjs(adj.to).format('D MMM YYYY') }}</span>
@@ -395,8 +415,10 @@ import {
   CheckCheck,
   UserX,
   Users,
+  PencilLine,
 } from "lucide-vue-next";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
+import OverrideDeadline from "../../Deadline/OverrideDeadline/OverrideDeadline.vue";
 import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
 import { pb } from "~/lib/pocketbase";
 import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline } from "~/services/matters";
@@ -536,6 +558,16 @@ watch(
 // t_id — see the ad-hoc block below and internal/deadlinev2/adhoc.go. Declared
 // here because isProjected/urgencyOf depend on it.
 const isAdhoc = (deadline) => deadline?.origin === "adhoc";
+
+// L2: the most recent correction on a deadline, if any. Returns the row rather
+// than a boolean because the computed date it superseded (adj.from) is the part
+// that has to stay on screen — a correction that hides the rule is worse than no
+// correction at all. Rows written before L2 carry no kind and are adjournments.
+const overrideOf = (deadline) => {
+  const rows = (deadline?.expand?.adjournments ?? []).filter((a) => a.kind === "override");
+  if (rows.length === 0) return null;
+  return [...rows].sort((a, b) => new Date(b.created) - new Date(a.created))[0];
+};
 
 const isProjected = (deadline) => {
   // A firm-added deadline is a date the lawyer entered themselves, not one

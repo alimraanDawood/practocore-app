@@ -22,10 +22,12 @@ const formSchema = toTypedSchema(z.object({
 
 const placeholder = ref()
 
+// Seeded with empty strings, not left undefined: otherwise Zod's base type check
+// fires first and shows "Invalid input: expected string, received undefined"
+// instead of the message below.
 const { handleSubmit, setFieldValue, values } = useForm({
   validationSchema: formSchema,
-  initialValues: {
-  },
+  initialValues: { to: '', reason: '' },
 })
 
 const value = computed({

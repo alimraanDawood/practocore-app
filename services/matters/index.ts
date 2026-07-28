@@ -236,6 +236,35 @@ export async function fulfillEvent(event: any, date: string) {
     }).then((e) => e.json())
 }
 
+/**
+ * Correct a deadline whose computed date is not the real date.
+ *
+ * Distinct from adjournDeadline: nothing was adjourned. The record and the
+ * notification say "corrected", not "adjourned", so a lawyer fixing a date the
+ * registry gave orally no longer has to file a false adjournment to do it. The
+ * reason is mandatory — it is the audit record explaining why this date stopped
+ * matching the rule the timeline still cites.
+ */
+export async function overrideDeadline(deadline: Deadline, date: string, reason: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: {
+                action: "OVERRIDE",
+                meta: {
+                    targetId: deadline?.t_id,
+                    overriddenDate: date,
+                    reason: reason,
+                }
+            }
+        }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
 export async function adjournDeadline(deadline: Deadline, date: string, force = false, reason = "") {
     return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
         method: 'POST',
