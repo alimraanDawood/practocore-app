@@ -284,6 +284,28 @@ export function cleanCitationLabel(s?: string): string {
     .trim();
 }
 
+// Plain-text copy of an assistant answer: inline [[cite:<id>]] markers become
+// [n] (matching the on-screen chip numbers) and every citation is listed below,
+// so pasting elsewhere outside the app keeps the verify trail instead of losing
+// it to the <sup> chip markup CitedAnswer renders inline.
+export function buildCopyText(content: string, citations?: AiCitation[]): string {
+  const cites = citations ?? [];
+  const indexById = new Map(cites.map((c, i) => [c.citeId, i + 1]));
+  const text = content
+    .replace(/\[\[cite:([\w-]+)\]\]/g, (_, id: string) => {
+      const n = indexById.get(id);
+      return n ? `[${n}]` : '';
+    })
+    .trim();
+  if (!cites.length) return text;
+  const sources = cites.map((c, i) => {
+    const meta = c.meta ?? {};
+    const ref = meta.citation || meta.url || meta.locator || meta.statute;
+    return `[${i + 1}] ${cleanCitationLabel(c.title)}${ref ? ` — ${ref}` : ''}`;
+  });
+  return `${text}\n\nSources:\n${sources.join('\n')}`;
+}
+
 export interface AiContext {
   matterIds?: string[];
   deadlineIds?: string[];

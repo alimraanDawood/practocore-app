@@ -6,10 +6,10 @@ import {
   History, Plus, Trash2, MessageSquare, Settings, Lock, Zap, SquarePen,
   FileText, Briefcase, ArrowRight, Bell,
   Search, BookOpen, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, Download, FileType2, Library,
-  Gauge,
+  Gauge, Copy,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { useMediaQuery } from '@vueuse/core';
+import { useMediaQuery, useClipboard } from '@vueuse/core';
 import { Dialog, DialogContent, DialogTrigger } from '~/components/ui/dialog';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '~/components/ui/sheet';
 import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
@@ -22,6 +22,7 @@ import {
   sendAiMessageStream, confirmAiProposal, improvePrompt, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
   listConversations, getConversation, deleteConversation, saveConversationTree,
+  buildCopyText,
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiConversationSummary,
   type AiAttachmentMeta, type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
@@ -284,6 +285,20 @@ function switchBranch(index: number, dir: -1 | 1) {
   branches.switchSibling(index, dir);
   persistTree();
   scrollToBottom();
+}
+
+// Copy a message to the clipboard. Assistant answers keep their citation trail —
+// inline [[cite:id]] markers become [n] and every source is listed below — since
+// the rendered chip markup they'd otherwise copy from the DOM carries no source info.
+const { copy: copyToClipboard } = useClipboard();
+const copiedIdx = ref<number | null>(null);
+async function copyMessage(index: number, msg: DisplayAiMessage) {
+  const text = msg.role === 'assistant'
+    ? buildCopyText(messageText(msg.content), msg.citations)
+    : stripAttachmentPlaceholders(messageText(msg.content));
+  await copyToClipboard(text);
+  copiedIdx.value = index;
+  setTimeout(() => { if (copiedIdx.value === index) copiedIdx.value = null; }, 1500);
 }
 
 // Persist the branch tree (best-effort) so alternate branches survive a reload.
@@ -1789,7 +1804,7 @@ function formatToolName(tool: string): string {
                     {{ stripAttachmentPlaceholders(messageText(msg.content)) }}
                   </div>
                   <!-- Branch switcher + edit affordance -->
-                  <div class="flex items-center gap-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                  <div class="flex items-center gap-1 text-muted-foreground opacity-40 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                        :class="branches.siblings(i).count > 1 ? '!opacity-100' : ''">
                     <template v-if="branches.siblings(i).count > 1">
                       <button class="rounded p-0.5 transition-colors hover:text-foreground disabled:opacity-40"
@@ -1806,6 +1821,11 @@ function formatToolName(tool: string): string {
                             :disabled="loading" title="Edit message"
                             @click="startEdit(i, stripAttachmentPlaceholders(messageText(msg.content)))">
                       <Pencil class="size-3.5"/>
+                    </button>
+                    <button class="rounded p-0.5 transition-colors hover:text-foreground"
+                            title="Copy message" @click="copyMessage(i, msg as DisplayAiMessage)">
+                      <Check v-if="copiedIdx === i" class="size-3.5 text-primary"/>
+                      <Copy v-else class="size-3.5"/>
                     </button>
                   </div>
                 </div>
@@ -1864,15 +1884,25 @@ function formatToolName(tool: string): string {
                     <RotateCcw class="size-3" />
                     Retry
                   </button>
-                  <button
-                    v-else
-                    class="self-start flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100 px-0.5"
-                    :class="speakingIdx === i ? '!opacity-100 text-primary' : ''"
-                    @click="toggleSpeak(messageText(msg.content), i)"
-                  >
-                    <VolumeX v-if="speakingIdx === i" class="size-3" />
-                    <Volume2 v-else class="size-3" />
-                  </button>
+                  <div v-else class="self-start flex items-center gap-2 px-0.5">
+                    <button
+                      class="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100"
+                      :class="speakingIdx === i ? '!opacity-100 text-primary' : ''"
+                      @click="toggleSpeak(messageText(msg.content), i)"
+                    >
+                      <VolumeX v-if="speakingIdx === i" class="size-3" />
+                      <Volume2 v-else class="size-3" />
+                    </button>
+                    <button
+                      class="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-all opacity-40 sm:opacity-0 sm:group-hover/msg:opacity-100"
+                      :class="copiedIdx === i ? '!opacity-100 text-primary' : ''"
+                      title="Copy message"
+                      @click="copyMessage(i, msg as DisplayAiMessage)"
+                    >
+                      <Check v-if="copiedIdx === i" class="size-3" />
+                      <Copy v-else class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </template>
@@ -2048,6 +2078,7 @@ function formatToolName(tool: string): string {
 
               <InputGroupTextarea
                 v-model="inputText"
+                class="max-h-48 overflow-y-auto"
                 :placeholder="composerPlaceholder"
                 :disabled="!aiEnabled"
                 @keydown="handleKeydown"
