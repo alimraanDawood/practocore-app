@@ -1,5 +1,3 @@
-import { VoiceRecorder } from '@independo/capacitor-voice-recorder';
-import { Capacitor } from '@capacitor/core';
 import { pb, SERVER_URL } from '~/lib/pocketbase';
 
 const PREFS_KEY = 'practoai_speech_prefs';
@@ -60,7 +58,6 @@ export function useSpeech() {
   const sttSupported = ref(false);
   const audioLevel = ref(0);
   const micError = ref('');
-  const isNative = ref(false);
 
   // Web streaming state
   let activeStream: MediaStream | null = null;
@@ -87,17 +84,17 @@ export function useSpeech() {
   let livePartial = '';
   let endTurnTimer: ReturnType<typeof setTimeout> | null = null;
 
-  onMounted(async () => {
-    isNative.value = Capacitor.isNativePlatform();
-    if (isNative.value) {
-      const can = await VoiceRecorder.canDeviceVoiceRecord().catch(() => ({ value: false }));
-      sttSupported.value = can.value;
-    } else {
-      sttSupported.value =
-        typeof navigator !== 'undefined' &&
-        !!navigator.mediaDevices?.getUserMedia &&
-        typeof AudioWorkletNode !== 'undefined';
-    }
+  // One capture path on every platform. Android used to record to a file through a
+  // native plugin and upload it, because getUserMedia was assumed unavailable in the
+  // WebView — it isn't, once MODIFY_AUDIO_SETTINGS is declared alongside RECORD_AUDIO
+  // (Capacitor denies the mic unless BOTH are granted, which is what the plugin was
+  // really working around). Deleting that branch hands Android the same live
+  // streaming dictation, level meter and barge-in the web already had.
+  onMounted(() => {
+    sttSupported.value =
+      typeof navigator !== 'undefined' &&
+      !!navigator.mediaDevices?.getUserMedia &&
+      typeof AudioWorkletNode !== 'undefined';
   });
 
   // Mint a short-lived AssemblyAI streaming token from our backend.
@@ -153,7 +150,7 @@ export function useSpeech() {
    * to dictate, e.g. focusing the composer or opening voice mode.
    */
   async function prewarmSpeech(): Promise<void> {
-    if (isNative.value || !sttSupported.value) return;
+    if (!sttSupported.value) return;
     void getSttToken();
     if (workletModuleWarmed) return;
     try {
@@ -261,26 +258,6 @@ export function useSpeech() {
     livePartial = '';
     if (endTurnTimer) { clearTimeout(endTurnTimer); endTurnTimer = null; }
 
-    if (isNative.value) {
-      try {
-        const hasPerm = await VoiceRecorder.hasAudioRecordingPermission();
-        if (!hasPerm.value) {
-          const granted = await VoiceRecorder.requestAudioRecordingPermission();
-          if (!granted.value) {
-            micError.value = 'Microphone permission denied. Go to Settings → Apps → PractoCore → Permissions and enable Microphone.';
-            return;
-          }
-        }
-        await VoiceRecorder.startRecording();
-        isListening.value = true;
-      } catch (err: any) {
-        console.error('[STT] Native recording failed:', err);
-        micError.value = 'Could not access microphone.';
-      }
-      return;
-    }
-
-    // Web / desktop — live streaming to AssemblyAI
     if (!navigator.mediaDevices?.getUserMedia) {
       micError.value = 'Microphone requires a secure connection (HTTPS or localhost).';
       return;
@@ -383,8 +360,10 @@ export function useSpeech() {
       maxRecordTimer = setTimeout(() => stopListening(), MAX_SESSION_MS);
     } catch (err: any) {
       console.error('[STT] Failed to start streaming:', err);
+      // On Android this now comes back through the WebView rather than a native
+      // plugin, and the fix there is the OS permission screen, not a browser setting.
       micError.value = err?.name === 'NotAllowedError'
-        ? 'Microphone permission denied. Please allow microphone access in your browser settings.'
+        ? 'Microphone access was blocked. Allow it in your browser or app settings to dictate.'
         : 'Could not access microphone.';
       teardownStream();
       isListening.value = false;
@@ -395,30 +374,7 @@ export function useSpeech() {
   async function stopListening() {
     if (!isListening.value) return;
 
-    if (isNative.value) {
-      isListening.value = false;
-      isTranscribing.value = true;
-      try {
-        const result = await VoiceRecorder.stopRecording();
-        const { recordDataBase64, mimeType } = result.value;
-        console.log(`[STT] native recording: ${recordDataBase64?.length ?? 0} b64 chars, mime=${mimeType}`);
-        if (recordDataBase64) {
-          const blob = base64ToBlob(recordDataBase64, mimeType);
-          transcript.value = await sendBlobToBackend(blob, mimeType);
-        } else {
-          micError.value = 'No audio was recorded — check microphone permissions.';
-        }
-      } catch (err: any) {
-        console.error('[STT] native transcription failed:', err);
-        transcript.value = '';
-        micError.value = err?.message || 'Transcription failed.';
-      } finally {
-        isTranscribing.value = false;
-      }
-      return;
-    }
-
-    // Web path: transcript is already live from the stream; just finalise.
+    // The transcript is already live from the stream; just finalise.
     isListening.value = false; // set first so re-entrant calls bail immediately
     isTranscribing.value = true;
     teardownStream();
@@ -428,36 +384,16 @@ export function useSpeech() {
     isTranscribing.value = false;
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── TTS via ElevenLabs backend ────────────────────────────────────────────
+
+  // Used by the timed read, which gets its audio as base64 alongside the character
+  // alignment rather than as a blob body.
   function base64ToBlob(base64: string, mimeType: string): Blob {
     const bytes = atob(base64);
     const buffer = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
     return new Blob([buffer], { type: mimeType });
   }
-
-  // Native blob fallback → backend → AssemblyAI async file transcription.
-  async function sendBlobToBackend(blob: Blob, mimeType?: string): Promise<string> {
-    const form = new FormData();
-    const isM4a = mimeType?.includes('mp4') || mimeType?.includes('aac') || mimeType?.includes('m4a');
-    form.append('audio', blob, isM4a ? 'recording.m4a' : 'recording.webm');
-    form.append('language', 'en');
-    const res = await fetch(`${SERVER_URL}/api/practocore/ai/stt`, {
-      method: 'POST',
-      headers: { 'Authorization': pb.authStore.token },
-      body: form,
-    });
-    if (!res.ok) {
-      let detail = '';
-      try { detail = (await res.json())?.error ?? ''; } catch {}
-      console.error(`[STT] /ai/stt failed: ${res.status} ${detail}`);
-      throw new Error(detail || `Transcription failed (${res.status})`);
-    }
-    const data = await res.json();
-    return data.text ?? '';
-  }
-
-  // ── TTS via ElevenLabs backend ────────────────────────────────────────────
   const isSpeaking = ref(false);
   const ttsSupported = ref(true);
   const caption = ref(''); // text revealed so far during a timed (synced) read
@@ -797,7 +733,7 @@ export function useSpeech() {
   let bargeArmed = false;
 
   async function armBargeIn(onSpeech: () => void) {
-    if (bargeArmed || isNative.value || !navigator.mediaDevices?.getUserMedia) return;
+    if (bargeArmed || !navigator.mediaDevices?.getUserMedia) return;
     try {
       bargeStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
