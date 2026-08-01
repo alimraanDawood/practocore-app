@@ -71,6 +71,16 @@ export function useSpeech() {
   let ws: WebSocket | null = null;
   let levelFrame: number | null = null;
   let maxRecordTimer: ReturnType<typeof setTimeout> | null = null;
+  // Frames produced before the socket finishes handshaking. Without this they were
+  // dropped on the floor, which is why the first ~second of speech went missing:
+  // the UI flips to "listening" the moment the graph is built, but the WS is still
+  // connecting. We hold them and flush in order on open.
+  let pendingFrames: ArrayBuffer[] = [];
+  let pendingBytes = 0;
+  // ~10s of 16 kHz PCM16. If we ever exceed this the socket is not coming up and the
+  // session is lost anyway; we keep the EARLIEST audio, since that's the part the
+  // buffer exists to rescue.
+  const MAX_PENDING_BYTES = STT_SAMPLE_RATE * 2 * 10;
   // Turn accumulation: finalised turns joined together, plus the in-progress
   // partial, plus a grace timer that lets the user resume after end-of-turn.
   let finalizedText = '';
@@ -91,17 +101,70 @@ export function useSpeech() {
   });
 
   // Mint a short-lived AssemblyAI streaming token from our backend.
+  //
+  // The backend mints these with expires_in_seconds=60 (ai/assemblyai.go), so a
+  // cached token is only worth reusing well inside that window. We keep a short
+  // margin and re-mint otherwise — a stale token fails the handshake, which costs
+  // far more than the round-trip we saved.
+  const TOKEN_REUSE_MS = 40000;
+  let cachedToken: string | null = null;
+  let cachedTokenAt = 0;
+  let inflightToken: Promise<string | null> | null = null;
+
+  function fetchSttToken(): Promise<string | null> {
+    return fetch(`${SERVER_URL}/api/practocore/ai/stt-token`, {
+      method: 'GET',
+      headers: { 'Authorization': pb.authStore.token },
+    })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => data?.token ?? null)
+      .catch(() => null);
+  }
+
   async function getSttToken(): Promise<string | null> {
-    try {
-      const res = await fetch(`${SERVER_URL}/api/practocore/ai/stt-token`, {
-        method: 'GET',
-        headers: { 'Authorization': pb.authStore.token },
+    if (cachedToken && Date.now() - cachedTokenAt < TOKEN_REUSE_MS) return cachedToken;
+    // Collapse concurrent callers onto one request (prewarm racing a mic tap).
+    if (!inflightToken) {
+      inflightToken = fetchSttToken().then((tok) => {
+        if (tok) { cachedToken = tok; cachedTokenAt = Date.now(); }
+        inflightToken = null;
+        return tok;
       });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.token ?? null;
+    }
+    return inflightToken;
+  }
+
+  // Consume the cached token. A streaming token is treated as single-use: we drop it
+  // from the cache the moment a socket is built with it, so a second dictation always
+  // mints a fresh one. (Reusing a spent token would fail the handshake — the exact
+  // failure this whole change exists to prevent.)
+  function consumeCachedToken() {
+    cachedToken = null;
+    cachedTokenAt = 0;
+  }
+
+  let workletModuleWarmed = false;
+
+  /**
+   * Warm the expensive, permission-free parts of the STT path so tapping the mic
+   * is instant: mint the streaming token and compile the PCM worklet. Safe to call
+   * repeatedly and safe to ignore the result — it never touches the microphone and
+   * never opens a (billable) AssemblyAI stream. Call it when the user shows intent
+   * to dictate, e.g. focusing the composer or opening voice mode.
+   */
+  async function prewarmSpeech(): Promise<void> {
+    if (isNative.value || !sttSupported.value) return;
+    void getSttToken();
+    if (workletModuleWarmed) return;
+    try {
+      // A throwaway context just to fetch + compile the worklet, so the real
+      // session's addModule() resolves from cache instead of hitting the network.
+      const warmCtx = new AudioContext();
+      await warmCtx.audioWorklet.addModule('/assemblyai-pcm-worklet.js');
+      workletModuleWarmed = true;
+      await warmCtx.close().catch(() => {});
     } catch {
-      return null;
+      // Non-fatal: the real path will load it normally.
     }
   }
 
@@ -126,6 +189,7 @@ export function useSpeech() {
     if (maxRecordTimer !== null) { clearTimeout(maxRecordTimer); maxRecordTimer = null; }
     if (endTurnTimer !== null) { clearTimeout(endTurnTimer); endTurnTimer = null; }
     if (ws) {
+      ws.onopen = null; // a socket torn down mid-handshake must not try to flush
       ws.onmessage = null;
       ws.onerror = null;
       ws.onclose = null;
@@ -141,6 +205,8 @@ export function useSpeech() {
     if (sourceNode) { try { sourceNode.disconnect(); } catch {} sourceNode = null; }
     if (audioContext) { audioContext.close().catch(() => {}); audioContext = null; }
     if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+    pendingFrames = [];
+    pendingBytes = 0;
     audioLevel.value = 0;
   }
 
@@ -221,16 +287,43 @@ export function useSpeech() {
     }
 
     try {
-      activeStream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      });
+      // Mic permission and token mint are independent — run them together rather
+      // than serially. (The token is usually already warm; see prewarmSpeech.)
+      const [stream, token] = await Promise.all([
+        navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        }),
+        getSttToken(),
+      ]);
+      activeStream = stream;
 
-      const token = await getSttToken();
       if (!token) {
         micError.value = 'Could not start transcription. Please try again.';
         teardownStream();
         return;
       }
+
+      // Open the socket FIRST so its handshake overlaps with building the audio
+      // graph below, instead of running after it. Any frames the worklet produces
+      // while this is still CONNECTING get buffered and flushed on open.
+      ws = new WebSocket(
+        `${AAI_WS_BASE}?sample_rate=${STT_SAMPLE_RATE}&encoding=pcm_s16le&speech_model=u3-rt-pro` +
+        `&min_turn_silence=${MIN_TURN_SILENCE}&max_turn_silence=${MAX_TURN_SILENCE}&format_turns=true&token=${token}`,
+      );
+      ws.binaryType = 'arraybuffer';
+      consumeCachedToken(); // spent — the next session mints a fresh one
+      const socket = ws; // stable ref for the handlers below
+
+      let sentChunks = 0;
+      socket.onopen = () => {
+        const queued = pendingFrames.length;
+        for (const buf of pendingFrames) {
+          try { socket.send(buf); sentChunks++; } catch {}
+        }
+        pendingFrames = [];
+        pendingBytes = 0;
+        console.log(`[STT] WebSocket open — flushed ${queued} buffered frame(s), streaming live`);
+      };
 
       try {
         audioContext = new AudioContext({ sampleRate: STT_SAMPLE_RATE });
@@ -252,24 +345,24 @@ export function useSpeech() {
       // Connect to destination (outputs silence) so the worklet keeps processing.
       workletNode.connect(audioContext.destination);
 
-      ws = new WebSocket(
-        `${AAI_WS_BASE}?sample_rate=${STT_SAMPLE_RATE}&encoding=pcm_s16le&speech_model=u3-rt-pro` +
-        `&min_turn_silence=${MIN_TURN_SILENCE}&max_turn_silence=${MAX_TURN_SILENCE}&format_turns=true&token=${token}`,
-      );
-      ws.binaryType = 'arraybuffer';
-
-      let sentChunks = 0;
       workletNode.port.onmessage = (ev: MessageEvent) => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(ev.data);
+        const buf = ev.data as ArrayBuffer;
+        if (!ws) return;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(buf);
           sentChunks++;
           if (sentChunks === 1 || sentChunks % 40 === 0) {
-            console.log(`[STT] sent ${sentChunks} audio chunks (${(ev.data as ArrayBuffer).byteLength}B each)`);
+            console.log(`[STT] sent ${sentChunks} audio chunks (${buf.byteLength}B each)`);
+          }
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          // Hold the opening words until the handshake lands.
+          if (pendingBytes + buf.byteLength <= MAX_PENDING_BYTES) {
+            pendingFrames.push(buf);
+            pendingBytes += buf.byteLength;
           }
         }
+        // CLOSING/CLOSED: the session is over, drop.
       };
-
-      ws.onopen = () => console.log('[STT] WebSocket open — streaming audio');
       ws.onmessage = (ev) => handleAaiMessage(ev.data);
       ws.onerror = (e) => {
         console.error('[STT] WebSocket error', e);
@@ -755,7 +848,7 @@ export function useSpeech() {
   return {
     // STT
     isListening, isTranscribing, transcript, sttSupported, audioLevel, micError,
-    startListening, stopListening,
+    startListening, stopListening, prewarmSpeech,
     // TTS
     isSpeaking, ttsSupported, caption, speak, speakTimed, speakConversational, stopSpeaking, unlockAudio,
     // Streaming TTS (LLM→TTS pipelining)

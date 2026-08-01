@@ -793,7 +793,7 @@ function handleKeydown(e: KeyboardEvent) {
 // composer mic button is hidden where streaming STT isn't supported.
 const {
   isListening, isTranscribing, transcript, audioLevel, micError, sttSupported,
-  startListening, stopListening,
+  startListening, stopListening, prewarmSpeech,
   isSpeaking, caption, stopSpeaking, unlockAudio,
   beginStreamingSpeech, pushSpeechDelta, endStreamingSpeech, awaitStreamingDone,
   armBargeIn, disarmBargeIn,
@@ -935,6 +935,8 @@ function beginListening(settleMs = 0) {
   disarmBargeIn();
   voiceState.value = 'listening';
   if (settleMs > 0) {
+    // Use the settle window to re-mint an expired token, so the mic opens instantly.
+    prewarmSpeech();
     setTimeout(() => { if (voiceOpen.value && voiceState.value === 'listening') startListening(); }, settleMs);
   } else {
     startListening();
@@ -1948,7 +1950,9 @@ defineExpose({
               {{ tierLabel }}
             </InputGroupButton>
             <InputGroupButton v-if="sttSupported" size="icon-sm" variant="outline"
-                              title="Dictate your prompt" @click="toggleDictation">
+                              title="Dictate your prompt" @click="toggleDictation"
+                              @pointerenter="prewarmSpeech" @focus="prewarmSpeech"
+                              @touchstart.passive="prewarmSpeech">
               <Mic class="size-4"/>
               <span class="sr-only">Dictate your prompt</span>
             </InputGroupButton>
