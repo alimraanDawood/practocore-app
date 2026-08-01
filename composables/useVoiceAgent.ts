@@ -1,4 +1,4 @@
-import { startVoiceSession } from '~/services/ai/voice';
+import { sendVoiceHeartbeat, startVoiceSession } from '~/services/ai/voice';
 
 /**
  * Conversational voice mode, driven by AssemblyAI's Voice Agent API.
@@ -64,6 +64,12 @@ export function useVoiceAgent() {
   const agentText = ref('');     // what the assistant is saying
   const level = ref(0);          // 0..100 mic level, for the orb
   const error = ref<string | null>(null);
+  // Why the call ended, when it wasn't the user hanging up. Drives the toast the
+  // overlay shows on the way out — a call that just vanishes reads as a bug.
+  const endedReason = ref<'idle' | 'credits' | null>(null);
+  // True in the last stretch before an idle hang-up, so the UI can warn instead of
+  // dropping someone mid-thought.
+  const idleWarning = ref(false);
 
   let ws: WebSocket | null = null;
   let ctx: AudioContext | null = null;
@@ -72,6 +78,53 @@ export function useVoiceAgent() {
   let sources: AudioBufferSourceNode[] = [];
   let playhead = 0;
   let closing = false;
+
+  // ── Metering and idle ───────────────────────────────────────────────────────
+  // An open connection bills by the second whether or not anyone is talking, so a
+  // call nobody is on is pure loss. Two independent guards: the heartbeat, which
+  // makes the time visible and stops billing the moment this tab dies, and the idle
+  // timer, which hangs up on silence. The server's 30-minute session cap is the
+  // backstop under both.
+  let sessionId = '';
+  let beatTimer: ReturnType<typeof setTimeout> | null = null;
+  let idleTimer: ReturnType<typeof setInterval> | null = null;
+  let lastActivity = 0;
+  let idleTimeoutMs = 120_000;
+
+  // Silence is measured from the last thing EITHER side did. Thinking counts: a
+  // research turn can run quiet for a while and it is not an abandoned call.
+  function markActivity() {
+    lastActivity = Date.now();
+    idleWarning.value = false;
+  }
+
+  function beat(delayMs: number) {
+    beatTimer = setTimeout(async () => {
+      if (closing || !sessionId) return;
+      const r = await sendVoiceHeartbeat(sessionId);
+      if (closing) return;
+      if (r?.stop) {
+        endedReason.value = (r.reason as 'credits') || 'credits';
+        stop();
+        return;
+      }
+      beat(r?.nextBeatMs || delayMs);
+    }, delayMs);
+  }
+
+  function watchIdle() {
+    idleTimer = setInterval(() => {
+      if (closing) return;
+      // Never hang up mid-answer, however long the answer takes.
+      if (state.value === 'thinking' || state.value === 'speaking') { markActivity(); return; }
+      const quiet = Date.now() - lastActivity;
+      idleWarning.value = quiet > idleTimeoutMs - 30_000;
+      if (quiet > idleTimeoutMs) {
+        endedReason.value = 'idle';
+        stop();
+      }
+    }, 5_000);
+  }
 
   // getUserMedia needs a secure context; AudioWorklet is the capture path. Both
   // hold in the Capacitor WebView once MODIFY_AUDIO_SETTINGS is declared.
@@ -116,6 +169,8 @@ export function useVoiceAgent() {
     error.value = null;
     userText.value = '';
     agentText.value = '';
+    endedReason.value = null;
+    idleWarning.value = false;
     closing = false;
     state.value = 'connecting';
 
@@ -147,6 +202,14 @@ export function useVoiceAgent() {
       URL.createObjectURL(new Blob([workletSrc], { type: 'application/javascript' })),
     );
 
+    // Start the meter with the socket, not with the first word: the provider bills
+    // from connect, so anything else systematically undercounts.
+    sessionId = session.sessionId || '';
+    idleTimeoutMs = session.idleTimeoutMs || idleTimeoutMs;
+    markActivity();
+    if (sessionId) beat(session.heartbeatMs || 30_000);
+    watchIdle();
+
     ws = new WebSocket(session.wsUrl);
 
     ws.onopen = () => {
@@ -156,6 +219,9 @@ export function useVoiceAgent() {
     ws.onmessage = (ev: MessageEvent) => {
       let m: { type?: string; text?: string; data?: string; message?: string };
       try { m = JSON.parse(ev.data as string); } catch { return; }
+      // Any frame carrying speech in either direction is proof the call is live.
+      if (m.type === 'transcript.user' || m.type === 'transcript.agent'
+        || m.type === 'reply.audio' || m.type === 'input.speech.started') markActivity();
       switch (m.type) {
         case 'session.ready':
           state.value = 'listening';
@@ -212,6 +278,12 @@ export function useVoiceAgent() {
 
   function stop() {
     closing = true;
+    if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; }
+    if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
+    idleWarning.value = false;
+    // Settle the last interval. Fire-and-forget with keepalive, so it still lands
+    // when this is the tab closing.
+    if (sessionId) { void sendVoiceHeartbeat(sessionId, true); sessionId = ''; }
     stopPlayback();
     try { ws?.send(JSON.stringify({ type: 'session.end' })); } catch { /* already gone */ }
     try { ws?.close(); } catch { /* already gone */ }
@@ -231,5 +303,8 @@ export function useVoiceAgent() {
   // must hang up — not just hide the overlay.
   onBeforeUnmount(stop);
 
-  return { state, userText, agentText, level, error, supported, start, stop, interrupt: stopPlayback };
+  return {
+    state, userText, agentText, level, error, endedReason, idleWarning,
+    supported, start, stop, interrupt: stopPlayback,
+  };
 }

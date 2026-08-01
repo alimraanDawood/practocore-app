@@ -797,6 +797,7 @@ function handleKeydown(e: KeyboardEvent) {
 const {
   state: voiceState, userText: voiceUserText, agentText: voiceAgentText,
   level: voiceLevel, error: voiceError, supported: voiceSupported,
+  endedReason: voiceEndedReason, idleWarning: voiceIdleWarning,
   start: startVoice, stop: stopVoice, interrupt: interruptVoice,
 } = useVoiceAgent();
 
@@ -919,6 +920,16 @@ watch(voiceError, (err) => {
   if (!err) return;
   toast.error(err);
   if (voiceOpen.value) voiceOpen.value = false;
+});
+
+// The composable can hang up on its own — on silence, or when the org runs out of
+// credit mid-call. Close the overlay and say which, so it doesn't look like a drop.
+watch(voiceEndedReason, (reason) => {
+  if (!reason) return;
+  voiceOpen.value = false;
+  toast.info(reason === 'credits'
+    ? 'Voice ended — this workspace is out of AI credits.'
+    : 'Voice ended after a couple of minutes of silence.');
 });
 
 // End of an STT turn (web + native both flip isTranscribing true→false at the end).
@@ -2025,6 +2036,7 @@ defineExpose({
               <p v-else-if="voiceState === 'thinking'" key="th" class="text-sm text-muted-foreground">Thinking…</p>
               <p v-else-if="voiceState === 'speaking' && voiceAgentText" key="c" class="line-clamp-4 text-sm leading-relaxed text-foreground">{{ voiceAgentText }}</p>
               <p v-else-if="voiceState === 'speaking'" key="s" class="animate-pulse text-sm font-medium text-primary">Speaking…</p>
+              <p v-else-if="voiceState === 'listening' && voiceIdleWarning" key="iw" class="animate-pulse text-sm font-medium text-amber-500">Still there? Ending shortly…</p>
               <p v-else-if="voiceState === 'listening'" key="l" class="animate-pulse text-sm font-medium text-primary">Listening — just talk</p>
               <p v-else key="e" class="text-sm text-muted-foreground">Not connected</p>
             </Transition>
