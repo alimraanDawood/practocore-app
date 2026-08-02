@@ -150,17 +150,24 @@ export function useVoiceAgent() {
     captionComplete = false;
     turnAudioStart = 0;
     captionStartedAt = 0;
+    revealedLen = 0;
+    lastRevealAt = 0;
   }
 
-  // Reveal on word boundaries: cutting mid-word reads as a glitch rather than as
-  // speech being transcribed.
-  function revealedSlice(text: string, fraction: number): string {
-    if (fraction >= 1) return text;
-    const upto = Math.floor(text.length * fraction);
-    if (upto <= 0) return '';
-    const space = text.lastIndexOf(' ', upto);
-    return space > 0 ? text.slice(0, space) : '';
-  }
+  // How often the reveal may advance. It used to run every animation frame, which
+  // meant 60 string slices AND 60 reactive writes per second — and each write
+  // re-renders the transcript list, on a phone, while the same main thread is
+  // scheduling audio. Speech delivers ~3 words a second, so ninety milliseconds is
+  // far finer than anyone can perceive and costs a seventh of the work.
+  const REVEAL_TICK_MS = 90;
+  let lastRevealAt = 0;
+
+  // Characters already shown for this turn. The reveal must never go BACKWARDS:
+  // the fraction below divides by the audio received so far, and that denominator
+  // grows as the turn streams in, so the same character position yields a smaller
+  // fraction a moment later. Without this the text visibly rewinds mid-sentence,
+  // which reads as the captions disagreeing with the voice.
+  let revealedLen = 0;
 
   // If audio never arrives for a turn, pacing text against it would hold the words
   // back forever. After this long with nothing scheduled we stop pacing and just
@@ -173,6 +180,10 @@ export function useVoiceAgent() {
     const loop = () => {
       revealRaf = requestAnimationFrame(loop);
       if (!ctx || !captionText) return;
+      const now = performance.now();
+      if (now - lastRevealAt < REVEAL_TICK_MS) return;
+      lastRevealAt = now;
+
       const spanned = playhead - turnAudioStart;
       // Before any audio is scheduled there is nothing to pace against; once the
       // text is complete AND the audio has all played, show everything.
@@ -180,17 +191,26 @@ export function useVoiceAgent() {
         ? Math.min(1, Math.max(0, (ctx.currentTime - turnAudioStart) / spanned))
         : 0;
       const stranded = !turnAudioStart && Date.now() - captionStartedAt > REVEAL_UNGATE_MS;
-      const shown = (captionComplete && fraction >= 1) || stranded
-        ? captionText
-        : revealedSlice(captionText, fraction);
-      if (shown && shown !== agentText.value) {
-        agentText.value = shown;
-        // The transcript is what the screen actually renders, so the PACED text has
-        // to be what lands in it. Recording the raw caption here instead would put
-        // the whole answer on screen the moment the model generated it — ahead of
-        // its own voice, which is the thing the pacing exists to prevent.
-        record('assistant', shown);
+
+      let cut: number;
+      if ((captionComplete && fraction >= 1) || stranded) {
+        cut = captionText.length;
+      } else {
+        // Cut on a word boundary: mid-word reads as a glitch rather than as speech.
+        const upto = Math.floor(captionText.length * fraction);
+        const space = captionText.lastIndexOf(' ', upto);
+        cut = space > 0 ? space : 0;
       }
+      if (cut <= revealedLen) return; // monotonic — see revealedLen
+      revealedLen = cut;
+
+      const shown = captionText.slice(0, cut);
+      agentText.value = shown;
+      // The transcript is what the screen actually renders, so the PACED text has
+      // to be what lands in it. Recording the raw caption here instead would put
+      // the whole answer on screen the moment the model generated it — ahead of
+      // its own voice, which is the thing the pacing exists to prevent.
+      record('assistant', shown);
     };
     loop();
   }
@@ -607,12 +627,16 @@ export function useVoiceAgent() {
           if (m.status === 'interrupted') stopReveal();
           break;
         case 'transcript.agent':
-          // The provider's transcript arrives after the audio it describes. It is the
-          // fallback: while captions are flowing they own the text, because they are
-          // the same words paced to the voice rather than trailing it.
-          if (m.text) {
-            if (!captionText) agentText.value = m.text;
-            record('assistant', agentText.value || m.text);
+          // The provider's transcript arrives after the audio it describes, and is
+          // ONLY a fallback for when captions never connected. While captions are
+          // flowing they own the text outright: mixing the two mid-turn was writing
+          // the provider's full line over a partially-revealed one (and, when the
+          // reveal had not started, our line over theirs), so the text on screen
+          // disagreed with the voice. The reveal completes the turn on its own when
+          // the audio does.
+          if (m.text && !captionText) {
+            agentText.value = m.text;
+            record('assistant', m.text);
           }
           break;
         case 'reply.audio':
