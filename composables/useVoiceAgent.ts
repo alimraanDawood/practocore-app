@@ -294,8 +294,21 @@ export function useVoiceAgent() {
   // the reply stutters between packets.
   function playChunk(arrbuf: ArrayBuffer) {
     if (!ctx) return;
-    const pcm = new Int16Array(arrbuf);
+    // A PCM16 view REQUIRES an even byte length — Int16Array throws RangeError on an
+    // odd one. Streaming TTS can flush on a byte that is not sample-aligned, and the
+    // throw used to escape into ws.onmessage, where the browser swallows it: the UI
+    // had already been set to 'speaking' a line earlier, no audio was ever scheduled,
+    // and nothing reset the state. Silence with no error anywhere. Drop the stray byte.
+    const usable = arrbuf.byteLength - (arrbuf.byteLength % 2);
+    if (usable <= 0) return;
+    const pcm = new Int16Array(usable === arrbuf.byteLength ? arrbuf : arrbuf.slice(0, usable));
     if (!pcm.length) return;
+    // A context that never resumed schedules silently and never fires onended, so the
+    // call would sit in 'speaking' forever. Nudge it and say so.
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+      console.warn('[voice] AudioContext suspended — audio will not play until it resumes');
+    }
     const buf = ctx.createBuffer(1, pcm.length, RATE);
     const f32 = buf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i]! / 0x8000;
@@ -587,6 +600,15 @@ export function useVoiceAgent() {
     ws.onmessage = (ev: MessageEvent) => {
       let m: { type?: string; text?: string; data?: string; message?: string; status?: string };
       try { m = JSON.parse(ev.data as string); } catch { return; }
+      try { handleFrame(m); } catch (err) {
+        // An exception here is otherwise invisible: the browser swallows throws from
+        // a WebSocket handler, so a frame that consistently fails looks exactly like
+        // a provider that stopped sending — the failure mode this call has been in.
+        console.error('[voice] frame handler threw', m.type, err);
+      }
+    };
+
+    const handleFrame = (m: { type?: string; text?: string; data?: string; message?: string; status?: string }) => {
       // Any frame carrying speech in either direction is proof the call is live.
       if (m.type === 'transcript.user' || m.type === 'transcript.user.delta'
         || m.type === 'transcript.agent' || m.type === 'reply.started'
