@@ -149,6 +149,7 @@ export function useVoiceAgent() {
     captionText = '';
     captionComplete = false;
     turnAudioStart = 0;
+    captionStartedAt = 0;
   }
 
   // Reveal on word boundaries: cutting mid-word reads as a glitch rather than as
@@ -161,6 +162,12 @@ export function useVoiceAgent() {
     return space > 0 ? text.slice(0, space) : '';
   }
 
+  // If audio never arrives for a turn, pacing text against it would hold the words
+  // back forever. After this long with nothing scheduled we stop pacing and just
+  // show the answer: a readable answer with broken audio beats a blank screen.
+  const REVEAL_UNGATE_MS = 4000;
+  let captionStartedAt = 0;
+
   function startReveal() {
     if (revealRaf !== null) return;
     const loop = () => {
@@ -172,10 +179,18 @@ export function useVoiceAgent() {
       const fraction = spanned > 0.05
         ? Math.min(1, Math.max(0, (ctx.currentTime - turnAudioStart) / spanned))
         : 0;
-      const shown = captionComplete && fraction >= 1
+      const stranded = !turnAudioStart && Date.now() - captionStartedAt > REVEAL_UNGATE_MS;
+      const shown = (captionComplete && fraction >= 1) || stranded
         ? captionText
         : revealedSlice(captionText, fraction);
-      if (shown && shown !== agentText.value) agentText.value = shown;
+      if (shown && shown !== agentText.value) {
+        agentText.value = shown;
+        // The transcript is what the screen actually renders, so the PACED text has
+        // to be what lands in it. Recording the raw caption here instead would put
+        // the whole answer on screen the moment the model generated it — ahead of
+        // its own voice, which is the thing the pacing exists to prevent.
+        record('assistant', shown);
+      }
     };
     loop();
   }
@@ -253,7 +268,7 @@ export function useVoiceAgent() {
   // The cost is honest: this much silence before each answer begins. Latency you
   // hear once per turn is a far better trade than breaks you hear inside every
   // sentence, which read as the assistant malfunctioning rather than as the network.
-  const JITTER_LEAD = 0.18;
+  const JITTER_LEAD = 0.3;
 
   // Schedule agent audio back-to-back: consecutive chunks must play gaplessly or
   // the reply stutters between packets.
@@ -535,8 +550,8 @@ export function useVoiceAgent() {
     captionAbort = new AbortController();
     void readVoiceCaptions(
       (delta) => {
+        if (!captionStartedAt) captionStartedAt = Date.now();
         captionText += delta;
-        record('assistant', captionText);
         startReveal();
       },
       () => { captionComplete = true; },
@@ -550,14 +565,24 @@ export function useVoiceAgent() {
     };
 
     ws.onmessage = (ev: MessageEvent) => {
-      let m: { type?: string; text?: string; data?: string; message?: string };
+      let m: { type?: string; text?: string; data?: string; message?: string; status?: string };
       try { m = JSON.parse(ev.data as string); } catch { return; }
       // Any frame carrying speech in either direction is proof the call is live.
-      if (m.type === 'transcript.user' || m.type === 'transcript.agent'
+      if (m.type === 'transcript.user' || m.type === 'transcript.user.delta'
+        || m.type === 'transcript.agent' || m.type === 'reply.started'
         || m.type === 'reply.audio' || m.type === 'input.speech.started') markActivity();
       switch (m.type) {
         case 'session.ready':
           state.value = 'listening';
+          break;
+        case 'transcript.user.delta':
+          // The partial, emitted every few hundred ms WHILE you are still speaking.
+          // Waiting for the final transcript meant your own words appeared in one
+          // lump after you stopped, which reads as the call not listening.
+          if (m.text) {
+            userText.value = m.text;
+            record('you', m.text);
+          }
           break;
         case 'transcript.user':
           if (m.text) {
@@ -569,6 +594,17 @@ export function useVoiceAgent() {
             // agent thinking (which, with tools, can be several seconds).
             state.value = 'thinking';
           }
+          break;
+        // NOTE: reply.started is deliberately NOT a turn boundary here. Our captions
+        // come from the shim, which generates the words BEFORE the provider
+        // synthesises them, so they are already accumulating by the time this fires —
+        // resetting on it would throw away the text it is announcing. The boundary
+        // that works is transcript.user, which precedes both.
+        case 'reply.done':
+          // Synthesis finished. `interrupted` means barge-in cut it off, so the words
+          // that were never spoken should not sit on screen as if they were.
+          captionComplete = true;
+          if (m.status === 'interrupted') stopReveal();
           break;
         case 'transcript.agent':
           // The provider's transcript arrives after the audio it describes. It is the
