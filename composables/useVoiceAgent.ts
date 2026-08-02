@@ -169,10 +169,18 @@ export function useVoiceAgent() {
   // which reads as the captions disagreeing with the voice.
   let revealedLen = 0;
 
-  // If audio never arrives for a turn, pacing text against it would hold the words
-  // back forever. After this long with nothing scheduled we stop pacing and just
-  // show the answer: a readable answer with broken audio beats a blank screen.
-  const REVEAL_UNGATE_MS = 4000;
+  // The reveal has TWO clocks, and which one it uses is the whole reliability story.
+  //
+  // When audio is playing, the audio is the truth: text tracks the playhead so the
+  // words land with the voice. When no audio has started for this turn, it falls
+  // back to a plain reading pace — because the shim publishes the answer as ONE
+  // caption (it holds each round until it knows the round was not a tool call), so
+  // there is no arrival cadence to inherit. Without a clock of its own the screen
+  // would show nothing at all, and the old fix — dump everything after four seconds —
+  // is what produced "the text comes at once".
+  //
+  // The point is that a dead audio path can no longer take the captions down with it.
+  const CHARS_PER_SEC = 15; // ≈ 170 wpm, unhurried speech
   let captionStartedAt = 0;
 
   function startReveal() {
@@ -184,21 +192,25 @@ export function useVoiceAgent() {
       if (now - lastRevealAt < REVEAL_TICK_MS) return;
       lastRevealAt = now;
 
-      const spanned = playhead - turnAudioStart;
-      // Before any audio is scheduled there is nothing to pace against; once the
-      // text is complete AND the audio has all played, show everything.
-      const fraction = spanned > 0.05
-        ? Math.min(1, Math.max(0, (ctx.currentTime - turnAudioStart) / spanned))
-        : 0;
-      const stranded = !turnAudioStart && Date.now() - captionStartedAt > REVEAL_UNGATE_MS;
-
-      let cut: number;
-      if ((captionComplete && fraction >= 1) || stranded) {
-        cut = captionText.length;
+      let upto: number;
+      if (turnAudioStart) {
+        const spanned = playhead - turnAudioStart;
+        const fraction = spanned > 0.05
+          ? Math.min(1, Math.max(0, (ctx.currentTime - turnAudioStart) / spanned))
+          : 0;
+        // Complete text, and nothing still queued to play: nothing left to hold back.
+        // The empty queue matters as much as the fraction — if playback stalls part
+        // way, the fraction freezes and the last words would never appear.
+        if (captionComplete && (fraction >= 1 || !sources.length)) upto = captionText.length;
+        else upto = Math.floor(captionText.length * fraction);
       } else {
-        // Cut on a word boundary: mid-word reads as a glitch rather than as speech.
-        const upto = Math.floor(captionText.length * fraction);
-        const space = captionText.lastIndexOf(' ', upto);
+        upto = Math.floor(((Date.now() - captionStartedAt) / 1000) * CHARS_PER_SEC);
+      }
+
+      // Cut on a word boundary: mid-word reads as a glitch rather than as speech.
+      let cut = Math.min(upto, captionText.length);
+      if (cut < captionText.length) {
+        const space = captionText.lastIndexOf(' ', cut);
         cut = space > 0 ? space : 0;
       }
       if (cut <= revealedLen) return; // monotonic — see revealedLen
@@ -207,9 +219,7 @@ export function useVoiceAgent() {
       const shown = captionText.slice(0, cut);
       agentText.value = shown;
       // The transcript is what the screen actually renders, so the PACED text has
-      // to be what lands in it. Recording the raw caption here instead would put
-      // the whole answer on screen the moment the model generated it — ahead of
-      // its own voice, which is the thing the pacing exists to prevent.
+      // to be what lands in it.
       record('assistant', shown);
     };
     loop();
