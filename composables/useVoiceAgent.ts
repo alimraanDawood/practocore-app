@@ -276,6 +276,68 @@ export function useVoiceAgent() {
     playhead = 0;
   }
 
+  // ── Push to talk ────────────────────────────────────────────────────────────
+  // An open mic hands the turn boundary to the provider's voice-activity
+  // detection, which cannot tell your voice from the room. On a phone — a street,
+  // an office, a car — that means ambient noise reads as barge-in: the answer is
+  // cut off mid-sentence, the state flips to listening, and the call breaks up.
+  //
+  // So on touch devices the turn boundary becomes deliberate: the mic is closed
+  // until you tap the orb, and closes again when you tap it back. Nothing about
+  // the wire protocol changes — what changes is what the room is allowed to say.
+  const pushToTalk = ref(false);   // the mode
+  const talking = ref(false);      // mic actually open, in that mode
+
+  // Off-mic we keep sending SILENCE rather than nothing. The provider closes a turn
+  // when it hears a quiet stretch, so a gap in the stream would leave the turn open
+  // and the answer would never come. One frame is one render quantum and never
+  // changes size, so it is encoded once.
+  let silentFrame = '';
+  let silentBytes = -1;
+
+  function silence(byteLength: number): string {
+    if (byteLength !== silentBytes) {
+      silentFrame = b64encode(new ArrayBuffer(byteLength));
+      silentBytes = byteLength;
+    }
+    return silentFrame;
+  }
+
+  // Coarse pointer rather than a user-agent sniff: it is the property that actually
+  // matters here (a handheld held in a room) and it covers the Capacitor WebView,
+  // a tablet and a touch laptop without a device list to maintain.
+  function prefersPushToTalk(): boolean {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  }
+
+  function startTalking() {
+    // Nothing to talk into before the session is up.
+    if (talking.value || state.value === 'idle' || state.value === 'connecting') return;
+    talking.value = true;
+    markActivity();
+    // Tapping to speak IS the barge-in: drop whatever is still queued so you are
+    // not talking over the tail of the answer.
+    stopPlayback();
+    resetCaptions();
+    agentText.value = '';
+    state.value = 'listening';
+  }
+
+  function stopTalking() {
+    if (!talking.value) return;
+    talking.value = false;
+    level.value = 0;
+    markActivity();
+    // Stay 'listening' until the provider returns the transcript — that is what
+    // moves the call to 'thinking', and it is the honest state until then.
+  }
+
+  function toggleTalk() {
+    if (talking.value) stopTalking();
+    else startTalking();
+  }
+
   // ── Preview plumbing ────────────────────────────────────────────────────────
   // True while the surface is running the scripted call rather than a real one.
   // The UI reads it to show the state switcher and to keep the meter out of view.
@@ -382,7 +444,7 @@ export function useVoiceAgent() {
     void runPreview();
   }
 
-  async function start(opts?: { mock?: boolean }) {
+  async function start(opts?: { mock?: boolean; pushToTalk?: boolean }) {
     if (state.value !== 'idle') return;
     error.value = null;
     userText.value = '';
@@ -392,16 +454,19 @@ export function useVoiceAgent() {
     idleWarning.value = false;
     closing = false;
     previewHeld = false;
+    talking.value = false;
     state.value = 'connecting';
 
     // Design preview: no mic, no socket, no meter. Everything below this line
     // costs money the moment it runs, which is exactly why the fixture skips it.
     if (opts?.mock) {
       preview.value = true;
+      pushToTalk.value = false; // the scripted call talks by itself
       void runPreview();
       return;
     }
     preview.value = false;
+    pushToTalk.value = opts?.pushToTalk ?? prefersPushToTalk();
 
     let session;
     try {
@@ -495,6 +560,11 @@ export function useVoiceAgent() {
           }
           break;
         case 'input.speech.started':
+          // In push-to-talk, YOU decide when a turn starts. Silence is all we send
+          // off-mic, so this should not fire — but if the provider ever reads its own
+          // echo or a stray frame as speech, honouring it would cut the answer off,
+          // which is the exact failure push-to-talk exists to remove.
+          if (pushToTalk.value && !talking.value) break;
           stopPlayback();
           resetCaptions();
           state.value = 'listening';
@@ -520,9 +590,14 @@ export function useVoiceAgent() {
     src.connect(node);
     node.connect(ctx.destination);
     node.port.onmessage = (e: MessageEvent<{ buf: ArrayBuffer; peak: number }>) => {
-      level.value = Math.min(100, e.data.peak * 140);
+      // In push-to-talk the mic is physically open the whole call (so there is no
+      // permission prompt or device warm-up per turn) but the room only reaches the
+      // provider while you are holding the floor.
+      const live = !pushToTalk.value || talking.value;
+      level.value = live ? Math.min(100, e.data.peak * 140) : 0;
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'input.audio', audio: b64encode(e.data.buf) }));
+        const audio = live ? b64encode(e.data.buf) : silence(e.data.buf.byteLength);
+        ws.send(JSON.stringify({ type: 'input.audio', audio }));
       }
     };
   }
@@ -553,6 +628,7 @@ export function useVoiceAgent() {
     void ctx?.close();
     ctx = null;
     level.value = 0;
+    talking.value = false;
     state.value = 'idle';
   }
 
@@ -563,6 +639,7 @@ export function useVoiceAgent() {
   return {
     state, userText, agentText, turns, level, error, endedReason, idleWarning,
     supported, start, stop, interrupt: stopPlayback,
+    pushToTalk, talking, startTalking, stopTalking, toggleTalk,
     preview, previewPin, previewReplay,
   };
 }

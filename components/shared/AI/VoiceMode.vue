@@ -37,6 +37,7 @@ const {
   state, userText, turns, level, error, supported,
   endedReason, idleWarning,
   start, stop, interrupt,
+  pushToTalk, talking, toggleTalk,
   preview: inPreview, previewPin, previewReplay,
 } = useVoiceAgent();
 
@@ -163,10 +164,17 @@ watch(newestAssistantId, async (id) => {
 });
 
 // ── What the screen says ──────────────────────────────────────────────────────
-const status = computed(() => ({
-  idle: 'Ending', connecting: 'Connecting', listening: 'Listening',
-  thinking: 'Thinking', speaking: 'Speaking',
-}[state.value]));
+const status = computed(() => {
+  // Push-to-talk: "Listening" would be a lie while the mic is closed, and the screen
+  // has to say whose move it is — that is the whole point of the mode.
+  if (pushToTalk.value && state.value === 'listening') {
+    return talking.value ? 'Listening — tap when done' : 'Tap to speak';
+  }
+  return {
+    idle: 'Ending', connecting: 'Connecting', listening: 'Listening',
+    thinking: 'Thinking', speaking: 'Speaking',
+  }[state.value];
+});
 
 // The empty screen is an invitation, and it is the only thing on it until the
 // first answer arrives.
@@ -175,22 +183,41 @@ const showPrompt = computed(() => !failure.value && !history.value.length && sta
 // ── The orb ───────────────────────────────────────────────────────────────────
 // One lit object carrying the whole state machine: it swells with your voice,
 // settles while it thinks, and brightens while it speaks.
+// Off-mic in push-to-talk the orb is dimmed and still: it must be visibly NOT
+// hearing you, or the mode is worse than an open mic — you would talk into a
+// closed microphone and only find out when no answer came.
+const offMic = computed(() => pushToTalk.value && !talking.value);
+
 const orbScale = computed(() => {
+  if (offMic.value) return 1;
   if (state.value === 'listening') return 1 + Math.min(1, level.value / 100) * 0.14;
   if (state.value === 'speaking') return 1.06;
   return 1;
 });
 
 const orbLight = computed(() => {
+  if (offMic.value) return state.value === 'speaking' ? 0.8 : 0.3;
   if (state.value === 'listening') return 0.55 + Math.min(1, level.value / 100) * 0.45;
   if (state.value === 'speaking') return 1;
   if (state.value === 'thinking') return 0.5;
   return 0.38;
 });
 
+// One control, and what it does depends on whose turn it is. With an open mic the
+// orb is only an interrupt; in push-to-talk it takes and gives back the floor —
+// and taking the floor mid-answer IS the interrupt, so both live here.
 function tapOrb() {
+  if (pushToTalk.value) { toggleTalk(); return; }
   if (state.value === 'speaking') interrupt();
 }
+
+const orbLabel = computed(() => {
+  if (pushToTalk.value) {
+    if (talking.value) return 'Stop speaking and send';
+    return state.value === 'speaking' ? 'Interrupt and speak' : 'Tap to speak';
+  }
+  return state.value === 'speaking' ? 'Interrupt the assistant' : 'Voice activity';
+});
 
 const previewStates = ['connecting', 'listening', 'thinking', 'speaking'] as const;
 </script>
@@ -271,9 +298,8 @@ const previewStates = ['connecting', 'listening', 'thinking', 'speaking'] as con
         </button>
 
         <button type="button" class="orb" :style="{ '--lit': orbLight, transform: `scale(${orbScale})` }"
-                :class="`is-${state}`"
-                :title="state === 'speaking' ? 'Tap to interrupt' : 'The assistant is listening'"
-                :aria-label="state === 'speaking' ? 'Interrupt the assistant' : 'Voice activity'"
+                :class="[`is-${state}`, { 'is-offmic': offMic, 'is-talking': talking }]"
+                :title="orbLabel" :aria-label="orbLabel" :aria-pressed="pushToTalk ? talking : undefined"
                 @click="tapOrb">
           <span class="orb-tint"/>
           <span class="orb-light"/>
@@ -372,6 +398,24 @@ const previewStates = ['connecting', 'listening', 'thinking', 'speaking'] as con
 .orb.is-speaking .orb-light { animation-duration: 2.1s; }
 .orb.is-thinking .orb-tint,
 .orb.is-thinking .orb-light { animation-duration: 7s; }
+
+/* ── Push to talk ─────────────────────────────────────────────────────────────
+   Off-mic the slab goes quiet and desaturated, and stops breathing: a lit, moving
+   orb reads as "it can hear you", which off-mic it cannot. Holding the floor
+   brings it back up and rings it, so there is never a doubt about who has it. */
+.orb.is-offmic {
+  filter: saturate(0.45);
+  box-shadow: 0 6px 18px -14px color-mix(in oklch, var(--foreground) 30%, transparent);
+}
+
+.orb.is-offmic .orb-tint,
+.orb.is-offmic .orb-light { animation-play-state: paused; }
+
+.orb.is-talking {
+  box-shadow:
+    0 0 0 2px color-mix(in oklch, var(--primary) 55%, transparent),
+    0 10px 26px -10px color-mix(in oklch, var(--primary) 55%, transparent);
+}
 
 /* ── Transitions ──────────────────────────────────────────────────────────── */
 .voice-enter-active, .voice-leave-active { transition: opacity 260ms ease, transform 260ms ease; }
