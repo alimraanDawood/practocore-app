@@ -241,11 +241,26 @@ export function useVoiceAgent() {
 
   const supported = computed(voiceAgentSupported);
 
+  // How far ahead of the playing head a turn's audio is scheduled to start — the
+  // jitter buffer, and the single biggest lever on whether a reply sounds whole.
+  //
+  // Audio chunks arrive over a WebSocket, which delivers them in bursts and gaps;
+  // playback consumes them at exactly real time. With no cushion, ANY late packet
+  // leaves the playhead behind the clock, the next chunk restarts at "now", and the
+  // seam is audible as a click or a swallowed syllable. 20 ms was the old cushion,
+  // which is under the jitter of a good wired connection, let alone mobile data.
+  //
+  // The cost is honest: this much silence before each answer begins. Latency you
+  // hear once per turn is a far better trade than breaks you hear inside every
+  // sentence, which read as the assistant malfunctioning rather than as the network.
+  const JITTER_LEAD = 0.18;
+
   // Schedule agent audio back-to-back: consecutive chunks must play gaplessly or
   // the reply stutters between packets.
   function playChunk(arrbuf: ArrayBuffer) {
     if (!ctx) return;
     const pcm = new Int16Array(arrbuf);
+    if (!pcm.length) return;
     const buf = ctx.createBuffer(1, pcm.length, RATE);
     const f32 = buf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i]! / 0x8000;
@@ -253,11 +268,14 @@ export function useVoiceAgent() {
     src.buffer = buf;
     src.connect(ctx.destination);
     const now = ctx.currentTime;
-    if (playhead < now) {
-      playhead = now + 0.02;
-      // First chunk of this turn: anchor the caption pacing to where its audio starts.
-      turnAudioStart = playhead;
-    }
+    // Underrun: everything queued has already played, so this chunk cannot follow
+    // anything — start a fresh run a cushion ahead rather than flush against the
+    // clock, or the very next late packet breaks in the same place again.
+    if (playhead < now) playhead = now + JITTER_LEAD;
+    // Anchor the caption pacing to where this TURN's audio starts. Only the first
+    // chunk may set it: re-anchoring on a mid-turn underrun would jump the captions
+    // backwards through text that has already been spoken.
+    if (!turnAudioStart) turnAudioStart = playhead;
     src.start(playhead);
     playhead += buf.duration;
     sources.push(src);
@@ -294,6 +312,14 @@ export function useVoiceAgent() {
   // changes size, so it is encoded once.
   let silentFrame = '';
   let silentBytes = -1;
+
+  // Uplink batching: how many worklet render quanta go into one socket message.
+  // Eight quanta is ~43 ms at 24 kHz — short enough that end-of-turn detection is
+  // unaffected, long enough to cut the per-message main-thread work by 8x.
+  const UPLINK_QUANTA = 8;
+  let pending: Int16Array | null = null;
+  let pendingLen = 0;
+  let batchLive = false;
 
   function silence(byteLength: number): string {
     if (byteLength !== silentBytes) {
@@ -595,10 +621,31 @@ export function useVoiceAgent() {
       // provider while you are holding the floor.
       const live = !pushToTalk.value || talking.value;
       level.value = live ? Math.min(100, e.data.peak * 140) : 0;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        const audio = live ? b64encode(e.data.buf) : silence(e.data.buf.byteLength);
-        ws.send(JSON.stringify({ type: 'input.audio', audio }));
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+      // Batch before sending. A worklet render quantum is 128 samples — 5.3 ms at
+      // 24 kHz — so sending one frame per message meant ~188 JSON serialisations,
+      // base64 encodings and socket writes EVERY SECOND on the main thread. On a
+      // phone that is enough main-thread work to starve the audio thread, which
+      // then drops packets of the reply: the call breaks up because of what we are
+      // sending, not what we are receiving. Batching costs ~43 ms of added uplink
+      // latency and removes seven eighths of the work.
+      const chunk = new Int16Array(e.data.buf);
+      if (!pending || pending.length !== chunk.length * UPLINK_QUANTA) {
+        pending = new Int16Array(chunk.length * UPLINK_QUANTA);
+        pendingLen = 0;
+        batchLive = false;
       }
+      if (live) { pending.set(chunk, pendingLen); batchLive = true; }
+      else pending.fill(0, pendingLen, pendingLen + chunk.length);
+      pendingLen += chunk.length;
+      if (pendingLen < pending.length) return;
+
+      // A wholly off-mic batch is the same bytes every time, so it is encoded once.
+      const audio = batchLive ? b64encode(pending.buffer) : silence(pending.byteLength);
+      ws.send(JSON.stringify({ type: 'input.audio', audio }));
+      pendingLen = 0;
+      batchLive = false;
     };
   }
 
@@ -629,6 +676,9 @@ export function useVoiceAgent() {
     ctx = null;
     level.value = 0;
     talking.value = false;
+    pending = null;
+    pendingLen = 0;
+    batchLive = false;
     state.value = 'idle';
   }
 
