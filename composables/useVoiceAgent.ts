@@ -1,4 +1,4 @@
-import { sendVoiceHeartbeat, startVoiceSession } from '~/services/ai/voice';
+import { readVoiceCaptions, sendVoiceHeartbeat, startVoiceSession } from '~/services/ai/voice';
 
 /**
  * Conversational voice mode, driven by AssemblyAI's Voice Agent API.
@@ -41,6 +41,17 @@ class Cap extends AudioWorkletProcessor {
 registerProcessor('practocore-voice-cap', Cap);
 `;
 
+/**
+ * Whether this platform can hold a call at all. getUserMedia needs a secure
+ * context and AudioWorklet is the capture path; both hold in the Capacitor
+ * WebView once MODIFY_AUDIO_SETTINGS is declared. Exported so a surface can
+ * decide whether to offer voice without opening a session to find out.
+ */
+export function voiceAgentSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.AudioWorklet);
+}
+
 function b64encode(buf: ArrayBuffer): string {
   const b = new Uint8Array(buf);
   let s = '';
@@ -58,10 +69,56 @@ function b64decode(s: string): ArrayBuffer {
   return out.buffer;
 }
 
+// ── Design preview ────────────────────────────────────────────────────────────
+// A scripted call, so the voice surface can be designed without opening a mic, a
+// socket or a meter. Every state the UI has to render is reachable here, in the
+// order and at the pace a real call reaches them. Deliberately a fixture and not
+// a toggle a user can find: `start({ mock: true })` is the only way in.
+const PREVIEW_EXCHANGES = [
+  {
+    you: 'What is the deadline for filing the record of appeal in Kato versus Nabbosa?',
+    agent: 'The record of appeal is due within sixty days of the notice of appeal. '
+      + 'Yours was filed on the fourteenth of July, so the record is due on the twelfth of September, six weeks from today.',
+  },
+  {
+    you: 'Can we get more time?',
+    agent: 'Yes. Rule 83 sub-rule 2 lets the Court extend time, but you have to show sufficient reason '
+      + 'and apply before the sixty days run out. I can draft the notice of motion.',
+  },
+  {
+    you: 'Draft it, and remind me a week before.',
+    agent: 'I will draft the notice of motion and set a reminder for the fifth of September. '
+      + 'Both will be on the matter when you next open it.',
+  },
+];
+
+/** One side of one exchange, as the call heard it. */
+export interface VoiceTurn {
+  id: number;
+  role: 'you' | 'assistant';
+  text: string;
+}
+
 export function useVoiceAgent() {
   const state = ref<VoiceAgentState>('idle');
   const userText = ref('');      // what the provider heard you say
   const agentText = ref('');     // what the assistant is saying
+
+  // The running transcript of THIS call, so the surface can be scrolled back
+  // through like a conversation. Still ephemeral: it lives as long as the call
+  // does and never reaches the chat thread.
+  const turns = ref<VoiceTurn[]>([]);
+  let nextTurnId = 1;
+
+  // Speech arrives as a growing partial, not as finished lines. So each side
+  // extends its own open turn until the other side starts, which is what makes
+  // the turn boundary rather than any explicit end-of-turn signal.
+  function record(role: VoiceTurn['role'], text: string) {
+    if (!text) return;
+    const last = turns.value[turns.value.length - 1];
+    if (last && last.role === role) last.text = text;
+    else turns.value.push({id: nextTurnId++, role, text});
+  }
   const level = ref(0);          // 0..100 mic level, for the orb
   const error = ref<string | null>(null);
   // Why the call ended, when it wasn't the user hanging up. Drives the toast the
@@ -70,6 +127,62 @@ export function useVoiceAgent() {
   // True in the last stretch before an idle hang-up, so the UI can warn instead of
   // dropping someone mid-thought.
   const idleWarning = ref(false);
+
+  // ── Live captions ───────────────────────────────────────────────────────────
+  // The shim streams the answer's text to us as it is generated, which arrives
+  // BEFORE the audio for the same words. Showing it immediately would run ahead of
+  // the voice, so the text is held here and revealed against the audio playhead.
+  //
+  // Entirely optional: if the caption stream never connects, `captionText` stays
+  // empty and the provider's own (late) transcript drives the surface as before.
+  let captionAbort: AbortController | null = null;
+  let captionText = '';        // everything the shim has sent for this turn
+  let captionComplete = false; // the shim says the answer is finished
+  let revealRaf: number | null = null;
+
+  // Audio clock for the turn in flight. `turnAudioStart` is where the turn's audio
+  // began on the AudioContext timeline; `playhead` is where the audio scheduled so
+  // far ends. The ratio between them is how much of the answer has been SPOKEN.
+  let turnAudioStart = 0;
+
+  function resetCaptions() {
+    captionText = '';
+    captionComplete = false;
+    turnAudioStart = 0;
+  }
+
+  // Reveal on word boundaries: cutting mid-word reads as a glitch rather than as
+  // speech being transcribed.
+  function revealedSlice(text: string, fraction: number): string {
+    if (fraction >= 1) return text;
+    const upto = Math.floor(text.length * fraction);
+    if (upto <= 0) return '';
+    const space = text.lastIndexOf(' ', upto);
+    return space > 0 ? text.slice(0, space) : '';
+  }
+
+  function startReveal() {
+    if (revealRaf !== null) return;
+    const loop = () => {
+      revealRaf = requestAnimationFrame(loop);
+      if (!ctx || !captionText) return;
+      const spanned = playhead - turnAudioStart;
+      // Before any audio is scheduled there is nothing to pace against; once the
+      // text is complete AND the audio has all played, show everything.
+      const fraction = spanned > 0.05
+        ? Math.min(1, Math.max(0, (ctx.currentTime - turnAudioStart) / spanned))
+        : 0;
+      const shown = captionComplete && fraction >= 1
+        ? captionText
+        : revealedSlice(captionText, fraction);
+      if (shown && shown !== agentText.value) agentText.value = shown;
+    };
+    loop();
+  }
+
+  function stopReveal() {
+    if (revealRaf !== null) { cancelAnimationFrame(revealRaf); revealRaf = null; }
+  }
 
   let ws: WebSocket | null = null;
   let ctx: AudioContext | null = null;
@@ -126,12 +239,7 @@ export function useVoiceAgent() {
     }, 5_000);
   }
 
-  // getUserMedia needs a secure context; AudioWorklet is the capture path. Both
-  // hold in the Capacitor WebView once MODIFY_AUDIO_SETTINGS is declared.
-  const supported = computed(() => {
-    if (typeof window === 'undefined') return false;
-    return !!(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.AudioWorklet);
-  });
+  const supported = computed(voiceAgentSupported);
 
   // Schedule agent audio back-to-back: consecutive chunks must play gaplessly or
   // the reply stutters between packets.
@@ -145,7 +253,11 @@ export function useVoiceAgent() {
     src.buffer = buf;
     src.connect(ctx.destination);
     const now = ctx.currentTime;
-    if (playhead < now) playhead = now + 0.02;
+    if (playhead < now) {
+      playhead = now + 0.02;
+      // First chunk of this turn: anchor the caption pacing to where its audio starts.
+      turnAudioStart = playhead;
+    }
     src.start(playhead);
     playhead += buf.duration;
     sources.push(src);
@@ -164,15 +276,132 @@ export function useVoiceAgent() {
     playhead = 0;
   }
 
-  async function start() {
+  // ── Preview plumbing ────────────────────────────────────────────────────────
+  // True while the surface is running the scripted call rather than a real one.
+  // The UI reads it to show the state switcher and to keep the meter out of view.
+  const preview = ref(false);
+  let previewTimers: ReturnType<typeof setTimeout>[] = [];
+  let previewRaf: number | null = null;
+  let previewHeld = false; // a state was pinned from the switcher; the script stops
+
+  function previewSleep(ms: number) {
+    return new Promise<void>((resolve) => { previewTimers.push(setTimeout(resolve, ms)); });
+  }
+
+  function clearPreview() {
+    previewTimers.forEach(clearTimeout);
+    previewTimers = [];
+    if (previewRaf !== null) { cancelAnimationFrame(previewRaf); previewRaf = null; }
+  }
+
+  // A wandering mic level, so the bar breathes the way a real room drives it.
+  function previewLevels() {
+    const t0 = performance.now();
+    const loop = () => {
+      const t = (performance.now() - t0) / 1000;
+      level.value = state.value === 'listening'
+        ? Math.max(0, (Math.sin(t * 2.3) * 0.5 + 0.5) * (Math.sin(t * 0.7) * 0.35 + 0.6) * 78)
+        : 0;
+      previewRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  // Reveal a line the way each side actually arrives: STT partials grow word by
+  // word, and the agent's caption keeps pace with its own speech.
+  async function previewType(
+    target: Ref<string>, role: VoiceTurn['role'], line: string, msPerWord: number,
+  ) {
+    const words = line.split(' ');
+    target.value = '';
+    for (const w of words) {
+      if (closing || previewHeld) return;
+      target.value = target.value ? `${target.value} ${w}` : w;
+      record(role, target.value);
+      await previewSleep(msPerWord);
+    }
+  }
+
+  async function runPreview() {
+    previewLevels();
+    state.value = 'connecting';
+    await previewSleep(1100);
+    if (closing || previewHeld) return;
+
+    for (const turn of PREVIEW_EXCHANGES) {
+      state.value = 'listening';
+      userText.value = '';
+      agentText.value = '';
+      await previewSleep(2200);
+      if (closing || previewHeld) return;
+
+      await previewType(userText, 'you', turn.you, 190);
+      if (closing || previewHeld) return;
+
+      state.value = 'thinking';
+      await previewSleep(1600);
+      if (closing || previewHeld) return;
+
+      state.value = 'speaking';
+      await previewType(agentText, 'assistant', turn.agent, 230);
+      if (closing || previewHeld) return;
+      await previewSleep(900);
+      if (closing || previewHeld) return;
+    }
+
+    // Land on the quiet end of a call rather than looping forever.
+    state.value = 'listening';
+    userText.value = '';
+    agentText.value = '';
+  }
+
+  // Pin one state from the switcher and freeze the script, so a state can be
+  // looked at for as long as it takes to get it right.
+  function previewPin(s: VoiceAgentState) {
+    previewHeld = true;
+    clearPreview();
+    previewLevels();
+    state.value = s;
+    if (s === 'thinking' || s === 'speaking') {
+      userText.value = PREVIEW_EXCHANGES[0]!.you;
+      agentText.value = s === 'speaking' ? PREVIEW_EXCHANGES[0]!.agent : '';
+    } else {
+      userText.value = '';
+      agentText.value = '';
+    }
+    idleWarning.value = false;
+  }
+
+  // Back to the scripted call from wherever the switcher left it.
+  function previewReplay() {
+    previewHeld = false;
+    clearPreview();
+    userText.value = '';
+    agentText.value = '';
+    turns.value = [];
+    void runPreview();
+  }
+
+  async function start(opts?: { mock?: boolean }) {
     if (state.value !== 'idle') return;
     error.value = null;
     userText.value = '';
     agentText.value = '';
+    turns.value = [];
     endedReason.value = null;
     idleWarning.value = false;
     closing = false;
+    previewHeld = false;
     state.value = 'connecting';
+
+    // Design preview: no mic, no socket, no meter. Everything below this line
+    // costs money the moment it runs, which is exactly why the fixture skips it.
+    if (opts?.mock) {
+      preview.value = true;
+      void runPreview();
+      return;
+    }
+    preview.value = false;
 
     let session;
     try {
@@ -210,6 +439,19 @@ export function useVoiceAgent() {
     if (sessionId) beat(session.heartbeatMs || 30_000);
     watchIdle();
 
+    // Captions ride alongside the call. Started before the socket so the first
+    // answer is already covered, and never awaited — the call must not wait on it.
+    captionAbort = new AbortController();
+    void readVoiceCaptions(
+      (delta) => {
+        captionText += delta;
+        record('assistant', captionText);
+        startReveal();
+      },
+      () => { captionComplete = true; },
+      captionAbort.signal,
+    );
+
     ws = new WebSocket(session.wsUrl);
 
     ws.onopen = () => {
@@ -230,13 +472,21 @@ export function useVoiceAgent() {
           if (m.text) {
             userText.value = m.text;
             agentText.value = '';
+            resetCaptions();
+            record('you', m.text);
             // Our turn is in: everything from here until audio returns is the
             // agent thinking (which, with tools, can be several seconds).
             state.value = 'thinking';
           }
           break;
         case 'transcript.agent':
-          if (m.text) agentText.value = m.text;
+          // The provider's transcript arrives after the audio it describes. It is the
+          // fallback: while captions are flowing they own the text, because they are
+          // the same words paced to the voice rather than trailing it.
+          if (m.text) {
+            if (!captionText) agentText.value = m.text;
+            record('assistant', agentText.value || m.text);
+          }
           break;
         case 'reply.audio':
           if (m.data) {
@@ -246,6 +496,7 @@ export function useVoiceAgent() {
           break;
         case 'input.speech.started':
           stopPlayback();
+          resetCaptions();
           state.value = 'listening';
           break;
         case 'session.error':
@@ -278,6 +529,12 @@ export function useVoiceAgent() {
 
   function stop() {
     closing = true;
+    stopReveal();
+    captionAbort?.abort();
+    captionAbort = null;
+    resetCaptions();
+    clearPreview();
+    preview.value = false;
     if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; }
     if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
     idleWarning.value = false;
@@ -304,7 +561,8 @@ export function useVoiceAgent() {
   onBeforeUnmount(stop);
 
   return {
-    state, userText, agentText, level, error, endedReason, idleWarning,
+    state, userText, agentText, turns, level, error, endedReason, idleWarning,
     supported, start, stop, interrupt: stopPlayback,
+    preview, previewPin, previewReplay,
   };
 }

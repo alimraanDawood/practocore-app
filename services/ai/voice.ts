@@ -41,6 +41,64 @@ export async function startVoiceSession(): Promise<VoiceSession> {
 }
 
 /**
+ * Read this call's live captions.
+ *
+ * The provider's own transcript arrives only after it has synthesised a chunk, so
+ * it always trails the voice. These are the same words taken from the shim as it
+ * generates them, which puts them AHEAD of the audio — the caller paces the
+ * reveal against its own playhead so they land with the speech.
+ *
+ * Read with fetch rather than EventSource so the auth token travels in a header
+ * instead of the query string.
+ *
+ * Fails soft by contract: the returned promise resolves when the stream ends for
+ * any reason, and every error is swallowed. A call must not break because its
+ * captions did.
+ */
+export async function readVoiceCaptions(
+  onDelta: (text: string) => void,
+  onTurnEnd: () => void,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/practocore/ai/voice/captions`, {
+      headers: { 'Authorization': pb.authStore.token, 'Accept': 'text/event-stream' },
+      signal,
+    });
+    if (!res.ok || !res.body) return;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buf += decoder.decode(value, { stream: true });
+
+      // SSE frames are separated by a blank line; a partial frame stays in buf.
+      let cut = buf.indexOf('\n\n');
+      while (cut !== -1) {
+        const frame = buf.slice(0, cut);
+        buf = buf.slice(cut + 2);
+        for (const line of frame.split('\n')) {
+          if (!line.startsWith('data:')) continue; // ": ping" keep-alives land here
+          try {
+            const m = JSON.parse(line.slice(5).trim()) as { delta?: string; end?: boolean };
+            if (m.end) onTurnEnd();
+            else if (m.delta) onDelta(m.delta);
+          } catch { /* a malformed frame is not worth ending the call over */ }
+        }
+        cut = buf.indexOf('\n\n');
+      }
+    }
+  } catch {
+    // Aborted on hang-up, or the stream failed. Either way the call carries on
+    // using the provider's transcript.
+  }
+}
+
+/**
  * Check in for an open call.
  *
  * Voice bills for wall-clock time the socket is open, and the socket runs straight
