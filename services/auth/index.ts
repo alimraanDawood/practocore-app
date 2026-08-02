@@ -65,9 +65,18 @@ async function signInWithGoogleNative() {
 
     let idToken: string | null = null;
     try {
+        // No `scopes`. The Android provider already adds userinfo.email,
+        // userinfo.profile and openid by default, and passing a scopes array at all
+        // makes it reject with "You CANNOT use scopes without modifying the main
+        // activity" unless MainActivity implements the plugin's
+        // ModifiedMainActivityForSocialLoginPlugin interface. We only need the
+        // idToken's email claim, which the defaults already cover — so asking for
+        // them explicitly bought nothing and broke sign-in outright.
+        // Only add scopes (and the MainActivity change) if we ever need a Google API
+        // beyond basic profile, e.g. Drive or Calendar.
         const response = await SocialLogin.login({
             provider: 'google',
-            options: { scopes: ['email', 'profile'] },
+            options: {},
         });
         const result = response.result as { idToken?: string | null };
         idToken = result?.idToken ?? null;
