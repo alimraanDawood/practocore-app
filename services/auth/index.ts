@@ -118,9 +118,70 @@ async function signInWithGoogleNative() {
     return { token: data.token, record: data.record };
 }
 
+function isTauriRuntime() {
+    return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+// Named so we can abort the in-flight desktop flow from the UI (see
+// cancelGoogleSignIn). The PocketBase SDK keys its AbortControllers by this.
+const TAURI_GOOGLE_REQUEST_KEY = 'google-oauth-desktop';
+
+/**
+ * Google Sign-In on the Tauri desktop app.
+ *
+ * Same PocketBase realtime OAuth2 flow as the web, with one change: the
+ * provider URL is handed to the OS default browser instead of a popup.
+ *
+ * The default `urlCallback` calls `window.open`. A Tauri webview has a
+ * `window.open` that returns null rather than opening anything, so the SDK
+ * silently ends up with no window, never receives the `@oauth2` realtime
+ * message, and the promise never settles — the sign-in button just spins.
+ * Google also refuses OAuth inside embedded webviews (`disallowed_useragent`),
+ * so routing to the real browser is required regardless.
+ *
+ * The redirect URI stays PocketBase's `/api/oauth2-redirect`, so this needs no
+ * change in Google Cloud: the browser completes the hop, PocketBase pushes the
+ * code down the realtime channel this webview is still subscribed to, and the
+ * SDK exchanges it here.
+ */
+async function signInWithGoogleTauri() {
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+
+    try {
+        return await pocketbase.collection('Users').authWithOAuth2({
+            provider: 'google',
+            requestKey: TAURI_GOOGLE_REQUEST_KEY,
+            urlCallback: async (url) => {
+                await openUrl(url);
+            },
+        });
+    } catch (err: any) {
+        // cancelGoogleSignIn() aborts the controller; surface it the same way
+        // the native picker's cancel is surfaced so callers can stay quiet.
+        if (err?.isAbort) {
+            throw new GoogleAuthCancelledError();
+        }
+        throw err;
+    }
+}
+
+/**
+ * Abandon a desktop sign-in that was started but never completed in the
+ * browser. Without this the promise from `signUpWithGoogle()` stays pending
+ * forever if the user closes the Google tab, leaving the caller's loading flag
+ * stuck on. Rejects the pending call as a GoogleAuthCancelledError.
+ */
+export function cancelGoogleSignIn() {
+    pocketbase.cancelRequest(TAURI_GOOGLE_REQUEST_KEY);
+}
+
 export async function signUpWithGoogle() {
     if (Capacitor.isNativePlatform()) {
         return signInWithGoogleNative();
+    }
+
+    if (isTauriRuntime()) {
+        return signInWithGoogleTauri();
     }
 
     // Default Web Flow (popup + realtime redirect) — only reliable in a real
