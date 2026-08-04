@@ -284,13 +284,21 @@
 
             <!-- Pending deadline (Deadlines collection) -->
             <template v-else-if="deadline.collectionName === 'Deadlines'">
-              <p
-                v-if="deadline.pending_prompt"
-                class="text-sm italic text-muted-foreground ibm-plex-serif"
-                v-html="deadline.pending_prompt
-                  .replace('<<date>>', `<b class='text-foreground'>${dayjs(deadline.date).format('D MMM YYYY')}</b>`)
-                  .replace('<<from_now>>', `<b class='text-foreground'>${dayjs(deadline.date).fromNow()}</b>`)"
-              ></p>
+              <!-- L2: on a corrected deadline this sentence describes what the
+                   rule COMPUTES, against the date the rule actually produced —
+                   never against the firm's corrected date, which the rule did
+                   not produce. The operative date is the row's own, badged
+                   "Corrected" above. The label is what keeps the two apart. -->
+              <div v-if="promptOf(deadline, deadline.pending_prompt).html" class="flex flex-col gap-0.5">
+                <span
+                  v-if="promptOf(deadline, deadline.pending_prompt).isComputation"
+                  class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                >What the rule computes</span>
+                <p
+                  class="text-sm italic text-muted-foreground ibm-plex-serif"
+                  v-html="promptOf(deadline, deadline.pending_prompt).html"
+                ></p>
+              </div>
 
               <p v-if="deadline.input_prompt && !deadline.disableFulfill" class="text-sm text-muted-foreground">
                 {{ deadline.input_prompt }}
@@ -574,11 +582,16 @@ const isAdhoc = (deadline) => deadline?.origin === "adhoc";
 // than a boolean because the computed date it superseded (adj.from) is the part
 // that has to stay on screen — a correction that hides the rule is worse than no
 // correction at all. Rows written before L2 carry no kind and are adjournments.
-const overrideOf = (deadline) => {
-  const rows = (deadline?.expand?.adjournments ?? []).filter((a) => a.kind === "override");
-  if (rows.length === 0) return null;
-  return [...rows].sort((a, b) => new Date(b.created) - new Date(a.created))[0];
-};
+//
+// Shared with the rule-sentence renderer below: two copies of "is this corrected"
+// would let the badge and the sentence disagree about the same row.
+const { formatDeadlinePrompt, correctionOf } = useDeadlinePrompt();
+const overrideOf = (deadline) => correctionOf(deadline);
+
+// A deadline's prompt cites the rule. On a corrected deadline it is rendered
+// against the COMPUTED date, so the citation stays true; `isComputation` tells
+// the template to label it as the rule's calculation rather than the real date.
+const promptOf = (deadline, prompt) => formatDeadlinePrompt(prompt, deadline?.date, deadline);
 
 const isProjected = (deadline) => {
   // A firm-added deadline is a date the lawyer entered themselves, not one
