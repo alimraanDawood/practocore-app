@@ -17,6 +17,25 @@ export interface VoiceBeat {
 }
 
 /**
+ * The page a call is opened from, so spoken turns are answered against the same
+ * matter/engagement/vault a typed turn on that page would be.
+ *
+ * Sent once, at session start, rather than per turn: the completion callbacks come
+ * from AssemblyAI's servers and carry only the capability token, so start is the
+ * one moment at which the client can say where it is. The backend holds it for the
+ * life of the call. Field names match the chat request on purpose — callers build
+ * this from the same AiContext they'd send when typing.
+ */
+export interface VoiceContext {
+  matterIds?: string[];
+  deadlineIds?: string[];
+  userIds?: string[];
+  engagementIds?: string[];
+  /** Ambient free text for what ids can't name — a vault, the calendar. */
+  pageContext?: string;
+}
+
+/**
  * Start a voice session.
  *
  * The AssemblyAI API key never reaches the client: the backend exchanges it for a
@@ -24,10 +43,11 @@ export interface VoiceBeat {
  * is spent by the first connection, so this is called before EVERY connect, not
  * once per app load.
  */
-export async function startVoiceSession(): Promise<VoiceSession> {
+export async function startVoiceSession(context?: VoiceContext): Promise<VoiceSession> {
   const res = await fetch(`${SERVER_URL}/api/practocore/ai/voice/session`, {
     method: 'POST',
-    headers: { 'Authorization': pb.authStore.token },
+    headers: { 'Authorization': pb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(context ?? {}),
   });
   if (!res.ok) {
     let msg = `Could not start a voice session (${res.status})`;
@@ -59,6 +79,7 @@ export async function readVoiceCaptions(
   onDelta: (text: string) => void,
   onTurnEnd: () => void,
   signal: AbortSignal,
+  onReset?: () => void,
 ): Promise<void> {
   try {
     const res = await fetch(`${SERVER_URL}/api/practocore/ai/voice/captions`, {
@@ -84,8 +105,11 @@ export async function readVoiceCaptions(
         for (const line of frame.split('\n')) {
           if (!line.startsWith('data:')) continue; // ": ping" keep-alives land here
           try {
-            const m = JSON.parse(line.slice(5).trim()) as { delta?: string; end?: boolean };
-            if (m.end) onTurnEnd();
+            const m = JSON.parse(line.slice(5).trim()) as { delta?: string; end?: boolean; reset?: boolean };
+            // Reset first: it means a NEW answer is starting, and anything held is
+            // from a turn the backend has just superseded.
+            if (m.reset) onReset?.();
+            else if (m.end) onTurnEnd();
             else if (m.delta) onDelta(m.delta);
           } catch { /* a malformed frame is not worth ending the call over */ }
         }

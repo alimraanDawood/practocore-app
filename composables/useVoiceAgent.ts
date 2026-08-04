@@ -1,4 +1,6 @@
 import { readVoiceCaptions, sendVoiceHeartbeat, startVoiceSession } from '~/services/ai/voice';
+import type { VoiceContext } from '~/services/ai/voice';
+import { createVoiceTrace } from '~/composables/useVoiceTrace';
 
 /**
  * Conversational voice mode, driven by AssemblyAI's Voice Agent API.
@@ -100,6 +102,10 @@ export interface VoiceTurn {
 }
 
 export function useVoiceAgent() {
+  // Diagnostic harness; inert unless localStorage 'practocore:voicetrace' is '1'.
+  // See composables/useVoiceTrace.ts — throwaway, remove with the backend half.
+  const trace = createVoiceTrace();
+
   const state = ref<VoiceAgentState>('idle');
   const userText = ref('');      // what the provider heard you say
   const agentText = ref('');     // what the assistant is saying
@@ -173,11 +179,13 @@ export function useVoiceAgent() {
   //
   // When audio is playing, the audio is the truth: text tracks the playhead so the
   // words land with the voice. When no audio has started for this turn, it falls
-  // back to a plain reading pace — because the shim publishes the answer as ONE
-  // caption (it holds each round until it knows the round was not a tool call), so
-  // there is no arrival cadence to inherit. Without a clock of its own the screen
-  // would show nothing at all, and the old fix — dump everything after four seconds —
-  // is what produced "the text comes at once".
+  // back to a plain reading pace of its own.
+  //
+  // The shim now publishes a caption per SENTENCE rather than one per turn, so there
+  // is an arrival cadence — but it is the wrong clock to read by: it is the model's
+  // writing speed, which is far faster than speech and arrives in bursts. The steady
+  // pace below is still what makes unaccompanied text readable. (The older fix —
+  // dump everything after four seconds — is what produced "the text comes at once".)
   //
   // The point is that a dead audio path can no longer take the captions down with it.
   const CHARS_PER_SEC = 15; // ≈ 170 wpm, unhurried speech
@@ -329,11 +337,32 @@ export function useVoiceAgent() {
     // Underrun: everything queued has already played, so this chunk cannot follow
     // anything — start a fresh run a cushion ahead rather than flush against the
     // clock, or the very next late packet breaks in the same place again.
-    if (playhead < now) playhead = now + JITTER_LEAD;
+    const underrun = playhead < now;
+    // An underrun IS the glitch, heard. Counting them per turn turns "it sounds
+    // broken up" into a number, and separates a network that delivers late from a
+    // main thread too busy to schedule on time.
+    if (underrun) {
+      trace.mark('audio.underrun', {
+        behindMs: Math.round((now - playhead) * 1000),
+        first: !turnAudioStart,
+      });
+      playhead = now + JITTER_LEAD;
+    }
     // Anchor the caption pacing to where this TURN's audio starts. Only the first
     // chunk may set it: re-anchoring on a mid-turn underrun would jump the captions
     // backwards through text that has already been spoken.
-    if (!turnAudioStart) turnAudioStart = playhead;
+    if (!turnAudioStart) {
+      turnAudioStart = playhead;
+      // The first audio of a turn actually being SCHEDULED. Paired with the server's
+      // `emit.first`, the gap between them is everything outside our process: TTS,
+      // the provider's network, and the socket. That split is what the harness is
+      // for. `leadMs` is how far in the future it was scheduled — if audio is
+      // scheduled but never heard, this is where the evidence will be.
+      trace.mark('audio.turn.start', {
+        leadMs: Math.round((playhead - now) * 1000),
+        ctxState: ctx.state,
+      });
+    }
     src.start(playhead);
     playhead += buf.duration;
     sources.push(src);
@@ -347,6 +376,16 @@ export function useVoiceAgent() {
   // Barge-in: drop everything queued the moment the user starts talking. The
   // provider tells us; we don't have to detect it.
   function stopPlayback() {
+    // How much audio we threw away. A barge-in that discards a lot of queued speech
+    // right after a turn starts is the signature of a FALSE barge-in — the provider
+    // hearing its own voice through an echo canceller that has not converged, which
+    // is one of the two candidates for the silent first reply.
+    if (sources.length) {
+      trace.mark('audio.discarded', {
+        chunks: sources.length,
+        queuedMs: ctx ? Math.round(Math.max(0, playhead - ctx.currentTime) * 1000) : 0,
+      });
+    }
     sources.forEach((s) => { try { s.stop(); } catch { /* already ended */ } });
     sources = [];
     playhead = 0;
@@ -528,7 +567,7 @@ export function useVoiceAgent() {
     void runPreview();
   }
 
-  async function start(opts?: { mock?: boolean; pushToTalk?: boolean }) {
+  async function start(opts?: { mock?: boolean; pushToTalk?: boolean; context?: VoiceContext }) {
     if (state.value !== 'idle') return;
     error.value = null;
     userText.value = '';
@@ -552,19 +591,30 @@ export function useVoiceAgent() {
     preview.value = false;
     pushToTalk.value = opts?.pushToTalk ?? prefersPushToTalk();
 
+    // Anchor the trace clock BEFORE the session request, so the first thing on the
+    // timeline is the request itself — the server anchors on the same event.
+    trace.begin();
+    trace.mark('session.request');
+
     let session;
     try {
-      session = await startVoiceSession();
+      // The page context has to go in HERE, at session start — it is the last point
+      // at which this client is in the loop. Every turn after this is a callback from
+      // AssemblyAI to the backend that we never see.
+      session = await startVoiceSession(opts?.context);
     } catch (e) {
+      trace.mark('session.error');
       error.value = e instanceof Error ? e.message : 'Could not start a voice session.';
       state.value = 'idle';
       return;
     }
+    trace.mark('session.response');
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
+      trace.mark('mic.ready');
     } catch (e) {
       const name = e instanceof Error ? e.name : '';
       error.value = name === 'NotAllowedError'
@@ -579,6 +629,10 @@ export function useVoiceAgent() {
     await ctx.audioWorklet.addModule(
       URL.createObjectURL(new Blob([workletSrc], { type: 'application/javascript' })),
     );
+    // `state` and the ACTUAL rate both matter: a context that silently fell back to
+    // 48 kHz, or that never left 'suspended', are two of the ways audio can be
+    // scheduled into a void with no error raised anywhere.
+    trace.mark('audio.ready', { state: ctx.state, sampleRate: ctx.sampleRate });
 
     // Start the meter with the socket, not with the first word: the provider bills
     // from connect, so anything else systematically undercounts.
@@ -599,11 +653,21 @@ export function useVoiceAgent() {
       },
       () => { captionComplete = true; },
       captionAbort.signal,
+      () => {
+        // A new answer is starting. Without this, two answers for one utterance —
+        // which the provider does produce — were concatenated into one bubble,
+        // because the only other reset is `transcript.user` and no new user
+        // transcript arrives between them.
+        trace.mark('caption.reset');
+        resetCaptions();
+      },
     );
 
+    trace.mark('ws.connecting');
     ws = new WebSocket(session.wsUrl);
 
     ws.onopen = () => {
+      trace.mark('ws.open');
       ws?.send(JSON.stringify({ type: 'session.update', session: { agent_id: session.agentId } }));
     };
 
@@ -619,6 +683,13 @@ export function useVoiceAgent() {
     };
 
     const handleFrame = (m: { type?: string; text?: string; data?: string; message?: string; status?: string }) => {
+      // EVERY frame, with its type — the ordering of provider frames against our own
+      // emits is the whole question, and a filtered log would beg it. Audio frames
+      // record their size only; the payload is not interesting and is large.
+      trace.mark('ws.frame', m.type === 'reply.audio'
+        ? { type: m.type, bytes: m.data?.length ?? 0 }
+        : { type: m.type, ...(m.status ? { status: m.status } : {}) });
+
       // Any frame carrying speech in either direction is proof the call is live.
       if (m.type === 'transcript.user' || m.type === 'transcript.user.delta'
         || m.type === 'transcript.agent' || m.type === 'reply.started'
@@ -754,7 +825,15 @@ export function useVoiceAgent() {
     idleWarning.value = false;
     // Settle the last interval. Fire-and-forget with keepalive, so it still lands
     // when this is the tab closing.
-    if (sessionId) { void sendVoiceHeartbeat(sessionId, true); sessionId = ''; }
+    if (sessionId) {
+      void sendVoiceHeartbeat(sessionId, true);
+      // Post the trace BEFORE clearing the id, and before stopPlayback() — which
+      // would otherwise record a discard for the audio we are deliberately dropping
+      // on hang-up and make every call look like it ended in a barge-in.
+      trace.mark('call.end');
+      void trace.flush(sessionId);
+      sessionId = '';
+    }
     stopPlayback();
     try { ws?.send(JSON.stringify({ type: 'session.end' })); } catch { /* already gone */ }
     try { ws?.close(); } catch { /* already gone */ }

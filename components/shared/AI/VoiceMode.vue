@@ -21,6 +21,7 @@
  */
 import {MessageSquareText, X} from 'lucide-vue-next';
 import {toast} from 'vue-sonner';
+import type {VoiceContext} from '~/services/ai/voice';
 
 const props = withDefaults(defineProps<{
   open: boolean;
@@ -29,6 +30,16 @@ const props = withDefaults(defineProps<{
    * This is how the surface is designed and reviewed. Drop it to go live.
    */
   preview?: boolean;
+  /**
+   * The page this call is being opened from — the same matter/engagement/vault
+   * context the host surface sends when the user types. Resolved once, at connect,
+   * because that is the only moment the client is in the loop: every turn after it
+   * is a callback from the provider straight to our backend.
+   *
+   * A provider function rather than a value so the host can resolve it lazily, the
+   * way ChatSurface already resolves its ambient page context per turn.
+   */
+  contextProvider?: () => Promise<VoiceContext> | VoiceContext;
 }>(), {preview: false});
 
 const emit = defineEmits<{ 'update:open': [boolean] }>();
@@ -92,9 +103,18 @@ async function connect() {
     failure.value = 'Voice needs microphone access on a secure (https) connection.';
     return;
   }
+  // Resolving context must not be able to stop a call starting: a context-less
+  // call is worse than one with context, but far better than none at all.
+  let context: VoiceContext | undefined;
+  try {
+    context = await props.contextProvider?.();
+  } catch {
+    context = undefined;
+  }
+
   // Must be awaited on the user gesture that opened voice mode — the
   // AudioContext will not resume otherwise.
-  await start({mock: props.preview});
+  await start({mock: props.preview, context});
 }
 
 function close() {

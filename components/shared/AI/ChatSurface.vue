@@ -10,6 +10,7 @@ import {
 import {toast} from 'vue-sonner';
 import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
 import VoiceMode from '~/components/shared/AI/VoiceMode.vue';
+import type {VoiceContext} from '~/services/ai/voice';
 import {initials} from '~/components/shared/AI/proposals/theme';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt,
@@ -808,6 +809,25 @@ const {
 } = useSpeech();
 
 const voiceOpen = ref(false);
+
+// A spoken turn should know what a typed turn on this surface knows. Both sources
+// are reused verbatim — the selected context chips (which the dock pre-seeds with
+// the current matter/engagement) and the ambient page-context header (which covers
+// what chips can't name: a vault, the calendar).
+//
+// Unlike a typed turn this is resolved ONCE, when the call connects. The provider
+// calls our backend directly for each spoken turn, so mid-call chip changes cannot
+// reach it; ending and restarting the call picks up the new context.
+async function buildVoiceContext(): Promise<VoiceContext> {
+  const ctx = buildContext();
+  return {
+    matterIds: ctx?.matterIds,
+    deadlineIds: ctx?.deadlineIds,
+    userIds: ctx?.userIds,
+    engagementIds: ctx?.engagementIds,
+    pageContext: await resolvePageContext(),
+  };
+}
 
 // ── Simple dictation (composer) ───────────────────────────────────────────────
 // For now the mic button just transcribes speech into the prompt box rather than
@@ -1958,7 +1978,7 @@ defineExpose({
     </Transition>
 
     <!-- ░░ Conversational voice mode ░░ -->
-    <VoiceMode v-model:open="voiceOpen" :preview="VOICE_PREVIEW"/>
+    <VoiceMode v-model:open="voiceOpen" :preview="VOICE_PREVIEW" :context-provider="buildVoiceContext"/>
 
     <!-- ── Attachment preview (right sheet on desktop, bottom on touch) ──────── -->
     <Sheet v-model:open="previewOpen">
