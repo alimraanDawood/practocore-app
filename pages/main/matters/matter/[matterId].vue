@@ -266,8 +266,12 @@
                         <CalendarIcon class="size-4 text-muted-foreground shrink-0" />
                       </span>
                       <span
+                          v-if="isRuleComputation(latestDeadline)"
+                          class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                      >What the rule computes — this date was corrected</span>
+                      <span
                           class="text-sm italic text-muted-foreground ibm-plex-serif"
-                          v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
+                          v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date, latestDeadline)"
                       ></span>
                     </button>
                   </SharedDeadlineCompleteDeadline>
@@ -281,8 +285,12 @@
             </span>
                     <template v-for="missed in missedDeadlines" :key="missed.id">
               <span
+                  v-if="isRuleComputation(missed)"
+                  class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+              >What the rule computes — this date was corrected</span>
+              <span
                   class="text-sm italic text-muted-foreground ibm-plex-serif"
-                  v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
+                  v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date, missed)"
               ></span>
                     </template>
                   </div>
@@ -332,20 +340,28 @@
                     <div class="flex flex-col" v-if="latestDeadline">
                       <span class="text-lg font-semibold ibm-plex-serif">Upcoming Deadline</span>
                       <span
+                          v-if="isRuleComputation(latestDeadline)"
+                          class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                      >What the rule computes — this date was corrected</span>
+                      <span
                           class="text-sm italic text-muted-foreground ibm-plex-serif"
-                          v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date)"
+                          v-html="formatDeadlinePrompt(latestDeadline.pending_prompt, latestDeadline.date, latestDeadline)"
                       ></span>
                     </div>
 
                     <div class="flex flex-col" v-if="latestDeadline">
                       <span class="text-lg font-semibold ibm-plex-serif">Missed Deadlines</span>
                       <template v-if="missedDeadlines.length > 0">
-            <span
-                v-for="missed in missedDeadlines"
-                :key="missed.id"
-                class="text-sm italic text-muted-foreground ibm-plex-serif"
-                v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date)"
-            ></span>
+            <span v-for="missed in missedDeadlines" :key="missed.id" class="flex flex-col gap-0.5">
+              <span
+                  v-if="isRuleComputation(missed)"
+                  class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+              >What the rule computes — this date was corrected</span>
+              <span
+                  class="text-sm italic text-muted-foreground ibm-plex-serif"
+                  v-html="formatDeadlinePrompt(missed.overdue_prompt, missed.date, missed)"
+              ></span>
+            </span>
                       </template>
                       <span class="text-sm text-muted-foreground mx-auto p-3" v-else>No Missed Deadlines</span>
                     </div>
@@ -631,14 +647,16 @@ const canEditMatterFields = computed(() => {
   return m.owner === user.id;
 });
 
-const formatDeadlinePrompt = (prompt, date) => {
-  if (!prompt) return '';
-  const tz = currentUser.value?.timezone;
-  const d = tz ? dayjs(date).tz(tz) : dayjs(date);
-  return prompt
-    .replace('<<date>>', `<b class="text-foreground">${d.format('D MMM YYYY')}</b>`)
-    .replace('<<from_now>>', `<b class="text-foreground">${d.fromNow()}</b>`);
-};
+// L2: a deadline's prompt cites the rule imposing the step. On a CORRECTED
+// deadline the date the row carries is one the firm entered, so filling the
+// prompt with it made the sentence claim the rule produced a date it did not.
+// The shared composable renders the sentence against the computed date instead;
+// isRuleComputation tells the panel to label it as the calculation, not the date
+// that governs.
+const { formatDeadlinePrompt: buildDeadlinePrompt, correctionOf } = useDeadlinePrompt();
+const formatDeadlinePrompt = (prompt, date, deadline) =>
+  buildDeadlinePrompt(prompt, date, deadline, { timezone: currentUser.value?.timezone }).html;
+const isRuleComputation = (deadline) => !!correctionOf(deadline);
 
 const debouncedReloadMatter = useDebounceFn(async () => {
   try {

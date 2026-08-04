@@ -34,7 +34,6 @@
     "@capgo/capacitor-social-login": "^8.3.5",
     "@dagrejs/dagre": "^1.1.8",
     "@iconify-json/lucide": "^1.2.88",
-    "@independo/capacitor-voice-recorder": "^8.3.4",
     "@joint/core": "^4.2.3",
     "@nuxt/icon": "^1.15.0",
     "@nuxtjs/color-mode": "3.5.2",

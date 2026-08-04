@@ -36,6 +36,18 @@ const getLastestDeadline = (matter: any) => {
   return matter?.deadlines?.sort((d1, d2) => new Date(d1.date) - new Date(d2.date))?.at(0);
 }
 
+// The deadline prompt cites the rule imposing the step, so it must be rendered
+// against the date the rule produced — see useDeadlinePrompt. Where this view's
+// payload carries no adjournment expansion, no correction is detected and the
+// sentence renders exactly as it did before.
+const { formatDeadlinePrompt } = useDeadlinePrompt();
+const rulePromptFor = (matter: any) => {
+  const d = getLastestDeadline(matter);
+  return formatDeadlinePrompt(d?.pending_prompt, d?.date, d, {
+    timezone: getSignedInUser()?.timezone,
+  });
+};
+
 // Fetch lawyer details
 const fetchLawyerDetails = async () => {
   if (!props.lawyerId) return
@@ -185,22 +197,16 @@ watch(() => props.lawyerId, () => {
                   <span class="font-semibold ibm-plex-serif">{{ matter?.name }}</span>
                   <div class="flex flex-col">
                     <span class="text-sm text-muted-foreground">Current Deadline</span>
+                    <!-- L2: on a corrected deadline this sentence is rendered
+                         against the date the rule computed, not the date the
+                         firm entered — the rule did not produce the latter. -->
+                    <span
+                        v-if="rulePromptFor(matter).isComputation"
+                        class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                    >What the rule computes — this date was corrected</span>
                     <span
                         class="text-sm italic text-muted-foreground ibm-plex-serif"
-                        v-html="
-                getLastestDeadline(matter)?.pending_prompt?.replace(
-                    '<<date>>',
-                    `<b class='text-foreground'>${dayjs(getLastestDeadline(matter)?.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).format('D MMM YYYY')}</b>`
-                  )
-                  .replace(
-                    '<<from_now>>',
-                    `<b class='text-foreground'>${dayjs(getLastestDeadline(matter)?.date, {
-                      timezone: getSignedInUser()?.timezone,
-                    }).fromNow()}</b>`
-                  )
-              "
+                        v-html="rulePromptFor(matter).html"
                     ></span>
 
                   </div>

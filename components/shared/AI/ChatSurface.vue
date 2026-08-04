@@ -4,14 +4,16 @@ import {
   Loader2, Check, X, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, ArrowUpIcon, Trash2,
   Briefcase, FileText, FileType2, BookOpen, AtSign, Paperclip, Building2, Clock, User,
   Library, Zap, Gauge, Files, Eye, Download,
-  Mic, MicOff, AudioLines, VolumeX, Headphones, Copy,
+  Mic, AudioLines, Copy,
   type LucideIcon,
 } from 'lucide-vue-next';
 import {toast} from 'vue-sonner';
 import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
+import VoiceMode from '~/components/shared/AI/VoiceMode.vue';
+import type {VoiceContext} from '~/services/ai/voice';
 import {initials} from '~/components/shared/AI/proposals/theme';
 import {
-  sendAiMessageStream, sendAiMessageVoiceStream, confirmAiProposal, improvePrompt,
+  sendAiMessageStream, confirmAiProposal, improvePrompt,
   getConversation, deleteConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
   newTurnId, stopAiTurn, buildCopyText,
@@ -786,39 +788,45 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 // ── Conversational voice mode ─────────────────────────────────────────────────
-// A full-duplex-ish loop on top of the same message/conversation state as text
-// chat: listen → think → speak → listen. The reply is synthesized sentence-by-
-// sentence (fast first word) and the user can cut in at any point — either by
-// talking over it (barge-in) or tapping the orb. Web/desktop only for now; the
-// composer mic button is hidden where streaming STT isn't supported.
+// The whole call surface lives in <VoiceMode>, which owns useVoiceAgent. All this
+// surface does is open it. Voice turns are deliberately EPHEMERAL — the spoken
+// exchange does not land in this conversation's history.
+//
+// VOICE_PREVIEW runs the scripted call instead of connecting: no mic, no socket,
+// no meter, and every state reachable from the switcher on the screen. It is on
+// while the surface is being designed. Flip it to false to go live.
+const VOICE_PREVIEW = false;
+
+// Offer voice only where a call could actually run — except in preview, which
+// never touches the mic and so should be reachable anywhere it's being designed.
+const voiceSupported = computed(() => VOICE_PREVIEW || voiceAgentSupported());
+
+// Dictation still uses the old cascade — it only needs transcription, and the
+// per-message speaker button still uses its TTS.
 const {
   isListening, isTranscribing, transcript, audioLevel, micError, sttSupported,
-  startListening, stopListening,
-  isSpeaking, caption, stopSpeaking, unlockAudio,
-  beginStreamingSpeech, pushSpeechDelta, endStreamingSpeech, awaitStreamingDone,
-  armBargeIn, disarmBargeIn,
+  startListening, stopListening, prewarmSpeech,
 } = useSpeech();
 
 const voiceOpen = ref(false);
-type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
-const voiceState = ref<VoiceState>('idle');
 
-// Barge-in lets you talk over the assistant, but on open speakers the mic hears
-// the assistant's OWN voice and treats it as a reply (a feedback loop). So it's
-// off by default and only safe with headphones; tap-the-orb interrupt always
-// works. Persisted so the choice sticks.
-const bargeInEnabled = ref(false);
-onMounted(() => {
-  try { bargeInEnabled.value = localStorage.getItem('practoai_bargein') === '1'; } catch {}
-});
-function toggleBargeIn() {
-  bargeInEnabled.value = !bargeInEnabled.value;
-  try { localStorage.setItem('practoai_bargein', bargeInEnabled.value ? '1' : '0'); } catch {}
-  if (!bargeInEnabled.value) disarmBargeIn();
-}
-
-function isUsableTranscript(t: string): boolean {
-  return t.trim().replace(/[.,!?…\s]/g, '').length >= 2;
+// A spoken turn should know what a typed turn on this surface knows. Both sources
+// are reused verbatim — the selected context chips (which the dock pre-seeds with
+// the current matter/engagement) and the ambient page-context header (which covers
+// what chips can't name: a vault, the calendar).
+//
+// Unlike a typed turn this is resolved ONCE, when the call connects. The provider
+// calls our backend directly for each spoken turn, so mid-call chip changes cannot
+// reach it; ending and restarting the call picks up the new context.
+async function buildVoiceContext(): Promise<VoiceContext> {
+  const ctx = buildContext();
+  return {
+    matterIds: ctx?.matterIds,
+    deadlineIds: ctx?.deadlineIds,
+    userIds: ctx?.userIds,
+    engagementIds: ctx?.engagementIds,
+    pageContext: await resolvePageContext(),
+  };
 }
 
 // ── Simple dictation (composer) ───────────────────────────────────────────────
@@ -905,108 +913,6 @@ watch(isListening, (now) => {
 
 onBeforeUnmount(stopRecFx);
 
-// Entry point for the full conversational voice mode. Intentionally retained but
-// not wired to any control for now — the composer mic does simple dictation
-// instead (see toggleDictation). We'll re-attach this when voice mode is ready.
-function enterVoice() {
-  if (!sttSupported.value) {
-    toast.error('Voice needs microphone access on a secure (https) connection.');
-    return;
-  }
-  unlockAudio(); // must run on the user gesture before any async audio
-  voiceOpen.value = true;
-  beginListening();
-}
-void enterVoice; // kept for the upcoming voice-mode revisit; avoids dead-symbol noise
-
-function exitVoice() {
-  voiceOpen.value = false;
-  voiceState.value = 'idle';
-  stopListening();
-  stopSpeaking();
-  disarmBargeIn();
-}
-
-// `settleMs` lets the assistant's audio fully clear the room before the mic opens,
-// so a speaker echo of the last word isn't transcribed as the user's reply.
-function beginListening(settleMs = 0) {
-  if (!voiceOpen.value) return;
-  stopSpeaking();
-  disarmBargeIn();
-  voiceState.value = 'listening';
-  if (settleMs > 0) {
-    setTimeout(() => { if (voiceOpen.value && voiceState.value === 'listening') startListening(); }, settleMs);
-  } else {
-    startListening();
-  }
-}
-
-// User cuts in while the assistant is talking — drop playback and listen.
-function onBargeIn() {
-  if (!voiceOpen.value) return;
-  beginListening();
-}
-
-// Tap the orb: interrupt if speaking, otherwise toggle the mic.
-function tapOrb() {
-  if (voiceState.value === 'thinking') return;
-  if (isSpeaking.value) { beginListening(); return; }
-  if (isListening.value) stopListening();
-  else beginListening();
-}
-
-async function runVoiceTurn(text: string) {
-  voiceState.value = 'thinking';
-  branches.append({ role: 'user', content: text });
-  scrollToBottom();
-
-  // Stream the reply: speak sentences as the model writes them (LLM→TTS pipeline).
-  // The first text delta flips us into 'speaking'; arm barge-in once we're talking.
-  beginStreamingSpeech();
-  let started = false;
-  const voicePageContext = await resolvePageContext();
-  const response = await sendAiMessageVoiceStream(
-    apiMessages.value, buildContext(), conversationId.value || undefined,
-    {
-      mode: props.mode,
-      contextKey: props.contextKey,
-      pageContext: voicePageContext,
-      onText: (delta) => {
-        if (!voiceOpen.value) return;
-        if (!started) {
-          started = true;
-          voiceState.value = 'speaking';
-          if (bargeInEnabled.value) armBargeIn(onBargeIn);
-        }
-        pushSpeechDelta(delta);
-      },
-    },
-  );
-  if (!voiceOpen.value) return; // user left mid-flight
-
-  applyResponse(response);
-  scrollToBottom();
-
-  if (response.type === 'text' && response.content?.trim()) {
-    // If nothing streamed (e.g. proxy collapsed to JSON), speak the full text now.
-    if (!started) {
-      voiceState.value = 'speaking';
-      if (bargeInEnabled.value) armBargeIn(onBargeIn);
-      pushSpeechDelta(response.content);
-    }
-    endStreamingSpeech();
-    await awaitStreamingDone();
-    disarmBargeIn();
-    // Finished speaking uninterrupted → hand the turn back. Without barge-in (open
-    // speakers) wait a beat so the tail doesn't echo into the mic.
-    if (voiceOpen.value && voiceState.value === 'speaking') beginListening(bargeInEnabled.value ? 0 : 350);
-  } else {
-    // Proposal / error: nothing to read aloud, so just reopen the mic.
-    stopSpeaking();
-    beginListening();
-  }
-}
-
 // End of an STT turn (web + native both flip isTranscribing true→false at the end).
 watch(isTranscribing, (now, was) => {
   if (!was || now) return;
@@ -1020,36 +926,12 @@ watch(isTranscribing, (now, was) => {
     }
     dictating.value = false;
     dictateCancelled.value = false;
-    return;
   }
-  // Conversational voice mode (dormant for now).
-  if (!voiceOpen.value || voiceState.value !== 'listening') return;
-  const t = transcript.value.trim();
-  if (isUsableTranscript(t)) runVoiceTurn(t);
-  else beginListening(); // heard nothing usable — keep the mic open
 });
 
 watch(micError, (err) => {
   if (!err) return;
   if (dictating.value) { toast.error(err); dictating.value = false; }
-  if (voiceOpen.value) { toast.error(err); voiceState.value = 'idle'; }
-});
-
-// ── Orb visualisation ─────────────────────────────────────────────────────────
-function barHeight(i: number): number {
-  if (!isListening.value) return 4;
-  const wave = Math.abs(Math.sin((i + 1) * 0.9 + Date.now() / 200));
-  return Math.max(4, (audioLevel.value / 100) * 38 * wave + 4);
-}
-const outerRingScale = computed(() => {
-  if (voiceState.value === 'listening') return 1 + (audioLevel.value / 100) * 0.5;
-  if (voiceState.value === 'speaking') return 1.25;
-  return 1;
-});
-const innerRingScale = computed(() => {
-  if (voiceState.value === 'listening') return 1 + (audioLevel.value / 100) * 0.28;
-  if (voiceState.value === 'speaking') return 1.12;
-  return 1;
 });
 
 // ── Proposals ───────────────────────────────────────────────────────────────
@@ -1344,7 +1226,16 @@ function removeItem(id: string) {
 // ── Prompt enhancement ──────────────────────────────────────────────────────
 const enhancing = ref(false);
 const canEnhance = computed(() => draft.value.trim().length > 0 && !enhancing.value && !loading.value);
-const canSend = computed(() => (draft.value.trim().length > 0 || attachments.value.length > 0) && !loading.value);
+// Anything to send? Drives BOTH the send button's enabled state and which button
+// occupies the primary slot: empty composer ⇒ voice mode, typed ⇒ send arrow.
+const hasInput = computed(() => draft.value.trim().length > 0 || attachments.value.length > 0);
+
+// Bound to the composer's NATIVE input event so every keystroke reaches `draft`
+// immediately (see the textarea in the template for why v-model wasn't enough).
+function onDraftInput(e: Event) {
+  draft.value = (e.target as HTMLTextAreaElement).value;
+}
+const canSend = computed(() => hasInput.value && !loading.value);
 
 async function enhancePrompt() {
   const original = draft.value.trim();
@@ -1926,7 +1817,13 @@ defineExpose({
             </Button>
           </InputGroupAddon>
 
-          <InputGroupTextarea v-model="draft" class="max-h-48 overflow-y-auto" placeholder="Ask, Search or Chat…" @keydown="handleKeydown"/>
+          <!-- `:model-value` + a native `@input` rather than `v-model`: the model goes
+               through two wrappers (InputGroupTextarea → Textarea) and a passive proxy
+               before it lands here, which delayed `hasInput` — and so the send/voice
+               button swap — until the textarea lost focus. The native event is per-keystroke. -->
+          <InputGroupTextarea :model-value="draft" class="max-h-48 overflow-y-auto"
+                              placeholder="Ask, Search or Chat…"
+                              @input="onDraftInput" @keydown="handleKeydown"/>
 
           <InputGroupAddon align="block-end">
             <InputGroupButton variant="outline" size="icon-sm" title="Attach a PDF or image"
@@ -1948,14 +1845,23 @@ defineExpose({
               {{ tierLabel }}
             </InputGroupButton>
             <InputGroupButton v-if="sttSupported" size="icon-sm" variant="outline"
-                              title="Dictate your prompt" @click="toggleDictation">
+                              title="Dictate your prompt" @click="toggleDictation"
+                              @pointerenter="prewarmSpeech" @focus="prewarmSpeech"
+                              @touchstart.passive="prewarmSpeech">
               <Mic class="size-4"/>
               <span class="sr-only">Dictate your prompt</span>
             </InputGroupButton>
+            <!-- Primary slot: stop while generating, voice mode while the composer is
+                 empty, send once there's something to send. -->
             <InputGroupButton v-if="loading" variant="default" class="rounded-full" size="icon-sm"
                               title="Stop generating" @click="stopTurn">
               <Square class="size-3.5 fill-current"/>
               <span class="sr-only">Stop generating</span>
+            </InputGroupButton>
+            <InputGroupButton v-else-if="!hasInput && voiceSupported" variant="default" class="rounded-full"
+                              size="icon-sm" title="Talk to the assistant" @click="voiceOpen = true">
+              <AudioLines class="size-4"/>
+              <span class="sr-only">Talk to the assistant</span>
             </InputGroupButton>
             <InputGroupButton v-else variant="default" class="rounded-full" size="icon-sm"
                               :disabled="!canSend" @click="send()">
@@ -2072,94 +1978,7 @@ defineExpose({
     </Transition>
 
     <!-- ░░ Conversational voice mode ░░ -->
-    <Transition name="voice">
-      <div v-if="voiceOpen" class="absolute inset-0 z-40 flex flex-col bg-background">
-        <!-- Top bar -->
-        <div class="flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <div class="flex items-center gap-2">
-            <span class="size-2 animate-pulse rounded-full bg-primary"/>
-            <span class="text-sm font-medium text-primary">Live voice</span>
-          </div>
-          <Button size="icon-sm" variant="ghost" title="Back to chat" @click="exitVoice">
-            <MessageSquareText class="size-4"/>
-          </Button>
-        </div>
-
-        <!-- Proposal card (e.g. create-matter) surfaces here too -->
-        <Transition name="context-panel">
-          <ProposalCard v-if="pendingProposal" :proposal="pendingProposal" variant="panel"
-                        :loading="proposalLoading" class="mx-4 mt-3 shrink-0"
-                        @approve="approveProposal" @dismiss="dismissProposal"/>
-        </Transition>
-
-        <!-- Centre: orb + live text -->
-        <div class="flex flex-1 flex-col items-center justify-center gap-7 px-8">
-          <button class="relative flex size-36 items-center justify-center" @click="tapOrb">
-            <span class="absolute size-36 rounded-full bg-primary/8 transition-transform duration-75 ease-out"
-                  :style="{ transform: `scale(${outerRingScale})` }"/>
-            <span class="absolute size-36 rounded-full bg-primary/12 transition-transform duration-75 ease-out"
-                  :style="{ transform: `scale(${innerRingScale})` }"/>
-            <span class="relative z-10 flex size-24 flex-col items-center justify-center rounded-full bg-primary text-primary-foreground shadow-2xl shadow-primary/25 transition-all duration-300"
-                  :class="{ 'scale-105': voiceState === 'listening', 'animate-pulse': voiceState === 'speaking' }">
-              <span v-if="voiceState === 'listening'" class="flex h-9 items-end gap-1">
-                <span v-for="i in 7" :key="i" class="w-1 rounded-full bg-primary-foreground transition-all duration-75 ease-out"
-                      :style="{ height: `${barHeight(i)}px` }"/>
-              </span>
-              <Loader2 v-else-if="voiceState === 'thinking'" class="size-8 animate-spin opacity-90"/>
-              <AudioLines v-else-if="voiceState === 'speaking'" class="size-8 opacity-90"/>
-              <Sparkles v-else class="size-8 opacity-90"/>
-            </span>
-          </button>
-
-          <div class="flex min-h-[4rem] w-full max-w-md flex-col items-center justify-center gap-1 text-center">
-            <Transition name="voice-fade" mode="out-in">
-              <p v-if="voiceState === 'listening' && transcript" key="t" class="text-lg font-medium leading-snug text-foreground">{{ transcript }}</p>
-              <p v-else-if="voiceState === 'listening'" key="l" class="animate-pulse text-sm font-medium text-primary">Listening…</p>
-              <p v-else-if="voiceState === 'thinking'" key="th" class="text-sm text-muted-foreground">Thinking…</p>
-              <p v-else-if="voiceState === 'speaking' && caption" key="c" class="line-clamp-4 text-sm leading-relaxed text-foreground">{{ caption }}</p>
-              <p v-else-if="voiceState === 'speaking'" key="s" class="animate-pulse text-sm font-medium text-primary">Speaking…</p>
-              <p v-else key="e" class="text-sm text-muted-foreground">Tap the orb and start talking</p>
-            </Transition>
-          </div>
-        </div>
-
-        <!-- Bottom controls -->
-        <div class="flex shrink-0 items-center justify-center gap-3 border-t px-6 pb-6 pt-3">
-          <Button size="icon" variant="ghost" class="relative rounded-full" title="Add context"
-                  @click="contextDrawerOpen = true">
-            <AtSign class="size-5"/>
-            <span v-if="selectedItems.length"
-                  class="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">
-              {{ selectedItems.length }}
-            </span>
-          </Button>
-
-          <Button size="icon" variant="ghost" class="rounded-full"
-                  :class="bargeInEnabled ? 'text-primary' : 'text-muted-foreground'"
-                  :title="bargeInEnabled ? 'Talk-over on (use headphones)' : 'Talk-over off — tap to enable (headphones only)'"
-                  @click="toggleBargeIn">
-            <Headphones class="size-5"/>
-          </Button>
-
-          <Button v-if="isSpeaking" size="icon" variant="ghost" class="rounded-full"
-                  title="Stop speaking" @click="beginListening()">
-            <VolumeX class="size-5"/>
-          </Button>
-
-          <Button size="icon" class="size-16 rounded-full shadow-lg shadow-primary/20 [&_svg]:size-6"
-                  :variant="isListening ? 'destructive' : 'default'"
-                  :class="isListening ? 'ring-4 ring-destructive/20' : ''"
-                  :disabled="voiceState === 'thinking'" @click="tapOrb">
-            <MicOff v-if="isListening"/>
-            <Mic v-else/>
-          </Button>
-
-          <Button size="icon" variant="destructive" class="rounded-full" title="Exit voice" @click="exitVoice">
-            <X class="size-5"/>
-          </Button>
-        </div>
-      </div>
-    </Transition>
+    <VoiceMode v-model:open="voiceOpen" :preview="VOICE_PREVIEW" :context-provider="buildVoiceContext"/>
 
     <!-- ── Attachment preview (right sheet on desktop, bottom on touch) ──────── -->
     <Sheet v-model:open="previewOpen">
@@ -2256,28 +2075,4 @@ defineExpose({
   transform: translateY(4px);
 }
 
-/* Voice overlay fade */
-.voice-enter-active {
-  transition: opacity 0.25s ease;
-}
-
-.voice-leave-active {
-  transition: opacity 0.18s ease;
-}
-
-.voice-enter-from,
-.voice-leave-to {
-  opacity: 0;
-}
-
-/* Live-text crossfade inside the voice overlay */
-.voice-fade-enter-active,
-.voice-fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-
-.voice-fade-enter-from,
-.voice-fade-leave-to {
-  opacity: 0;
-}
 </style>
