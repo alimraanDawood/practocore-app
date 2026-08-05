@@ -167,7 +167,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The app is SPA-only (ssr: false), so runtimeConfig.public is INLINED into the
+      # client bundle at `nuxt generate` time — there is no server to read env at
+      # runtime. `.env` is gitignored and never exists on the runner, so any
+      # NUXT_PUBLIC_* var not passed here compiles to '' and the feature is dead in
+      # the APK: native Google Sign-In throws "Native Google Sign-In is not
+      # configured" before the account picker even opens.
+      #
+      # These OAuth client ids are deliberately inline, not secrets — they are public
+      # by design (they ship inside the bundle either way, see nuxt.config.ts).
+      #
+      # Do NOT solve this by committing .env instead: it also sets
+      # POCKETBASE_URL=http://127.0.0.1:8090, which lib/pocketbase.ts prefers over the
+      # https://api.practocore.com fallback, pointing every CI build at the handset's
+      # own loopback.
       - name: Build frontend
+        env:
+          NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID: 286763366119-3t8ae6qc45smec3up32c1r9hlhi2uot9.apps.googleusercontent.com
+          NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID: 286763366119-d5gbju720bdoahn01k1vuo69l5hqkan5.apps.googleusercontent.com
         run: bun run generate
 
       # capacitor.config.ts has webDir: 'dist' (and its server.url block commented out,
