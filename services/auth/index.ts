@@ -81,12 +81,35 @@ async function signInWithGoogleNative() {
         const result = response.result as { idToken?: string | null };
         idToken = result?.idToken ?? null;
     } catch (err: any) {
-        // Capgo surfaces user cancellation as a thrown error whose message/code
-        // varies by platform. Normalise it so callers can suppress the toast.
-        const raw = `${err?.code ?? ''} ${err?.message ?? err ?? ''}`.toLowerCase();
-        if (raw.includes('cancel') || raw.includes('12501') /* Android SIGN_IN_CANCELLED */) {
+        const code = `${err?.code ?? ''}`;
+        const message = `${err?.message ?? err ?? ''}`;
+
+        // Always surface the raw failure. Callers suppress the toast for
+        // cancellation, so without this line a genuine failure leaves the user on
+        // an unchanged login page with no feedback anywhere.
+        console.error('[google-signin] native login failed', { code, message, err });
+
+        // Only the plugin's explicit cancellation code counts as "user backed out"
+        // (GoogleProvider.java rejects with USER_CANCELLED for
+        // GetCredentialCancellationException; 12501 is the legacy Play Services
+        // SIGN_IN_CANCELLED). This used to substring-match 'cancel' across the whole
+        // error, which also swallowed Credential Manager's misconfiguration
+        // failures — those abort *after* the account picker and read as a cancel,
+        // so a missing Android OAuth client looked exactly like the user changing
+        // their mind, silently.
+        if (code === 'USER_CANCELLED' || code === '12501') {
             throw new GoogleAuthCancelledError();
         }
+
+        // Credential Manager's own wording for a build Google Cloud doesn't
+        // recognise. Give the operator the actionable version rather than
+        // "[28444] Developer console is not set up correctly."
+        if (/developer console|28444|\b10:/i.test(message)) {
+            throw new Error(
+                'This build is not registered in Google Cloud. Add an Android OAuth client for this package + signing SHA-1, then rebuild. See Logcat tag GoogleProvider for the exact fingerprint.'
+            );
+        }
+
         throw err;
     }
 
