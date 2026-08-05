@@ -30,7 +30,8 @@ const emit = defineEmits<{ create: []; navigate: [key: string] }>();
 const nav: NavItem[] = [
   { key: 'assistant', label: 'Assistant', icon: MessageSquareText },
   { key: 'vault', label: 'Vault', icon: FolderLock },
-  { key: 'workflows', label: 'Workflows', icon: Workflow },
+  // Workflows hidden for now (see layouts/default.vue) — not ready to ship.
+  // { key: 'workflows', label: 'Workflows', icon: Workflow },
   { key: 'history', label: 'History', icon: History },
   { key: 'library', label: 'Library', icon: Library },
   { key: 'guidance', label: 'Guidance', icon: LifeBuoy },
