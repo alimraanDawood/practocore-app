@@ -1,0 +1,249 @@
+name: build
+
+# Compiles the app for every shipping platform and keeps the binaries as workflow
+# artifacts. Nothing is published or released here — that is main.yml's job, which
+# cuts a GitHub release from the `release` branch. This one just gives you an
+# installable build of any commit, on demand.
+#
+# Platforms: Tauri desktop (macOS arm64 + x86_64, Windows x64, Linux x64) and the
+# Capacitor Android app. iOS is deliberately excluded.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+# One build per ref; a new push supersedes an in-flight run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `nuxt prepare` runs on postinstall and Nuxt's build is memory-hungry on CI.
+  NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+  # ── Tauri desktop ─────────────────────────────────────────────────────────
+  desktop:
+    name: desktop (${{ matrix.label }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-arm64
+            platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - label: macos-x86_64
+            platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - label: linux-x86_64
+            platform: ubuntu-22.04
+            args: ''
+          - label: windows-x86_64
+            platform: windows-latest
+            args: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.label }}
+
+      # webkit2gtk-4.1 is a hard requirement: src-tauri links the `webkit2gtk` crate
+      # directly to attach the microphone permission handler (src-tauri/src/lib.rs).
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # tauri.conf.json points frontendDist at ../dist, but `nuxt generate` writes to
+      # .output/public. Build the frontend here and put it where Tauri expects it.
+      # (tauri-action runs beforeBuildCommand — another `nuxt generate` — which only
+      # rewrites .output, leaving this copy intact.)
+      - name: Build frontend
+        shell: bash
+        run: bun run generate
+
+      - name: Stage frontend into dist/
+        shell: bash
+        run: |
+          if [ -f .output/public/index.html ]; then
+            rm -rf dist && cp -R .output/public dist
+          elif [ -f dist/index.html ]; then
+            echo "nuxt generate wrote dist/ directly — leaving it alone"
+          else
+            echo "::error::No static build output found (looked for .output/public/index.html and dist/index.html)"
+            exit 1
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # No tagName/releaseName: build only, so nothing is published.
+          args: ${{ matrix.args }}
+
+      - name: Upload desktop bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: practocore-desktop-${{ matrix.label }}-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          # Covers both target/release/bundle (no --target) and
+          # target/<triple>/release/bundle (macOS matrix entries).
+          path: |
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/*/release/bundle/**/*.deb
+            src-tauri/target/*/release/bundle/**/*.rpm
+            src-tauri/target/*/release/bundle/**/*.AppImage
+            src-tauri/target/*/release/bundle/**/*.dmg
+            src-tauri/target/*/release/bundle/**/*.msi
+            src-tauri/target/*/release/bundle/**/*.exe
+
+  # ── Capacitor Android ─────────────────────────────────────────────────────
+  android:
+    name: android
+    runs-on: ubuntu-latest
+    env:
+      # Read once at job level so the signing steps can be gated on them — secrets
+      # can't be referenced from an `if:` expression, but env vars can.
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # AGP 8.13 / compileSdk 36 needs JDK 17+.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        run: bun run generate
+
+      # capacitor.config.ts has webDir: 'dist' (and its server.url block commented out,
+      # so this bundles the local assets rather than pointing at a dev server).
+      - name: Stage frontend into dist/
+        run: |
+          if [ -f .output/public/index.html ]; then
+            rm -rf dist && cp -R .output/public dist
+          elif [ -f dist/index.html ]; then
+            echo "nuxt generate wrote dist/ directly — leaving it alone"
+          else
+            echo "::error::No static build output found (looked for .output/public/index.html and dist/index.html)"
+            exit 1
+          fi
+
+      - name: Capacitor sync
+        run: bunx cap sync android
+
+      # Debug is always installable (Gradle signs it with the auto-generated debug
+      # key), so there is something to sideload even without release signing secrets.
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      # Release is built regardless — it catches minify/manifest problems that debug
+      # doesn't — but comes out unsigned unless the keystore secrets are configured.
+      - name: Build release APK + AAB
+        working-directory: android
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: Sign release artifacts
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          set -euo pipefail
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+          # Gradle pulls its own build-tools; take the newest installed.
+          BUILD_TOOLS="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          ZIPALIGN="$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+
+          APK_IN=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          APK_OUT=android/app/build/outputs/apk/release/app-release-signed.apk
+          "$ZIPALIGN" -p -f 4 "$APK_IN" "$RUNNER_TEMP/aligned.apk"
+          "$APKSIGNER" sign \
+            --ks "$RUNNER_TEMP/release.jks" \
+            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+            --out "$APK_OUT" \
+            "$RUNNER_TEMP/aligned.apk"
+          "$APKSIGNER" verify "$APK_OUT"
+
+          # The bundle can't go through apksigner — jarsigner is what Play expects.
+          jarsigner -verbose:false \
+            -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            -signedjar android/app/build/outputs/bundle/release/app-release-signed.aab \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            "$ANDROID_KEY_ALIAS"
+
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Note missing signing secrets
+        if: env.ANDROID_KEYSTORE_BASE64 == ''
+        run: |
+          echo "::warning::ANDROID_KEYSTORE_BASE64 is not set — the release APK/AAB are UNSIGNED and cannot be installed or uploaded to Play. The debug APK is installable."
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: practocore-android-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
