@@ -42,10 +42,11 @@ async function continueWithGoogle() {
     }
   } catch (e: any) {
     // User backed out of the Google picker — not an error, just reset the button.
-    if (e?.code !== 'CANCELLED') {
-      console.error(e);
-      toast.error('We were unable to sign you in at this time!');
-    }
+    if (e?.code === 'CANCELLED') return;
+    console.error(e);
+    // Surface the actionable message when the service gave us one (e.g. a build
+    // not registered in Google Cloud) instead of the generic fallback.
+    toast.error(e?.message || 'We were unable to sign you in at this time!');
   } finally {
     isGoogleLoading.value = false;
   }

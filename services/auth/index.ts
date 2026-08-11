@@ -19,6 +19,28 @@ export class GoogleAuthCancelledError extends Error {
     }
 }
 
+/**
+ * Thrown when Google/Credential Manager rejects the app itself — the SHA-1 of
+ * the signing certificate + package name is not registered as an Android OAuth
+ * client in the Google Cloud project that owns the web client id. This is the
+ * "works in debug, silently fails in release" bug: the debug keystore's SHA-1
+ * is registered, the release (or Play App Signing) key's is not.
+ *
+ * Call sites SHOULD surface `message` — it's actionable — instead of the
+ * generic "couldn't sign you in" toast.
+ */
+export class GoogleSignInMisconfiguredError extends Error {
+    readonly code = 'MISCONFIGURED';
+    constructor(detail: string) {
+        super(
+            'This build isn\'t registered for Google sign-in. Add its signing SHA-1 as an ' +
+            'Android OAuth client (same Google Cloud project as the web client id), then rebuild. ' +
+            (detail ? `(${detail})` : '')
+        );
+        this.name = 'GoogleSignInMisconfiguredError';
+    }
+}
+
 // The Capgo plugin's `initialize` is only valid once per process. Guard it so
 // repeated login attempts don't re-init (and so we don't pay the import cost on
 // web, where the native module isn't bundled).
@@ -89,28 +111,42 @@ async function signInWithGoogleNative() {
         // an unchanged login page with no feedback anywhere.
         console.error('[google-signin] native login failed', { code, message, err });
 
+        // A build Google Cloud doesn't recognise (missing/mismatched SHA-1 OAuth
+        // client). Check this BEFORE the cancellation branch so that if a misconfig
+        // ever carries both signals, the actionable error wins. On most devices
+        // Play Services reports it as a DEVELOPER_ERROR ("10:", "28444", "Developer
+        // console ..."); newer plugin builds also reject with an explicit "not
+        // configured for this installed build" message.
+        if (
+            /developer console|28444|\b10:|not configured for this installed build|oauth is not configured|not registered to use oauth/i.test(
+                message
+            )
+        ) {
+            throw new GoogleSignInMisconfiguredError(message);
+        }
+
         // Only the plugin's explicit cancellation code counts as "user backed out"
         // (GoogleProvider.java rejects with USER_CANCELLED for
         // GetCredentialCancellationException; 12501 is the legacy Play Services
-        // SIGN_IN_CANCELLED). This used to substring-match 'cancel' across the whole
-        // error, which also swallowed Credential Manager's misconfiguration
-        // failures — those abort *after* the account picker and read as a cancel,
-        // so a missing Android OAuth client looked exactly like the user changing
-        // their mind, silently.
+        // SIGN_IN_CANCELLED).
+        //
+        // KNOWN LIMITATION: on some devices a SHA-1 rejection *also* collapses into
+        // a bare GetCredentialCancellationException (USER_CANCELLED) whose message
+        // is just "activity is cancelled by the user" — indistinguishable here from
+        // a real back-out. The distinguishing "[GetTokenResponseHandler] ... not
+        // registered to use OAuth2.0" line is emitted by Play Services to Logcat
+        // only and never reaches JS. We keep the UI quiet on cancel (real back-outs
+        // must not shout at the user) but the console.error above always fires, so a
+        // genuine misconfig remains diagnosable from a webview/remote log.
         if (code === 'USER_CANCELLED' || code === '12501') {
             throw new GoogleAuthCancelledError();
         }
 
-        // Credential Manager's own wording for a build Google Cloud doesn't
-        // recognise. Give the operator the actionable version rather than
-        // "[28444] Developer console is not set up correctly."
-        if (/developer console|28444|\b10:/i.test(message)) {
-            throw new Error(
-                'This build is not registered in Google Cloud. Add an Android OAuth client for this package + signing SHA-1, then rebuild. See Logcat tag GoogleProvider for the exact fingerprint.'
-            );
-        }
-
-        throw err;
+        // Anything else is a real failure — surface something specific rather than
+        // letting the caller fall back to a generic "couldn't sign you in".
+        throw new Error(
+            message ? `Google sign-in failed: ${message}` : 'Google sign-in failed for an unknown reason.'
+        );
     }
 
     if (!idToken) {
