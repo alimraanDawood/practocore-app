@@ -265,7 +265,7 @@
       <h2 class="font-semibold">Need more help?</h2>
       <p class="text-sm text-muted-foreground">Our support team is available Monday to Friday, 8 am – 6 pm EAT.</p>
       <div class="flex flex-row gap-2 flex-wrap">
-        <a href="mailto:contact@fiika.dev">
+        <a href="mailto:contact@practocore.com">
           <Button variant="outline" size="sm">
             <Mail class="size-4 mr-2" />
             Email support
