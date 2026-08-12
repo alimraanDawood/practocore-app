@@ -7,7 +7,7 @@
         </div>
         <h2 class="text-2xl font-bold ibm-plex-serif">Create your account</h2>
         <p class="text-muted-foreground text-sm">
-          Get started managing your litigation deadlines. It only takes a moment.
+          Set up your workspace to get started. It only takes a moment.
         </p>
       </div>
 

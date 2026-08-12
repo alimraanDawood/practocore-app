@@ -4,7 +4,7 @@
       <div class="flex flex-col items-center gap-2 max-w-lg">
         <h1 class="text-3xl font-bold ibm-plex-serif">Welcome to PractoCore</h1>
         <p class="text-muted-foreground">
-          Litigation deadline management built for East African advocates. Let's get you set up.
+          An AI-powered legal platform for Ugandan law. Let's get you set up.
         </p>
       </div>
       <PageComponentsOnboardingPersonaSelector v-model="store.persona" />
