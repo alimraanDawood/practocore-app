@@ -54,7 +54,6 @@ interface NavLink {
   exact?: boolean;
   adminOnly?: boolean;
   needsOrg?: boolean;
-  beta?: boolean;
 }
 
 const hasOrg = computed(() => !!getSignedInUser()?.organisation);
@@ -63,8 +62,8 @@ const appNav: NavLink[] = [
   // { label: 'Home', icon: Home, to: '/main', exact: true },
   {label: 'Assistant', icon: MessageSquareText, to: '/main', exact: true},
   {label: 'Litigation', icon: Scale, to: '/main/matters'},
-  {label: 'Engagements', icon: Briefcase, to: '/main/engagements', beta: true},
-  {label: 'Compliance', icon: ShieldCheck, to: '/main/compliance', beta: true},
+  {label: 'Engagements', icon: Briefcase, to: '/main/engagements'},
+  {label: 'Compliance', icon: ShieldCheck, to: '/main/compliance'},
   {label: 'Calendar', icon: CalendarClock, to: '/main/calendar'},
   {label: 'Vault', icon: FolderLock, to: '/main/vault'},
   {label: 'Skills', icon: Scroll, to: '/main/skills'},
@@ -72,7 +71,7 @@ const appNav: NavLink[] = [
   // backend remain intact; the entitlement is OFF by default (backend ai/entitlements.go),
   // so /main/workflows renders its "not enabled yet" state even if reached directly.
   // {label: 'Workflows', icon: Workflow, to: '/main/workflows', beta: true},
-  {label: 'Research', icon: Telescope, to: '/main/research', beta: true},
+  {label: 'Research', icon: Telescope, to: '/main/research'},
   {label: 'Lawyers', icon: Users, to: '/main/lawyers', adminOnly: true, needsOrg: true},
   // { label: 'Organisation', icon: Building2, to: '/main/organisation', adminOnly: true, needsOrg: true },
 ];
@@ -148,12 +147,6 @@ function isActive(item: NavLink): boolean {
                       <span>{{ item.label }}</span>
                     </NuxtLink>
                   </SidebarMenuButton>
-                  <SidebarMenuBadge
-                    v-if="item.beta"
-                    class="bg-primary/10 text-primary text-[10px] font-medium uppercase tracking-wide"
-                  >
-                    Beta
-                  </SidebarMenuBadge>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
