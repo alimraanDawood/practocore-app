@@ -1,5 +1,12 @@
 <template>
   <div class="flex flex-col w-full h-full gap-6 justify-center-safe">
+    <!-- Until the signup config resolves we don't yet know whether the trial fee is
+         waived; render a preloader instead of flashing the paid payment form. -->
+    <div v-if="loading" class="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
+      <LoaderCircle class="size-6 animate-spin" />
+    </div>
+
+    <template v-else>
     <!-- Pricing Display -->
     <div class="flex flex-col items-center py-8 gap-3">
       <Badge variant="secondary" class="mb-2">{{ freeTrial ? 'Free Trial' : 'Trial Offer' }}</Badge>
@@ -115,6 +122,7 @@
         <a href="#" class="underline hover:text-foreground">Privacy Policy</a>
       </p>
     </form>
+    </template>
   </div>
 </template>
 
@@ -123,7 +131,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
-import { AlertCircle, Smartphone, CreditCard, Receipt, Info } from 'lucide-vue-next';
+import { AlertCircle, Smartphone, CreditCard, Receipt, Info, LoaderCircle } from 'lucide-vue-next';
 import { getSignupConfig } from '~/services/subscriptions/index.ts';
 
 const emit = defineEmits<{
@@ -137,10 +145,19 @@ const errorMessage = ref('');
 const paymentMethod = ref<'MOBILE_MONEY' | 'CARD' | 'MANUAL'>('MOBILE_MONEY');
 
 // Backend FREE_TRIAL waiver: when on, the trial fee is waived and this whole
-// payment step collapses to a "start free trial" confirmation.
+// payment step collapses to a "start free trial" confirmation. `loading` gates the
+// initial render so the paid form never flashes before the config resolves.
 const freeTrial = ref(false);
+const loading = ref(true);
 onMounted(async () => {
-  freeTrial.value = (await getSignupConfig()).freeTrial;
+  try {
+    freeTrial.value = (await getSignupConfig()).freeTrial;
+  } catch (e) {
+    // On failure, fall back to the paid form (freeTrial stays false) rather than blocking.
+    console.error('Failed to load signup config:', e);
+  } finally {
+    loading.value = false;
+  }
 });
 
 const trialAmount = computed(() => {
@@ -205,5 +222,6 @@ defineExpose({
   isSubmitting,
   paymentMethod,
   freeTrial,
+  loading,
 });
 </script>

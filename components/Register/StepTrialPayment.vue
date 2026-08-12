@@ -28,7 +28,8 @@ const store = useRegisterStore()
 const trialPaymentRef = ref<InstanceType<typeof TrialPayment>>()
 
 const isSubmitting = computed(() => trialPaymentRef.value?.isSubmitting ?? false)
-const canProceed = computed(() => !isSubmitting.value)
+const loading = computed(() => trialPaymentRef.value?.loading ?? true)
+const canProceed = computed(() => !isSubmitting.value && !loading.value)
 
 const handleNext = async () => {
   await trialPaymentRef.value?.triggerSubmit()
@@ -42,7 +43,9 @@ const onTrialPaymentComplete = async (payload: { phone?: string; paymentMethod: 
 
 const freeTrial = computed(() => trialPaymentRef.value?.freeTrial ?? false)
 const footerLabel = computed(() =>
-  isSubmitting.value ? 'Processing…' : (freeTrial.value ? 'Start Free Trial' : 'Continue to Payment')
+  loading.value ? 'Please wait…'
+    : isSubmitting.value ? 'Processing…'
+    : (freeTrial.value ? 'Start Free Trial' : 'Continue to Payment')
 )
 
 watch(canProceed, v => { store.stepCanProceed = v }, { immediate: true })
