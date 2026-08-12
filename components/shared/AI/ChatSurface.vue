@@ -4,7 +4,7 @@ import {
   Loader2, Check, X, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, ArrowUpIcon, Trash2,
   Briefcase, FileText, FileType2, BookOpen, AtSign, Paperclip, Building2, Clock, User,
   Library, Zap, Gauge, Files, Eye, Download,
-  Mic, AudioLines, Copy,
+  Mic, Copy,
   type LucideIcon,
 } from 'lucide-vue-next';
 import {toast} from 'vue-sonner';
@@ -796,10 +796,6 @@ function handleKeydown(e: KeyboardEvent) {
 // no meter, and every state reachable from the switcher on the screen. It is on
 // while the surface is being designed. Flip it to false to go live.
 const VOICE_PREVIEW = false;
-
-// Offer voice only where a call could actually run — except in preview, which
-// never touches the mic and so should be reachable anywhere it's being designed.
-const voiceSupported = computed(() => VOICE_PREVIEW || voiceAgentSupported());
 
 // Dictation still uses the old cascade — it only needs transcription, and the
 // per-message speaker button still uses its TTS.
@@ -1851,17 +1847,12 @@ defineExpose({
               <Mic class="size-4"/>
               <span class="sr-only">Dictate your prompt</span>
             </InputGroupButton>
-            <!-- Primary slot: stop while generating, voice mode while the composer is
-                 empty, send once there's something to send. -->
+            <!-- Primary slot: stop while generating, otherwise send (disabled until
+                 there's something to send). Voice mode is currently disabled. -->
             <InputGroupButton v-if="loading" variant="default" class="rounded-full" size="icon-sm"
                               title="Stop generating" @click="stopTurn">
               <Square class="size-3.5 fill-current"/>
               <span class="sr-only">Stop generating</span>
-            </InputGroupButton>
-            <InputGroupButton v-else-if="!hasInput && voiceSupported" variant="default" class="rounded-full"
-                              size="icon-sm" title="Talk to the assistant" @click="voiceOpen = true">
-              <AudioLines class="size-4"/>
-              <span class="sr-only">Talk to the assistant</span>
             </InputGroupButton>
             <InputGroupButton v-else variant="default" class="rounded-full" size="icon-sm"
                               :disabled="!canSend" @click="send()">
