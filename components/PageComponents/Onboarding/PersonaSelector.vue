@@ -37,7 +37,7 @@ const selectPersona = (persona: Persona) => {
       <button @click="selectPersona('JOIN')" class="flex gap-4 disabled:opacity-50 flex-row items-start text-left p-3 border-2 rounded-lg ring-transparent" :class="{ '!ring-tertiary bg-tertiary/5 border-tertiary': registerAs === 'JOIN' }">
         <div class="flex flex-col w-full">
           <span class="text-lg font-semibold">Join my law firm</span>
-          <span class="text-sm text-muted-foreground">I've been invited to join my firm's workspace (this option is pre-selected if they arrived via an invite link)</span>
+          <span class="text-sm text-muted-foreground">I've been invited to join my firm's workspace</span>
         </div>
 
         <div class="size-4 ring-2 ring-muted-foreground/20 rounded-full bg-muted shrink-0 grid place-items-center my-auto" :class="{ 'ring-tertiary': registerAs === 'JOIN' }">
