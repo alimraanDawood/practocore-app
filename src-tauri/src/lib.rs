@@ -44,7 +44,20 @@ fn allow_microphone(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // Single-instance MUST be the first plugin registered, and is desktop-only.
+    // Its callback fires in the ORIGINAL process when a second launch happens
+    // (e.g. the OS starting a new process to hand off a practocore:// link); the
+    // `deep-link` feature forwards that URL into the deep-link plugin, so the
+    // empty body here is deliberate — we don't need to do anything extra.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}));
+    }
+
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -61,6 +74,16 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     allow_microphone(&window)?;
                 }
+            }
+
+            // On Linux/Windows the practocore:// scheme is not registered with
+            // the OS by an installer during development, so register it at
+            // runtime. macOS reads the scheme from the bundle's Info.plist and
+            // needs no runtime call. Harmless to re-run on an installed app.
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
             }
 
             Ok(())

@@ -57,6 +57,14 @@
 				<string>com.googleusercontent.apps.286763366119-d5gbju720bdoahn01k1vuo69l5hqkan5</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.practocore.app.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>practocore</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

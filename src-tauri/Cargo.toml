@@ -24,6 +24,18 @@ log = "0.4"
 tauri = { version = "2.10.0", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
+# OS-level deep links (practocore:// scheme + https App Links). Works on every
+# target; the desktop-only single-instance plugin below routes a link fired at a
+# already-running app back into this one instead of spawning a second window.
+tauri-plugin-deep-link = "2"
+
+# Desktop only: on Linux/Windows a deep link launches a *fresh* process, so we
+# need single-instance to forward its argv (the URL) to the running app. The
+# `deep-link` feature makes it emit straight into tauri-plugin-deep-link's
+# onOpenUrl, which the frontend listens on. macOS/mobile deliver the URL to the
+# live process directly and don't use this.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 # Needed to attach a microphone permission handler to the platform webview (see
 # allow_microphone in src/lib.rs). Version-pinned on purpose: this must be the

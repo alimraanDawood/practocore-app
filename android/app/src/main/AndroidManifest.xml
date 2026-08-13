@@ -19,6 +19,28 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Custom-scheme deep links: practocore://main/... Works with no
+                 server-side verification, so it's the link type we can test
+                 today. No autoVerify — custom schemes aren't verifiable. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="practocore" />
+            </intent-filter>
+
+            <!-- HTTPS App Links: https://app.practocore.com/... open the app
+                 directly. android:autoVerify makes Android fetch
+                 /.well-known/assetlinks.json from the host and skip the
+                 disambiguation chooser once verified. Requires that file to be
+                 served on the live domain (see docs/DEEP_LINKING.md). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="app.practocore.com" />
+            </intent-filter>
         </activity>
 
         <provider
