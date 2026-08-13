@@ -6,6 +6,8 @@ import type {
   RegistrationError
 } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { navigateTo } from '#app';
+import { resolveNotificationRoute } from '~/utils/notificationRoute';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import type { Messaging } from 'firebase/messaging';
@@ -17,6 +19,12 @@ import { pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
 
 // Store Firebase messaging instance for web
 let firebaseMessaging: Messaging | null = null;
+
+// Guards `ensureNativePushListeners()` so repeated calls attach the Capacitor
+// listeners exactly once. The plugin re-runs initialisation on every authStore
+// change, and the settings/permission UIs call it too, so without this the
+// `registration` handler would stack up and save the same token N times.
+let nativeListenersReady: Promise<void> | null = null;
 
 /**
  * Get current platform
@@ -223,6 +231,11 @@ async function initializeWebPushNotifications() {
  */
 async function initializeNativePushNotifications() {
   try {
+    // Listeners MUST be attached before register(): the `registration` event
+    // carrying the FCM token can fire immediately, and a handler added after
+    // the fact misses it outright.
+    await ensureNativePushListeners();
+
     // Request permission to use push notifications
     const permResult = await PushNotifications.requestPermissions();
 
@@ -232,9 +245,6 @@ async function initializeNativePushNotifications() {
     } else {
       console.log('Push notification permission denied');
     }
-
-    // Set up event listeners
-    setupNativePushNotificationListeners();
   } catch (error) {
     console.error('Error initializing native push notifications:', error);
   }
@@ -260,39 +270,63 @@ export async function isPushNotificationsSupported(): Promise<boolean> {
 }
 
 /**
- * Set up all native push notification event listeners (Capacitor)
+ * Attach the native push notification event listeners (Capacitor), once.
+ *
+ * MUST be awaited before any `PushNotifications.register()` call — the
+ * `registration` event that delivers the FCM token is what actually persists
+ * the device token, and an unlistened event is simply lost. Anywhere that
+ * drives registration itself (the permission prompt, notification settings)
+ * has to call this first rather than assuming app startup did it: startup
+ * initialisation is skipped whenever push isn't supported or the user wasn't
+ * signed in yet.
+ *
+ * Safe to call repeatedly — the listeners are attached exactly once per app
+ * session.
  */
-function setupNativePushNotificationListeners() {
-  // Called when registration is successful
-  PushNotifications.addListener('registration', async (token: Token) => {
-    console.log('Push registration success, token:', token.value);
-    await saveDeviceToken(token.value);
-  });
+export async function ensureNativePushListeners(): Promise<void> {
+  const platform = getPlatform();
+  if (platform !== 'android' && platform !== 'ios') return;
 
-  // Called when registration fails
-  PushNotifications.addListener('registrationError', (error: RegistrationError) => {
-    console.error('Push registration error:', error);
-  });
+  if (!nativeListenersReady) {
+    nativeListenersReady = (async () => {
+      // Called when registration is successful
+      await PushNotifications.addListener('registration', async (token: Token) => {
+        console.log('Push registration success, token:', token.value);
+        await saveDeviceToken(token.value);
+      });
 
-  // Called when a push notification is received while app is in foreground
-  PushNotifications.addListener(
-    'pushNotificationReceived',
-    (notification: PushNotificationSchema) => {
-      console.log('Push notification received (foreground):', notification);
-      // Handle foreground notification - show in-app notification
-      handleForegroundNotification(notification);
-    }
-  );
+      // Called when registration fails
+      await PushNotifications.addListener('registrationError', (error: RegistrationError) => {
+        console.error('Push registration error:', error);
+      });
 
-  // Called when user taps on a notification
-  PushNotifications.addListener(
-    'pushNotificationActionPerformed',
-    (action: ActionPerformed) => {
-      console.log('Push notification action performed:', action);
-      // Handle notification tap - navigate to relevant screen
-      handleNotificationAction(action);
-    }
-  );
+      // Called when a push notification is received while app is in foreground
+      await PushNotifications.addListener(
+        'pushNotificationReceived',
+        (notification: PushNotificationSchema) => {
+          console.log('Push notification received (foreground):', notification);
+          // Handle foreground notification - show in-app notification
+          handleForegroundNotification(notification);
+        }
+      );
+
+      // Called when user taps on a notification
+      await PushNotifications.addListener(
+        'pushNotificationActionPerformed',
+        (action: ActionPerformed) => {
+          console.log('Push notification action performed:', action);
+          // Handle notification tap - navigate to relevant screen
+          handleNotificationAction(action);
+        }
+      );
+    })().catch((error) => {
+      // Don't cache a failed attach — let the next caller retry.
+      nativeListenersReady = null;
+      throw error;
+    });
+  }
+
+  return nativeListenersReady;
 }
 
 /**
@@ -416,26 +450,26 @@ function handleWebForegroundNotification(payload: any) {
 function handleWebNotificationClick(data: any) {
   console.log('Web notification clicked with data:', data);
 
-  // Navigate based on notification data
-  if (data?.matter_id) {
-    // Use navigateTo or router to navigate
-    window.location.href = `/main/matters/${data.matter_id}`;
-  } else if (data?.deadline_id) {
-    window.location.href = `/main/deadlines/${data.deadline_id}`;
-  } else if (data?.click_action) {
-    window.location.href = data.click_action;
-  }
+  const route = resolveNotificationRoute(data);
+  // Client-side routing rather than `window.location.href`: this is an SPA, and
+  // a location assignment tears down and re-boots the whole app (losing the
+  // PocketBase realtime subscriptions) just to change page.
+  if (route) navigateTo(route);
 }
 
 /**
  * Handle notification received while app is in foreground (Native)
  */
 function handleForegroundNotification(notification: PushNotificationSchema) {
-  // You can integrate with your existing notification system here
-  // For example, show a toast or add to notification center
   console.log('Foreground notification:', notification.title, notification.body);
 
-  toast.message(notification, { description: notification.body, position: 'top-right', duration: 3000 });
+  // Title first, not the whole notification object — vue-sonner expects a
+  // string (or component) here and renders an object as "[object Object]".
+  toast.message(notification.title ?? 'PractoCore Notification', {
+    description: notification.body,
+    position: 'top-right',
+    duration: 3000,
+  });
 }
 
 /**
@@ -448,14 +482,8 @@ function handleNotificationAction(action: ActionPerformed) {
   console.log('User tapped notification:', notification.title);
   console.log('Notification data:', data);
 
-  // Navigate based on notification data
-  // Example: if notification contains a matter ID, navigate to that matter
-  if (data.matter_id) {
-    // Use your router to navigate
-    // navigateTo(`/main/matters/${data.matter_id}`);
-  } else if (data.deadline_id) {
-    // navigateTo(`/main/deadlines/${data.deadline_id}`);
-  }
+  const route = resolveNotificationRoute(data);
+  if (route) navigateTo(route);
 }
 
 /**
@@ -534,8 +562,10 @@ export async function unregisterPushNotifications() {
     } else {
       // Unregister from native platform
       await PushNotifications.unregister();
-      // Remove all listeners
+      // Remove all listeners — and drop the once-guard with them, so the next
+      // sign-in re-attaches instead of assuming they're still up.
       await PushNotifications.removeAllListeners();
+      nativeListenersReady = null;
     }
 
     console.log('Push notifications unregistered');

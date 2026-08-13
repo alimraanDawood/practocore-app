@@ -866,7 +866,16 @@ export function sendAiMessageVoiceStream(
   context: AiContext | undefined,
   conversationId: string | undefined,
   opts: { onText?: (delta: string) => void; onStep?: (step: AiStreamStep) => void;
-    mode?: string; contextKey?: string; pageContext?: string } = {},
+    mode?: string; contextKey?: string; pageContext?: string;
+    /** Speed tier. A spoken turn should pass 'fast': the answer is short and the
+     *  listener is waiting in real time, which is not what 'deep' is for. */
+    tier?: 'auto' | 'fast' | 'deep';
+    /** Suppress conversation persistence. A spoken turn is ephemeral — without this
+     *  every utterance creates an AiConversations row and floods chat history. */
+    ephemeral?: boolean;
+    /** Turn id. Registering a whole call under ONE id means a new utterance cancels
+     *  the generation still running for the previous one. */
+    turnId?: string } = {},
 ): Promise<AiResponse> {
   return aiStreamPost(
     '/api/practocore/ai/chat',
@@ -882,6 +891,9 @@ export function sendAiMessageVoiceStream(
       mode: opts.mode ?? '',
       contextKey: opts.contextKey ?? '',
       pageContext: opts.pageContext ?? '',
+      tier: opts.tier ?? 'auto',
+      ephemeral: opts.ephemeral ?? false,
+      turnId: opts.turnId ?? '',
     },
     opts.onStep,
     opts.onText,

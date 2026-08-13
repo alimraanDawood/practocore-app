@@ -7,6 +7,9 @@ import { listCategories, type HelpCategory } from '~/services/help';
 
 definePageMeta({ layout: 'default' });
 
+// Support is a tab on desktop, a standalone page on mobile.
+const { settingsPath } = useSettingsLink();
+
 const categories = ref<HelpCategory[]>([]);
 const loading = ref(true);
 const loadError = ref('');
@@ -89,7 +92,7 @@ onMounted(refresh);
 
       <!-- Still need help -->
       <NuxtLink
-        to="/main/settings/support"
+        :to="settingsPath('support')"
         class="flex flex-row items-center gap-4 rounded-xl border bg-muted/20 p-5 transition-colors hover:bg-muted/50"
       >
         <div class="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10">

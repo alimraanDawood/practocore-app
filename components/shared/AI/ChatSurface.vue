@@ -284,6 +284,16 @@ const branches = useChatBranches<ChatMessage>();
 const messages = branches.messages;
 const conversationId = ref('');
 watch(conversationId, (id) => emit('conversationChange', id));
+
+// Shared surfaces remember the thread they had open, so navigating away and back
+// resumes it instead of landing on an empty chat (this component unmounts on the way
+// out, and the sidebar's Assistant link carries no `?c`). Opening another conversation
+// overwrites the memory; a new chat clears it (conversationId goes back to '').
+const threadMemory = useSharedThreadMemory();
+const threadKey = computed(() => props.mode || 'assistant');
+watch(conversationId, (id) => {
+  if (isShared.value) threadMemory.remember(threadKey.value, id);
+});
 // defineExpose is called once, lower in the file (after the history-related consts
 // like `conversations`/`historyLoading` are initialized) to avoid a TDZ error.
 
@@ -1300,7 +1310,13 @@ function selectConversation(id: string) {
 async function loadConversation(id: string) {
   if (conversationId.value === id) return;
   const conv = await getConversation(id);
-  if (!conv) return;
+  if (!conv) {
+    // Gone (deleted elsewhere, or a stale remembered/deep-linked id). Forget it and
+    // drop `?c` so the surface settles on a clean new chat rather than a dead URL.
+    threadMemory.remember(threadKey.value, '');
+    if (isShared.value && route.query.c === id) router.replace({ query: {} });
+    return;
+  }
   const flat = (conv.messages ?? []).map((m): ChatMessage => {
     if (m.role.startsWith('tool-event:')) {
       const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
@@ -1384,6 +1400,14 @@ onMounted(async () => {
   if (isShared.value) {
     const initial = route.query.c;
     if (typeof initial === 'string' && initial) loadConversation(initial);
+    else if (!props.seed?.trim()) {
+      // No thread in the URL: resume the one this surface had open before we left.
+      // Restored through the query (not a direct load) so `?c` stays the single source
+      // of truth and the watcher does the work. "New chat" cleared the memory, so it
+      // still gets the blank surface it asked for.
+      const last = threadMemory.recall(threadKey.value);
+      if (last) router.replace({ query: { c: last } });
+    }
   } else if (props.autoResumeLatest && !props.seed?.trim()) {
     // Dock: resume the most recent thread for this page-context so returning to a
     // matter picks up where the user left off. Skipped when a seed prompt is set

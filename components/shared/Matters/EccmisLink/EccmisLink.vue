@@ -71,7 +71,7 @@
                     <span>{{ loadError }}</span>
                 </div>
                 <Button variant="outline" size="sm" as-child>
-                    <NuxtLink to="/main/settings/eccmis">Open ECCMIS settings</NuxtLink>
+                    <NuxtLink :to="settingsPath('eccmis')">Open ECCMIS settings</NuxtLink>
                 </Button>
             </div>
 
@@ -144,6 +144,9 @@ import {
     detachEccmisCase,
     type PortfolioCase,
 } from '~/services/eccmis';
+
+// ECCMIS settings are a tab on desktop, a standalone page on mobile.
+const { settingsPath } = useSettingsLink();
 
 const props = defineProps<{
     matter: any;

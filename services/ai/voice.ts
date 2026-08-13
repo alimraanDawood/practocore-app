@@ -60,6 +60,42 @@ export async function startVoiceSession(context?: VoiceContext): Promise<VoiceSe
   return await res.json() as VoiceSession;
 }
 
+/** What a cascade call needs to open its ears. See ai/voicecascade.go. */
+export interface VoiceCascadeSession {
+  sessionId: string;     // metered on the SAME heartbeat as an agent call
+  sttToken: string;      // AssemblyAI streaming token; seconds to redeem
+  sttUrl: string;        // v3 streaming socket — audio format and turn policy attached
+  sampleRate: number;    // what the worklet must produce
+  idleTimeoutMs: number;
+  heartbeatMs: number;
+  expiresAt: number;     // when the STT token stops being redeemable
+}
+
+/**
+ * Start a cascade voice session — AssemblyAI for the ears only.
+ *
+ * Unlike startVoiceSession there is no agent to provision and no third party that
+ * will call our backend later, so the page context is sent here only to keep the
+ * metering registry uniform: the actual context travels with every /ai/chat turn,
+ * because in this transport the client IS in the loop for every turn.
+ */
+export async function startVoiceCascadeSession(context?: VoiceContext): Promise<VoiceCascadeSession> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/voice/cascade/session`, {
+    method: 'POST',
+    headers: { 'Authorization': pb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(context ?? {}),
+  });
+  if (!res.ok) {
+    let msg = `Could not start a voice session (${res.status})`;
+    try {
+      const j = await res.json() as { error?: string; message?: string };
+      if (j?.error || j?.message) msg = (j.error || j.message)!;
+    } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return await res.json() as VoiceCascadeSession;
+}
+
 /**
  * Read this call's live captions.
  *

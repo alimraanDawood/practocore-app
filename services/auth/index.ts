@@ -324,6 +324,11 @@ export async function updateUser(options : Object) {
 }
 
 export async function signOut() {
+    // Note: the module-level caches that outlive the token (notification
+    // centre, permissions) clear themselves off `authStore.onChange` rather
+    // than being reset from here — see the reset functions in those
+    // composables. Most callers don't await this function, so anything queued
+    // behind an await here would run after they'd already navigated.
     pocketbase.authStore.clear();
 
     return true;

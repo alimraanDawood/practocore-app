@@ -14,7 +14,13 @@ const route = useRoute();
 const onAssistant = computed(() => route.path === '/main' || route.path === '/main/');
 const onResearch = computed(() => route.path === '/main/research' || route.path === '/main/research/');
 const onVault = computed(() => route.path.startsWith('/main/vault'));
-const visible = computed(() => onAssistant.value || onResearch.value || onVault.value);
+
+// On desktop the assistant's chat list moved into the Chat History flyout
+// (LayoutChatHistoryPanel), so showing it inline here too would duplicate it.
+// The mobile sidebar keeps the inline list.
+const isDesktop = useMediaQuery('(min-width: 1024px)');
+const showChats = computed(() => onAssistant.value && !isDesktop.value);
+const visible = computed(() => showChats.value || onResearch.value || onVault.value);
 
 // ── Chat: recent conversations ──────────────────────────────────────────────
 const { conversations, loading: chatLoading, refresh: refreshChats } = useAssistantHistory();
@@ -52,7 +58,7 @@ watch(visible, (on) => {
 <template>
   <SidebarGroup v-if="visible" class="group-data-[collapsible=icon]:hidden">
     <!-- ── Assistant: recent chats ──────────────────────────────────────── -->
-    <template v-if="onAssistant">
+    <template v-if="showChats">
       <SidebarGroupLabel>Recent chats</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>

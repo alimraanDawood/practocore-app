@@ -64,7 +64,7 @@ import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
 import * as z from 'zod';
 import { getUserPreferences, updateUserPreferences } from '~/services/auth';
-import { checkPushPermissions, requestWebPushPermission } from '~/services/push-notifications';
+import { checkPushPermissions, requestWebPushPermission, ensureNativePushListeners } from '~/services/push-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'vue-sonner';
@@ -157,7 +157,10 @@ async function handleEnablePermissions() {
         toast.error('Permission denied. Please enable notifications in your browser settings.');
       }
     } else {
-      // Native platform
+      // Native platform. Listeners first — register() emits the token via
+      // `registration`, and with nothing attached it is silently dropped.
+      await ensureNativePushListeners();
+
       const permResult = await PushNotifications.requestPermissions();
 
       if (permResult.receive === 'granted') {

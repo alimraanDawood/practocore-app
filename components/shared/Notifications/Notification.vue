@@ -2,6 +2,7 @@
 import { Scale, Bell, AlertCircle, CheckCircle, Info, X } from "lucide-vue-next";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { resolveNotificationRoute } from "~/utils/notificationRoute";
 
 const props = defineProps(['notification']);
 const emit = defineEmits(['mark-as-read']);
@@ -47,17 +48,16 @@ const handleMarkAsRead = () => {
   }
 };
 
-// Handle notification body click - navigate to clickAction if defined
+// Handle notification body click — navigate wherever it points, if anywhere.
+// This used to read `metadata.clickAction` and nothing else, which left every
+// notification that deep-links via the record's `link` field (deep research,
+// ECCMIS, billing) as a dead click. The shared resolver understands both.
 const handleNotificationClick = () => {
-  const clickAction = props.notification?.metadata?.clickAction;
+  const route = resolveNotificationRoute(props.notification);
 
-  if (clickAction) {
-    navigateTo(clickAction);
-    handleMarkAsRead();
-  } else {
-    // Just mark as read if no navigation defined
-    handleMarkAsRead();
-  }
+  if (route) navigateTo(route);
+  // Read either way — the user has engaged with it.
+  handleMarkAsRead();
 };
 
 // Handle action button clicks

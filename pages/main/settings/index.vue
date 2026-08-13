@@ -1,6 +1,8 @@
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden items-center">
-    <div class="flex flex-row items-center p-3 border-b justify-between w-full">
+    <!-- On desktop the tab row below carries the rule, so the title and its tabs
+         read as one block (mobile keeps the header's own border). -->
+    <div class="flex flex-row items-center p-3 border-b lg:border-b-0 lg:pb-1 justify-between w-full">
       <div class="flex items-center gap-2">
         <SidebarTrigger class="lg:hidden"/>
         <span class="font-semibold text-xl ibm-plex-serif">Settings</span>
@@ -8,63 +10,27 @@
     </div>
 
     <div class="flex flex-col flex-1 min-h-0 w-full">
-      <div class="flex flex-col lg:flex-row w-full gap-3 flex-1 min-h-0 overflow-hidden">
-        <!-- Desktop: Tabs Layout -->
-        <div
-            class="hidden lg:flex flex-row border-r w-fit items-center lg:items-start lg:flex-col lg:w-full overflow-x-scroll overflow-y-hidden p-3 max-w-[200px] lg:h-full gap-3">
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'profile' ? 'default' : 'ghost'"
-              @click="activeTab = 'profile'"
-          >Profile
-          </Button>
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'notifications' ? 'default' : 'ghost'"
-              @click="activeTab = 'notifications'"
-          >Notifications
-          </Button>
-          <Button
-              v-if="canSeeBilling"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'billing' ? 'default' : 'ghost'"
-              @click="activeTab = 'billing'">
-            Billing
-          </Button>
-
-          <Separator class="my-1"/>
-
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'eccmis' ? 'default' : 'ghost'"
-              @click="activeTab = 'eccmis'"
-          >ECCMIS Sync
-          </Button>
-
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'documentation' ? 'default' : 'ghost'"
-              @click="activeTab = 'documentation'"
-          >Documentation
-          </Button>
-
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'support' ? 'default' : 'ghost'"
-              @click="activeTab = 'support'"
-          >Support
-          </Button>
+      <div class="flex flex-col w-full flex-1 min-h-0 overflow-hidden">
+        <!-- Desktop: horizontal tab row. The app shell already owns the left
+             sidebar, so a second vertical rail here read as a competing nav —
+             the sections sit in a row under the page title instead. -->
+        <div class="hidden lg:flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b px-3 py-2">
+          <template v-for="tab in visibleTabs" :key="tab.key">
+            <span v-if="tab.startsGroup" class="mx-1.5 h-5 w-px shrink-0 bg-border" />
+            <Button
+                size="sm"
+                class="shrink-0 whitespace-nowrap"
+                :variant="activeTab === tab.key ? 'secondary' : 'ghost'"
+                @click="activeTab = tab.key"
+            >{{ tab.label }}</Button>
+          </template>
         </div>
 
         <!-- Desktop: Tab Content -->
-        <div class="hidden lg:flex flex-col w-full flex-1 min-h-0 overflow-y-auto p-3">
+        <div class="hidden lg:flex flex-col w-full flex-1 min-h-0 overflow-y-auto p-4">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
+          <PageComponentsSettingsAIProviders v-if="activeTab === 'ai'"/>
           <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
             <div class="flex flex-col">
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
@@ -118,6 +84,16 @@
                   <div class="flex flex-row justify-center items-center gap-2">
                     <Bell/>
                     Notifications
+                  </div>
+                  <ChevronRight class="size-5 text-muted-foreground"/>
+                </Button>
+              </NuxtLink>
+
+              <NuxtLink to="/main/settings/ai" class="w-full">
+                <Button variant="ghost" class="justify-between items-center w-full">
+                  <div class="flex flex-row justify-center items-center gap-2">
+                    <Sparkles/>
+                    AI Provider
                   </div>
                   <ChevronRight class="size-5 text-muted-foreground"/>
                 </Button>
@@ -224,7 +200,7 @@ import {
   Globe,
   Users,
   UserPlus,
-  Moon, WifiOff
+  Moon, Sparkles, WifiOff
 } from "lucide-vue-next"
 import {getSignedInUser, signOut} from "~/services/auth"
 
@@ -237,7 +213,7 @@ const router = useRouter()
 
 // Tab selection is URL-backed (`?tab=`) so links can land on a specific panel
 // (e.g. the AI can send a user straight to Billing). Unknown/missing → profile.
-const VALID_TABS = ['profile', 'notifications', 'billing', 'eccmis', 'documentation', 'support']
+const VALID_TABS = ['profile', 'notifications', 'ai', 'billing', 'eccmis', 'documentation', 'support']
 const activeTab = computed({
   get() {
     const t = route.query.tab
@@ -263,4 +239,17 @@ const canSeeBilling = computed(() => {
   }
   return true;
 });
+
+// Desktop tab row. `startsGroup` draws the divider that separates the account
+// sections from the integrations/help ones — what the old vertical rail used a
+// <Separator> for.
+const visibleTabs = computed(() => [
+  { key: 'profile', label: 'Profile', show: true },
+  { key: 'notifications', label: 'Notifications', show: true },
+  { key: 'ai', label: 'AI Provider', show: true },
+  { key: 'billing', label: 'Billing', show: canSeeBilling.value },
+  { key: 'eccmis', label: 'ECCMIS Sync', show: true, startsGroup: true },
+  { key: 'documentation', label: 'Documentation', show: true },
+  { key: 'support', label: 'Support', show: true },
+].filter(t => t.show));
 </script>

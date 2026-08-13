@@ -54,7 +54,9 @@ const status = ref('processing'); // 'processing' | 'success' | 'timeout'
 let pollInterval = null;
 let pollTimeout = null;
 
-const goToBilling = () => navigateTo('/main/settings/billing');
+// Billing is a tab on desktop, a standalone page on mobile.
+const { settingsPath } = useSettingsLink();
+const goToBilling = () => navigateTo(settingsPath('billing'));
 
 const stopPolling = () => {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }

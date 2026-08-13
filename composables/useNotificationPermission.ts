@@ -1,4 +1,4 @@
-import { requestWebPushPermission, checkPushPermissions, isPushNotificationsSupported } from '~/services/push-notifications';
+import { requestWebPushPermission, checkPushPermissions, isPushNotificationsSupported, ensureNativePushListeners } from '~/services/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
@@ -148,6 +148,11 @@ export const useNotificationPermission = () => {
           return false;
         }
       } else {
+        // Attach the token listener before registering — otherwise the
+        // `registration` event fires into the void and the device token is
+        // never saved.
+        await ensureNativePushListeners();
+
         // Request native permission
         const permResult = await PushNotifications.requestPermissions();
 

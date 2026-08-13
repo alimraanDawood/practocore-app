@@ -44,13 +44,17 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ 'update:open': [boolean] }>();
 
+// The call itself, on whichever transport is selected — AssemblyAI's Voice Agent, or
+// the cascade (AssemblyAI ears → our /ai/chat → ElevenLabs mouth). The surface is the
+// same either way; see composables/useVoiceEngine.ts for the choice.
 const {
   state, userText, turns, level, error, supported,
   endedReason, idleWarning,
   start, stop, interrupt,
   pushToTalk, talking, toggleTalk,
   preview: inPreview, previewPin, previewReplay,
-} = useVoiceAgent();
+  engine, switchEngine, switcherEnabled,
+} = useVoiceEngine({preview: props.preview});
 
 // ── Elapsed ───────────────────────────────────────────────────────────────────
 // A call that bills by the second should say how long it has been running. It
@@ -249,7 +253,18 @@ const previewStates = ['connecting', 'listening', 'thinking', 'speaking'] as con
       <header class="relative z-20 flex shrink-0 items-center gap-2 px-6 pb-2 pt-5">
         <span class="size-1.5 rounded-full bg-primary" :class="{ 'animate-pulse': state !== 'idle' }"/>
         <span class="text-xs font-medium tracking-wide text-foreground/55">{{ status }}</span>
-        <span class="ml-auto font-mono text-xs tabular-nums text-foreground/35">{{ elapsed }}</span>
+        <!-- Transport switcher. A testing affordance, hidden unless explicitly
+             switched on (localStorage 'practocore:voice:switcher' = '1'), because
+             which speech vendor a call uses is never a user's decision. Switching
+             hangs up: the plumbing cannot change under a live call. -->
+        <button v-if="switcherEnabled() && !inPreview" type="button"
+                class="ml-auto rounded-full border border-dashed border-foreground/15 px-2 py-0.5 text-[10px] uppercase tracking-widest text-foreground/40 transition-colors hover:text-foreground/70"
+                :title="engine === 'cascade' ? 'AssemblyAI ears, ElevenLabs voice' : 'AssemblyAI voice agent'"
+                @click="switchEngine(engine === 'cascade' ? 'agent' : 'cascade'); close()">
+          {{ engine }}
+        </button>
+        <span class="font-mono text-xs tabular-nums text-foreground/35"
+              :class="{ 'ml-auto': !(switcherEnabled() && !inPreview) }">{{ elapsed }}</span>
       </header>
 
       <!-- Design preview only: pin a state and hold it. Never rendered on a real

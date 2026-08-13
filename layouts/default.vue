@@ -4,8 +4,8 @@
 // `definePageMeta({ layout: 'blank' })` (or another layout).
 import {
   ChevronsUpDown, MessageSquareText, FolderLock, LifeBuoy, Settings,
-  Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon,
-  type LucideIcon, Plus, Workflow, Scroll, Telescope, Briefcase, ShieldCheck,
+  Scale, Home, Users, Building2, CalendarClock, LogOut, User as UserIcon, Bell,
+  type LucideIcon, Plus, Workflow, Scroll, Telescope, Briefcase, ShieldCheck, History,
 } from 'lucide-vue-next';
 import {getSignedInUser, signOut} from '~/services/auth';
 import AICreditGauge from '~/components/shared/AI/AICreditGauge.vue';
@@ -14,10 +14,15 @@ import {useOrganisationStore} from '~/stores/organisation';
 
 const workspace = 'PractoCore';
 const route = useRoute();
+const router = useRouter();
 const authStore = useAuthStore();
 authStore.init();
 
 useOfflineSync();
+
+// Unread badge on the sidebar's notifications item. The realtime subscription
+// that keeps this current is owned by <SharedNotifications> itself.
+const { hasUnread, unreadBadge } = useNotificationCenter();
 
 // ── Current organisation (shown under the brand, switchable) ────────────────
 const orgStore = useOrganisationStore();
@@ -45,6 +50,16 @@ function userInitials(name: string): string {
 function signOutUser() {
   signOut();
   window.location.reload();
+}
+
+// "New Chat" is the one entry into /main that must NOT resume the last thread, so it
+// forgets it before navigating. Every other way in (the Assistant nav link, a back
+// navigation) restores whatever was open. See composables/useSharedThreadMemory.ts.
+const threadMemory = useSharedThreadMemory();
+
+function startNewChat() {
+  threadMemory.forget('assistant');
+  router.push('/main');
 }
 
 interface NavLink {
@@ -86,6 +101,25 @@ function isActive(item: NavLink): boolean {
   if (item.exact) return route.path === item.to;
   return route.path === item.to || route.path.startsWith(`${item.to}/`);
 }
+
+// ── Chat history flyout ─────────────────────────────────────────────────────
+// On desktop, while the assistant page is open, its nav entry has nothing left
+// to navigate to — so it becomes "Chat History" and toggles a flyout pinned to
+// the right edge of the sidebar (see LayoutChatHistoryPanel). Mobile keeps the
+// Assistant link and its own history sheet in the chat toolbar — the 1024px
+// breakpoint is exactly where that toolbar hides (ChatSurface's `lg:hidden`),
+// so one of the two is always available and never both.
+const isDesktop = useMediaQuery('(min-width: 1024px)');
+const onAssistant = computed(() => route.path === '/main' || route.path === '/main/');
+const historyOpen = ref(false);
+
+function isHistoryEntry(item: NavLink): boolean {
+  return item.to === '/main' && onAssistant.value && isDesktop.value;
+}
+
+// Leaving the assistant turns the entry back into a link; the flyout must not
+// outlive it.
+watch(onAssistant, (on) => { if (!on) historyOpen.value = false; });
 </script>
 
 <template>
@@ -127,7 +161,7 @@ function isActive(item: NavLink): boolean {
           <SidebarGroup>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton class="border" tooltip="New chat" @click="close(); $router.push('/main')">
+                <SidebarMenuButton class="border" tooltip="New chat" @click="close(); startNewChat()">
                   <Plus/>
                   <span>New Chat</span>
                 </SidebarMenuButton>
@@ -141,12 +175,38 @@ function isActive(item: NavLink): boolean {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem v-for="item in visibleNav" :key="item.to">
-                  <SidebarMenuButton as-child :tooltip="item.label" :is-active="isActive(item)">
-                    <NuxtLink :to="item.to" @click="close">
-                      <component :is="item.icon"/>
-                      <span>{{ item.label }}</span>
-                    </NuxtLink>
-                  </SidebarMenuButton>
+                  <!-- On the assistant page (desktop) this slot becomes the chat-history
+                       toggle instead of a link to the page you're already on. The two
+                       cross-fade in place — the outgoing one is taken out of flow so the
+                       row never jumps. -->
+                  <Transition
+                    enter-active-class="transition-[opacity,transform] duration-200 ease-out"
+                    leave-active-class="absolute inset-x-0 top-0 transition-[opacity,transform] duration-200 ease-in"
+                    enter-from-class="opacity-0 translate-y-1"
+                    leave-to-class="opacity-0 -translate-y-1"
+                  >
+                  <!-- The plain <div> wrappers give <Transition> a single root element to
+                       animate: a tooltip-bearing SidebarMenuButton renders a fragment
+                       (trigger + portalled content), which it cannot target. -->
+                    <div v-if="isHistoryEntry(item)" key="chat-history">
+                      <SidebarMenuButton
+                        tooltip="Chat History"
+                        :is-active="historyOpen"
+                        @click="historyOpen = !historyOpen"
+                      >
+                        <History/>
+                        <span>Chat History</span>
+                      </SidebarMenuButton>
+                    </div>
+                    <div v-else key="nav-link">
+                      <SidebarMenuButton as-child :tooltip="item.label" :is-active="isActive(item)">
+                        <NuxtLink :to="item.to" @click="close">
+                          <component :is="item.icon"/>
+                          <span>{{ item.label }}</span>
+                        </NuxtLink>
+                      </SidebarMenuButton>
+                    </div>
+                  </Transition>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
@@ -163,9 +223,39 @@ function isActive(item: NavLink): boolean {
             <SidebarMenuItem class="group-data-[collapsible=icon]:hidden">
               <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5">
                 <span class="text-sm text-muted-foreground">AI credits</span>
-                <AICreditGauge />
+                <!-- Opens beside the sidebar (with a gap) rather than flipping up
+                     over the footer. The pill sits ~16px inside the sidebar's edge,
+                     so 28 leaves a ~12px gap — matching the notifications popover. -->
+                <AICreditGauge side="right" align="end" :side-offset="28" />
               </div>
             </SidebarMenuItem>
+            <!-- Notifications — a popover beside the sidebar on desktop, the
+                 /main/notifications page on mobile. The unread badge is hidden
+                 in icon mode (no room), so a dot rides on the button instead. -->
+            <SidebarMenuItem>
+              <SharedNotifications>
+                <SidebarMenuButton
+                  tooltip="Notifications"
+                  :is-active="route.path === '/main/notifications'"
+                  class="relative"
+                  @click="close"
+                >
+                  <Bell/>
+                  <span>Notifications</span>
+                  <span
+                    v-if="hasUnread"
+                    class="absolute left-5 top-1.5 hidden size-2 rounded-full bg-destructive ring-2 ring-sidebar group-data-[collapsible=icon]:block"
+                  />
+                </SidebarMenuButton>
+              </SharedNotifications>
+              <SidebarMenuBadge
+                v-if="hasUnread"
+                class="top-1.5 bg-destructive/15 text-destructive text-[10px] font-semibold"
+              >
+                {{ unreadBadge }}
+              </SidebarMenuBadge>
+            </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton as-child tooltip="Settings" :is-active="route.path.startsWith('/main/settings')">
                 <NuxtLink to="/main/settings" @click="close">
@@ -250,6 +340,10 @@ function isActive(item: NavLink): boolean {
         <SidebarRail/>
       </Sidebar>
       </LayoutSidebarCloseMobileOnClick>
+
+      <!-- Chat-history flyout: sits beside the sidebar, full viewport height,
+           dismissed by clicking away. Only ever open on desktop /main. -->
+      <LayoutChatHistoryPanel v-model:open="historyOpen" />
 
       <!-- ── Main panel ──────────────────────────────────────────────── -->
       <SidebarInset class="relative min-h-0">

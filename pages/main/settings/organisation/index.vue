@@ -15,6 +15,12 @@
 
         <div class="flex flex-col gap-6 p-4 lg:p-6">
           <PageComponentsOrganisationProfile />
+
+          <!-- Firm-level provider permission. Admin-only; the server re-checks. -->
+          <template v-if="authStore.isAdmin && getSignedInUser()?.organisation">
+            <Separator />
+            <PageComponentsSettingsAIProviders org-scope />
+          </template>
         </div>
       </div>
     </div>
@@ -24,8 +30,10 @@
 <script setup>
 import { ArrowLeft, Headset, Mail, MessageCircle, ExternalLink, Copy } from "lucide-vue-next";
 import { toast } from 'vue-sonner';
+import { getSignedInUser } from "~/services/auth";
 
 const { goBack } = useTabHistory();
+const authStore = useAuthStore();
 
 definePageMeta({
   layout: 'blank'

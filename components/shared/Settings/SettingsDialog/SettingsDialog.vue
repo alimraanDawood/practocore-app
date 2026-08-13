@@ -30,6 +30,14 @@
           </Button>
 
           <Button
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'ai' ? 'secondary' : 'ghost'"
+              @click="activeTab = 'ai'">
+            <Sparkles />
+            AI Provider
+          </Button>
+
+          <Button
               v-if="canSeeBilling"
               class="lg:w-full flex flex-row justify-start"
               :variant="activeTab === 'billing' ? 'secondary' : 'ghost'"
@@ -43,6 +51,7 @@
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
+          <PageComponentsSettingsAIProviders v-if="activeTab === 'ai'"/>
           <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
             <div class="flex flex-col">
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
@@ -61,7 +70,7 @@
 
 <script setup>
 import {ref, computed} from 'vue'
-import {Bell, UserCircle, CreditCard} from "lucide-vue-next";
+import {Bell, UserCircle, CreditCard, Sparkles} from "lucide-vue-next";
 import {getSignedInUser} from "~/services/auth";
 
 definePageMeta({

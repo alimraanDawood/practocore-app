@@ -1,4 +1,4 @@
-import { getUserPermissions, subscribeToPermissions } from "~/services/auth";
+import { getUserPermissions, subscribeToPermissions, unsubscribeFromPermissions } from "~/services/auth";
 import { pb } from "~/lib/pocketbase";
 
 interface UserPermissions {
@@ -22,6 +22,46 @@ let subscribed = false;
 // and unlike the active-subscription type it is available synchronously and never
 // races with async plan loading. Solo users implicitly have every permission.
 const isIndividual = () => !pb.authStore.record?.organisation;
+
+/**
+ * Drop the cached permission set. Same reasoning as the notification centre:
+ * this state is module-level and survives a sign-out, so without it the next
+ * account on the same tab inherits the previous user's role and permission
+ * list. That matters more here than elsewhere — these values gate what the UI
+ * lets you do.
+ *
+ * Wired to `authStore.onChange` below rather than called from `signOut()`:
+ * most callers don't await that function, and it also misses the other way a
+ * session ends — the token simply expiring or being invalidated.
+ *
+ * The realtime subscription is closed against the outgoing user's permission
+ * record — clearing `subscribed` alone would forget it while leaving it open.
+ */
+export function resetPermissions() {
+    const previousId = permissions.value?.id;
+    if (subscribed && previousId) {
+        unsubscribeFromPermissions(previousId);
+    }
+
+    permissions.value = null;
+    loading.value = false;
+    error.value = null;
+    fetched = false;
+    subscribed = false;
+}
+
+// Reset whenever the session ends. Guarded on "was signed in, now isn't" so an
+// ordinary token refresh (which also fires onChange) doesn't drop the cache and
+// send every mounted consumer back to a permission-denied render while it
+// refetches.
+if (import.meta.client) {
+    let wasSignedIn = pb.authStore.isValid;
+    pb.authStore.onChange(() => {
+        const signedIn = pb.authStore.isValid;
+        if (wasSignedIn && !signedIn) resetPermissions();
+        wasSignedIn = signedIn;
+    });
+}
 
 export const usePermissions = () => {
     const fetchPermissions = async () => {

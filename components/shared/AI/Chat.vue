@@ -38,6 +38,9 @@ const open = defineModel<boolean>('open', { default: false });
 
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 
+// Billing is a tab on desktop, a standalone page on mobile.
+const { settingsPath } = useSettingsLink();
+
 // ── Speech ────────────────────────────────────────────────────────────────────
 const {
   isListening, isTranscribing, transcript, audioLevel, micError,
@@ -1292,7 +1295,7 @@ watch(() => aiChat.request.value?.requestedAt, async (ts) => {
 
 function goToBilling() {
   open.value = false;
-  navigateTo('/main/settings/billing');
+  navigateTo(settingsPath('billing'));
 }
 
 function dismissProposal() {

@@ -8,6 +8,9 @@ import { getArticle, listArticles, submitFeedback, type HelpArticle, type HelpAr
 
 definePageMeta({ layout: 'default' });
 
+// Support is a tab on desktop, a standalone page on mobile.
+const { settingsPath } = useSettingsLink();
+
 const route = useRoute();
 const slug = computed(() => String(route.params.slug || ''));
 const categorySlug = computed(() => String(route.params.category || ''));
@@ -124,7 +127,7 @@ watch(slug, refresh);
 
         <!-- Support hand-off -->
         <NuxtLink
-          to="/main/settings/support"
+          :to="settingsPath('support')"
           class="mt-2 flex flex-row items-center gap-4 rounded-xl border bg-muted/20 p-5 transition-colors hover:bg-muted/50"
         >
           <div class="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10">

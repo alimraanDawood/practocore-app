@@ -113,7 +113,40 @@ export interface Entitlements {
   vaults: boolean;
   documents: boolean;
   modelCeiling: string;
+  aiProviders?: AIProviderState;
 }
+
+/** Provider ids, mirroring providerClaude / providerDeepSeek in ai/pricing.go. */
+export type AIProvider = 'claude' | 'deepseek';
+
+/**
+ * The three layers that decide which provider serves a member's work (see
+ * ai/router.go providerChoice):
+ *   available - what this DEPLOYMENT can reach; nothing to choose if length < 2
+ *   allowed   - what the FIRM permits (a confidentiality decision, admin-set)
+ *   preferred - what this MEMBER picked; '' means follow the firm default
+ */
+export interface AIProviderState {
+  available: AIProvider[];
+  allowed: AIProvider[];
+  preferred: AIProvider | '';
+}
+
+/** Display metadata for each provider. Vendor and jurisdiction are named because a
+ *  firm needs to know where its privileged material is processed — stated once,
+ *  here, as fact. The UI does not repeat it or add a verdict on top. */
+export const AI_PROVIDER_INFO: Record<AIProvider, { name: string; vendor: string; note: string }> = {
+  claude: {
+    name: 'Claude',
+    vendor: 'Anthropic',
+    note: 'The default. Processed by Anthropic, in the United States.',
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    vendor: 'DeepSeek',
+    note: 'Lower cost per request. Processed by DeepSeek, in China.',
+  },
+};
 
 // ── Custom vaults (membership-scoped) ────────────────────────────────────────
 // Mirrors ai/vault/vaults.go. A custom vault is a named container with members;
@@ -582,4 +615,41 @@ export async function getEntitlements(): Promise<Entitlements> {
     return { memory: false, skills: false, vaults: false, documents: false, modelCeiling: '' };
   }
   return res.json();
+}
+
+/**
+ * Provider settings use their own fetch rather than vaultFetch: vaultFetch maps any
+ * 403 whose message matches /not enabled/i to VaultDisabledError, which would both
+ * swallow the real message and wrongly mark the VAULT surface disabled when a firm
+ * has simply not permitted an AI provider. Same auth + error-message extraction,
+ * without the vault-specific special case.
+ */
+async function providerFetch(path: string, body: unknown): Promise<AIProviderState> {
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    method: 'PATCH',
+    headers: { Authorization: pb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.message) msg = j.message;
+    } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+/**
+ * Set which providers the FIRM permits. Admin-only server-side; writes
+ * feature_overrides.ai_providers on the Organisations record.
+ */
+export function setOrgAllowedProviders(providers: AIProvider[]): Promise<AIProviderState> {
+  return providerFetch('/api/practocore/ai/providers/org', { providers });
+}
+
+/** Set the signed-in member's own preference. '' follows the firm default. */
+export function setMyProvider(provider: AIProvider | ''): Promise<AIProviderState> {
+  return providerFetch('/api/practocore/ai/providers/me', { provider });
 }

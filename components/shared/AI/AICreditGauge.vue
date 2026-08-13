@@ -1,6 +1,10 @@
 <template>
-  <Popover v-if="usage" v-model:open="open">
-    <PopoverTrigger as-child>
+  <!-- The pill is identical on both platforms; only the surface it opens
+       differs — a popover beside the sidebar on desktop, a bottom drawer on
+       mobile (where a 288px popover anchored to a sidebar edge has nowhere to
+       go). -->
+  <component :is="isDesktop ? Popover : Sheet" v-if="usage" v-model:open="open">
+    <component :is="isDesktop ? PopoverTrigger : SheetTrigger" as-child>
       <!-- Compact pill with an animated fill that ticks up as credits burn -->
       <button
         type="button"
@@ -22,14 +26,30 @@
           {{ fmt(usage.pool_used) }}<span class="opacity-60">/{{ fmt(total) }}</span>
         </span>
       </button>
-    </PopoverTrigger>
+    </component>
 
-    <PopoverContent align="end" class="w-72 p-0 overflow-hidden">
-      <!-- Header -->
+    <component
+      :is="isDesktop ? PopoverContent : SheetContent"
+      v-bind="isDesktop
+        ? { side: props.side, sideOffset: props.sideOffset, align: props.align, collisionPadding: 12, class: 'w-72 p-0 overflow-hidden' }
+        : { side: 'bottom', hideX: true, class: 'gap-0 p-0 overflow-hidden rounded-t-xl' }"
+    >
+      <!-- Drawer grab handle — the X is suppressed because it would land on
+           top of the period label in the header. -->
+      <div v-if="!isDesktop" class="flex justify-center pt-3 pb-1">
+        <span class="h-1 w-10 rounded-full bg-muted-foreground/30" />
+      </div>
+
+      <!-- Header. On mobile this doubles as the drawer's accessible title. -->
       <div class="flex items-center justify-between px-4 py-3 border-b">
-        <span class="text-sm font-semibold">AI Credits</span>
+        <component :is="isDesktop ? 'span' : SheetTitle" class="text-sm font-semibold">
+          AI Credits
+        </component>
         <span class="text-xs text-muted-foreground">{{ periodLabel }}</span>
       </div>
+      <SheetDescription v-if="!isDesktop" class="sr-only">
+        Your AI credit usage for this billing period.
+      </SheetDescription>
 
       <!-- State note -->
       <div
@@ -82,7 +102,7 @@
         </div>
       </div>
 
-      <!-- Billing link (inside the popover) -->
+      <!-- Billing link (inside the popover / drawer) -->
       <button
         type="button"
         class="w-full flex items-center justify-between px-4 py-3 border-t text-sm hover:bg-muted transition-colors"
@@ -91,8 +111,8 @@
         <span>Manage in Billing</span>
         <ArrowRight class="size-4 text-muted-foreground" />
       </button>
-    </PopoverContent>
-  </Popover>
+    </component>
+  </component>
 
   <!-- Loading skeleton -->
   <div v-else class="h-6 w-16 rounded-full border bg-muted/40 animate-pulse" />
@@ -101,11 +121,33 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import dayjs from 'dayjs';
+import { useMediaQuery } from '@vueuse/core';
 import { Zap, Lock, ArrowRight } from 'lucide-vue-next';
+import { Popover, PopoverTrigger, PopoverContent } from '~/components/ui/popover';
+import { Sheet, SheetTrigger, SheetContent, SheetTitle, SheetDescription } from '~/components/ui/sheet';
 import { useAiUsage } from '~/composables/useAiUsage';
+
+// Below the tablet breakpoint the details surface becomes a bottom drawer. A
+// reka-ui bottom Sheet is used rather than the vaul-vue Drawer: this gauge sits
+// in the sidebar footer, which on mobile *is* a reka Sheet, and mixing the two
+// libraries' body-lock managers races (see app CLAUDE.md → Nested Modals).
+const isDesktop = useMediaQuery('(min-width: 768px)');
 
 // Shared reactive state — the chat refreshes this after each round, so the
 // gauge updates live without polling here.
+// Placement of the details popover. Defaults to hanging below the pill (chat
+// header); the sidebar footer passes side="right" so it opens beside the
+// sidebar instead of flipping up over the footer for want of room below.
+const props = withDefaults(defineProps<{
+  side?: 'top' | 'right' | 'bottom' | 'left';
+  sideOffset?: number;
+  align?: 'start' | 'center' | 'end';
+}>(), {
+  side: 'bottom',
+  sideOffset: 4,
+  align: 'end',
+});
+
 const { usage, refresh } = useAiUsage();
 onMounted(() => { if (!usage.value) refresh(); });
 
@@ -163,8 +205,10 @@ const tooltip = computed(() => {
   return t;
 });
 
+const { settingsPath } = useSettingsLink();
+
 function goBilling() {
   open.value = false;
-  navigateTo('/main/settings/billing');
+  navigateTo(settingsPath('billing'));
 }
 </script>

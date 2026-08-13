@@ -87,7 +87,8 @@ const items = computed(() => {
       label: 'Invite a team member',
       description: 'Send your first invitation to a colleague in your firm',
       done: inviteCount.value > 0,
-      action: () => { isOpen.value = false; navigateTo('/main/settings/team') },
+      // /main/settings/team never existed; inviting lives on the Lawyers page.
+      action: () => { isOpen.value = false; navigateTo('/main/lawyers') },
     })
   }
 

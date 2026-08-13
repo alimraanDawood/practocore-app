@@ -18,11 +18,18 @@
               :variant="activeTab === 'profile' ? 'secondary' : 'ghost'"
               @click="activeTab = 'profile'"
           >Organisation Profile</Button>
+
+          <Button
+              class="lg:w-full flex flex-row justify-start"
+              :variant="activeTab === 'ai' ? 'secondary' : 'ghost'"
+              @click="activeTab = 'ai'"
+          >AI Providers</Button>
         </div>
 
         <!-- Tab Content -->
         <div class="flex flex-col w-full h-full overflow-y-scroll p-5">
           <PageComponentsOrganisationProfile v-if="activeTab === 'profile'" />
+          <PageComponentsSettingsAIProviders v-if="activeTab === 'ai'" org-scope />
         </div>
       </div>
     </DialogContent>
