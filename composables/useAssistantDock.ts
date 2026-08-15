@@ -1,5 +1,5 @@
 import type { Component } from 'vue';
-import type { ContextItem } from '~/services/ai';
+import type { ContextItem, AiActionResult } from '~/services/ai';
 
 // The floating assistant dock lets the user talk to PractoAI from anywhere without
 // leaving the page they're on: a slide-in panel (pushing the page left on desktop, a
@@ -38,12 +38,27 @@ export function useAssistantDock() {
   const isOpen = useState<boolean>('assistant-dock-open', () => false);
   const context = useState<DockContext | null>('assistant-dock-context', () => null);
   const owner = useState<number>('assistant-dock-owner', () => 0);
+  // Monotonic tick bumped whenever the dock assistant approves/fulfils a write
+  // proposal (e.g. schedules a reminder, adjourns a deadline). The active page
+  // watches it to refresh its own server-synced data, since the dock has no direct
+  // channel to the page and the realtime subscription can't be relied on to surface
+  // a record the backend wrote mid-conversation. Mirrors the AddEventDialog's
+  // explicit `@created` refresh for the button path.
+  const writeSignal = useState<number>('assistant-dock-write-signal', () => 0);
+  // The structured result of that write (tool name + data map), so the page can react
+  // specifically — e.g. jump the calendar to a freshly-scheduled reminder's date so
+  // the new event is actually in view, not just silently present on some other cell.
+  const lastWrite = useState<AiActionResult | null>('assistant-dock-last-write', () => null);
 
   function open() { if (context.value) isOpen.value = true; }
   function close() { isOpen.value = false; }
   function toggle() { isOpen.value = !isOpen.value; }
+  function signalWrite(action?: AiActionResult | null) {
+    lastWrite.value = action ?? null;
+    writeSignal.value++; // bump last so watchers see lastWrite already set
+  }
 
-  return { isOpen, context, owner, open, close, toggle };
+  return { isOpen, context, owner, writeSignal, lastWrite, open, close, toggle, signalWrite };
 }
 
 /**

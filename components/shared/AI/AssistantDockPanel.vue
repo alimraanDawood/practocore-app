@@ -4,10 +4,15 @@
 // sheet (only one exists at a time), so ChatSurface is configured in exactly one place.
 import { X, Maximize2, Sparkles } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
-import type { DockContext } from '~/composables/useAssistantDock';
+import { useAssistantDock, type DockContext } from '~/composables/useAssistantDock';
 
 const props = defineProps<{ context: DockContext }>();
 defineEmits<{ (e: 'close'): void; (e: 'openFull'): void }>();
+
+// When the assistant approves/fulfils a write proposal (e.g. schedules a reminder),
+// bump the global write signal so the page under the dock refreshes its data — the
+// dock has no direct channel to the page it's floating over.
+const { signalWrite } = useAssistantDock();
 
 // Ambient page context attached to every turn so the model always knows which page the
 // user is on. Sent as a non-persisted preamble (pageContextProvider), NOT folded into
@@ -50,6 +55,7 @@ function provideContext(): string {
       :initial-context="context.chips"
       :page-context-provider="provideContext"
       :seed="context.seed"
-      auto-resume-latest />
+      auto-resume-latest
+      @proposal-approved="(action) => signalWrite(action)" />
   </div>
 </template>

@@ -1,9 +1,11 @@
 <script lang="ts" setup>
-import { ArrowLeft, CheckCircle2, Plus, History, Trash2, Loader2, MessageSquare, Scale } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle2, Plus, History, Trash2, Loader2, MessageSquare, Scale, Wand2, ShieldCheck } from 'lucide-vue-next';
 import {
   listConversations, deleteConversation,
   type AiConversationSummary,
 } from '~/services/ai';
+import { getTemplate } from '~/services/templates';
+import type { EnhancedTemplate } from '~/lib/types/template';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 
 definePageMeta({ layout: 'default' });
@@ -38,21 +40,73 @@ async function loadList() {
 const route = useRoute();
 const router = useRouter();
 
+// ── Edit mode ────────────────────────────────────────────────────────────────
+// Deep-linked "Edit in Studio" from the procedure library. The id is held here and
+// sent with every turn; the backend loads the procedure and hands the assistant its
+// definition. Nothing is auto-sent — Studio opens with a local greeting instead, so
+// the transcript never contains words the user did not type.
+const editing = ref<EnhancedTemplate | null>(null);
+const editLoading = ref(false);
+const editError = ref('');
+
+// A PractoCore procedure is maintained by us and carries statutory authority, so
+// it can't be edited by a firm at all — the route is to extend it. Studio says so
+// up front rather than letting the user compose a change that will be refused.
+const editIsSigned = computed(() => {
+  const t = editing.value as (EnhancedTemplate & { provenance?: string }) | null;
+  return !!t && (t.isPublic || (t.provenance ?? '') !== 'firm');
+});
+
+const editSummary = computed(() => {
+  const t = editing.value;
+  if (!t) return '';
+  const parts: string[] = [];
+  if (t.deadlineCount) parts.push(`${t.deadlineCount} step${t.deadlineCount === 1 ? '' : 's'}`);
+  if (t.fieldCount) parts.push(`${t.fieldCount} field${t.fieldCount === 1 ? '' : 's'}`);
+  return parts.length ? `It has ${parts.join(' and ')}.` : '';
+});
+
+const editSuggestions = computed(() => editIsSigned.value
+  ? [
+      'Add our own internal steps on top of this procedure',
+      'What does this procedure already cover?',
+    ]
+  : [
+      'Add a step to this procedure',
+      'Change when a step falls',
+      'Change how we count weekends and holidays',
+    ]);
+
+async function loadEditTarget(id: string) {
+  editLoading.value = true;
+  editError.value = '';
+  try {
+    editing.value = await getTemplate(id);
+  } catch {
+    // A stale or unreachable id degrades to plain authoring rather than a dead
+    // page: the backend independently refuses an id it can't resolve.
+    editing.value = null;
+    editError.value = 'That procedure could not be loaded. You can still build a new one here.';
+  } finally {
+    editLoading.value = false;
+  }
+}
+
 onMounted(async () => {
   await loadList();
-  // Deep-linked "Edit in Studio" from the procedure library: seed the chat with a
-  // refine request naming the playbook, then strip the query so a refresh doesn't
-  // re-fire it. The tool's upsert-by-name path updates the same procedure rather
-  // than creating a duplicate.
-  const editName = typeof route.query.edit === 'string' ? route.query.edit.trim() : '';
-  if (editName) {
-    await nextTick();
-    chatRef.value?.send(
-      `Let's refine my firm's existing procedure "${editName}". Load it with list_templates first, then walk me through what I'd like to change before you propose the update under the same name.`,
-    );
+  const templateId = typeof route.query.template === 'string' ? route.query.template.trim() : '';
+  if (templateId) {
+    await loadEditTarget(templateId);
+    // Strip the query so a refresh doesn't re-enter edit mode over a thread that
+    // has since moved on. The id lives in `editing` from here.
     router.replace({ query: {} });
   }
 });
+
+function clearEditing() {
+  editing.value = null;
+  editError.value = '';
+}
 
 async function resume(id: string) {
   if (loadingId.value || id === activeId.value) { mobileHistoryOpen.value = false; return; }
@@ -60,6 +114,9 @@ async function resume(id: string) {
   try {
     await chatRef.value?.loadConversation(id);
     activeId.value = id;
+    // A resumed thread is its own conversation — don't keep amending the
+    // procedure the user happened to arrive with.
+    clearEditing();
   } catch { /* ignore */ } finally {
     loadingId.value = '';
     mobileHistoryOpen.value = false;
@@ -70,6 +127,7 @@ function newProcedure() {
   chatRef.value?.newChat();
   activeId.value = '';
   mobileHistoryOpen.value = false;
+  clearEditing();
 }
 
 function onChanged(id: string) {
@@ -102,6 +160,9 @@ function fmtWhen(s: string): string {
       </Button>
       <div class="min-w-0 flex-1">
         <h1 class="font-semibold leading-tight ibm-plex-serif">Matter Studio</h1>
+        <p v-if="editing" class="text-xs text-muted-foreground truncate">
+          {{ editIsSigned ? 'Viewing' : 'Editing' }} <span class="font-medium text-foreground">{{ editing.name }}</span>
+        </p>
       </div>
       <!-- Mobile history toggle -->
       <Button variant="outline" size="icon-sm" class="md:hidden shrink-0" title="In-progress builds" @click="mobileHistoryOpen = true">
@@ -162,11 +223,46 @@ function fmtWhen(s: string): string {
           mode="matter_studio"
           label="Matter Studio"
           hide-toolbar
+          :edit-template-id="editing?.id ?? ''"
           @conversation-change="onChanged"
           @proposal-approved="onSaved"
         >
           <template #empty="{ send }">
-            <div class="m-auto max-w-md text-center flex flex-col items-center gap-3 px-4">
+            <div v-if="editLoading" class="m-auto flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 class="size-4 animate-spin" /> Loading procedure…
+            </div>
+
+            <!-- Edit mode opener. Rendered locally rather than sent as a turn: the
+                 assistant already receives the procedure's definition with every
+                 message, so this greeting is instant, free, and cannot be wrong. -->
+            <div v-else-if="editing" class="m-auto max-w-md text-center flex flex-col items-center gap-3 px-4">
+              <div class="size-11 rounded-xl grid place-items-center"
+                :class="editIsSigned ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'">
+                <component :is="editIsSigned ? ShieldCheck : Wand2" class="size-5" />
+              </div>
+              <p class="font-semibold">
+                {{ editIsSigned ? '“' + editing.name + '”' : 'Editing “' + editing.name + '”' }}
+              </p>
+              <p v-if="editIsSigned" class="text-sm text-muted-foreground">
+                This procedure is maintained by PractoCore — its deadlines carry statutory authority, so it
+                can't be edited by a firm. I can build your firm's own procedure that adds your internal steps
+                on top of it, which keeps the statutory dates ours to maintain.
+              </p>
+              <p v-else class="text-sm text-muted-foreground">
+                {{ editSummary }} Tell me what you'd like to change and I'll propose the update for you to review.
+              </p>
+              <div class="flex flex-col gap-2 w-full mt-1">
+                <button
+                  v-for="s in editSuggestions" :key="s"
+                  class="text-left text-sm rounded-lg border bg-muted/50 text-muted-foreground px-3 py-2 hover:bg-muted transition-colors"
+                  @click="send(s)"
+                >
+                  {{ s }}
+                </button>
+              </div>
+            </div>
+
+            <div v-else class="m-auto max-w-md text-center flex flex-col items-center gap-3 px-4">
               <div class="size-11 rounded-xl grid place-items-center bg-muted text-muted-foreground">
                 <Scale class="size-5" />
               </div>
@@ -180,6 +276,7 @@ function fmtWhen(s: string): string {
                 statutory deadlines and their authority — a procedure you author here never states what the
                 law requires.
               </p>
+              <p v-if="editError" class="text-xs text-destructive">{{ editError }}</p>
               <div class="flex flex-col gap-2 w-full mt-1">
                 <button
                   v-for="s in suggestions" :key="s"

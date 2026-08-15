@@ -81,9 +81,9 @@ function hostOf(url?: string): string {
 </script>
 
 <template>
-  <div class="flex items-start gap-2 border-b px-3 py-2.5">
-    <div class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-muted">
-      <component :is="meta.icon" class="size-3.5" :class="meta.tint" />
+  <div class="flex shrink-0 items-start gap-2 border-b px-3 py-2.5">
+    <div class="mt-0.5 grid size-6 shrink-0 place-items-center text-muted-foreground rounded-md bg-muted">
+      <component :is="meta.icon" class="size-3.5" />
     </div>
     <div class="min-w-0 flex-1">
       <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -96,7 +96,7 @@ function hostOf(url?: string): string {
     </button>
   </div>
 
-  <div class="space-y-2 px-3 py-2.5">
+  <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2.5">
     <!-- eslint-disable-next-line vue/no-v-html — snippet is server-built corpus text rendered as inline markdown -->
     <p v-if="citation.snippet" class="text-xs leading-relaxed text-foreground/90 [&_em]:italic [&_strong]:font-semibold [&_code]:rounded [&_code]:bg-muted [&_code]:px-1" v-html="snippetHtml" />
 
@@ -129,7 +129,7 @@ function hostOf(url?: string): string {
     <template v-else-if="citation.kind === 'legislation'">
       <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
         <span v-if="m.statute" class="font-medium text-foreground/80">{{ m.statute }}</span>
-        <span v-if="m.anchor" class="rounded-full bg-teal-500/10 px-2 py-0.5 text-teal-600 dark:text-teal-400">{{ m.anchor }}</span>
+        <span v-if="m.anchor" class="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{{ m.anchor }}</span>
       </div>
       <p v-if="m.anchor" class="text-[10px] italic text-muted-foreground">Verbatim — verify against the Act.</p>
     </template>
@@ -140,13 +140,13 @@ function hostOf(url?: string): string {
     </p>
   </div>
 
-  <div v-if="openLabel" class="border-t px-3 py-2">
-    <button
-      class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+  <div v-if="openLabel" class="shrink-0 border-t px-3 py-2">
+    <Button
+        size="xs" variant="secondary"
       @click="emit('open', citation)"
     >
       <component :is="opensExternally ? ExternalLink : FileText" class="size-3.5" />
       {{ openLabel }}
-    </button>
+    </Button>
   </div>
 </template>

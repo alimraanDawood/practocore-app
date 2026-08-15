@@ -90,9 +90,6 @@ const htmlContent = ref('');  // sanitized HTML (markdown rendered / docx conver
 // Content-Length, so we can't compute a percentage and show a pulsing bar instead.
 const progress = ref(0);
 const indeterminate = ref(false);
-// Declared here (before load()) so the immediate doc.id watcher, which runs load()
-// during setup, doesn't hit a temporal-dead-zone on this ref.
-const pdfReady = ref(false);
 
 // Object URLs must be revoked to avoid leaking the downloaded blob in memory.
 let objectUrl: string | null = null;
@@ -129,7 +126,6 @@ async function load() {
   htmlContent.value = '';
   progress.value = 0;
   indeterminate.value = false;
-  pdfReady.value = false;
 
   // Nothing to download for an unpreviewable type — go straight to the fallback.
   if (kind.value === 'unsupported') { loading.value = false; return; }
@@ -165,31 +161,14 @@ async function load() {
 watch(() => props.doc.id, load, { immediate: true });
 onBeforeUnmount(revokeObjectUrl);
 
-// vue-pdf-embed is heavy and pulls in pdfjs — load it lazily, client-only.
-const VuePdfEmbed = defineAsyncComponent(() => import('vue-pdf-embed'));
+// The PDF surface (page nav / zoom / scroll-vs-paged) is the shared reader used by
+// case-law citations — <SharedPdfView> parks page jumps itself until the canvases
+// exist, so we can forward a request at any time.
+const pdfView = ref<{ goToPage: (page: number) => void } | null>(null);
 
-const pdfHost = ref<HTMLElement | null>(null);
-// A page-jump requested before the PDF has rendered (citation deep-link, or a
-// fact clicked from the Facts tab) is parked here and applied on @rendered.
-let pendingScrollPage: number | null = null;
-
-// Scroll a 1-based page into view. vue-pdf-embed renders one canvas per page in
-// document order, so the (page-1)th canvas is the target. Best-effort: out-of-range
-// or not-yet-rendered just parks the request (applied on render).
 function scrollToPage(page: number) {
   if (!page || page < 1) return;
-  if (!pdfReady.value || !pdfHost.value) { pendingScrollPage = page; return; }
-  nextTick(() => {
-    const target = pdfHost.value?.querySelectorAll('canvas')?.[page - 1];
-    target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  });
-}
-
-function onPdfRendered() {
-  pdfReady.value = true;
-  const page = pendingScrollPage ?? props.initialPage ?? 0;
-  pendingScrollPage = null;
-  if (page) scrollToPage(page);
+  nextTick(() => pdfView.value?.goToPage(page));
 }
 
 // ── Facts tab (per-document verification trail) ───────────────────────────────
@@ -314,7 +293,10 @@ async function download() {
     </div>
 
     <!-- ── Body: Document tab (kept mounted so page-jumps stay instant) ──────── -->
-    <div v-show="activeTab === 'document'" class="min-h-0 flex-1 overflow-auto">
+    <div
+      v-show="activeTab === 'document'"
+      class="min-h-0 flex-1"
+      :class="kind === 'pdf' && !loading && !error ? 'overflow-hidden' : 'overflow-auto'">
       <!-- Loading (with download progress) -->
       <div v-if="loading" class="flex h-full flex-col items-center justify-center gap-3 p-6">
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
@@ -344,17 +326,8 @@ async function download() {
         <img :src="url" :alt="doc.filename" class="max-h-full max-w-full object-contain" />
       </div>
 
-      <!-- PDF -->
-      <div v-else-if="kind === 'pdf'" ref="pdfHost" class="bg-muted/30 p-3">
-        <ClientOnly>
-          <VuePdfEmbed :source="url" class="mx-auto max-w-3xl [&_canvas]:!h-auto [&_canvas]:!w-full" @rendered="onPdfRendered" />
-          <template #fallback>
-            <div class="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-              <Loader2 class="size-4 animate-spin" /> Rendering PDF…
-            </div>
-          </template>
-        </ClientOnly>
-      </div>
+      <!-- PDF — the shared citation reader surface (page nav, zoom, scroll/paged) -->
+      <SharedPdfView v-else-if="kind === 'pdf'" ref="pdfView" :source="url" :initial-page="initialPage" class="h-full" />
 
       <!-- Markdown / docx (rendered HTML) -->
       <div v-else-if="kind === 'markdown' || kind === 'docx'" class="p-5">

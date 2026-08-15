@@ -95,7 +95,7 @@ export const useCalendarStore = defineStore('calendar', {
         // Milestone-derived reminders (those linked to an engagement) are dropped
         // here — the engagement milestone already renders on the calendar, so
         // showing its reminder too would double it up.
-        const list = await getReminders(user.id);
+        const list = await getReminders();
         this.reminders = (list || []).filter((r: any) => r.status !== 'cancelled' && !r.engagement);
         return this.reminders;
       } catch {

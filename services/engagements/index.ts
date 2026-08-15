@@ -194,6 +194,48 @@ export function deleteEngagementTemplate(id: string) {
   return pb.collection('EngagementTemplates').delete(id);
 }
 
+// ── Playbook version history ─────────────────────────────────────────────────
+// Every save of a playbook appends a snapshot (backend record hook), so an edit
+// that went wrong is recoverable. Restoring writes an old snapshot back onto the
+// playbook, which appends another snapshot — history only grows, and restoring is
+// itself undoable.
+
+export interface EngagementTemplateVersion {
+  id: string;
+  seq: number;
+  name: string;
+  authorName: string;
+  note: string;
+  created: string;
+}
+
+export async function listTemplateVersions(templateId: string): Promise<EngagementTemplateVersion[]> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/engagement-templates/${templateId}/versions`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `listTemplateVersions failed (${res.status})`);
+  }
+  const data = await res.json() as { versions: EngagementTemplateVersion[] };
+  return data.versions ?? [];
+}
+
+// Restore goes through a route rather than an SDK update: the collection's write
+// rule is author-only, while the edit permission is broader (author, org admin, or
+// canManageTemplates) — the route applies that same check.
+export async function restoreTemplateVersion(templateId: string, versionId: string) {
+  const res = await fetch(
+    `${SERVER_URL}/api/practocore/engagement-templates/${templateId}/restore/${versionId}`,
+    { method: 'POST', headers: { Authorization: pb.authStore.token } },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `restoreTemplateVersion failed (${res.status})`);
+  }
+  return res.json() as Promise<{ success: boolean; name: string; seq: number }>;
+}
+
 // describeCompliance mirrors engagements.DescribeCompliance in the backend so the
 // playbook library renders a recurring obligation in the same trust language the
 // Studio review card uses. Keep in sync with practocore-backend/ai/engagements/describe.go.

@@ -204,7 +204,7 @@
     <SharedCalendarAddEventDialog
       v-model:open="addEventOpen"
       :default-date="currentDate"
-      @created="calendar.fetchReminders()" />
+      @created="onEventCreated" />
 
     <!-- Deadline Detail Sheet -->
     <Sheet v-model:open="selectedDeadline.open">
@@ -255,13 +255,40 @@ const { deadlines, reminders, milestones, compliance, selectedDate, loading } = 
 
 // On desktop the assistant dock slides in as an in-flow panel; rather than squeeze it
 // beside the "Today" sidebar, we drop that sidebar so the dock takes its place.
-const { isOpen: assistantOpen, context: assistantContext } = useAssistantDock();
+const { isOpen: assistantOpen, context: assistantContext, writeSignal, lastWrite } = useAssistantDock();
+
+// The floating assistant can schedule reminders, adjourn/fulfil deadlines, etc. from
+// right here on the calendar. It writes through the backend and has no direct channel
+// back to this page, and the realtime subscription can't be relied on to surface a
+// row the assistant just created — so refresh our data whenever it reports a write.
+watch(writeSignal, async () => {
+  await Promise.all([
+    calendar.fetchReminders(),
+    calendar.fetchDeadlines(true),
+    calendar.fetchMilestones(),
+    calendar.fetchCompliance(),
+  ]);
+
+  // When the assistant just scheduled a reminder, bring it into view instead of
+  // leaving it to silently occupy some other cell — a reminder the lawyer explicitly
+  // asked for should be visible on the calendar, not sprung on them later.
+  const action = lastWrite.value;
+  const target = action?.tool === 'schedule_reminder' ? action.data?.targetDate : undefined;
+  if (typeof target === 'string' && target) {
+    const iso = toISO(target);
+    if (iso) {
+      currentDate.value = iso;
+      await nextTick();
+      calendarRef.value?.goToDate(iso);
+    }
+  }
+});
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const assistantReplacesToday = computed(
   () => isDesktop.value && assistantOpen.value && !!assistantContext.value
 );
 const addEventOpen = ref(false);
-const calendarRef = ref<{ goToday: () => void } | null>(null);
+const calendarRef = ref<{ goToday: () => void; goToDate: (input: string | Date) => void } | null>(null);
 
 const currentDate = computed({
   get: () => selectedDate.value,
@@ -487,7 +514,7 @@ provideDockContext(() => {
     label: 'Calendar',
     sublabel: selectedDateFormatted.value,
     icon: CalendarClock,
-    contextText: `The user is on the Calendar, viewing ${selectedDateFormatted.value.toLowerCase()} (${currentDate.value}), which has ${items} item(s). Help with deadlines, reminders and scheduling.`,
+    contextText: `The user is on the Calendar, viewing ${selectedDateFormatted.value.toLowerCase()} (${currentDate.value}), which has ${items} item(s). Help with deadlines, reminders and scheduling. "Add an event" here means schedule_reminder — that tool writes the same record the calendar's Add Event button does, so never say you cannot add an event.`,
   };
 });
 
@@ -496,6 +523,18 @@ const goToToday = () => {
   currentDate.value = toISO(today);
   calendarRef.value?.goToday();
 };
+
+// After the Add Event dialog creates an event, refresh and jump the grid to its date
+// so the new event is immediately visible rather than buried on an off-screen month.
+async function onEventCreated(targetDate: string) {
+  await calendar.fetchReminders();
+  const iso = toISO(targetDate);
+  if (iso) {
+    currentDate.value = iso;
+    await nextTick();
+    calendarRef.value?.goToDate(iso);
+  }
+}
 
 const updateDate = (newDate: { date: Date }) => {
   currentDate.value = toISO(newDate.date);

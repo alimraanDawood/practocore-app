@@ -115,6 +115,20 @@
             </Button>
         </form>
 
+        <!-- Desktop-only: keep the app resident in the tray so it can deliver
+             notifications while the window is closed. Not a saved preference —
+             it drives the OS autostart entry directly. -->
+        <div v-if="isDesktopClient" class="flex flex-row items-center justify-between rounded-lg border p-4">
+            <div class="space-y-0.5">
+                <p class="text-base font-medium">Launch on Startup</p>
+                <p class="text-sm text-muted-foreground">
+                    Start PractoCore in the background when you sign in, so it can deliver
+                    notifications while the window is closed.
+                </p>
+            </div>
+            <Switch :model-value="autostartEnabled" @update:model-value="toggleAutostart" />
+        </div>
+
     </div>
 </template>
 
@@ -125,6 +139,24 @@ import { useForm } from 'vee-validate';
 import * as z from 'zod';
 import { getUserPreferences, updateUserPreferences, updateUser, getSignedInUser } from '~/services/auth';
 import { toast } from 'vue-sonner';
+import { isDesktop } from '~/utils/isDesktop';
+
+// Desktop-only "Launch on Startup" state. The plugin is dynamically imported so
+// its Tauri IPC code never loads on web/mobile builds.
+const isDesktopClient = ref(false);
+const autostartEnabled = ref(false);
+
+async function toggleAutostart(next) {
+    try {
+        const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+        if (next) await enable(); else await disable();
+        autostartEnabled.value = next;
+        toast.success(next ? 'PractoCore will launch on startup.' : 'Startup launch disabled.');
+    } catch (e) {
+        console.error(e);
+        toast.error('Could not update the startup setting.');
+    }
+}
 
 const formSchema = toTypedSchema(z.object({
     use_email_notifications: z.boolean(),
@@ -188,6 +220,16 @@ onMounted(async () => {
         reminder_time: preferences.reminder_time,
         phone: user?.phone?.replace(/^\+256/, '') ?? '',
     });
+
+    isDesktopClient.value = isDesktop();
+    if (isDesktopClient.value) {
+        try {
+            const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+            autostartEnabled.value = await isEnabled();
+        } catch (e) {
+            console.error('failed to read autostart state', e);
+        }
+    }
 });
 
 </script>

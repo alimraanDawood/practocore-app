@@ -8,6 +8,7 @@ import type {
 import { Capacitor } from '@capacitor/core';
 import { navigateTo } from '#app';
 import { resolveNotificationRoute } from '~/utils/notificationRoute';
+import { isDesktop } from '~/utils/isDesktop';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import type { Messaging } from 'firebase/messaging';
@@ -45,6 +46,15 @@ function getPlatform(): 'web' | 'android' | 'ios' | 'electron' {
  */
 export async function initializePushNotifications() {
   console.log("Initializing Push Notifications");
+
+  // The Tauri desktop shell has its own bridge (services/desktop-notifications.ts)
+  // driven by PocketBase realtime + tauri-plugin-notification. Its webview would
+  // otherwise fall through to the web/FCM path below (getPlatform() === 'web'
+  // there) and try to register a Firebase service worker, which we don't want.
+  if (isDesktop()) {
+    console.log('Desktop (Tauri) detected — handled by the desktop notification bridge, skipping FCM');
+    return;
+  }
 
   const platform = getPlatform();
   console.log('Platform:', platform);

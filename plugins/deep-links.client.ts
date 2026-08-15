@@ -7,9 +7,12 @@
  * navigate the SPA router there, so the link lands on the right page without a
  * full reload (which would drop the PocketBase realtime subscriptions).
  *
- * Two entry points per platform:
- *   - warm: a listener fired while the app is already running.
- *   - cold: the URL that *launched* the app, read once after mount.
+ * This handles only the WARM case — a link fired while the app is already
+ * running. The COLD case (a link that launched the app) is deliberately NOT
+ * handled here: it's resolved inside `pages/index.vue`'s boot routing via
+ * `resolveColdStartDeepLink()`, so it's one decision with the auth check instead
+ * of a post-mount `navigateTo` that races — and loses to — the index page's
+ * default `/main` redirect (the target page would flash, then get clobbered).
  *
  * Auth is not handled here on purpose: `navigateTo` runs `auth.global.ts`, which
  * bounces an unauthenticated user to `/auth/login?next=<path>` and back, so a
@@ -21,27 +24,22 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { resolveDeepLinkPath } from '~/utils/deepLink';
 
-export default defineNuxtPlugin((nuxtApp) => {
-  // Guard against handling the same link twice — cold-start URLs can surface
-  // through both `getLaunchUrl` and an `appUrlOpen`/`onOpenUrl` callback, and
-  // re-navigating to the page you're already on is pointless churn.
-  let lastHandled: string | null = null;
-
+export default defineNuxtPlugin(() => {
+  // Classify by boot STATE, not timing: until pages/index.vue has finished its
+  // one boot-routing decision, any link is a cold start and is offered to it to
+  // route (navigating a cold link from here would race index.vue's default and
+  // corrupt the router). After boot routing is done, links are warm and
+  // navigate immediately.
   function dispatch(rawUrl: unknown) {
     const path = resolveDeepLinkPath(rawUrl);
-    if (!path || path === lastHandled) return;
-    lastHandled = path;
-    navigateTo(path);
+    if (!path) return;
+    if (isBootRoutingDone()) navigateDeepLink(path);
+    else offerColdDeepLink(path);
   }
 
   // --- Capacitor (Android / iOS) ------------------------------------------
   if (Capacitor.isNativePlatform()) {
     CapacitorApp.addListener('appUrlOpen', (event) => dispatch(event.url));
-
-    nuxtApp.hook('app:mounted', async () => {
-      const launch = await CapacitorApp.getLaunchUrl();
-      if (launch?.url) dispatch(launch.url);
-    });
   }
 
   // --- Tauri (desktop + mobile) -------------------------------------------
@@ -50,19 +48,10 @@ export default defineNuxtPlugin((nuxtApp) => {
   const isTauri = '__TAURI_INTERNALS__' in window;
   if (isTauri) {
     (async () => {
-      const { onOpenUrl, getCurrent } = await import('@tauri-apps/plugin-deep-link');
-
-      // Warm: fires for every link opened while the app is running.
+      const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+      // Fires for every link opened while the app is already running.
       await onOpenUrl((urls) => {
         for (const url of urls) dispatch(url);
-      });
-
-      // Cold: the link that started this process, if any.
-      nuxtApp.hook('app:mounted', async () => {
-        const current = await getCurrent();
-        if (current) {
-          for (const url of current) dispatch(url);
-        }
       });
     })();
   }

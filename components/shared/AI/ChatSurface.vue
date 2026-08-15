@@ -64,6 +64,11 @@ const props = withDefaults(defineProps<{
   surface?: string;
   seed?: string;
   workflowContext?: unknown;
+  // Id of the template being edited by an authoring Studio (engagement_studio →
+  // a playbook, matter_studio → a procedure). Sent each turn; the backend loads
+  // the record and injects its definition, so the model is never asked to find
+  // the template the user just clicked "edit" on.
+  editTemplateId?: string;
   clientTool?: ChatClientTool;
   label?: string;
   hideToolbar?: boolean;
@@ -93,7 +98,10 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'artifact', artifact: AiArtifact): void;
   (e: 'conversationChange', id: string): void;
-  (e: 'proposalApproved'): void;
+  // Carries the executed write-tool's structured result (tool + data) when there is
+  // one, so hosts can react to what was just done (e.g. jump the calendar to a newly
+  // scheduled reminder's date). Null for proposals that produce no action data.
+  (e: 'proposalApproved', action?: AiActionResult | null): void;
 }>();
 
 // "Shared" modes share conversation history with the global sidebar and drive the
@@ -587,6 +595,7 @@ async function send(explicit?: string) {
     surface: props.surface,
     tier: chatTier.value,
     workflowContext: props.workflowContext,
+    editTemplateId: props.editTemplateId,
     signal: turnAbort.signal,
     turnId,
   });
@@ -702,6 +711,7 @@ async function retryTurn() {
     pageContext,
     surface: props.surface,
     workflowContext: props.workflowContext,
+    editTemplateId: props.editTemplateId,
     signal: turnAbort.signal,
     turnId,
   });
@@ -753,6 +763,7 @@ async function saveEdit(index: number) {
     pageContext,
     surface: props.surface,
     workflowContext: props.workflowContext,
+    editTemplateId: props.editTemplateId,
     signal: turnAbort.signal,
     turnId,
   });
@@ -988,7 +999,7 @@ async function approveProposal() {
   loading.value = false;
   proposalLoading.value = false;
 
-  emit('proposalApproved');
+  emit('proposalApproved', response.actionResult ?? null);
   applyResponse(response);
   scrollToBottom();
 }

@@ -780,6 +780,11 @@ export function sendAiMessageStream(
     /** Live builder-canvas definition, sent in workflow_studio mode so the model
      *  refines the current draft (incl. manual edits) rather than restarting. */
     workflowContext?: unknown;
+    /** Id of the template being edited by an authoring Studio (mode decides which
+     *  collection). Only the id travels — the backend loads and access-checks the
+     *  record itself and injects its definition as a volatile preamble, so the model
+     *  never has to go looking for what the user just opened. Empty = new. */
+    editTemplateId?: string;
     /** Abort signal for the Stop button — aborting resolves to { type:'aborted' }. */
     signal?: AbortSignal;
     /** Client-generated id for THIS turn, so it can be stopped explicitly.
@@ -819,6 +824,7 @@ export function sendAiMessageStream(
       // Speed/cost tier ('auto' default) — picks the serving model on the backend.
       tier: opts.tier ?? 'auto',
       workflowContext: opts.workflowContext ?? null,
+      editTemplateId: opts.editTemplateId ?? '',
       turnId: opts.turnId ?? '',
     },
     opts.onStep,

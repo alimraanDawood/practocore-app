@@ -25,18 +25,9 @@ const props = withDefaults(defineProps<{
   rootLabel?: string;
   /** Read-only mode disables uploads, new folders, rename/move/delete. */
   readonly?: boolean;
-  /**
-   * How the document preview surfaces on desktop:
-   *  - 'push'    → an inline panel that splits the browser, pushing the list aside.
-   *  - 'overlay' → a sheet that slides in from the right over the content.
-   * On touch / narrow viewports the preview is always a bottom sheet regardless.
-   * Swap the default (or pass the prop) to retune the behaviour per surface.
-   */
-  previewBehavior?: 'push' | 'overlay';
 }>(), {
   rootLabel: 'Library',
   readonly: false,
-  previewBehavior: 'overlay',
 });
 
 const folders = ref<VaultFolder[]>([]);
@@ -303,17 +294,16 @@ async function download(entry: VaultEntry) {
 }
 
 // ── Document preview ────────────────────────────────────────────────────────
-// Clicking a document opens an in-app preview. On a wide screen this is either an
-// inline panel that pushes the list aside (previewBehavior='push') or a sheet from
-// the right ('overlay'); on touch / narrow screens it's always a bottom sheet.
+// Clicking a document opens an in-app preview: a sheet from the right on desktop, a
+// bottom sheet on touch / narrow screens. It deliberately overlays rather than taking
+// a column of its own — the app shell already spends horizontal space on the sidebar
+// and the assistant dock, so an in-flow panel gets clipped off the right edge.
 const previewEntry = ref<VaultEntry | null>(null);
 const previewDoc = computed(() => (previewEntry.value?.raw as VaultDocument) ?? null);
 
 const isDesktop = useMediaQuery('(min-width: 1024px)');
-// Inline split only on wide screens in 'push' mode; otherwise the preview is a sheet.
-const previewPushed = computed(() => isDesktop.value && props.previewBehavior === 'push');
 const previewSheetOpen = computed({
-  get: () => !!previewEntry.value && !previewPushed.value,
+  get: () => !!previewEntry.value,
   set: (v: boolean) => {
     if (!v) previewEntry.value = null;
   },
@@ -665,8 +655,8 @@ const ingestingCount = computed(() =>
 </script>
 
 <template>
-  <!-- Outer split: the browser column + (optionally) an inline preview panel. -->
-  <div class="flex min-h-0 items-start gap-3">
+  <!-- The browser column; the preview rides over it as a sheet. -->
+  <div class="flex min-h-0 items-start">
     <div class="flex min-w-0 flex-1 flex-col gap-3">
       <!-- ── Toolbar: nav + path + actions ──────────────────────────────────── -->
       <div class="flex flex-col gap-2">
@@ -1047,22 +1037,7 @@ const ingestingCount = computed(() =>
       </AlertDialog>
     </div>
 
-    <!-- ── Inline preview panel (desktop, previewBehavior='push') ──────────── -->
-    <Transition
-        enter-active-class="transition-all duration-200 ease-out"
-        enter-from-class="opacity-0 translate-x-4"
-        leave-active-class="transition-all duration-150 ease-in"
-        leave-to-class="opacity-0 translate-x-4"
-    >
-      <aside
-          v-if="previewDoc && previewPushed"
-          class="sticky top-0 hidden h-[calc(100dvh-7rem)] w-[400px] shrink-0 overflow-hidden rounded-xl border shadow-sm lg:block xl:w-[460px]"
-      >
-        <SharedVaultDocumentPreview :doc="previewDoc" :resolve-url="() => vaultFileUrl(previewDoc!)" :facts-doc-id="previewDoc.ingest ? previewDoc.id : undefined" @close="closePreview"/>
-      </aside>
-    </Transition>
-
-    <!-- ── Preview sheet (touch = bottom; desktop overlay = right) ─────────── -->
+    <!-- ── Preview sheet (touch = bottom; desktop = right) ─────────────────── -->
     <Sheet v-model:open="previewSheetOpen">
       <SheetContent
           :side="previewSheetSide"

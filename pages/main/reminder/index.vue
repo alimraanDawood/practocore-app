@@ -60,7 +60,7 @@ async function load() {
   }
   loading.value = true;
   try {
-    tasks.value = await getReminders(user.id);
+    tasks.value = await getReminders();
   } catch (e) {
     console.error(e);
     toast.error('Failed to load reminders');

@@ -90,7 +90,6 @@ function back() {
           :scope="selected.scope"
           :scope-id="selected.scopeId"
           :root-label="selected.label"
-          :preview-behavior="urlState ? 'push' : 'overlay'"
           @disabled="enabled = false"
         />
       </template>

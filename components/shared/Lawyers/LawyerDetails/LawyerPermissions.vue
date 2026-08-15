@@ -48,6 +48,11 @@ const Permissions = [
     label: "Can Add Applications in Matters",
     description: "Allows the lawyer to add applications to matters that they are not a member of."
   },
+  {
+    value: "canManageTemplates",
+    label: "Can Manage Firm Templates",
+    description: "Allows the lawyer to edit engagement playbooks and firm procedures authored by a colleague. Everyone can always create their own and edit what they authored."
+  },
 ]
 </script>
 

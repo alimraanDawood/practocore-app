@@ -99,13 +99,13 @@ const handleAction = (action: any) => {
     <img
       v-if="notification?.avatar"
       :src="notification?.avatar"
-      class="flex size-10 shrink-0 bg-muted text-muted-foreground items-center justify-center border rounded object-cover"
+      class="flex size-8 shrink-0 bg-muted text-muted-foreground items-center justify-center border rounded object-cover"
       alt="Notification avatar"
     />
 
     <div
       v-else
-      class="flex size-10 shrink-0 items-center justify-center border rounded"
+      class="flex size-8 shrink-0 items-center justify-center border rounded"
       :class="getTypeColor()"
     >
       <component :is="getIcon()" class="size-4" />

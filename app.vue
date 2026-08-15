@@ -7,7 +7,6 @@
 </template>
 
 <script setup>
-import {App} from '@capacitor/app';
 import {Toaster} from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { registerPlugin } from '@capacitor/core'
@@ -20,21 +19,12 @@ const SystemBars = registerPlugin('SystemBars')
 // Back button handling is auto-initialized by the composable
 useBackButton();
 
-const router = useRouter();
-
-// Universal Links (https://app.practocore.com/...) land here as a full URL —
-// route to just the path/query/hash. `appUrlOpen` fires while the app is
-// already running; `getLaunchUrl` covers a cold start via the same link.
-function routeToDeepLink(rawUrl) {
-  if (!rawUrl) return;
-  try {
-    const url = new URL(rawUrl);
-    const target = `${url.pathname}${url.search}${url.hash}`;
-    if (target && target !== '/') router.push(target);
-  } catch (e) {
-    console.error('Failed to parse deep link URL:', rawUrl, e);
-  }
-}
+// Deep links (both practocore:// and https://app.practocore.com/...) are owned
+// by the unified handler — utils/deepLink.ts + plugins/deep-links.client.ts for
+// warm opens, and pages/index.vue for cold starts. This component deliberately
+// does NOT touch them: an earlier `new URL(rawUrl).pathname` here dropped the
+// `main` host for custom-scheme links (`practocore://main/settings` → `/settings`
+// → 404) and raced the correct handler.
 
 onMounted(async () => {
   // Mark native platforms so CSS can draw the status-bar separator only where
@@ -42,9 +32,6 @@ onMounted(async () => {
   if (Capacitor.isNativePlatform()) {
     document.documentElement.classList.add('native');
   }
-
-  const launch = await App.getLaunchUrl();
-  routeToDeepLink(launch?.url);
 });
 
 
@@ -68,10 +55,6 @@ async function updateSystemBars(mode) {
   }
 }
 
-
-App.addListener('appUrlOpen', (event) => {
-  routeToDeepLink(event.url);
-});
 
 onUnmounted(() => {
   // Cleanup when app closes

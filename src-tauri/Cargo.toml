@@ -21,9 +21,17 @@ tauri-build = { version = "2.5.4", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.10.0", features = [] }
+# `tray-icon` is what lets us build the system-tray icon + menu in lib.rs. The
+# tray is the whole reason the app can keep listening after the window closes:
+# on close we hide to tray instead of quitting, so the webview (and its
+# PocketBase realtime subscription) stays alive.
+tauri = { version = "2.10.0", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
+# Renders OS-native notifications from Rust. We use the plugin rather than the
+# webview's Notification API because WebKitGTK's webview notification support is
+# unreliable on Linux (same class of gotcha as the getUserMedia handler below).
+tauri-plugin-notification = "2"
 # OS-level deep links (practocore:// scheme + https App Links). Works on every
 # target; the desktop-only single-instance plugin below routes a link fired at a
 # already-running app back into this one instead of spawning a second window.
@@ -36,6 +44,18 @@ tauri-plugin-deep-link = "2"
 # live process directly and don't use this.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Desktop only: "Launch on startup" toggle in notification settings. Writes a
+# LaunchAgent (macOS), registry Run key (Windows), or ~/.config/autostart entry
+# (Linux). Mobile has no equivalent, hence the desktop-only target.
+tauri-plugin-autostart = "2"
+# The background notification listener (src/notifications.rs): reqwest holds the
+# PocketBase realtime SSE connection, eventsource-stream parses the event frames,
+# futures-util drives the stream, tokio provides the reconnect-backoff sleep.
+# rustls-tls avoids a system OpenSSL dependency for the https prod endpoint.
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+eventsource-stream = "0.2"
+futures-util = "0.3"
+tokio = { version = "1", features = ["time"] }
 
 # Needed to attach a microphone permission handler to the platform webview (see
 # allow_microphone in src/lib.rs). Version-pinned on purpose: this must be the

@@ -16,10 +16,18 @@ target, a bell-list destination, and an App Link that opens the native app.
 ## How it flows
 
 1. The OS hands the native shell the raw URL.
-2. `plugins/deep-links.client.ts` receives it (warm via a listener, cold via the
-   launch URL) on both the Capacitor and Tauri paths.
-3. `utils/deepLink.ts` → `resolveDeepLinkPath()` validates it (same-origin only —
+2. `utils/deepLink.ts` → `resolveDeepLinkPath()` validates it (same-origin only —
    a deep link is untrusted input) and reduces it to a relative path.
+3. It reaches the router by one of two paths, split by app state:
+   - **Warm** (app already running): `plugins/deep-links.client.ts` listens on
+     Capacitor `appUrlOpen` / Tauri `onOpenUrl` and calls `navigateTo`.
+   - **Cold** (link launched the app): `pages/index.vue` — the boot spinner that
+     already decides where to land — reads the launch URL via
+     `resolveColdStartDeepLink()` (`composables/useColdStartDeepLink.ts`) and
+     routes there *instead of* its default `/main`. Doing it here, in the same
+     decision as the auth check, is what avoids a post-mount `navigateTo` racing
+     (and losing to) the index redirect — which showed up as the target page
+     flashing then bouncing to `/main`.
 4. `navigateTo(path)` runs the SPA router. `auth.global.ts` handles login
    redirect + `next` for protected pages automatically.
 

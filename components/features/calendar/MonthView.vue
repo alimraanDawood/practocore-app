@@ -216,6 +216,17 @@ function goToday() {
   emits('month-change', { year: state.cursor.getFullYear(), month: state.cursor.getMonth() + 1 });
 }
 
+// Move the grid to the month containing `input` and select that day, so a caller can
+// bring a specific date (e.g. a just-scheduled reminder) into view.
+function goToDate(input: string | Date) {
+  const d = toDate(input);
+  if (!d) return;
+  state.cursor = new Date(d.getFullYear(), d.getMonth(), 1);
+  currentDate.value = d;
+  focusedIdx.value = -1;
+  emits('month-change', { year: state.cursor.getFullYear(), month: state.cursor.getMonth() + 1 });
+}
+
 function isToday(d: Date) {
   const t = new Date();
   return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
@@ -268,5 +279,5 @@ function dayOfWeek(d: Date) {
   return d.getDay();
 }
 
-defineExpose({ goToday });
+defineExpose({ goToday, goToDate });
 </script>

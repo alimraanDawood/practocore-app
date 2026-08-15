@@ -52,6 +52,43 @@ let subscribers = 0;
 // still-mounted consumers) can't leave the two disagreeing.
 let subscribed = false;
 
+// Listeners notified of each *incoming* (action === 'create') notification.
+// The Tauri desktop bridge registers here to render an OS-native toast, rather
+// than opening its own PocketBase subscription — a second subscribe('*') would
+// be torn down by this module's unsubscribe('*') on teardown. Fanning out from
+// the one subscription keeps a single source of truth.
+type IncomingListener = (record: any) => void;
+const incomingListeners = new Set<IncomingListener>();
+
+/**
+ * Register a callback fired once per incoming notification. Returns an
+ * unregister function. Safe to call before any subscription is open — the
+ * listener simply waits for the next `create` event.
+ */
+export function onNotificationReceived(listener: IncomingListener): () => void {
+  incomingListeners.add(listener);
+  return () => incomingListeners.delete(listener);
+}
+
+/**
+ * Hold the realtime subscription open for a non-component consumer (the desktop
+ * bridge), independent of whether any UI is mounted. Shares the same
+ * ref-counted subscription as the bell, so it coexists with it and is torn down
+ * only when every holder — UI and bridge — has released. Returns a release fn.
+ */
+export function holdNotificationSubscription(): () => void {
+  if (!import.meta.client) return () => {};
+  subscribers++;
+  openSubscription();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    subscribers = Math.max(0, subscribers - 1);
+    if (subscribers === 0) closeSubscription();
+  };
+}
+
 function openSubscription() {
   if (subscribed) return;
   subscribed = true;
@@ -140,6 +177,17 @@ function handleRealtimeUpdate(data: any) {
       allCount.value++;
     }
     if (!data.record.read) unreadCount.value++;
+
+    // Fan the new notification out to registered listeners (the desktop bridge
+    // renders it as an OS toast). Isolated so one throwing listener can't break
+    // the in-app list update above.
+    for (const listener of incomingListeners) {
+      try {
+        listener(data.record);
+      } catch (err) {
+        console.error('notification listener failed', err);
+      }
+    }
   } else if (data.action === 'update') {
     const index = notifications.value.findIndex(n => n.id === data.record.id);
     if (index !== -1) {

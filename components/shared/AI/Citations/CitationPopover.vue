@@ -19,19 +19,36 @@ const isMobile = useMediaQuery('(max-width: 767px)');
 
 // ── Desktop positioning ─────────────────────────────────────────────────────────
 const card = ref<HTMLElement | null>(null);
-const pos = ref<{ top: number; left: number; placeAbove: boolean }>({ top: -9999, left: -9999, placeAbove: false });
+const pos = ref<{ top: number; left: number; placeAbove: boolean; maxHeight: number }>({ top: -9999, left: -9999, placeAbove: false, maxHeight: 0 });
 const WIDTH = 320;
 const GAP = 6;
+const MARGIN = 8;
 
 function place() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const h = card.value?.offsetHeight ?? 160;
-  let left = Math.min(Math.max(8, props.anchor.left), vw - WIDTH - 8);
-  const below = props.anchor.bottom + GAP;
-  const placeAbove = below + h > vh - 8 && props.anchor.top - GAP - h > 8;
-  const top = placeAbove ? props.anchor.top - GAP - h : below;
-  pos.value = { top, left, placeAbove };
+  const left = Math.min(Math.max(MARGIN, props.anchor.left), vw - WIDTH - MARGIN);
+
+  // Room available on each side of the anchor.
+  const spaceBelow = vh - MARGIN - (props.anchor.bottom + GAP);
+  const spaceAbove = props.anchor.top - GAP - MARGIN;
+
+  // Prefer below; flip above only when the card doesn't fit below but does above,
+  // or when there's simply more room above (very tall cards).
+  const fitsBelow = h <= spaceBelow;
+  const placeAbove = !fitsBelow && spaceAbove > spaceBelow;
+
+  // Cap the height to the chosen side so an over-tall card scrolls internally
+  // instead of running off the viewport edge.
+  const avail = placeAbove ? spaceAbove : spaceBelow;
+  const maxHeight = Math.max(120, Math.min(h, avail));
+
+  let top = placeAbove ? props.anchor.top - GAP - maxHeight : props.anchor.bottom + GAP;
+  // Final clamp so the card is always fully on-screen.
+  top = Math.min(Math.max(MARGIN, top), vh - MARGIN - maxHeight);
+
+  pos.value = { top, left, placeAbove, maxHeight };
 }
 
 // Only the desktop popover self-positions and closes on scroll; the drawer manages
@@ -51,7 +68,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScrollClose, true);
   window.removeEventListener('keydown', onKey);
 });
-function onScrollClose() { emit('close'); }
+// Close when the page/chat behind the popover scrolls (the anchor moves away), but
+// ignore scrolls that originate inside the card itself now that it scrolls internally.
+function onScrollClose(e: Event) {
+  if (card.value && e.target instanceof Node && card.value.contains(e.target)) return;
+  emit('close');
+}
 function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
 </script>
 
@@ -79,8 +101,8 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close'); }
     <div class="fixed inset-0 z-[120]" @click="emit('close')" />
     <div
       ref="card"
-      class="fixed z-[121] w-80 rounded-xl border bg-popover text-popover-foreground shadow-lg"
-      :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
+      class="fixed z-[121] flex w-80 flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg"
+      :style="{ top: `${pos.top}px`, left: `${pos.left}px`, maxHeight: pos.maxHeight ? `${pos.maxHeight}px` : undefined }"
       @click.stop
     >
       <SharedAICitationsCitationDetail

@@ -12,7 +12,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:open', value: boolean): void;
-  (e: 'created'): void;
+  // Carries the event's date (YYYY-MM-DD) so the calendar can jump to it and show it.
+  (e: 'created', targetDate: string): void;
 }>();
 
 const isOpen = computed({
@@ -110,7 +111,7 @@ async function submit() {
 
     const n = res?.scheduled?.length ?? 0;
     toast.success(`Event added — ${n} reminder${n === 1 ? '' : 's'} scheduled`);
-    emit('created');
+    emit('created', date.value);
     isOpen.value = false;
   } catch (err: any) {
     toast.error(err?.message || 'Failed to add event');

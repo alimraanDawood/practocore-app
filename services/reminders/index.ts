@@ -32,10 +32,19 @@ export async function scheduleEvent(payload: ScheduleEventPayload) {
     return data;
 }
 
-export async function getReminders(userId: string, options: Record<string, any> = {}) {
+export async function getReminders(options: Record<string, any> = {}) {
     // Reminders the user created OR is a recipient of (someone set it for them).
+    //
+    // The scope is enforced by the collection's list rule; do NOT repeat it here as
+    // a client filter. `recipients.id ?= '<id>'` traverses a MULTI-VALUE relation
+    // into Users, and the Users list rule is organisation-scoped
+    // (`@request.auth.organisation.users ~ id`) — so an individual account with no
+    // organisation can read no Users row at all, that join matches nothing, and
+    // PocketBase then returns zero rows for the WHOLE filter, discarding the rows
+    // the OR'd `owner` clause had already matched. That silently emptied the
+    // calendar and the reminders page of every event for such accounts. Verified
+    // against the live API: the same request without this filter returns all rows.
     return pocketbase.collection('Reminders').getFullList({
-        filter: `owner = '${userId}' || recipients.id ?= '${userId}'`,
         sort: 'targetDate',
         expand: 'matter,recipients,owner',
         ...options,
