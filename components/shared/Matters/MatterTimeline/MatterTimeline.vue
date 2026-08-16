@@ -42,16 +42,26 @@
       </button>
 
       <!-- Add a deadline the firm tracks itself, alongside the court's own dates. -->
-      <Button
-        v-if="canAddDeadline"
-        size="sm"
-        variant="outline"
-        class="ml-auto shrink-0"
-        @click="openAddDeadline"
-      >
-        <CalendarPlus class="size-3.5"/>
-        Add deadline
-      </Button>
+      <div v-if="canAddDeadline" class="ml-auto">
+        <Button
+            size="sm"
+            variant="outline"
+            class="ml-auto shrink-0 hidden lg:flex"
+            @click="openAddDeadline"
+        >
+          <CalendarPlus class="size-3.5"/>
+          Add deadline
+        </Button>
+
+        <Button
+            size="icon-sm"
+            variant="outline"
+            class="ml-auto shrink-0 lg:hidden"
+            @click="openAddDeadline"
+        >
+          <CalendarPlus class="size-3.5"/>
+        </Button>
+      </div>
     </div>
 
     <AdhocDeadlineDialog

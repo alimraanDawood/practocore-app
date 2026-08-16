@@ -124,7 +124,7 @@ const emptyMessage = computed(() => (
     :class="props.variant === 'popover' ? 'h-[min(32rem,70vh)]' : 'h-full min-h-0'"
   >
     <!-- Title + mark-all -->
-    <div class="flex shrink-0 flex-row items-center justify-between gap-2 px-3 py-2.5">
+    <div class="flex shrink-0 flex-row items-center justify-between gap-2 px-3 py-2.5 border-b">
       <span v-if="!props.hideTitle" class="text-sm font-semibold">Notifications</span>
       <Button
         size="sm"

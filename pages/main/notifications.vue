@@ -24,10 +24,10 @@ onMounted(() => requestPermissionPrompt());
 <template>
   <div class="flex h-full w-full flex-col overflow-hidden border-x">
     <div class="flex shrink-0 flex-row items-center gap-2 border-b p-3">
-      <Button variant="ghost" size="icon-sm" class="lg:hidden" aria-label="Back" @click="goBack">
+      <Button variant="outline" size="icon-sm" class="lg:hidden" aria-label="Back" @click="goBack">
         <ArrowLeft class="size-5" />
       </Button>
-      <h1 class="ibm-plex-serif text-2xl font-bold">Notifications</h1>
+      <span class="text-lg font-semibold">Notifications</span>
     </div>
 
     <SharedNotificationsPanel variant="page" hide-title class="flex-1" />

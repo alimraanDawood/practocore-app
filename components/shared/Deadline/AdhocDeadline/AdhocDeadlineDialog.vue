@@ -183,8 +183,8 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
   </DefineTemplate>
 
   <Drawer :close-threshold="0.95" v-if="$viewport.isLessThan('tablet')" v-model:open="isOpen">
-    <DrawerContent class="sm:max-w-md max-h-[90dvh] overflow-y-auto">
-      <DrawerHeader>
+    <DrawerContent class="sm:max-w-md max-h-[95dvh]">
+      <DrawerHeader class="border-b">
         <DrawerTitle class="flex items-center gap-2">
           <CalendarPlus class="size-5" /> {{ isEdit ? 'Edit deadline' : 'Add a deadline' }}
         </DrawerTitle>
@@ -192,9 +192,11 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
           A deadline your firm tracks, separate from the court's own dates.
         </DrawerDescription>
       </DrawerHeader>
-      <div class="flex flex-col px-5">
+
+      <div class="flex flex-col px-5 overflow-y-auto">
         <ReuseTemplate />
       </div>
+
       <DrawerFooter>
         <Button variant="outline" @click="isOpen = false" :disabled="submitting">Cancel</Button>
         <Button :disabled="!canSubmit || submitting" @click="submit">
