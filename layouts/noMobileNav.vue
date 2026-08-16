@@ -2,6 +2,7 @@
   <div class="flex flex-col w-full h-[100dvh] xs:pt-5 lg:pt-0">
     <SharedDesktopTitleBar class="hidden xs:flex" />
     <SharedBillingExpiryBanner class="xs:hidden" />
+    <SharedBillingBlockedDialog />
     <div class="flex flex-col  h-full w-screen items-center overflow-hidden safe-area-shell">
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">
         <div class="flex flex-col w-full lg:w-[95vw] bg-background gap-4 text-foreground p-5 pb-0 h-full">

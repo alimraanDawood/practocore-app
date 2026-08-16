@@ -158,6 +158,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Payment</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"></th>
               </tr>
               </thead>
               <tbody class="divide-y">
@@ -197,6 +198,33 @@
                     {{ subscription.paymentStatus || 'N/A' }}
                   </Badge>
                 </td>
+                <!-- An unpaid term is the only thing here anyone can act on. -->
+                <td class="px-4 py-3">
+                  <div v-if="isUnsettled(subscription)" class="flex flex-row items-center gap-1 justify-end">
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        :disabled="workingId === subscription.id"
+                        @click="resumePayment(subscription)"
+                    >
+                      <Loader2
+                          v-if="workingId === subscription.id || waitingId === subscription.id"
+                          class="size-3 animate-spin"
+                      />
+                      {{ waitingId === subscription.id ? 'Waiting for payment' : 'Complete payment' }}
+                    </Button>
+                    <!-- Never disabled by a payment in progress. Someone whose
+                         payment has stalled is exactly who needs this button. -->
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        class="text-muted-foreground"
+                        @click="cancelTarget = subscription"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </td>
               </tr>
               </tbody>
             </table>
@@ -234,6 +262,29 @@
                   {{ subscription.paymentStatus || 'N/A' }}
                 </Badge>
               </div>
+              <div v-if="isUnsettled(subscription)" class="flex flex-row items-center gap-2">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    class="flex-1"
+                    :disabled="workingId === subscription.id"
+                    @click="resumePayment(subscription)"
+                >
+                  <Loader2
+                      v-if="workingId === subscription.id || waitingId === subscription.id"
+                      class="size-3 animate-spin"
+                  />
+                  {{ waitingId === subscription.id ? 'Waiting for payment' : 'Complete payment' }}
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    class="text-muted-foreground"
+                    @click="cancelTarget = subscription"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -244,6 +295,35 @@
           <p class="text-sm text-muted-foreground">No subscription history available</p>
         </div>
       </div>
+
+      <!-- Cancelling an unpaid term. Worth a confirmation because the term
+           cannot be resumed afterwards — the customer subscribes again instead. -->
+      <AlertDialog :open="!!cancelTarget" @update:open="(v) => { if (!v) cancelTarget = null }">
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this subscription?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cancels the unpaid
+              {{ cancelTarget?.expand?.plan?.name || 'subscription' }} term for
+              {{ cancelTarget ? dayjs(cancelTarget.startDate).format('MMM D, YYYY') : '' }} —
+              {{ cancelTarget ? dayjs(cancelTarget.endDate).format('MMM D, YYYY') : '' }}
+              and voids its UGX {{ cancelTarget?.amount?.toLocaleString() }} invoice.
+              You have not been charged for it and will not be. Your current
+              subscription is unaffected. To take this plan later, subscribe again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel :disabled="cancelling">Keep it</AlertDialogCancel>
+            <AlertDialogAction
+                class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                :disabled="cancelling"
+                @click.prevent="confirmCancel"
+            >
+              {{ cancelling ? 'Cancelling…' : 'Cancel subscription' }}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   </DefineTemplate>
 
@@ -287,7 +367,15 @@ import { Calendar, CalendarClock, CreditCard, Tag, ArrowRight, Loader2, FileText
 import dayjs from "dayjs";
 import { useOrganisationStore } from "~/stores/organisation";
 import { getSignedInUser } from "~/services/auth";
-import { computed } from 'vue';
+import { computed, ref, onBeforeUnmount } from 'vue';
+import { toast } from "vue-sonner";
+import {
+  subscriptionCheckoutLink,
+  cancelSubscriptionTerm,
+  openCheckout,
+  waitForPayment,
+  checkoutTokenFromURL,
+} from "~/services/billing";
 
 const props = defineProps(['asModal']);
 const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
@@ -310,23 +398,148 @@ const historyItems = computed(() => {
   return [];
 });
 
-// Helper functions
-const getSubscriptionStatusVariant = (subscription: any) => {
-  if (!subscription.active) return 'destructive';
-  if (subscription.trial) return 'secondary';
-  const daysLeft = dayjs(subscription.endDate).diff(dayjs(), 'day');
-  if (daysLeft < 7) return 'outline';
-  return 'default';
+/**
+ * termStatus describes where a subscription term stands.
+ *
+ * It is derived from the payment and the dates, never from the stored `active`
+ * flag. That flag is written by a background reconcile, so it drifts the moment
+ * a term ends and nobody runs the cron — which is why a term starting next month
+ * read as "Expired": `active` was false because it had not started yet, and the
+ * old helper treated every inactive term as a finished one. The backend's
+ * entitlement resolver derives the same way, deliberately, for the same reason.
+ *
+ * The unpaid states come first because they are the only ones a customer can act
+ * on. A term awaiting payment is not expired, failed, or scheduled — it is a
+ * checkout nobody finished.
+ */
+const termStatus = (subscription: any): { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } => {
+  const paymentStatus = subscription.paymentStatus;
+
+  if (paymentStatus === 'cancelled') return { text: 'Cancelled', variant: 'outline' };
+  if (paymentStatus === 'failed') return { text: 'Payment failed', variant: 'destructive' };
+  if (paymentStatus !== 'complete') return { text: 'Awaiting payment', variant: 'secondary' };
+
+  const now = dayjs();
+  const start = subscription.startDate ? dayjs(subscription.startDate) : null;
+  const end = subscription.endDate ? dayjs(subscription.endDate) : null;
+
+  // Paid and not yet begun — a renewal stacked behind the running term.
+  if (start && start.isAfter(now)) return { text: 'Scheduled', variant: 'secondary' };
+  if (end && !end.isAfter(now)) return { text: 'Expired', variant: 'outline' };
+  if (subscription.trial) return { text: 'Trial', variant: 'secondary' };
+  if (end && end.diff(now, 'day') < 7) return { text: 'Expiring soon', variant: 'outline' };
+  return { text: 'Active', variant: 'default' };
 };
 
-const getSubscriptionStatusText = (subscription: any) => {
-  if (!subscription.active) return 'Expired';
-  if (subscription.trial) return 'Trial';
-  const daysLeft = dayjs(subscription.endDate).diff(dayjs(), 'day');
-  if (daysLeft < 0) return 'Expired';
-  if (daysLeft < 7) return 'Expiring Soon';
-  return 'Active';
-};
+const getSubscriptionStatusVariant = (subscription: any) => termStatus(subscription).variant;
+const getSubscriptionStatusText = (subscription: any) => termStatus(subscription).text;
+
+/**
+ * isUnsettled marks the terms a customer can still do something about: a bill
+ * that was raised and never paid. Trials and zero-amount terms are excluded —
+ * there is nothing to collect on them — and so is anything already settled or
+ * cancelled.
+ */
+const isUnsettled = (subscription: any) =>
+  !subscription.trial &&
+  (subscription.amount ?? 0) > 0 &&
+  (subscription.paymentStatus === 'pending' || subscription.paymentStatus === 'failed');
+
+// workingId is the term whose request is in flight — a link being minted. It is
+// short-lived and disables only the button that fired it.
+const workingId = ref<string | null>(null);
+// waitingId is the term whose payment we are polling for. It must NOT disable
+// anything: mobile money settles on the payer's handset over minutes, and the
+// first version froze both buttons for the whole five-minute poll — so the
+// customer whose payment had just failed found Cancel inert and nothing
+// happened when they clicked it.
+const waitingId = ref<string | null>(null);
+// The link the payer was last sent to, so "waiting" can put them back on the
+// checkout page rather than minting a second one.
+const openCheckoutUrl = ref('');
+const cancelTarget = ref<any | null>(null);
+const cancelling = ref(false);
+let pollAbort: AbortController | null = null;
+
+/**
+ * resumePayment reopens the checkout for a term that was never paid for.
+ *
+ * It does not create anything. The server re-mints a link for the term's own
+ * invoice, so tapping this ten times still bills once — which is the whole point:
+ * subscribing again was previously the only way to retry, and it duplicated both
+ * the term and the bill.
+ */
+async function resumePayment(subscription: any) {
+  // Already watching this one: the payer wants the page back, not a new link.
+  if (waitingId.value === subscription.id && openCheckoutUrl.value) {
+    await openCheckout(openCheckoutUrl.value);
+    return;
+  }
+
+  workingId.value = subscription.id;
+  try {
+    const { url } = await subscriptionCheckoutLink(subscription.id);
+    openCheckoutUrl.value = url;
+    await openCheckout(url);
+
+    const token = checkoutTokenFromURL(url);
+    // Deliberately not awaited. Settlement lands minutes later as a provider
+    // callback, and blocking this handler on it is what made the row unusable.
+    if (token) watchForSettlement(subscription.id, token);
+  } catch (e: any) {
+    toast.error(e?.message ?? 'Could not open the payment page. Try again.');
+  } finally {
+    workingId.value = null;
+  }
+}
+
+/**
+ * watchForSettlement polls until the payment lands. Polling is the only signal
+ * the app gets: mobile money completes on the payer's handset, where neither we
+ * nor the browser can see it.
+ */
+async function watchForSettlement(id: string, token: string) {
+  pollAbort?.abort();
+  pollAbort = new AbortController();
+  const signal = pollAbort.signal;
+
+  waitingId.value = id;
+  const paid = await waitForPayment(token, { signal });
+  if (signal.aborted) return;
+
+  waitingId.value = null;
+  if (paid) {
+    toast.success('Payment received — your subscription is active.');
+    await billingStore.reloadSubscriptionData();
+  }
+}
+
+async function confirmCancel() {
+  const subscription = cancelTarget.value;
+  if (!subscription) return;
+
+  cancelling.value = true;
+  try {
+    await cancelSubscriptionTerm(subscription.id);
+    // Stop watching for a payment on a term that no longer exists to be paid.
+    if (waitingId.value === subscription.id) {
+      pollAbort?.abort();
+      waitingId.value = null;
+      openCheckoutUrl.value = '';
+    }
+    cancelTarget.value = null;
+    toast.success('Subscription cancelled. You have not been charged for it.');
+    await billingStore.reloadSubscriptionData();
+  } catch (e: any) {
+    // A 409 is the interesting one: a charge is still in flight, and the server
+    // will not tear up a bill that might be collected a moment later.
+    toast.error(e?.message ?? 'Could not cancel this subscription.');
+  } finally {
+    cancelling.value = false;
+  }
+}
+
+onBeforeUnmount(() => pollAbort?.abort());
 
 const getPaymentStatusVariant = (status: string) => {
   switch (status) {

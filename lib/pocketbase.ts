@@ -37,3 +37,26 @@ export const pb = new PocketBase(SERVER_URL);
 
 // Disable auto cancellation (as per project requirements)
 pb.autoCancellation(false);
+
+// Catch the billing guard's 402 on every SDK call.
+//
+// The guard fronts the whole API, so a restricted workspace can be refused on
+// any request, not just a billing one. afterSend runs before the SDK turns a
+// >=400 into a ClientResponseError, which makes it the one place that sees
+// every response — hooking each call site instead would mean touching every
+// service and still missing the next one written.
+//
+// It only records the refusal; deciding what to show is the UI's job. Raw
+// fetch() calls in the service layer report through the same function.
+pb.afterSend = (response, data) => {
+    if (response.status === 402) {
+        // Imported lazily so this module stays free of a load-order dependency
+        // on the services layer, which imports `pb` from here.
+        import('~/services/billing/gate')
+            .then(({ reportBillingBlock }) => reportBillingBlock(data))
+            .catch(() => {
+                // A missing gate must never break an API response.
+            });
+    }
+    return data;
+};

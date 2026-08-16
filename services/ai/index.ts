@@ -1149,6 +1149,13 @@ export interface AiUsage {
   state: 'normal' | 'degraded' | 'blocked';
   overage_balance: number; // prepaid overage credits left
   hard_cap: number;        // burn level at which AI locks
+  /**
+   * Price of one top-up credit, in UGX, straight from the server. The buy
+   * dialog prices its packs from this rather than from a constant of its own —
+   * a hardcoded rate quotes the customer one figure while the invoice is raised
+   * at another the moment AI_OVERAGE_UGX_PER_CREDIT changes.
+   */
+  overage_ugx_per_credit: number;
 }
 
 export async function getAiUsage(): Promise<AiUsage> {
@@ -1162,18 +1169,11 @@ export async function getAiUsage(): Promise<AiUsage> {
   return res.json();
 }
 
-// topUpCredits adds overage credits to the caller's billing holder (org for a
-// team admin, else the solo user). `paid` records a purchased top-up vs a grant.
-// Returns the new overage balance. Admin-only server-side for teams.
-export async function topUpCredits(credits: number, paid = true): Promise<number> {
-  const res = await fetch(`${SERVER_URL}/api/practocore/ai/credits/topup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': pb.authStore.token },
-    body: JSON.stringify({ credits, paid }),
-  });
-  if (!res.ok) {
-    throw new Error(`Top-up failed (${res.status})`);
-  }
-  const j = await res.json();
-  return j?.overage_balance ?? 0;
-}
+// Buying AI credits lives in `services/billing` now — see purchaseCredits().
+//
+// It used to be here as topUpCredits(), which POSTed {credits, paid} to
+// /api/practocore/ai/credits/topup and got back a new balance. That route added
+// the credits on the spot without collecting a shilling, and let the client
+// decide whether the top-up counted as revenue or as a comp — the one place in
+// the product where a client could create value. It is gone from the backend;
+// a top-up now raises an invoice and credits are granted only on settlement.

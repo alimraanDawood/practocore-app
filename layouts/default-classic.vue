@@ -4,6 +4,7 @@
     <SharedDesktopTitleBar class="hidden xs:flex" />
 
     <SharedBillingExpiryBanner class="xs:hidden" />
+    <SharedBillingBlockedDialog />
 
     <div class="flex flex-col bg-background text-foreground h-full w-screen items-center overflow-hidden safe-area-shell">
       <div class="bg-background xs:flex flex-col xs:pt-5 lg:pt-0 w-full border-b items-center hidden">

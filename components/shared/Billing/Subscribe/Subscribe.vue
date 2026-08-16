@@ -52,8 +52,8 @@
       <!-- Step 2: Payment -->
       <template v-else-if="currentStep === 'PAY'">
         <div class="flex flex-col gap-1 px-5 pt-5">
-          <h3 class="text-lg font-semibold ibm-plex-serif">Pay Now</h3>
-          <p class="text-sm text-muted-foreground">Choose a payment method to complete your subscription</p>
+          <h3 class="text-lg font-semibold ibm-plex-serif">Confirm your subscription</h3>
+          <p class="text-sm text-muted-foreground">Check the details below, then continue to the secure payment page</p>
         </div>
 
         <form @submit="onSubmit" class="flex flex-col gap-0">
@@ -62,10 +62,12 @@
               <span class="text-sm text-muted-foreground">Total Amount</span>
               <span class="font-semibold ibm-plex-serif text-3xl">UGX {{ totalCosts?.toLocaleString() }}</span>
               <span v-if="isOrgSubscription" class="text-xs text-muted-foreground text-center">
-                UGX {{ perSeatPrice?.toLocaleString() }}/seat/mo × {{ seats }} {{ seats === 1 ? 'seat' : 'seats' }} × {{ units }} {{ units === 1 ? 'month' : 'months' }}
+                UGX {{ perSeatPrice?.toLocaleString() }}/seat/mo × {{ seats }} {{ seats === 1 ? 'seat' : 'seats' }}
+                <template v-if="isAnnual"> × 12 months</template>
+                × {{ units }} {{ unitNoun }}
               </span>
               <span v-else class="text-xs text-muted-foreground">
-                {{ units }} {{ units === 1 ? 'month' : 'months' }} • {{ selectedOption === 'annually' ? 'Annual' : 'Monthly' }} billing
+                {{ units }} {{ unitNoun }} • {{ isAnnual ? 'Annual' : 'Monthly' }} billing
               </span>
             </div>
 
@@ -96,7 +98,7 @@
 
             <FormField v-slot="{ componentField }" name="units">
               <FormItem>
-                <FormLabel>Number of Months</FormLabel>
+                <FormLabel>Number of {{ isAnnual ? 'Years' : 'Months' }}</FormLabel>
                 <FormControl>
                   <NumberField :min="1" v-model="units" v-bind="componentField">
                     <NumberFieldContent>
@@ -107,70 +109,23 @@
                   </NumberField>
                 </FormControl>
                 <FormDescription>
-                  How many months would you like to subscribe for?
+                  How many {{ isAnnual ? 'years' : 'months' }} would you like to subscribe for?
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             </FormField>
 
-            <!-- Payment method selector -->
-            <div class="flex flex-col gap-2">
-              <span class="text-sm font-medium">Payment Method</span>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                    type="button"
-                    class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-sm transition-all cursor-pointer"
-                    :class="paymentMethod === 'MOBILE_MONEY'
-                      ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
-                    @click="paymentMethod = 'MOBILE_MONEY'"
-                >
-                  <Smartphone class="size-5" />
-                  <span class="font-medium">Mobile Money</span>
-                  <span class="text-xs">Airtel / MTN</span>
-                </button>
-                <button
-                    type="button"
-                    class="flex flex-col items-center gap-1.5 p-3 rounded-lg border text-sm transition-all cursor-pointer"
-                    :class="paymentMethod === 'CARD'
-                      ? 'outline outline-2 outline-primary bg-primary/5 text-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
-                    @click="paymentMethod = 'CARD'"
-                >
-                  <CreditCard class="size-5" />
-                  <span class="font-medium">Card Payment</span>
-                  <span class="text-xs">Visa / Mastercard</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Mobile Money: phone number -->
-            <FormField v-if="paymentMethod === 'MOBILE_MONEY'" v-slot="{ componentField }" name="phone">
-              <FormItem>
-                <FormLabel>Mobile Money Number (Airtel / MTN)</FormLabel>
-                <FormControl>
-                  <InputGroup class="overflow-hidden p-0">
-                    <InputGroupAddon class="border-r px-2 bg-muted">
-                      <InputGroupText>+256</InputGroupText>
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        placeholder="712345678"
-                        v-bind="componentField"
-                        maxlength="9"
-                    />
-                  </InputGroup>
-                </FormControl>
-                <FormDescription>
-                  Enter your mobile money number without the country code
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            </FormField>
-
-            <!-- Card: info message -->
-            <div v-else class="flex flex-row gap-3 p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
+            <!-- No payment method is chosen here. Continuing raises the invoice
+                 and hands the payer to the hosted checkout page, which is the one
+                 place that knows which methods are actually available and can
+                 collect the details each one needs. -->
+            <div class="flex flex-row gap-3 p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
               <Info class="size-4 mt-0.5 shrink-0 text-primary" />
-              <span>You'll be redirected to a secure card payment page to complete your payment.</span>
+              <span>
+                We'll issue your invoice and open a secure payment page where you can
+                pay by mobile money or card. This window stays open and confirms as
+                soon as the payment lands.
+              </span>
             </div>
 
             <!-- Error Alert -->
@@ -184,9 +139,8 @@
           <div class="flex flex-col gap-2 px-5 pb-5">
             <Button type="submit" :disabled="isSubmitting" class="w-full">
               <Loader2 v-if="isSubmitting" class="size-4 mr-2 animate-spin" />
-              <span v-if="isSubmitting">Processing...</span>
-              <span v-else-if="paymentMethod === 'CARD'">Pay with Card UGX {{ totalCosts?.toLocaleString() }}</span>
-              <span v-else>Pay Now UGX {{ totalCosts?.toLocaleString() }}</span>
+              <span v-if="isSubmitting">Issuing invoice...</span>
+              <span v-else>Continue to Payment · UGX {{ totalCosts?.toLocaleString() }}</span>
             </Button>
             <Button type="button" variant="secondary" class="w-full" @click="currentStep = 'PLANS'" :disabled="isSubmitting">
               Back to Plans
@@ -195,7 +149,7 @@
         </form>
       </template>
 
-      <!-- Step 3a: Redirecting to card payment -->
+      <!-- Step 3: Hosted checkout hand-off -->
       <template v-else-if="currentStep === 'REDIRECTING'">
         <div class="flex flex-col items-center justify-center p-8 gap-5 min-h-[300px]">
           <div v-if="redirectingStatus === 'waiting'" class="flex flex-col items-center gap-4">
@@ -206,7 +160,7 @@
             <div class="flex flex-col items-center gap-1 text-center">
               <span class="font-semibold text-lg ibm-plex-serif">Preparing Secure Payment</span>
               <span class="text-sm text-muted-foreground max-w-sm">
-                Setting up your card payment session. You'll be redirected shortly.
+                Issuing your invoice and opening the payment page.
               </span>
             </div>
             <div class="flex flex-row items-center gap-2 text-xs text-muted-foreground">
@@ -215,64 +169,61 @@
             </div>
           </div>
 
-          <div v-else-if="redirectingStatus === 'timeout'" class="flex flex-col items-center gap-4">
-            <div class="size-16 rounded-full bg-amber-100 dark:bg-amber-900/30 grid place-items-center">
-              <Clock class="size-8 text-amber-600" />
-            </div>
-            <div class="flex flex-col items-center gap-1 text-center">
-              <span class="font-semibold text-lg ibm-plex-serif">Session Unavailable</span>
-              <span class="text-sm text-muted-foreground max-w-sm">
-                We couldn't prepare your card payment session. Please try again.
-              </span>
-            </div>
-            <Button variant="secondary" class="w-full" @click="currentStep = 'PAY'; redirectingStatus = 'waiting'">Try Again</Button>
-          </div>
-        </div>
-      </template>
-
-      <!-- Step 3b: Mobile Money polling -->
-      <template v-else-if="currentStep === 'POLLING'">
-        <div class="flex flex-col items-center justify-center p-8 gap-5 min-h-[300px]">
-          <div v-if="pollingStatus === 'waiting'" class="flex flex-col items-center gap-4">
+          <!-- The payment is happening in another tab, which we cannot see into.
+               Say so honestly, and give them a way back to it. -->
+          <div v-else-if="redirectingStatus === 'opened'" class="flex flex-col items-center gap-4">
             <div class="relative">
               <div class="size-16 rounded-full border-4 border-muted animate-pulse" />
               <Loader2 class="size-8 text-primary animate-spin absolute top-4 left-4" />
             </div>
             <div class="flex flex-col items-center gap-1 text-center">
-              <span class="font-semibold text-lg ibm-plex-serif">Waiting for Payment Confirmation</span>
+              <span class="font-semibold text-lg ibm-plex-serif">Waiting for your payment</span>
               <span class="text-sm text-muted-foreground max-w-sm">
-                A payment prompt has been sent to your phone. Please enter your PIN to complete the transaction.
+                We've opened a secure payment page in a new tab. Finish there and this
+                page will update on its own — you don't need to do anything else here.
               </span>
             </div>
-            <div class="flex flex-row items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 class="size-3 animate-spin" />
-              <span>Checking payment status...</span>
-            </div>
+            <Button variant="secondary" class="w-full" @click="openCheckout(checkoutUrl)">
+              Reopen payment page
+            </Button>
           </div>
 
-          <div v-else-if="pollingStatus === 'success'" class="flex flex-col items-center gap-4">
-            <div class="size-16 rounded-full bg-green-100 dark:bg-green-900/30 grid place-items-center">
-              <CheckCircle2 class="size-8 text-green-600" />
-            </div>
-            <div class="flex flex-col items-center gap-1 text-center">
-              <span class="font-semibold text-lg ibm-plex-serif">Payment Successful!</span>
-              <span class="text-sm text-muted-foreground">
-                Your subscription is now active. Enjoy PractoCore!
-              </span>
-            </div>
-          </div>
-
-          <div v-else-if="pollingStatus === 'timeout'" class="flex flex-col items-center gap-4">
+          <div v-else-if="redirectingStatus === 'timeout'" class="flex flex-col items-center gap-4">
             <div class="size-16 rounded-full bg-amber-100 dark:bg-amber-900/30 grid place-items-center">
               <Clock class="size-8 text-amber-600" />
             </div>
             <div class="flex flex-col items-center gap-1 text-center">
-              <span class="font-semibold text-lg ibm-plex-serif">Payment Still Processing</span>
+              <span class="font-semibold text-lg ibm-plex-serif">Still waiting for confirmation</span>
+              <!-- Never claim the payment failed. We only know we stopped
+                   watching; the money may well have moved. -->
               <span class="text-sm text-muted-foreground max-w-sm">
-                We haven't received a confirmation yet. Your dashboard will update automatically once the payment is confirmed.
+                We haven't seen this payment confirmed yet. If you've already paid, your
+                subscription will activate on its own — you can close this safely.
               </span>
             </div>
-            <Button variant="secondary" class="w-full" @click="closeAndReset">Close</Button>
+            <div class="flex flex-col gap-2 w-full">
+              <Button variant="secondary" class="w-full" @click="openCheckout(checkoutUrl)" v-if="checkoutUrl">
+                Reopen payment page
+              </Button>
+              <Button variant="ghost" class="w-full" @click="closeAndReset()">Close</Button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Step 4: Settled -->
+      <template v-else-if="currentStep === 'PAID'">
+        <div class="flex flex-col items-center justify-center p-8 gap-5 min-h-[300px]">
+          <div class="flex flex-col items-center gap-4">
+            <div class="size-16 rounded-full bg-green-100 dark:bg-green-900/30 grid place-items-center">
+              <CheckCircle2 class="size-8 text-green-600" />
+            </div>
+            <div class="flex flex-col items-center gap-1 text-center">
+              <span class="font-semibold text-lg ibm-plex-serif">Payment Received</span>
+              <span class="text-sm text-muted-foreground">
+                Your subscription is now active. Enjoy PractoCore!
+              </span>
+            </div>
           </div>
         </div>
       </template>
@@ -303,10 +254,11 @@
 </template>
 
 <script setup>
-import { getSubscriptionPlans, getSubscriptionStatus, getCardSession, subscribeAsIndividual, subscribeAsOrganisation } from "~/services/subscriptions/index.ts";
+import { getSubscriptionPlans, subscribeAsIndividual, subscribeAsOrganisation } from "~/services/subscriptions/index.ts";
+import { openCheckout, waitForPayment, checkoutTokenFromURL } from "~/services/billing";
 import { getSignedInUser } from "~/services/auth";
 import { toast } from "vue-sonner";
-import { Loader2, CheckCircle2, Clock, Smartphone, CreditCard, Info } from 'lucide-vue-next';
+import { Loader2, CheckCircle2, Clock, Info } from 'lucide-vue-next';
 import { useForm } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
@@ -331,16 +283,12 @@ const isSubmitting = ref(false);
 const subscriptionError = ref('');
 const isOpen = ref(false);
 
-const currentStep = ref('PLANS'); // 'PLANS' | 'PAY' | 'REDIRECTING' | 'POLLING'
-const pollingStatus = ref('waiting'); // 'waiting' | 'success' | 'timeout'
-const redirectingStatus = ref('waiting'); // 'waiting' | 'timeout'
-const pollingSubscriptionId = ref(null);
-const paymentMethod = ref('MOBILE_MONEY'); // 'MOBILE_MONEY' | 'CARD'
-
-let pollingInterval = null;
-let pollingTimeout = null;
-let cardSessionInterval = null;
-let cardSessionTimeout = null;
+const currentStep = ref('PLANS'); // 'PLANS' | 'PAY' | 'REDIRECTING' | 'PAID'
+const redirectingStatus = ref('waiting'); // 'waiting' | 'opened' | 'timeout'
+// The hosted checkout link for the current attempt, so the payer can reopen the
+// tab if they closed it by accident.
+const checkoutUrl = ref('');
+let checkoutAbort = null;
 
 const units = ref(1);
 const seats = ref(2);
@@ -351,6 +299,15 @@ watch(minSeats, (newMin) => {
     seats.value = newMin;
   }
 }, { immediate: true });
+
+// `units` is years on annual billing and months on monthly — the backend rolls
+// the term forward by AddDate(units,0,0) or AddDate(0,units,0) accordingly. The
+// labels have to follow, or a customer buying "1" reads a month and gets a year.
+const isAnnual = computed(() => selectedOption.value === 'annually');
+const unitNoun = computed(() => {
+  const noun = isAnnual.value ? 'year' : 'month';
+  return units.value === 1 ? noun : noun + 's';
+});
 
 const perSeatPrice = computed(() => {
   if (selectedOption.value === 'annually') {
@@ -386,29 +343,18 @@ const savingsPercentage = computed(() => {
   return Math.round(((monthly - annually) / monthly) * 100);
 });
 
-const ugandaPhoneRegex = /^[7][0-9]{8}$/;
-
 const formSchema = computed(() => {
   const baseSchema = {
     units: z.union([z.string(), z.number()])
         .transform((val) => typeof val === 'string' ? parseInt(val, 10) : val)
         .pipe(
             z.number({
-              required_error: "Number of months is required",
+              required_error: `Number of ${isAnnual.value ? 'years' : 'months'} is required`,
               invalid_type_error: "Please enter a valid number"
             })
-                .min(1, "Must subscribe for at least 1 month")
+                .min(1, `Must subscribe for at least 1 ${isAnnual.value ? 'year' : 'month'}`)
                 .int("Must be a whole number")
-        ),
-
-    phone: paymentMethod.value === 'MOBILE_MONEY'
-        ? z.string({
-            required_error: "Phone number is required"
-          })
-            .min(9, "Phone number must be 9 digits")
-            .max(9, "Phone number must be 9 digits")
-            .regex(ugandaPhoneRegex, "Must start with 7 and be 9 digits (e.g., 712345678)")
-        : z.string().optional()
+        )
   };
 
   if (isOrgSubscription.value) {
@@ -431,8 +377,7 @@ const { handleSubmit, resetForm, setFieldValue } = useForm({
   validationSchema: formSchema,
   initialValues: {
     units: 1,
-    seats: minSeats.value || 2,
-    phone: ''
+    seats: minSeats.value || 2
   }
 });
 
@@ -444,93 +389,52 @@ watch(seats, (newValue) => {
   setFieldValue('seats', newValue);
 });
 
-// Mobile money polling
-const startPolling = (subscriptionId) => {
-  pollingSubscriptionId.value = subscriptionId;
-  pollingStatus.value = 'waiting';
-  currentStep.value = 'POLLING';
-
-  pollingInterval = setInterval(async () => {
-    try {
-      const status = await getSubscriptionStatus(subscriptionId);
-      if (status.paymentStatus === 'complete' && status.active) {
-        pollingStatus.value = 'success';
-        stopPolling();
-
-        toast.success("Payment confirmed!", {
-          description: "Your subscription is now active."
-        });
-
-        await billingStore.reloadSubscriptionData();
-
-        setTimeout(() => {
-          closeAndReset();
-        }, 2000);
-      }
-    } catch (err) {
-      console.warn("Polling error:", err);
-    }
-  }, 5000);
-
-  pollingTimeout = setTimeout(() => {
-    if (pollingStatus.value === 'waiting') {
-      pollingStatus.value = 'timeout';
-      stopPolling();
-    }
-  }, 90000);
-};
-
-const stopPolling = () => {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-    pollingInterval = null;
-  }
-  if (pollingTimeout) {
-    clearTimeout(pollingTimeout);
-    pollingTimeout = null;
-  }
-};
-
-// Card session polling — waits for redirect_url then navigates
-const startCardRedirect = (subscriptionId) => {
-  localStorage.setItem('pendingCardSubscriptionId', subscriptionId);
-  redirectingStatus.value = 'waiting';
+// Hand off to the hosted checkout page, then watch for settlement.
+//
+// The page opens in a new tab (openCheckout), so this one stays put and keeps
+// showing the payer where they stand. That matters more than it sounds: paying
+// by card leaves our site for a bank's 3-D Secure screen, and if we navigate
+// away too then the customer's only record of the attempt is a tab they no
+// longer control. Here they can always come back to a page that will tell them
+// whether it worked.
+//
+// Settlement is confirmed against the checkout token rather than the
+// subscription: the checkout status endpoint reflects the ledger the moment the
+// provider callback lands.
+const startHostedCheckout = async (url, subscriptionId) => {
+  checkoutUrl.value = url;
+  redirectingStatus.value = 'opened';
   currentStep.value = 'REDIRECTING';
 
-  cardSessionInterval = setInterval(async () => {
-    try {
-      const session = await getCardSession(subscriptionId);
-      if (session.redirect_url) {
-        stopCardRedirect();
-        window.location.href = session.redirect_url;
-      }
-    } catch (err) {
-      console.warn("Card session polling error:", err);
-    }
-  }, 2000);
+  await openCheckout(url);
 
-  cardSessionTimeout = setTimeout(() => {
-    if (redirectingStatus.value === 'waiting') {
-      redirectingStatus.value = 'timeout';
-      stopCardRedirect();
-    }
-  }, 30000);
-};
-
-const stopCardRedirect = () => {
-  if (cardSessionInterval) {
-    clearInterval(cardSessionInterval);
-    cardSessionInterval = null;
+  const token = checkoutTokenFromURL(url);
+  if (!token) {
+    redirectingStatus.value = 'timeout';
+    return;
   }
-  if (cardSessionTimeout) {
-    clearTimeout(cardSessionTimeout);
-    cardSessionTimeout = null;
+
+  checkoutAbort?.abort();
+  checkoutAbort = new AbortController();
+
+  const paid = await waitForPayment(token, { signal: checkoutAbort.signal });
+  if (checkoutAbort.signal.aborted) return;
+
+  if (paid) {
+    currentStep.value = 'PAID';
+    toast.success("Payment confirmed!", {
+      description: "Your subscription is now active."
+    });
+    await billingStore.reloadSubscriptionData();
+    setTimeout(() => closeAndReset(), 2000);
+  } else {
+    redirectingStatus.value = 'timeout';
   }
 };
 
 const closeAndReset = () => {
-  stopPolling();
-  stopCardRedirect();
+  checkoutAbort?.abort();
+  checkoutAbort = null;
   isOpen.value = false;
 };
 
@@ -539,23 +443,20 @@ const onSubmit = handleSubmit(async (values) => {
   subscriptionError.value = '';
 
   try {
-    const fullPhoneNumber = values.phone ? `+256${values.phone}` : undefined;
+    // No phone or method is sent: the term is provisioned first and the hosted
+    // checkout page collects whatever the chosen method needs.
     let response;
 
     if (isOrgSubscription.value) {
       response = await subscribeAsOrganisation(orgId.value, {
         seats: values.seats || seats.value,
         units: values.units,
-        annual: selectedOption.value === 'annually',
-        phone: fullPhoneNumber,
-        paymentMethod: paymentMethod.value
+        annual: selectedOption.value === 'annually'
       });
     } else {
       response = await subscribeAsIndividual({
         units: values.units,
-        annual: selectedOption.value === 'annually',
-        phone: fullPhoneNumber,
-        paymentMethod: paymentMethod.value
+        annual: selectedOption.value === 'annually'
       });
     }
 
@@ -568,18 +469,29 @@ const onSubmit = handleSubmit(async (values) => {
     const subscriptionId = responseData.subscription?.id;
 
     if (!subscriptionId) {
-      toast.success("Payment initiated!", {
-        description: "Please check your phone to complete the transaction."
+      toast.success("Subscription saved", {
+        description: "Open Billing to pay the invoice."
       });
       setTimeout(() => closeAndReset(), 3000);
       return;
     }
 
-    if (paymentMethod.value === 'CARD') {
-      startCardRedirect(subscriptionId);
-    } else {
-      startPolling(subscriptionId);
+    // The v2 ledger raised a bill and handed back a hosted checkout link. That
+    // page is the one payment surface — it serves card and mobile money alike,
+    // and it is the path that has actually been proven end to end.
+    if (responseData.checkout_url) {
+      startHostedCheckout(responseData.checkout_url, subscriptionId);
+      return;
     }
+
+    // No checkout link: the ledger could not raise the invoice (it logs why).
+    // The term exists but is unpayable from here, so say so plainly instead of
+    // spinning on a payment that was never started.
+    subscriptionError.value =
+      "We couldn't start the payment. Your subscription is saved — open Billing to pay it.";
+    toast.error("Payment could not be started", {
+      description: subscriptionError.value
+    });
   } catch (error) {
     console.error('Subscription error:', error);
     subscriptionError.value = error instanceof Error
@@ -610,8 +522,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  stopPolling();
-  stopCardRedirect();
+  checkoutAbort?.abort();
 });
 
 watch(isOpen, (newValue) => {
@@ -620,12 +531,9 @@ watch(isOpen, (newValue) => {
       resetForm();
       currentStep.value = 'PLANS';
       subscriptionError.value = '';
-      pollingStatus.value = 'waiting';
       redirectingStatus.value = 'waiting';
-      paymentMethod.value = 'MOBILE_MONEY';
+      checkoutUrl.value = '';
       seats.value = minSeats.value || 2;
-      stopPolling();
-      stopCardRedirect();
     }, 300);
   }
 });

@@ -353,6 +353,7 @@ watch(onAssistant, (on) => { if (!on) historyOpen.value = false; });
 
         <SharedOfflineBanner/>
         <SharedBillingExpiryBanner class="xs:hidden"/>
+        <SharedBillingBlockedDialog />
 
         <div class="min-h-0 flex-1 flex-col flex w-full overflow-hidden">
           <!--                    <SharedDesktopTitleBar class="hidden lg:flex" />-->
