@@ -1,6 +1,8 @@
 # PractoCore Office Add-ins — Production Deployment & AppSource Listing
 
-**Status:** production manifests cut & validated — 2026-07-03
+**Status:** production manifests cut & re-validated — 2026-08-16.
+Legal/support pages built in `practocore-landing` but **not yet deployed**;
+submission package drafted in `APPSOURCE_SUBMISSION.md`.
 **Manifests:** `word-manifest.xml`, `outlook-manifest.xml` (production) · `*-manifest.dev.xml` (localhost, keep for dev)
 
 The task-pane code is already live in production (`app.practocore.com/word/taskpane`,
@@ -29,30 +31,39 @@ marketplace (AppSource).
 
 ## BLOCKERS — do these before either distribution path works
 
-### 1. Register the OAuth redirect URI (required for sign-in in production)
+### 1. ✅ DONE (2026-08-16) — OAuth redirect URI registered
 The pane signs in via Google OAuth through the Office Dialog API using
-`${location.origin}/word/auth/callback`. In production that origin is
-`app.practocore.com`, so it MUST be whitelisted or sign-in fails:
-
-- **Google Cloud Console** → the OAuth 2.0 Client → *Authorized redirect URIs* →
-  add `https://app.practocore.com/word/auth/callback`.
-- **PocketBase** (`api.practocore.com`) → Settings → Auth providers → **Google** →
-  ensure the same redirect URL is allowed.
-
+`${location.origin}/word/auth/callback`, which in production is
+`https://app.practocore.com/word/auth/callback`. That URI is now registered in
+the Google Cloud OAuth client and the PocketBase `google` auth provider.
 (Outlook reuses the Word `/word/auth/*` routes, so this one URI covers both.)
 
-### 2. Stand up Support / Privacy / Terms pages (required for AppSource, step B)
-AppSource validation rejects listings without reachable **Support**, **Privacy
-Policy**, and **Terms of Use** URLs. Today:
-- `practocore.com/support` → apex does **not** resolve (broken).
-- `www.practocore.com/contact` → **404** (page exists in the website repo but isn't
-  serving in prod — the SPA fallback/route isn't deployed).
-- Privacy Policy & Terms → **do not exist** (footer renders them as plain text, not links).
+⚠ Not yet exercised end-to-end from a real Office task pane — see the
+verification step at the end of section A.
 
-Action: deploy a working `https://www.practocore.com/contact` (support), publish a
-**Privacy Policy** and **Terms of Use** page, then confirm each returns 200. The
-manifests currently point `SupportUrl` at `https://www.practocore.com/contact` — make
-that live. (Not a blocker for centralized org deployment in step A, only for AppSource.)
+### 2. Deploy the Support / Privacy / Terms pages (required for AppSource, step B)
+AppSource validation rejects listings without reachable **Support**, **Privacy
+Policy**, and **Terms of Use** URLs.
+
+**2026-08-16 — the pages are now built** in `practocore-landing`:
+`app/pages/contact.vue`, `privacy.vue`, `terms.vue`, with content in
+`app/data/legal.ts` and the footer's Legal column wired to them. The site builds
+and all three routes render (verified against a local preview).
+
+Still outstanding:
+- **Deploy `practocore-landing`.** Until then `www.practocore.com/{contact,privacy,terms}`
+  all return **404**, and the `SupportUrl` in both manifests points at a dead page.
+- **Have the legal text reviewed.** It was drafted from what the platform actually
+  does (the subprocessor table lists the services the backend really calls) but it
+  has not been through counsel.
+
+Verify after deploying:
+```bash
+for u in contact privacy terms; do
+  printf "%-8s %s\n" "$u" "$(curl -s -o /dev/null -w '%{http_code}' -L https://www.practocore.com/$u)"
+done
+```
+(Not a blocker for centralized org deployment in step A, only for AppSource.)
 
 ---
 
@@ -83,6 +94,11 @@ confirm a matter loads and a draft inserts.
 > review (typically several business days to weeks). The manifests are already
 > AppSource-valid; below is the exact submission package.
 
+📄 **The full submission package — listing copy for both offers, asset specs,
+reviewer test notes and a readiness checklist — is in
+[`APPSOURCE_SUBMISSION.md`](./APPSOURCE_SUBMISSION.md).** The summary below
+remains as the short version.
+
 ### Prerequisites
 - A **Partner Center** account enrolled in the **Microsoft 365 and Copilot** program
   (partner.microsoft.com). Business/tax verification can take days — start early.
@@ -100,7 +116,7 @@ confirm a matter loads and a draft inserts.
    (Productivity / Legal), search keywords.
 4. Upload **assets**: logo (300×300 PNG), 1–5 **screenshots** (1366×768) of the pane in
    Word/Outlook, optional 30–120s demo video.
-5. **Support/Privacy/Terms URLs** (from blocker #2) + support contact (`hello@practocore.com`).
+5. **Support/Privacy/Terms URLs** (from blocker #2) + support contact (`contact@practocore.com`).
 6. **Test notes + credentials** for validators (see prerequisites).
 7. Submit → automated validation → manual review → publish.
 
