@@ -1,0 +1,357 @@
+name: release
+
+# Publishes a public, downloadable GitHub Release from a version tag. This is the
+# half build.yml's header refers to as "main.yml" — which never existed, so until
+# now nothing was ever published anywhere linkable.
+#
+# build.yml stays as it is: it builds every push to main into workflow artifacts,
+# which need a logged-in GitHub account and expire after 30 days. Those cannot be
+# linked from a website. This workflow attaches the same bundles to a Release as
+# public assets under STABLE, VERSION-FREE filenames, which is what makes
+#
+#   https://github.com/<owner>/<repo>/releases/latest/download/PractoCore-windows-x64.msi
+#
+# a permanent URL that always redirects to the newest release. www.practocore.com
+# links those directly (see practocore-landing app/data/downloads.ts), so the
+# marketing site never needs a redeploy when a new version ships.
+#
+# Usage: git tag v1.2.0 && git push origin v1.2.0
+# Or run manually from the Actions tab against an existing tag.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish (e.g. v1.2.0)'
+        required: true
+        type: string
+
+# Release assets are uploaded with `gh release upload`, which needs write access
+# to contents. tauri-action also reads GITHUB_TOKEN.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+  # ── Create the draft release up front ─────────────────────────────────────
+  # Every build job uploads into this one release. It stays a DRAFT until all
+  # platforms have finished, so /releases/latest/download/ never points at a
+  # half-populated release that would 404 for whichever platform lost the race.
+  create-release:
+    name: create draft release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: resolve
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # Strip the leading v for display ("v1.2.0" → "1.2.0").
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # --draft so it is invisible to /releases/latest until publish-release
+      # flips it. Re-running the workflow on the same tag reuses the release and
+      # the upload steps --clobber their assets, so a retry is always safe.
+      - name: Create or reuse draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — reusing it."
+            gh release edit "$TAG" --draft
+          else
+            gh release create "$TAG" \
+              --draft \
+              --title "PractoCore ${{ steps.resolve.outputs.version }}" \
+              --generate-notes
+          fi
+
+  # ── Tauri desktop ─────────────────────────────────────────────────────────
+  # Build steps are kept deliberately identical to build.yml — see the comments
+  # there for why the frontend is staged into dist/ and why webkit2gtk-4.1 is a
+  # hard requirement on Linux. The only additions are the rename + upload steps.
+  desktop:
+    name: desktop (${{ matrix.label }})
+    needs: create-release
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-arm64
+            platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - label: macos-x64
+            platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - label: linux-x64
+            platform: ubuntu-22.04
+            args: ''
+          - label: windows-x64
+            platform: windows-latest
+            args: ''
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.label }}
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        shell: bash
+        run: bun run generate
+
+      - name: Stage frontend into dist/
+        shell: bash
+        run: |
+          if [ -f .output/public/index.html ]; then
+            rm -rf dist && cp -R .output/public dist
+          elif [ -f dist/index.html ]; then
+            echo "nuxt generate wrote dist/ directly — leaving it alone"
+          else
+            echo "::error::No static build output found (looked for .output/public/index.html and dist/index.html)"
+            exit 1
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Still no tagName here: tauri-action's own publishing would name the
+          # assets after the app version (PractoCore_0.1.0_amd64.deb), which
+          # breaks the stable /releases/latest/download/ URLs the site depends
+          # on. We rename and upload ourselves in the next step.
+          args: ${{ matrix.args }}
+
+      # Collapse the version-stamped bundle names into stable ones. Tauri writes
+      # to target/release/bundle when --target is absent and
+      # target/<triple>/release/bundle when it is present, so both are searched.
+      - name: Collect and rename bundles
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          # take <extension> <output-name> — copies the first matching bundle, if any.
+          take() {
+            local ext="$1" out="$2" found
+            found="$(find src-tauri/target -path '*/release/bundle/*' -name "*.${ext}" -type f \
+              -print 2>/dev/null | head -n 1 || true)"
+            if [ -n "$found" ]; then
+              cp "$found" "release-assets/$out"
+              echo "  $out  <-  $found"
+            else
+              echo "  (no .$ext bundle)"
+            fi
+          }
+
+          echo "Collected:"
+          case "${{ matrix.label }}" in
+            # Spelled out rather than interpolated from matrix.label: these
+            # names are a contract with practocore-landing, and renaming a
+            # matrix label should not silently rename a published asset.
+            macos-arm64)
+              take dmg "PractoCore-macos-arm64.dmg"
+              ;;
+            macos-x64)
+              take dmg "PractoCore-macos-x64.dmg"
+              ;;
+            linux-x64)
+              take AppImage "PractoCore-linux-x86_64.AppImage"
+              take deb      "PractoCore-linux-x86_64.deb"
+              take rpm      "PractoCore-linux-x86_64.rpm"
+              ;;
+            windows-x64)
+              take msi "PractoCore-windows-x64.msi"
+              take exe "PractoCore-windows-x64-setup.exe"
+              ;;
+          esac
+
+          if [ -z "$(ls -A release-assets)" ]; then
+            echo "::error::No bundles were produced for ${{ matrix.label }}."
+            exit 1
+          fi
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.create-release.outputs.tag }}" release-assets/* --clobber
+
+  # ── Capacitor Android ─────────────────────────────────────────────────────
+  android:
+    name: android
+    needs: create-release
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # See build.yml for the full explanation: the app is ssr:false, so
+      # runtimeConfig.public is inlined at generate time and any NUXT_PUBLIC_*
+      # not passed here compiles to '' and the feature is dead in the APK.
+      - name: Build frontend
+        env:
+          NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID: 286763366119-3t8ae6qc45smec3up32c1r9hlhi2uot9.apps.googleusercontent.com
+          NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID: 286763366119-d5gbju720bdoahn01k1vuo69l5hqkan5.apps.googleusercontent.com
+        run: bun run generate
+
+      - name: Stage frontend into dist/
+        run: |
+          if [ -f .output/public/index.html ]; then
+            rm -rf dist && cp -R .output/public dist
+          elif [ -f dist/index.html ]; then
+            echo "nuxt generate wrote dist/ directly — leaving it alone"
+          else
+            echo "::error::No static build output found (looked for .output/public/index.html and dist/index.html)"
+            exit 1
+          fi
+
+      - name: Capacitor sync
+        run: bunx cap sync android
+
+      - name: Build release APK + AAB
+        working-directory: android
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: Sign release artifacts
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          set -euo pipefail
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+          BUILD_TOOLS="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          ZIPALIGN="$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+
+          APK_IN=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ZIPALIGN" -p -f 4 "$APK_IN" "$RUNNER_TEMP/aligned.apk"
+          "$APKSIGNER" sign \
+            --ks "$RUNNER_TEMP/release.jks" \
+            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+            --out "PractoCore-android.apk" \
+            "$RUNNER_TEMP/aligned.apk"
+          "$APKSIGNER" verify "PractoCore-android.apk"
+
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      # An unsigned APK cannot be installed on any handset, so publishing one to
+      # a public download page would just hand visitors a broken file. The .aab
+      # is never published either — it is a Play Console upload format and is not
+      # installable at all.
+      - name: Upload APK to release
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.create-release.outputs.tag }}" PractoCore-android.apk --clobber
+
+      - name: Skip Android publish (unsigned)
+        if: env.ANDROID_KEYSTORE_BASE64 == ''
+        run: |
+          echo "::warning::ANDROID_KEYSTORE_BASE64 is not set — the release APK is UNSIGNED and cannot be installed, so it was NOT attached to the release. The Android download on www.practocore.com will stay unavailable until the signing secrets are configured."
+
+  # ── Publish ───────────────────────────────────────────────────────────────
+  # Only once every platform has uploaded does the release leave draft — that is
+  # the moment /releases/latest/download/ starts serving the new binaries, and it
+  # flips for all platforms at once.
+  publish-release:
+    name: publish
+    needs: [create-release, desktop, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.create-release.outputs.tag }}"
+          # --latest is explicit: it is what makes /releases/latest resolve here,
+          # and it is not implied for a tag that sorts oddly against older ones.
+          gh release edit "$TAG" --draft=false --latest
+          echo "Published $TAG:"
+          gh release view "$TAG" --json assets -q '.assets[] | "  \(.name)  (\(.size) bytes)"'
