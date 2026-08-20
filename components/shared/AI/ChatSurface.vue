@@ -499,6 +499,13 @@ function stepIcon(tool: string) {
       return Sparkles;
     case 'fetch_url':
       return FileText;
+    case 'list_vault_documents':
+    case 'list_drafted_documents':
+      return Library;
+    case 'get_account_status':
+      return Gauge;
+    case 'get_eccmis_status':
+      return Building2;
     case '':
       return Sparkles;
     default:
