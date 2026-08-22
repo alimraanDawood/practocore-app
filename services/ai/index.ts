@@ -628,6 +628,25 @@ export interface ProposeEngagementTemplatePreview {
   isUpdate: boolean;
 }
 
+/** A recorded fact the assistant proposes to retire (forget_memory). */
+export interface ForgetMemoryPreview {
+  kind: 'forget_memory';
+  memoryId: string;
+  /** The fact itself — the thing the lawyer is actually approving the removal of. */
+  content: string;
+  scope: 'matter' | 'engagement' | 'vault' | 'org' | 'user';
+  /** The case/engagement/vault this fact is filed under, by name. */
+  scopeLabel?: string;
+  confidence: number;
+  recorded?: string;
+  /** Why the assistant thinks it should go. */
+  reason?: string;
+  /** Where the fact came from; a document-sourced fact will come back on re-ingest. */
+  provenance?: { type?: string; ref?: string; locator?: string };
+  /** Set when the fact was distilled from an uploaded document. */
+  source?: string;
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -644,6 +663,7 @@ export type ProposalPreview =
   | GenerateDocumentPreview
   | ProposeSkillPreview
   | ProposeEngagementTemplatePreview
+  | ForgetMemoryPreview
   | GenericPreview;
 
 export interface AiConversationSummary {
