@@ -22,6 +22,12 @@ export interface SkillSummary {
   source: 'global' | 'firm';
   /** True when this firm owns the skill and may edit/delete it. */
   owned: boolean;
+  /**
+   * Whether THIS user may change it. Diverges from `owned` for a firm skill a
+   * colleague authored: the firm owns it, but rewriting or deleting one takes the
+   * 'manage templates' permission, as it does for a shared playbook.
+   */
+  editable: boolean;
   /** Set on a global skill the firm has its own overriding copy of. */
   overridden?: boolean;
 }

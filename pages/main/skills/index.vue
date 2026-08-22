@@ -323,7 +323,10 @@ const statusTone: Record<string, string> = {
               <Button size="sm" variant="ghost" :disabled="saving" @click="editing = false">Cancel</Button>
             </template>
 
-            <template v-else-if="detail.owned">
+            <!-- editable, not owned: a firm skill a colleague authored is visible to
+                 the whole firm but only its author (or a template manager) may change
+                 it — the same rule shared playbooks have. Everyone else duplicates. -->
+            <template v-else-if="detail.editable">
               <Button size="sm" class="gap-1.5" @click="navigateTo(`/main/skills/studio?skill=${detail.id}`)"><Wand2 class="size-3.5" /> Edit with AI</Button>
               <Button size="sm" variant="outline" class="gap-1.5" @click="startEdit"><Pencil class="size-3.5" /> Edit</Button>
               <Button size="sm" variant="outline" class="gap-1.5" :disabled="busyAction === 'status'" @click="toggleActive">
@@ -349,7 +352,11 @@ const statusTone: Record<string, string> = {
                 <Loader2 v-if="busyAction === 'duplicate'" class="size-3.5 animate-spin" /><Copy v-else class="size-3.5" />
                 Duplicate to my firm
               </Button>
-              <p class="text-[11px] text-muted-foreground">Make an editable copy — your version takes precedence for your firm.</p>
+              <p class="text-[11px] text-muted-foreground">
+                {{ detail.owned
+                  ? 'A colleague authored this firm skill. Make your own copy, or ask them (or an administrator) to change it.'
+                  : 'Make an editable copy — your version takes precedence for your firm.' }}
+              </p>
             </template>
           </div>
         </template>

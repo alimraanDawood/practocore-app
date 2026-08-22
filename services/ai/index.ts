@@ -577,6 +577,27 @@ export interface ProposeSkillPreview {
   isUpdate: boolean;
   /** The current status of the skill being overwritten, when isUpdate. */
   currentStatus?: string;
+  /** The version being overwritten, when isUpdate. */
+  currentVersion?: string;
+  /** Bindings naming a tool that does not exist — the steps relying on them cannot run. */
+  unknownToolBindings?: string[];
+}
+
+/** manage_skill: a status change on a skill this workspace owns. */
+export interface ManageSkillPreview {
+  kind: 'manage_skill';
+  name: string;
+  action: 'activate' | 'deactivate' | 'deprecate' | 'delete' | string;
+  title?: string;
+  purpose?: string;
+  currentStatus?: string;
+  version?: string;
+  updated?: string;
+  /** The opening of the body, shown when it is about to be destroyed. */
+  instructionsExcerpt?: string;
+  instructionsLength?: number;
+  /** The named skill is not one this workspace owns (e.g. a curated PractoCore skill). */
+  missing?: boolean;
 }
 
 // Engagement Studio (ENGAGEMENT_STUDIO_OVERHAUL.md §3): the non-litigation

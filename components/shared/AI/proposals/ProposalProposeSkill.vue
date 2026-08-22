@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Sparkles, Wand2, Scale, Wrench, Pencil, Lightbulb } from 'lucide-vue-next';
+import { Sparkles, Wand2, Scale, Wrench, Pencil, Lightbulb, AlertTriangle } from 'lucide-vue-next';
 import type { ProposeSkillPreview } from '~/services/ai';
 import { proposalTheme, type ProposalVariant } from './theme';
 
@@ -30,6 +30,9 @@ const instructionsPreview = computed(() => {
       </Badge>
       <Badge variant="outline" class="text-[11px] capitalize">
         {{ preview.isUpdate ? `Stays ${preview.currentStatus || 'draft'}` : 'Saves as draft' }}
+      </Badge>
+      <Badge v-if="preview.isUpdate && preview.currentVersion" variant="outline" class="text-[11px]">
+        Replaces v{{ preview.currentVersion }}
       </Badge>
       <Badge v-if="preview.courtScope" variant="outline" class="gap-1 text-[11px]">
         <Scale class="size-3" /> {{ preview.courtScope }}
@@ -74,8 +77,21 @@ const instructionsPreview = computed(() => {
       <Badge v-if="preview.userInvocable" variant="outline" class="text-[11px]">Lawyer-runnable</Badge>
     </div>
 
+    <!-- A binding that names no real tool is a step the skill cannot carry out.
+         This is the last point before it is saved and offered as a capability. -->
+    <div v-if="preview.unknownToolBindings?.length" class="flex gap-2 items-start rounded-lg px-3 py-2" :class="t.surface">
+      <AlertTriangle class="size-3.5 mt-0.5 shrink-0 text-amber-500" />
+      <p class="text-xs" :class="t.muted">
+        {{ preview.unknownToolBindings.join(', ') }}
+        {{ preview.unknownToolBindings.length === 1 ? 'is not a tool' : 'are not tools' }} the assistant has — any step
+        that relies on {{ preview.unknownToolBindings.length === 1 ? 'it' : 'them' }} cannot be carried out.
+      </p>
+    </div>
+
     <p class="text-[11px]" :class="t.subtle">
-      Private to your firm. After approving, test it in a chat then activate it to make it available to the assistant.
+      {{ preview.isUpdate
+        ? 'Private to your workspace. The existing skill is replaced and its version is bumped.'
+        : 'Private to your workspace. It saves as a draft — ask the assistant to activate it once you are happy with it.' }}
     </p>
   </div>
 </template>
