@@ -21,7 +21,7 @@ const skipped = (r: NotificationRecipient) => props.preview.channels.filter((c) 
   <div class="flex flex-col gap-3">
     <!-- Channels -->
     <div class="flex items-center gap-1.5 flex-wrap">
-      <Badge v-for="ch in preview.channels" :key="ch" variant="secondary" class="gap-1 text-[11px]">
+      <Badge v-for="ch in preview.channels" :key="ch" variant="secondary" class="gap-1 text-[11px]" :class="t.chip">
         <component :is="channelIcon(ch)" class="size-3" /> {{ ch }}
       </Badge>
     </div>

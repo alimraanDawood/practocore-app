@@ -52,7 +52,7 @@ const iconWrap = computed(() => glass.value
   <div class="rounded-xl p-4" :class="rootClass">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-3">
-      <div class="size-7 rounded-full grid place-items-center shrink-0" :class="iconWrap">
+      <div class="size-7 rounded-full grid place-items-center shrink-0 bg-muted text-muted-foreground">
         <Zap class="size-3.5" />
       </div>
       <div class="min-w-0">
