@@ -3,7 +3,8 @@ import { Zap, Check, X, Loader2 } from 'lucide-vue-next';
 import type {
   AiResponse,
   ReassignPreview, BulkReassignPreview, NotificationPreview,
-  AdjournPreview, FulfillPreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
+  AdjournPreview, DateChangePreview, FulfillPreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
+  EventEditPreview, EventStatusPreview,
   GenerateDocumentPreview, ProposeSkillPreview, ManageSkillPreview, ProposeEngagementTemplatePreview,
   ForgetMemoryPreview,
 } from '~/services/ai';
@@ -12,10 +13,13 @@ import ProposalReassign from './proposals/ProposalReassign.vue';
 import ProposalBulkReassign from './proposals/ProposalBulkReassign.vue';
 import ProposalNotification from './proposals/ProposalNotification.vue';
 import ProposalAdjourn from './proposals/ProposalAdjourn.vue';
+import ProposalDateChange from './proposals/ProposalDateChange.vue';
 import ProposalFulfill from './proposals/ProposalFulfill.vue';
 import ProposalMatterEdit from './proposals/ProposalMatterEdit.vue';
 import ProposalCreateMatter from './proposals/ProposalCreateMatter.vue';
 import ProposalReminder from './proposals/ProposalReminder.vue';
+import ProposalEventEdit from './proposals/ProposalEventEdit.vue';
+import ProposalEventStatus from './proposals/ProposalEventStatus.vue';
 import ProposalGenerateDocument from './proposals/ProposalGenerateDocument.vue';
 import ProposalProposeSkill from './proposals/ProposalProposeSkill.vue';
 import ProposalManageSkill from './proposals/ProposalManageSkill.vue';
@@ -63,9 +67,12 @@ const iconWrap = computed(() => glass.value
       <ProposalBulkReassign v-else-if="kind === 'bulk_reassign'" :preview="(proposal.preview as BulkReassignPreview)" :variant="variant" />
       <ProposalNotification v-else-if="kind === 'notification'" :preview="(proposal.preview as NotificationPreview)" :variant="variant" />
       <ProposalAdjourn v-else-if="kind === 'adjourn'" :preview="(proposal.preview as AdjournPreview)" :variant="variant" />
+      <ProposalDateChange v-else-if="kind === 'date_change'" :preview="(proposal.preview as DateChangePreview)" :variant="variant" />
       <ProposalFulfill v-else-if="kind === 'fulfill'" :preview="(proposal.preview as FulfillPreview)" :variant="variant" />
       <ProposalMatterEdit v-else-if="kind === 'matter_edit'" :preview="(proposal.preview as MatterEditPreview)" :variant="variant" />
       <ProposalReminder v-else-if="kind === 'reminder'" :preview="(proposal.preview as ReminderPreview)" :variant="variant" />
+      <ProposalEventEdit v-else-if="kind === 'event_edit'" :preview="(proposal.preview as EventEditPreview)" :variant="variant" />
+      <ProposalEventStatus v-else-if="kind === 'event_status'" :preview="(proposal.preview as EventStatusPreview)" :variant="variant" />
       <ProposalGenerateDocument v-else-if="kind === 'generate_document'" :preview="(proposal.preview as GenerateDocumentPreview)" :variant="variant" />
       <ProposalProposeSkill v-else-if="kind === 'propose_skill'" :preview="(proposal.preview as ProposeSkillPreview)" :variant="variant" />
       <ProposalManageSkill v-else-if="kind === 'manage_skill'" :preview="(proposal.preview as ManageSkillPreview)" :variant="variant" />

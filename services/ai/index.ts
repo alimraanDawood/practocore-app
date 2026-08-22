@@ -450,6 +450,20 @@ export interface FulfillPreview {
   kind: 'fulfill';
   deadline?: DeadlineRef;
   fulfilledDate?: string;
+  // Reopening a deadline ticked off in error. Same tool, inverted sense — the
+  // card must not say "mark as fulfilled" over it.
+  undo?: boolean;
+}
+// override_deadline / set_deadline_date / reset_deadline. One card: they differ
+// in meaning, not in what there is to show.
+export interface DateChangePreview {
+  kind: 'date_change';
+  intent: 'override_deadline' | 'set_deadline_date' | 'reset_deadline';
+  deadline?: DeadlineRef;
+  newDate?: string;
+  reason?: string;
+  clearsDate?: boolean;
+  restoresComputed?: boolean;
 }
 export interface MatterEditPreview {
   kind: 'matter_edit';
@@ -649,6 +663,48 @@ export interface ProposeEngagementTemplatePreview {
   isUpdate: boolean;
 }
 
+// update_event / set_event_status. Both act on a calendar event that already
+// exists, so — unlike the reminder card, which previews something being created
+// — these have to show what it is today next to what it is about to become.
+export interface EventTouchpointPreview {
+  title: string;
+  /** Where the nudge sits today. */
+  date: string;
+  atTime?: string;
+  /** Days before the target date, when a reschedule is being previewed. */
+  daysBefore?: number;
+  /** Where it lands if the proposed target date is approved. */
+  newDate?: string;
+}
+export interface EventEditPreview {
+  kind: 'event_edit';
+  eventId: string;
+  title: string;
+  targetDate: string;
+  atTime?: string;
+  scope: 'personal' | 'case';
+  /** Matter name, or "Personal" for a standalone event. */
+  matter: string;
+  changes: MatterChange[];
+  /** Present only when recipients are being replaced. */
+  recipients?: UserRef[];
+  currentRecipients?: UserRef[];
+  channels?: string[];
+  touchpoints?: EventTouchpointPreview[];
+}
+export interface EventStatusPreview {
+  kind: 'event_status';
+  eventId: string;
+  title: string;
+  targetDate: string;
+  from: 'pending' | 'done' | 'cancelled';
+  to: 'pending' | 'done' | 'cancelled';
+  scope: 'personal' | 'case';
+  matter: string;
+  /** The nudges still scheduled — what this stops, or what reopening restores. */
+  touchpoints?: EventTouchpointPreview[];
+}
+
 /** A recorded fact the assistant proposes to retire (forget_memory). */
 export interface ForgetMemoryPreview {
   kind: 'forget_memory';
@@ -677,14 +733,17 @@ export type ProposalPreview =
   | BulkReassignPreview
   | NotificationPreview
   | AdjournPreview
+  | DateChangePreview
   | FulfillPreview
   | MatterEditPreview
   | CreateMatterPreview
   | ReminderPreview
+  | EventEditPreview
+  | EventStatusPreview
+  | ForgetMemoryPreview
   | GenerateDocumentPreview
   | ProposeSkillPreview
   | ProposeEngagementTemplatePreview
-  | ForgetMemoryPreview
   | GenericPreview;
 
 export interface AiConversationSummary {

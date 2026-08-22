@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { CheckCircle2 } from 'lucide-vue-next';
+import { CheckCircle2, RotateCcw } from 'lucide-vue-next';
 import type { FulfillPreview } from '~/services/ai';
 import { proposalTheme, formatProposalDate, type ProposalVariant } from './theme';
 
@@ -9,6 +9,11 @@ const props = withDefaults(defineProps<{
 }>(), { variant: 'panel' });
 
 const t = computed(() => proposalTheme(props.variant));
+
+// fulfill_deadline does both jobs: `undo` reopens a deadline ticked off in
+// error. Rendering the fulfil wording over an undo would put the lawyer's
+// approval on the opposite of what runs.
+const isUndo = computed(() => props.preview.undo === true);
 </script>
 
 <template>
@@ -22,12 +27,18 @@ const t = computed(() => proposalTheme(props.variant));
     </div>
 
     <div class="flex items-center gap-2 text-sm" :class="t.strong">
-      <CheckCircle2 class="size-4 text-emerald-500 shrink-0" />
-      <span>
+      <RotateCcw v-if="isUndo" class="size-4 text-amber-500 shrink-0" />
+      <CheckCircle2 v-else class="size-4 text-emerald-500 shrink-0" />
+      <span v-if="isUndo">Reopen this deadline</span>
+      <span v-else>
         Mark as fulfilled
         <template v-if="preview.fulfilledDate"> on {{ formatProposalDate(preview.fulfilledDate) }}</template>
         <template v-else> (today)</template>
       </span>
     </div>
+
+    <p v-if="isUndo" class="text-xs" :class="t.muted">
+      It goes back to outstanding and its reminders are restored.
+    </p>
   </div>
 </template>
