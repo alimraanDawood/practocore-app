@@ -23,8 +23,12 @@
                 </span>
                 <!-- The registry timed every stage; this is its own measure of the
                      case's pace, not ours. -->
-                <span v-if="recordedDays" class="text-muted-foreground">
-                    {{ recordedDays }} day{{ recordedDays === '1' ? '' : 's' }} recorded
+                <span
+                    v-if="recordedDays"
+                    class="text-muted-foreground"
+                    title="Total time the registry recorded across the stages it has completed"
+                >
+                    {{ recordedDays }} day{{ recordedDays === '1' ? '' : 's' }} at these stages
                 </span>
                 <span v-if="timeline.judges?.length" class="truncate text-muted-foreground">
                     {{ timeline.judges.join(', ') }}
@@ -140,8 +144,16 @@
                                     <p v-if="entry.startedAt" class="text-xs tabular-nums text-muted-foreground">
                                         {{ formatDate(entry.startedAt) }}
                                     </p>
-                                    <p v-if="entry.durationDays" class="text-[11px] tabular-nums text-muted-foreground/70">
-                                        {{ formatDuration(entry.durationDays) }}
+                                    <!-- The registry's own Duration for the stage.
+                                         A bare "16 hours" under a date reads as an
+                                         unexplained number, so it says what it
+                                         measures. -->
+                                    <p
+                                        v-if="entry.durationDays"
+                                        class="text-[11px] tabular-nums text-muted-foreground/70"
+                                        title="How long the case sat at this stage, as recorded by the registry"
+                                    >
+                                        took {{ formatDuration(entry.durationDays) }}
                                     </p>
                                 </div>
                             </div>
