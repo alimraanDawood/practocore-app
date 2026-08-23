@@ -130,7 +130,10 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
         <Label for="adhoc-date">
           Due date <span class="text-muted-foreground font-normal">(optional)</span>
         </Label>
-        <Input id="adhoc-date" type="date" v-model="date" />
+        <!-- The house date control (shadcn Calendar in a popover), not the
+             native picker: its dd/mm/yyyy spinner renders differently in every
+             browser and in the Tauri and Capacitor webviews. -->
+        <SharedFieldsDatePicker id="adhoc-date" v-model="date" clearable placeholder="Pick a due date" />
         <p class="text-[11px] text-muted-foreground">
           Leave blank to track it without a date. Reminders only fire once a date is set.
         </p>

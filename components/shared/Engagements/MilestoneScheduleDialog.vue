@@ -171,7 +171,9 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
       <!-- Due date -->
       <div class="flex flex-col gap-1.5">
         <Label for="ms-date">Due date</Label>
-        <Input id="ms-date" type="date" v-model="date" :min="todayIso()" />
+        <!-- Same control as the ad-hoc deadline dialog: the two surfaces do the
+             same job on either side of the product and should feel identical. -->
+        <SharedFieldsDatePicker id="ms-date" v-model="date" :min="todayIso()" clearable placeholder="Pick a date" />
       </div>
 
       <!-- Reminder master toggle -->
