@@ -73,38 +73,78 @@
                         The registry has recorded no stages on this case yet.
                     </p>
 
-                    <ol v-else class="relative flex flex-col gap-0 border-l pl-6">
+                    <ol v-else class="flex flex-col">
                         <li
-                            v-for="entry in orderedEntries"
+                            v-for="(entry, i) in orderedEntries"
                             :key="entry.id"
-                            class="relative pb-6 last:pb-0"
+                            class="relative flex gap-3 pb-5 last:pb-0"
                         >
-                            <span
-                                class="absolute -left-[1.7rem] top-1 size-2.5 rounded-full ring-4 ring-background"
-                                :class="entry.current ? 'bg-emerald-500' : entry.final ? 'bg-foreground' : 'bg-muted-foreground/40'"
-                            />
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-sm font-medium">
-                                    {{ entry.state || 'Unnamed stage' }}
-                                </span>
-                                <Badge v-if="entry.current" variant="secondary" class="text-[10px]">
-                                    Current
-                                </Badge>
-                                <Badge v-if="entry.final" variant="outline" class="text-[10px]">
-                                    Final
-                                </Badge>
-                                <span v-if="entry.durationDays" class="text-[10px] text-muted-foreground tabular-nums">
-                                    {{ formatDuration(entry.durationDays) }}
-                                </span>
+                            <!-- Rail: one hairline, one small mark per stage. The
+                                 current stage is the only one that reads loudly,
+                                 because it is the only one that is still true. -->
+                            <div class="relative flex w-3 shrink-0 justify-center">
+                                <span
+                                    v-if="i < orderedEntries.length - 1"
+                                    class="absolute top-2.5 bottom-[-1.25rem] w-px bg-border"
+                                />
+                                <span
+                                    class="relative mt-1.5 size-1.5 rounded-full"
+                                    :class="entry.current
+                                        ? 'size-2 bg-emerald-500 ring-4 ring-emerald-500/15'
+                                        : entry.final ? 'bg-foreground' : 'bg-border'"
+                                />
                             </div>
-                            <p v-if="entry.action" class="text-xs text-muted-foreground">
-                                {{ entry.action }}
-                            </p>
-                            <p class="text-xs text-muted-foreground">
-                                <span v-if="entry.startedAt">{{ formatDateTime(entry.startedAt) }}</span>
-                                <span v-if="entry.user"> · {{ entry.user }}</span>
-                            </p>
-                            <p v-if="entry.details" class="mt-1 text-xs">{{ entry.details }}</p>
+
+                            <div class="flex min-w-0 flex-1 gap-3">
+                                <!-- What happened -->
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span
+                                            class="truncate text-sm"
+                                            :class="entry.current ? 'font-medium' : ''"
+                                        >
+                                            {{ entry.state || 'Unnamed stage' }}
+                                        </span>
+                                        <Badge
+                                            v-if="entry.current"
+                                            variant="secondary"
+                                            class="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                                        >
+                                            Current
+                                        </Badge>
+                                        <span
+                                            v-else-if="entry.final"
+                                            class="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground"
+                                        >
+                                            Final
+                                        </span>
+                                    </div>
+                                    <p v-if="subLine(entry)" class="truncate text-xs text-muted-foreground">
+                                        {{ subLine(entry) }}
+                                    </p>
+                                    <!-- The registry's own note. Real payloads carry
+                                         the same sentence verbatim on consecutive
+                                         stages, which reads as a rendering bug, so
+                                         it shows on the row the reader meets first
+                                         and is suppressed on the repeats below it. -->
+                                    <p
+                                        v-if="entry.details && entry.details !== orderedEntries[i - 1]?.details"
+                                        class="mt-1 border-l-2 border-border pl-2 text-xs text-muted-foreground"
+                                    >
+                                        {{ entry.details }}
+                                    </p>
+                                </div>
+
+                                <!-- When, and for how long -->
+                                <div class="shrink-0 text-right">
+                                    <p v-if="entry.startedAt" class="text-xs tabular-nums text-muted-foreground">
+                                        {{ formatDate(entry.startedAt) }}
+                                    </p>
+                                    <p v-if="entry.durationDays" class="text-[11px] tabular-nums text-muted-foreground/70">
+                                        {{ formatDuration(entry.durationDays) }}
+                                    </p>
+                                </div>
+                            </div>
                         </li>
                     </ol>
                 </TabsContent>
@@ -290,8 +330,13 @@ function formatDate(value?: string) {
     return value ? dayjs(value).format('D MMM YYYY') : '';
 }
 
-function formatDateTime(value?: string) {
-    return value ? dayjs(value).format('D MMM YYYY, h:mm A') : '';
+/**
+ * The one line under a stage's name: what moved it, and who. The time of day is
+ * dropped — a registry stamp of 5:29 PM is noise next to which day it was, and
+ * it was pushing the officer's name onto a second line.
+ */
+function subLine(entry: CaseTimelineEntry) {
+    return [entry.action, entry.user].filter(Boolean).join(' · ');
 }
 
 function formatDuration(days: number) {
