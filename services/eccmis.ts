@@ -101,6 +101,9 @@ const IMPORT_SELECTED_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/import-sel
 const PORTFOLIO_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/portfolio`;
 const ATTACH_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/attach`;
 const DETACH_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/detach`;
+const TIMELINE_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/timeline`;
+const PAYMENTS_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/payments`;
+const DOCUMENT_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/document`;
 
 /**
  * Throws an Error carrying the server's `error` string (or a status fallback)
@@ -328,4 +331,121 @@ export async function detachEccmisCase(matterId: string): Promise<void> {
         },
     });
     await parseOrThrow<{ detached: boolean }>(res);
+}
+
+
+// ---------------------------------------------------------------------------
+// Live-probe surfaces (2026-08-23): case timeline, court fees, documents.
+// ---------------------------------------------------------------------------
+
+/** One stage of a case's life, as the registry recorded it. */
+export interface CaseTimelineEntry {
+    id: number;
+    stateId: number;
+    /** Resolved label; empty when the workflow catalogue could not name it. */
+    state: string;
+    actionId: number;
+    action?: string;
+    userId?: number;
+    /** Resolved officer name; empty rather than a bare id. */
+    user?: string;
+    startedAt?: string;
+    endedAt?: string;
+    /** Days the registry recorded for this stage. */
+    durationDays?: number;
+    current: boolean;
+    final: boolean;
+    details?: string;
+}
+
+export interface CaseDocumentRef {
+    documentId: number;
+    title?: string;
+    addedOn?: string;
+}
+
+export interface CaseTimeline {
+    caseInstanceId: number;
+    caseNumber?: string;
+    currentState?: string;
+    entries: CaseTimelineEntry[];
+    judges?: string[];
+    documents?: CaseDocumentRef[];
+    /** Total recorded across completed stages — the pace of the case. */
+    elapsedDays?: number;
+}
+
+/** A mirrored court fee. Amounts are UGX, which is ZERO-DECIMAL — never /100. */
+export interface EccmisPaymentRecord {
+    id: string;
+    matter: string;
+    caseInstanceId: number;
+    caseNumber: string;
+    eccmisPaymentId: string;
+    prn: string;
+    amount: number;
+    currency: string;
+    status: 'draft' | 'pending_payment' | 'paid_offline_pending' | 'paid_pending' | 'paid' | 'expired' | 'unknown';
+    dueDate: string;
+    description: string;
+}
+
+/**
+ * Read one matter's ECCMIS case history. This is an ON-DEMAND call that hits
+ * the court live — fetch it when the user opens the timeline, not on page load
+ * for a list of matters.
+ */
+export async function fetchEccmisTimeline(matterId: string): Promise<CaseTimeline> {
+    const res = await fetch(`${TIMELINE_ENDPOINT}/${encodeURIComponent(matterId)}`, {
+        headers: { 'Authorization': pocketbase.authStore.token },
+    });
+    return parseOrThrow<CaseTimeline>(res);
+}
+
+/**
+ * The mirrored court-fee register. Pass `outstanding` to get only the
+ * references that still need dealing with (including expired ones, which
+ * block the filing until they are regenerated).
+ */
+export async function fetchEccmisPayments(
+    opts: { matterId?: string; outstanding?: boolean } = {},
+): Promise<EccmisPaymentRecord[]> {
+    const params = new URLSearchParams();
+    if (opts.matterId) params.set('matterId', opts.matterId);
+    if (opts.outstanding) params.set('outstanding', 'true');
+    const query = params.toString();
+
+    const res = await fetch(query ? `${PAYMENTS_ENDPOINT}?${query}` : PAYMENTS_ENDPOINT, {
+        headers: { 'Authorization': pocketbase.authStore.token },
+    });
+    const { payments } = await parseOrThrow<{ payments: EccmisPaymentRecord[] }>(res);
+    return payments ?? [];
+}
+
+/**
+ * Fetch a court document's bytes.
+ *
+ * The binary route is the one unsettled question from the live probe — the
+ * court's own content endpoint answered 204 with no body for a document whose
+ * metadata reads fine. The server tries every published route and, on failure,
+ * throws with the exact routes tried and what each answered. Surface that
+ * message rather than a generic "download failed": it is the evidence needed to
+ * tell a storage gap on the court's side from a route we are calling wrongly.
+ */
+export async function fetchEccmisDocument(matterId: string, documentId: number): Promise<Blob> {
+    const res = await fetch(
+        `${DOCUMENT_ENDPOINT}/${documentId}?matterId=${encodeURIComponent(matterId)}`,
+        { headers: { 'Authorization': pocketbase.authStore.token } },
+    );
+    if (!res.ok) {
+        let message = `Could not fetch document ${documentId}`;
+        try {
+            const body = await res.json();
+            if (body?.message) message = body.message;
+        } catch {
+            // Non-JSON error body — keep the default.
+        }
+        throw new Error(message);
+    }
+    return res.blob();
 }

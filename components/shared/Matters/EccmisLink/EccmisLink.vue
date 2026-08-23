@@ -24,6 +24,11 @@
                 matter twice a day.
             </p>
             <DropdownMenuSeparator />
+            <DropdownMenuItem @select="scheduleRecord">
+                <Landmark class="size-4" />
+                View court record
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
                 v-if="canManage"
                 class="text-destructive focus:text-destructive"
@@ -110,6 +115,10 @@
         </DialogContent>
     </Dialog>
 
+    <!-- The registry's own record of the case: history, fees, documents. Opened
+         on demand — it reads ECCMIS live. -->
+    <SharedMattersEccmisRecord v-if="isLinked" :matter="matter" v-model:open="recordOpen" />
+
     <!-- Unlink confirmation -->
     <AlertDialog v-model:open="confirmOpen">
         <AlertDialogContent>
@@ -137,7 +146,7 @@
 <script setup lang="ts">
 import { useVModel } from '@vueuse/core';
 import { toast } from 'vue-sonner';
-import { Link2, Unlink, LoaderIcon, AlertCircle } from 'lucide-vue-next';
+import { Link2, Unlink, LoaderIcon, AlertCircle, Landmark } from 'lucide-vue-next';
 import {
     fetchEccmisPortfolio,
     attachEccmisCase,
@@ -160,6 +169,7 @@ const emits = defineEmits<{ updated: []; 'update:open': [value: boolean] }>();
 // Controlled when the parent binds `v-model:open`, otherwise internal (passive).
 const open = useVModel(props, 'open', emits, { passive: true, defaultValue: false });
 const confirmOpen = ref(false);
+const recordOpen = ref(false);
 const loading = ref(false);
 const busy = ref(false);
 const loadError = ref('');
@@ -177,6 +187,13 @@ const isOtherwiseLinked = (c: PortfolioCase) =>
 function scheduleConfirm() {
     setTimeout(() => {
         confirmOpen.value = true;
+    }, 50);
+}
+
+// Same deferral for the record sheet, for the same reason.
+function scheduleRecord() {
+    setTimeout(() => {
+        recordOpen.value = true;
     }, 50);
 }
 

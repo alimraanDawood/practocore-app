@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Scale, Bell, AlertCircle, CheckCircle, Info, X } from "lucide-vue-next";
+import { Scale, Bell, AlertCircle, CheckCircle, Info, Landmark, X } from "lucide-vue-next";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { resolveNotificationRoute } from "~/utils/notificationRoute";
@@ -21,6 +21,8 @@ const getIcon = () => {
       return CheckCircle;
     case 'INFO':
       return Info;
+    case 'ECCMIS_UPDATE':
+      return Landmark;
     default:
       return Bell;
   }
@@ -36,10 +38,25 @@ const getTypeColor = () => {
       return 'bg-green-500/10 text-green-600 dark:text-green-500';
     case 'INFO':
       return 'bg-blue-500/10 text-blue-600 dark:text-blue-500';
+    case 'ECCMIS_UPDATE':
+      return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500';
     default:
       return 'bg-muted text-muted-foreground';
   }
 };
+
+// The chip beneath the title. Raw enum values read as machine output
+// ("eccmis_update"), so the ones users actually see are named.
+const TYPE_LABELS: Record<string, string> = {
+  ECCMIS_UPDATE: 'Court update',
+  REMINDER: 'Reminder',
+};
+
+const typeLabel = computed(() => {
+  const type = props.notification?.type;
+  if (!type) return '';
+  return TYPE_LABELS[type] ?? type.toLowerCase().replace(/_/g, ' ');
+});
 
 // Handle mark as read
 const handleMarkAsRead = () => {
@@ -137,8 +154,8 @@ const handleAction = (action: any) => {
       <!-- Metadata -->
       <div class="flex flex-row w-full items-center gap-2 text-xs text-muted-foreground">
         <span>{{ dayjs(notification?.created).fromNow() }}</span>
-        <span v-if="notification?.type" class="px-2 py-0.5 bg-muted rounded text-xs capitalize">
-          {{ notification.type.toLowerCase() }}
+        <span v-if="typeLabel" class="px-2 py-0.5 bg-muted rounded text-xs capitalize">
+          {{ typeLabel }}
         </span>
       </div>
 
