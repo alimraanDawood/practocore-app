@@ -290,6 +290,10 @@ export interface PortfolioCase {
     filingDate?: string;
     /** If set, this ECCMIS case is already linked to that local matter. */
     linkedMatterId?: string;
+    /** Derived from the case number, e.g. "High Court — Commercial Court". */
+    courtName?: string;
+    /** Derived from the case number; empty when the code is not a documented one. */
+    category?: string;
 }
 
 export interface AttachResult {

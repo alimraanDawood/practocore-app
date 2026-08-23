@@ -54,7 +54,7 @@
 
     <!-- Picker dialog -->
     <Dialog v-model:open="open">
-        <DialogContent class="sm:max-w-lg">
+        <DialogContent class="sm:max-w-xl">
             <DialogHeader>
                 <DialogTitle>Attach an ECCMIS case</DialogTitle>
                 <DialogDescription>
@@ -80,38 +80,93 @@
                 </Button>
             </div>
 
-            <Command v-else class="rounded-lg border">
-                <CommandInput placeholder="Search by case number or party…" />
-                <CommandList>
-                    <CommandEmpty>No matching cases in your portfolio.</CommandEmpty>
-                    <CommandGroup>
-                        <CommandItem
-                            v-for="c in cases"
-                            :key="c.caseInstanceId"
-                            :value="`${c.caseNumber} ${(c.parties || []).join(' ')}`"
-                            :disabled="busy || isOtherwiseLinked(c)"
-                            class="flex flex-col items-start gap-0.5"
-                            @select="() => attach(c)"
-                        >
-                            <div class="flex w-full items-center justify-between gap-2">
-                                <span class="font-mono text-sm">{{ c.caseNumber }}</span>
-                                <Badge v-if="c.statusLabel" variant="secondary" class="text-xs">
-                                    {{ c.statusLabel }}
-                                </Badge>
-                            </div>
-                            <span
-                                v-if="c.parties?.length"
-                                class="w-full truncate text-xs text-muted-foreground"
+            <template v-else>
+                <!-- Court filter. A portfolio spans several courts and the case
+                     number is the only thing distinguishing them, so narrowing
+                     by court is the fastest way to a handful of candidates. -->
+                <div v-if="courts.length > 1" class="flex flex-wrap gap-1">
+                    <button
+                        v-for="court in courts"
+                        :key="court.value"
+                        type="button"
+                        class="rounded-full border px-2.5 py-1 text-xs transition-colors"
+                        :class="courtFilter === court.value
+                            ? 'border-foreground bg-foreground text-background'
+                            : 'text-muted-foreground hover:text-foreground'"
+                        @click="courtFilter = court.value"
+                    >
+                        {{ court.label }}
+                        <span class="tabular-nums opacity-60">{{ court.count }}</span>
+                    </button>
+                </div>
+
+                <Command class="rounded-lg border">
+                    <CommandInput placeholder="Search case number, party, court or year…" />
+                    <CommandList class="max-h-[22rem]">
+                        <CommandEmpty>No matching cases in your portfolio.</CommandEmpty>
+
+                        <CommandGroup v-if="availableCases.length" heading="Available to link">
+                            <CommandItem
+                                v-for="c in availableCases"
+                                :key="c.caseInstanceId"
+                                :value="searchIndex(c)"
+                                :disabled="busy"
+                                class="flex flex-col items-start gap-1 py-2.5"
+                                @select="() => attach(c)"
                             >
-                                {{ c.parties.join(' v. ') }}
-                            </span>
-                            <span v-if="isOtherwiseLinked(c)" class="text-xs text-amber-600">
-                                Already linked to another matter
-                            </span>
-                        </CommandItem>
-                    </CommandGroup>
-                </CommandList>
-            </Command>
+                                <div class="flex w-full items-start justify-between gap-3">
+                                    <span class="font-mono text-sm">{{ c.caseNumber }}</span>
+                                    <Badge
+                                        v-if="c.statusLabel"
+                                        variant="secondary"
+                                        class="shrink-0 text-[10px] font-normal"
+                                    >
+                                        {{ c.statusLabel }}
+                                    </Badge>
+                                </div>
+                                <!-- What the case number encodes, spelled out. -->
+                                <span v-if="contextLine(c)" class="text-xs text-muted-foreground">
+                                    {{ contextLine(c) }}
+                                </span>
+                                <span
+                                    v-if="c.parties?.length"
+                                    class="w-full truncate text-xs"
+                                >
+                                    {{ c.parties.join(' v. ') }}
+                                </span>
+                            </CommandItem>
+                        </CommandGroup>
+
+                        <!-- Cases spoken for. Kept visible rather than hidden: an
+                             advocate hunting a case they already linked needs to
+                             see that it is linked, not that it is missing. -->
+                        <CommandGroup v-if="linkedCases.length" heading="Already linked">
+                            <CommandItem
+                                v-for="c in linkedCases"
+                                :key="c.caseInstanceId"
+                                :value="searchIndex(c)"
+                                disabled
+                                class="flex flex-col items-start gap-0.5 py-2 opacity-60"
+                            >
+                                <div class="flex w-full items-center justify-between gap-3">
+                                    <span class="font-mono text-sm">{{ c.caseNumber }}</span>
+                                    <span class="shrink-0 text-[10px] text-muted-foreground">
+                                        Linked to another matter
+                                    </span>
+                                </div>
+                                <span v-if="contextLine(c)" class="text-xs text-muted-foreground">
+                                    {{ contextLine(c) }}
+                                </span>
+                            </CommandItem>
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+
+                <p class="text-xs text-muted-foreground">
+                    {{ availableCases.length }} of {{ cases.length }} case{{ cases.length === 1 ? '' : 's' }}
+                    available to link.
+                </p>
+            </template>
         </DialogContent>
     </Dialog>
 
@@ -145,6 +200,7 @@
 
 <script setup lang="ts">
 import { useVModel } from '@vueuse/core';
+import dayjs from 'dayjs';
 import { toast } from 'vue-sonner';
 import { Link2, Unlink, LoaderIcon, AlertCircle, Landmark } from 'lucide-vue-next';
 import {
@@ -180,6 +236,64 @@ const statusLabel = computed(() => props.matter?.eccmisData?.workflowStateLabel 
 
 const isOtherwiseLinked = (c: PortfolioCase) =>
     !!c.linkedMatterId && c.linkedMatterId !== props.matter?.id;
+
+const courtFilter = ref('all');
+
+/** Courts present in the portfolio, as filter chips with counts. */
+const courts = computed(() => {
+    const counts = new Map<string, number>();
+    for (const c of cases.value) {
+        const name = c.courtName || 'Other';
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const chips = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, count]) => ({ value: label, label, count }));
+    return [{ value: 'all', label: 'All courts', count: cases.value.length }, ...chips];
+});
+
+const visibleCases = computed(() =>
+    courtFilter.value === 'all'
+        ? cases.value
+        : cases.value.filter((c) => (c.courtName || 'Other') === courtFilter.value),
+);
+
+const availableCases = computed(() => visibleCases.value.filter((c) => !isOtherwiseLinked(c)));
+const linkedCases = computed(() => visibleCases.value.filter((c) => isOtherwiseLinked(c)));
+
+const yearOf = (c: PortfolioCase) => {
+    if (c.filingDate) return dayjs(c.filingDate).format('YYYY');
+    // Fall back to the year the case number itself carries.
+    const parts = c.caseNumber?.split('-') ?? [];
+    const last = parts[parts.length - 1];
+    return /^\d{4}$/.test(last ?? '') ? last : '';
+};
+
+/** The secondary line: what the case number encodes, in words. */
+function contextLine(c: PortfolioCase) {
+    const filed = c.filingDate ? `Filed ${dayjs(c.filingDate).format('D MMM YYYY')}` : yearOf(c);
+    return [c.courtName, c.category, filed].filter(Boolean).join(' · ');
+}
+
+/**
+ * Everything a row can be found by. Command matches a single case-insensitive
+ * substring against this, so search reaches the court, the category, the status
+ * and the parties — not just the case number the advocate is trying to avoid
+ * memorising.
+ */
+function searchIndex(c: PortfolioCase) {
+    return [
+        c.caseNumber,
+        c.courtName,
+        c.category,
+        c.statusLabel,
+        yearOf(c),
+        ...(c.parties ?? []),
+    ]
+        .filter(Boolean)
+        .join(' ');
+}
+
 
 // Open the confirm dialog only after the dropdown has fully closed, so the two
 // reka-ui dismissable layers don't race over the body pointer-events lock
