@@ -136,7 +136,7 @@ function onDrop(e: DragEvent) {
         :draggable="canDrag"
         class="group relative cursor-pointer select-none rounded-lg border transition-colors"
         :class="[
-          view === 'list' ? 'flex items-center gap-3 px-3 py-2' : 'flex flex-col gap-2 p-3',
+          view === 'list' ? 'flex items-center gap-3 px-3 py-3 sm:py-2' : 'flex flex-col gap-2 p-3',
           selected
             ? 'border-primary bg-primary/10'
             : over
@@ -163,7 +163,7 @@ function onDrop(e: DragEvent) {
             selected
               ? 'border-primary bg-primary text-primary-foreground'
               : 'border-muted-foreground/40 bg-background',
-            showCheckbox ? 'flex' : 'hidden group-hover:flex',
+            showCheckbox ? 'flex' : 'hidden pointer-fine:group-hover:flex',
             view === 'grid' ? 'absolute left-2 top-2 z-10' : '',
           ]"
           @click.stop="emit('toggleSelect', entry)"
@@ -176,7 +176,7 @@ function onDrop(e: DragEvent) {
           class="grid shrink-0 place-items-center rounded-lg"
           :class="[
             isFolder ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
-            view === 'list' ? 'size-9' : 'size-10',
+            view === 'list' ? 'size-10 sm:size-9' : 'size-10',
           ]"
         >
           <component :is="icon" :class="view === 'list' ? 'size-4.5' : 'size-5'" />
@@ -186,8 +186,16 @@ function onDrop(e: DragEvent) {
         <template v-if="view === 'list'">
           <div class="flex min-w-0 flex-1 flex-col">
             <span class="truncate text-sm font-medium">{{ entry.name }}</span>
-            <p v-if="entry.path" class="truncate text-xs text-muted-foreground">{{ subtitle }}</p>
-            <p v-else-if="entry.kind === 'doc'" class="truncate text-xs text-muted-foreground">{{ typeLabel }}</p>
+            <p v-if="entry.path" class="truncate text-xs text-muted-foreground">
+              {{ subtitle }}<span class="sm:hidden">{{ modified ? ` · ${modified}` : '' }}</span>
+            </p>
+            <p v-else class="truncate text-xs text-muted-foreground">
+              <!-- Folders show their item count only once the Status column is
+                   gone; documents show type, both gain the date on mobile. -->
+              <span v-if="entry.kind === 'doc'">{{ typeLabel }}</span>
+              <span v-else class="sm:hidden">{{ subtitle }}</span>
+              <span class="sm:hidden">{{ modified ? ((entry.kind === 'doc' && typeLabel) || entry.kind === 'folder' ? ` · ${modified}` : modified) : '' }}</span>
+            </p>
             <p v-if="entry.kind === 'doc' && entry.status === 'failed' && entry.failedError"
               class="flex items-start gap-1 text-xs text-destructive">
               <TriangleAlert class="mt-0.5 size-3 shrink-0" />
@@ -219,8 +227,11 @@ function onDrop(e: DragEvent) {
         <!-- ⋮ menu (touch / discoverable) -->
         <DropdownMenu>
           <DropdownMenuTrigger as-child @click.stop>
-            <Button size="icon-sm" variant="ghost"
-              class="shrink-0 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+            <!-- Visible by default: on a touch device there is no hover, so a
+                 hover-revealed menu is an unreachable menu. Fine pointers keep
+                 the quieter reveal-on-hover behaviour. -->
+            <Button size="icon" variant="ghost"
+              class="size-9 shrink-0 pointer-fine:size-8 pointer-fine:opacity-0 focus-visible:opacity-100 pointer-fine:group-hover:opacity-100"
               :class="view === 'grid' ? 'absolute right-2 top-2' : ''">
               <MoreVertical class="size-4" />
             </Button>

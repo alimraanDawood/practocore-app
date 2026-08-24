@@ -726,7 +726,7 @@ const ingestingCount = computed(() =>
           <!-- Sort (grid view only; list uses column headers) -->
           <DropdownMenu v-if="view === 'grid'">
             <DropdownMenuTrigger as-child>
-              <Button size="icon-sm" variant="ghost" class="shrink-0" title="Sort">
+              <Button size="icon-sm" variant="ghost" class="hidden shrink-0 sm:inline-flex" title="Sort">
                 <ArrowUpDown class="size-4"/>
               </Button>
             </DropdownMenuTrigger>
@@ -738,7 +738,7 @@ const ingestingCount = computed(() =>
 
           <!-- View toggle -->
           <ToggleGroup
-              :model-value="view" type="single" variant="outline" size="sm" class="shrink-0"
+              :model-value="view" type="single" variant="outline" size="sm" class="hidden shrink-0 sm:flex"
               @update:model-value="(v) => { if (v === 'list' || v === 'grid') view = v; }">
             <ToggleGroupItem value="list" title="List view">
               <ListIcon class="size-4"/>
@@ -756,6 +756,27 @@ const ingestingCount = computed(() =>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <!-- Phone-only: the action row has no space for these, so they
+                   live here rather than being unavailable on mobile. -->
+              <template v-if="!readonly && !trashView">
+                <DropdownMenuItem class="sm:hidden" @select="newOpen = true">
+                  <FolderPlus class="mr-2 size-4"/>
+                  New folder
+                </DropdownMenuItem>
+              </template>
+              <DropdownMenuItem class="sm:hidden" @select="view = view === 'list' ? 'grid' : 'list'">
+                <component :is="view === 'list' ? LayoutGrid : ListIcon" class="mr-2 size-4"/>
+                {{ view === 'list' ? 'Grid view' : 'List view' }}
+              </DropdownMenuItem>
+              <DropdownMenuItem class="sm:hidden" @select="toggleSort('name')">
+                <ArrowUpDown class="mr-2 size-4"/>
+                Sort by name
+              </DropdownMenuItem>
+              <DropdownMenuItem class="sm:hidden" @select="toggleSort('modified')">
+                <ArrowUpDown class="mr-2 size-4"/>
+                Sort by date
+              </DropdownMenuItem>
+              <DropdownMenuSeparator class="sm:hidden"/>
               <DropdownMenuItem @select="trashView = !trashView; query = ''">
                 <Trash2 class="mr-2 size-4"/>
                 {{ trashView ? 'Back to files' : 'Trash' }}
@@ -771,9 +792,9 @@ const ingestingCount = computed(() =>
           </DropdownMenu>
 
           <template v-if="!readonly && !trashView">
-            <Button size="sm" variant="outline" class="shrink-0 gap-1.5" @click="newOpen = true">
+            <Button size="sm" variant="outline" class="hidden shrink-0 gap-1.5 sm:inline-flex" @click="newOpen = true">
               <FolderPlus class="size-4"/>
-              <span class="hidden sm:inline">New folder</span>
+              New folder
             </Button>
             <Button size="sm" class="shrink-0 gap-1.5" @click="showUpload = !showUpload">
               <Upload class="size-4"/>
@@ -784,42 +805,66 @@ const ingestingCount = computed(() =>
       </div>
 
 
-      <!-- Selection action bar -->
+      <!-- ── Selection action bar ───────────────────────────────────────────
+           On a phone this pins to the bottom of the screen with thumb-sized
+           icon-over-label targets, the way Samsung My Files (and Photos, Notes,
+           Speechify) handle selection mode. From `sm` up it goes back to being
+           an inline strip above the list. -->
       <div v-if="selectionActive"
-           class="flex flex-wrap items-center gap-2 rounded-lg border bg-primary/5 px-3 py-2 text-sm">
-        <span class="font-medium">{{ selected.size }} selected</span>
-        <Button size="sm" variant="ghost" class="gap-1.5" @click="selectAll">
-          <CheckCheck class="size-4"/>
-          Select all
-        </Button>
-        <span class="mx-1 h-4 w-px bg-border"/>
-        <template v-if="trashView">
-          <Button size="sm" variant="ghost" class="gap-1.5" @click="bulkRestore">
-            <RotateCcw class="size-4"/>
-            Restore
+           class="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 border-t bg-background px-3 py-2 text-sm shadow-[0_-4px_16px_-6px_rgba(0,0,0,0.25)]
+                  sm:static sm:z-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:rounded-lg sm:border sm:bg-primary/5 sm:shadow-none">
+        <div class="flex items-center gap-2">
+          <span class="font-medium">{{ selected.size }} selected</span>
+          <Button size="sm" variant="ghost" class="gap-1.5" @click="selectAll">
+            <CheckCheck class="size-4"/>
+            Select all
           </Button>
-          <Button size="sm" variant="ghost" class="gap-1.5 text-destructive hover:text-destructive"
-                  @click="askPurge(selectedEntries)">
-            <Trash2 class="size-4"/>
-            Delete permanently
+          <Button size="sm" variant="ghost" class="ml-auto gap-1.5 sm:hidden" @click="clearSelection">
+            <X class="size-4"/>
+            Clear
           </Button>
-        </template>
-        <template v-else>
-          <Button size="sm" variant="ghost" class="gap-1.5" @click="bulkDownload">
-            <Download class="size-4"/>
-            Download
-          </Button>
-          <Button v-if="!readonly" size="sm" variant="ghost" class="gap-1.5" @click="openMove(selectedEntries)">
-            <FolderInput class="size-4"/>
-            Move to…
-          </Button>
-          <Button v-if="!readonly" size="sm" variant="ghost" class="gap-1.5 text-destructive hover:text-destructive"
-                  @click="bulkTrash">
-            <Trash2 class="size-4"/>
-            Move to Trash
-          </Button>
-        </template>
-        <Button size="sm" variant="ghost" class="ml-auto gap-1.5" @click="clearSelection">
+        </div>
+
+        <span class="mx-1 hidden h-4 w-px bg-border sm:block"/>
+
+        <div class="flex items-stretch gap-1 sm:items-center sm:gap-2">
+          <template v-if="trashView">
+            <Button size="sm" variant="ghost"
+                    class="h-auto flex-1 flex-col gap-1 py-2 sm:h-8 sm:flex-none sm:flex-row sm:gap-1.5 sm:py-0"
+                    @click="bulkRestore">
+              <RotateCcw class="size-4"/>
+              <span class="text-[11px] sm:text-sm">Restore</span>
+            </Button>
+            <Button size="sm" variant="ghost"
+                    class="h-auto flex-1 flex-col gap-1 py-2 text-destructive hover:text-destructive sm:h-8 sm:flex-none sm:flex-row sm:gap-1.5 sm:py-0"
+                    @click="askPurge(selectedEntries)">
+              <Trash2 class="size-4"/>
+              <span class="text-[11px] sm:text-sm">Delete forever</span>
+            </Button>
+          </template>
+          <template v-else>
+            <Button size="sm" variant="ghost"
+                    class="h-auto flex-1 flex-col gap-1 py-2 sm:h-8 sm:flex-none sm:flex-row sm:gap-1.5 sm:py-0"
+                    @click="bulkDownload">
+              <Download class="size-4"/>
+              <span class="text-[11px] sm:text-sm">Download</span>
+            </Button>
+            <Button v-if="!readonly" size="sm" variant="ghost"
+                    class="h-auto flex-1 flex-col gap-1 py-2 sm:h-8 sm:flex-none sm:flex-row sm:gap-1.5 sm:py-0"
+                    @click="openMove(selectedEntries)">
+              <FolderInput class="size-4"/>
+              <span class="text-[11px] sm:text-sm">Move to…</span>
+            </Button>
+            <Button v-if="!readonly" size="sm" variant="ghost"
+                    class="h-auto flex-1 flex-col gap-1 py-2 text-destructive hover:text-destructive sm:h-8 sm:flex-none sm:flex-row sm:gap-1.5 sm:py-0"
+                    @click="bulkTrash">
+              <Trash2 class="size-4"/>
+              <span class="text-[11px] sm:text-sm">Trash</span>
+            </Button>
+          </template>
+        </div>
+
+        <Button size="sm" variant="ghost" class="ml-auto hidden gap-1.5 sm:flex" @click="clearSelection">
           <X class="size-4"/>
           Clear
         </Button>
@@ -860,9 +905,10 @@ const ingestingCount = computed(() =>
 
         <!-- Items -->
         <div v-if="!isEmpty"
-             :class="view === 'list'
-          ? 'flex flex-col gap-1'
-          : 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3'">
+             :class="[
+               view === 'list' ? 'flex flex-col gap-1' : 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3',
+               selectionActive ? 'pb-28 sm:pb-0' : '',
+             ]">
           <SharedVaultItem
               v-for="entry in entries"
               :key="entry.kind + entry.id"

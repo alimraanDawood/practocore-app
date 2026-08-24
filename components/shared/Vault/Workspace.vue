@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { FolderLock, Lock, Loader2, PanelLeft } from 'lucide-vue-next';
+import { FolderLock, Lock, Loader2, ChevronDown } from 'lucide-vue-next';
 import { getEntitlements, type VaultScope } from '~/services/vault';
 
 // Self-contained vault workspace: entitlement gate → library rail → browser.
@@ -68,18 +68,20 @@ function onSelect(lib: Lib, replace = false) {
     <!-- ── Header: library name + mobile rail trigger ──────────────────────── -->
     <div v-if="heading" class="flex shrink-0 flex-row items-center gap-2 border-b p-3">
       <SidebarTrigger class="lg:hidden" />
-      <Button
+      <!-- On a phone the title *is* the library switcher, so the header carries
+           one trigger rather than two hamburgers side by side. From lg up the
+           rail is always on screen and the title is just a title. -->
+      <button
         v-if="enabled"
-        variant="ghost"
-        size="icon-sm"
-        class="lg:hidden"
-        title="Libraries"
+        class="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-accent lg:pointer-events-none lg:hover:bg-transparent"
+        :title="selected ? 'Switch library' : 'Libraries'"
         @click="railOpen = true">
-        <PanelLeft class="size-4" />
-      </Button>
-      <span class="ibm-plex-serif truncate text-xl font-semibold">
-        {{ selected ? selected.label : 'Vault' }}
-      </span>
+        <span class="ibm-plex-serif truncate text-xl font-semibold">
+          {{ selected ? selected.label : 'Vault' }}
+        </span>
+        <ChevronDown class="size-4 shrink-0 text-muted-foreground lg:hidden" />
+      </button>
+      <span v-else class="ibm-plex-serif truncate text-xl font-semibold">Vault</span>
     </div>
 
     <!-- Checking -->
@@ -111,11 +113,14 @@ function onSelect(lib: Lib, replace = false) {
 
       <!-- Mobile rail -->
       <Sheet v-model:open="railOpen">
-        <SheetContent side="left" class="w-72 p-0">
-          <SheetHeader class="border-b p-3">
+        <SheetContent side="left" class="flex w-72 flex-col gap-0 p-0">
+          <SheetHeader class="shrink-0 border-b p-3">
             <SheetTitle class="text-left text-base">Libraries</SheetTitle>
           </SheetHeader>
-          <SharedVaultLibraryRail :selected-key="selectedKey" @select="onSelect" />
+          <SharedVaultLibraryRail
+            :selected-key="selectedKey"
+            class="min-h-0 flex-1"
+            @select="onSelect" />
         </SheetContent>
       </Sheet>
 
