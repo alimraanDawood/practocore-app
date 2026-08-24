@@ -36,9 +36,9 @@ provideDockContext(() => {
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full overflow-y-auto border-x">
-    <div class="w-full flex flex-col">
-      <SharedVaultWorkspace url-state />
-    </div>
+  <!-- The workspace owns its own two-column scrolling (rail + browser scroll
+       independently), so this container must not scroll as well. -->
+  <div class="flex h-full min-h-0 w-full flex-col border-x">
+    <SharedVaultWorkspace url-state />
   </div>
 </template>

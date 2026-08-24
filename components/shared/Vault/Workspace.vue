@@ -1,12 +1,14 @@
 <script lang="ts" setup>
-import { ArrowLeft, FolderLock, Lock, Loader2 } from 'lucide-vue-next';
+import { FolderLock, Lock, Loader2, PanelLeft } from 'lucide-vue-next';
 import { getEntitlements, type VaultScope } from '~/services/vault';
 
-// Self-contained vault workspace: entitlement gate → library chooser → browser.
-// Reused by the standalone /main/vault page and the assistant Vault panel.
+// Self-contained vault workspace: entitlement gate → library rail → browser.
+// The rail is persistent (see LibraryRail.vue), so this is a two-column shell
+// rather than the old chooser-then-takeover flow: selecting a library only swaps
+// the browser on the right, and there is no back button to get out of one.
 // In `url-state` mode the selected library lives in the URL (`?lib=<scope>:<id>`)
 // so the global sidebar's quick-clicks and deep links can drive it; otherwise it
-// stays in local state (used by the embedded assistant panel).
+// stays in local state.
 const props = withDefaults(
   defineProps<{ heading?: boolean; urlState?: boolean }>(),
   { heading: true, urlState: false },
@@ -16,14 +18,19 @@ type Lib = { scope: VaultScope; scopeId: string; label: string };
 
 const route = useRoute();
 const router = useRouter();
-const { libraryQuery, parseLibraryQuery } = useVaultLibraries();
+const { libraryQuery, parseLibraryQuery, orgId, personalLibrary, refresh } = useVaultLibraries();
 
 const checking = ref(true);
 const enabled = ref(false);
 const internal = ref<Lib | null>(null);
+// Mobile: the rail rides in a sheet, since there is no room for two columns.
+const railOpen = ref(false);
 
 const selected = computed<Lib | null>(() =>
   props.urlState ? parseLibraryQuery(route.query.lib, route.query.libLabel) : internal.value);
+
+const selectedKey = computed(() =>
+  selected.value ? `${selected.value.scope}:${selected.value.scopeId}` : null);
 
 onMounted(async () => {
   try {
@@ -33,45 +40,58 @@ onMounted(async () => {
   } finally {
     checking.value = false;
   }
+  // Open the firm (or personal) library by default, the way a file manager opens
+  // on My Drive. `replace` so the default never costs the user a back-press.
+  if (enabled.value && !selected.value) {
+    await refresh();
+    const fallback: Lib | null = orgId.value
+      ? { scope: 'org', scopeId: orgId.value, label: 'Firm Library' }
+      : personalLibrary.value;
+    if (fallback) onSelect(fallback, true);
+  }
 });
 
-function onSelect(lib: Lib) {
-  if (props.urlState) router.push({ query: { ...route.query, ...libraryQuery(lib) } });
-  else internal.value = lib;
-}
-function back() {
+function onSelect(lib: Lib, replace = false) {
+  railOpen.value = false;
   if (props.urlState) {
-    const query = { ...route.query };
-    delete query.lib;
-    delete query.libLabel;
-    router.push({ query });
+    const query = { ...route.query, ...libraryQuery(lib) };
+    if (replace) router.replace({ query });
+    else router.push({ query });
   } else {
-    internal.value = null;
+    internal.value = lib;
   }
 }
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
-    <div v-if="heading" class="flex flex-row gap-2 items-center p-3 border-b">
-      <div>
-        <Button @click="back" v-if="selected" variant="outline" size="icon">
-          <ArrowLeft />
-        </Button>
-        <SidebarTrigger class="lg:hidden" v-else />
-      </div>
-      <span class="font-semibold text-xl ibm-plex-serif truncate">{{ selected ? selected.label : 'Vault' }}</span>
+  <div class="flex h-full min-h-0 flex-col">
+    <!-- ── Header: library name + mobile rail trigger ──────────────────────── -->
+    <div v-if="heading" class="flex shrink-0 flex-row items-center gap-2 border-b p-3">
+      <SidebarTrigger class="lg:hidden" />
+      <Button
+        v-if="enabled"
+        variant="ghost"
+        size="icon-sm"
+        class="lg:hidden"
+        title="Libraries"
+        @click="railOpen = true">
+        <PanelLeft class="size-4" />
+      </Button>
+      <span class="ibm-plex-serif truncate text-xl font-semibold">
+        {{ selected ? selected.label : 'Vault' }}
+      </span>
     </div>
-    
-    <div class="flex flex-col p-3">
-      <!-- Checking -->
-      <div v-if="checking" class="flex items-center gap-2 rounded-xl border px-4 py-6 text-sm text-muted-foreground">
+
+    <!-- Checking -->
+    <div v-if="checking" class="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+      <div class="flex w-full items-center gap-2 rounded-xl border px-4 py-6">
         <Loader2 class="size-4 animate-spin" /> Loading your vault…
       </div>
+    </div>
 
-      <!-- Locked -->
-      <div v-else-if="!enabled"
-        class="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center">
+    <!-- Locked -->
+    <div v-else-if="!enabled" class="p-3">
+      <div class="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center">
         <div class="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
           <Lock class="size-6" />
         </div>
@@ -81,18 +101,43 @@ function back() {
           on a firm plan, ask your organisation admin to enable it.
         </p>
       </div>
+    </div>
 
-      <!-- Chooser / Browser -->
-      <template v-else>
-        <SharedVaultLibraries v-if="!selected" @select="onSelect" />
+    <!-- ── Two columns: persistent rail + browser ──────────────────────────── -->
+    <div v-else class="flex min-h-0 flex-1">
+      <aside class="hidden w-64 shrink-0 border-r lg:flex lg:flex-col">
+        <SharedVaultLibraryRail :selected-key="selectedKey" @select="onSelect" />
+      </aside>
+
+      <!-- Mobile rail -->
+      <Sheet v-model:open="railOpen">
+        <SheetContent side="left" class="w-72 p-0">
+          <SheetHeader class="border-b p-3">
+            <SheetTitle class="text-left text-base">Libraries</SheetTitle>
+          </SheetHeader>
+          <SharedVaultLibraryRail :selected-key="selectedKey" @select="onSelect" />
+        </SheetContent>
+      </Sheet>
+
+      <div class="min-w-0 flex-1 overflow-y-auto p-3">
         <SharedVaultBrowser
-          v-else
+          v-if="selected"
+          :key="selectedKey || ''"
           :scope="selected.scope"
           :scope-id="selected.scopeId"
           :root-label="selected.label"
           @disabled="enabled = false"
         />
-      </template>
+        <!-- Only reachable when the account has no firm and no personal library
+             to fall back on. -->
+        <div v-else class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-16 text-center">
+          <FolderLock class="size-6 text-muted-foreground" />
+          <p class="text-sm font-medium">Choose a library</p>
+          <p class="max-w-sm text-xs text-muted-foreground">
+            Pick a vault, engagement or case file on the left to see its documents.
+          </p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
