@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {
   FolderPlus, ChevronRight, Loader2, FolderLock, FileText, Upload,
-  ArrowLeft, ArrowRight, ArrowUp, LayoutGrid, List as ListIcon, ArrowUpDown,
+  LayoutGrid, List as ListIcon, ArrowUpDown, MoreHorizontal,
   Search, X, Trash2, RotateCcw, FolderInput, Download, CheckCheck,
 } from 'lucide-vue-next';
 import {toast} from 'vue-sonner';
@@ -15,7 +15,7 @@ import {
 
 // The reusable vault explorer: a Nautilus-style file browser for one library
 // (scope + scope_id). Folders and documents share a unified list/grid view with
-// back/forward history, a breadcrumb path bar, drag-drop + "Move to…" moves,
+// a breadcrumb path bar, drag-drop + "Move to…" moves,
 // multi-selection (checkbox / long-press), search, a Trash with restore, and
 // LIVE ingestion status. Used by the standalone /main/vault page, the assistant
 // Vault panel, and the matter page's Case Documents section.
@@ -61,34 +61,21 @@ function toggleSort(key: 'name' | 'modified') {
   }
 }
 
-// ── Navigation history (back / forward) ─────────────────────────────────────
-const history = ref<string[]>(['']); // folder ids; "" = library root
-const histIndex = ref(0);
-const currentFolder = computed(() => history.value[histIndex.value] ?? '');
-const canBack = computed(() => histIndex.value > 0);
-const canForward = computed(() => histIndex.value < history.value.length - 1);
+// ── Current folder ──────────────────────────────────────────────────────────
+// No back/forward stack: the breadcrumb is the way out of a folder, the way it
+// is in Drive, Dropbox and every other file manager. A browser-chrome triplet of
+// arrows on top of the app's own history was two navigation models at once.
+const currentFolder = ref(''); // folder id; "" = library root
 
 function navigate(id: string) {
   // Navigating implicitly leaves the flat search / trash views.
   query.value = '';
   trashView.value = false;
-  if (id === currentFolder.value) return;
-  history.value = history.value.slice(0, histIndex.value + 1);
-  history.value.push(id);
-  histIndex.value = history.value.length - 1;
-}
-
-function back() {
-  if (canBack.value) histIndex.value--;
-}
-
-function forward() {
-  if (canForward.value) histIndex.value++;
+  currentFolder.value = id;
 }
 
 function resetHistory() {
-  history.value = [''];
-  histIndex.value = 0;
+  currentFolder.value = '';
 }
 
 let unsub: (() => void) | null = null;
@@ -257,12 +244,6 @@ const trail = computed(() => {
     cur = f.parent || '';
   }
   return out;
-});
-
-const parentFolder = computed(() => {
-  if (!currentFolder.value) return null;
-  const f = folderById.value.get(currentFolder.value);
-  return f ? (f.parent || '') : null;
 });
 
 // Folders eligible as move destinations (live, non-trashed).
@@ -658,38 +639,26 @@ const ingestingCount = computed(() =>
   <!-- The browser column; the preview rides over it as a sheet. -->
   <div class="flex min-h-0 items-start">
     <div class="flex min-w-0 flex-1 flex-col gap-3">
-      <!-- ── Toolbar: nav + path + actions ──────────────────────────────────── -->
+      <!-- ── Toolbar ────────────────────────────────────────────────────────
+           Two rows, so nothing competes: where you are, then what you can do.
+           The breadcrumb carries navigation (no arrow triplet); destructive and
+           rare controls live behind the overflow menu, away from Upload. -->
       <div class="flex flex-col gap-2">
-        <div class="flex flex-row gap-2 lg:flex-wrap items-center">
-          <div class="flex items-center gap-0.5">
-            <Button size="icon-sm" variant="ghost" :disabled="!canBack || flat" title="Back" @click="back">
-              <ArrowLeft class="size-4"/>
-            </Button>
-            <Button size="icon-sm" variant="ghost" :disabled="!canForward || flat" title="Forward" @click="forward">
-              <ArrowRight class="size-4"/>
-            </Button>
-            <Button size="icon-sm" variant="ghost" :disabled="parentFolder === null || flat" title="Up"
-                    @click="parentFolder !== null && navigate(parentFolder)">
-              <ArrowUp class="size-4"/>
-            </Button>
-          </div>
-
+        <!-- Row 1: where you are -->
+        <div class="flex min-h-8 items-center gap-2">
           <!-- Trash banner -->
-          <div v-if="trashView"
-               class="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-sm">
+          <div v-if="trashView" class="flex min-w-0 flex-1 items-center gap-2 text-sm">
             <Trash2 class="size-4 shrink-0 text-muted-foreground"/>
             <span class="font-medium">Trash</span>
             <span class="text-muted-foreground">· {{ trashCount }} item{{ trashCount === 1 ? '' : 's' }}</span>
-            <span class="ml-auto"/>
-            <Button size="sm" variant="ghost" class="gap-1.5" @click="trashView = false">
+            <Button size="sm" variant="ghost" class="ml-auto gap-1.5" @click="trashView = false">
               <X class="size-4"/>
               Close
             </Button>
           </div>
 
           <!-- Search results bar -->
-          <div v-else-if="searching"
-               class="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-sm">
+          <div v-else-if="searching" class="flex min-w-0 flex-1 items-center gap-2 text-sm">
             <Search class="size-4 shrink-0 text-muted-foreground"/>
             <span class="truncate text-muted-foreground">Results for “{{ query.trim() }}” · {{ entries.length }}</span>
             <Button size="sm" variant="ghost" class="ml-auto gap-1.5" @click="query = ''">
@@ -698,13 +667,12 @@ const ingestingCount = computed(() =>
             </Button>
           </div>
 
-          <!-- Breadcrumb path bar (also a drop target for moves) -->
-          <nav v-else
-               class="hidden lg:flex min-w-0 flex-1 items-center gap-0.5 rounded-md border bg-muted/30 px-2 py-1 text-sm">
+          <!-- Breadcrumb path (also a drop target for moves) -->
+          <nav v-else class="flex min-w-0 flex-1 items-center gap-0.5 text-sm">
             <button
-                class="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium hover:bg-accent truncate"
+                class="flex items-center gap-1 truncate rounded px-1.5 py-0.5 hover:bg-accent"
                 :class="[
-            currentFolder ? 'text-muted-foreground' : 'text-foreground',
+            currentFolder ? 'text-muted-foreground' : 'font-medium text-foreground',
             dropTarget === 'crumb:' ? 'bg-primary/10 ring-1 ring-primary' : '',
           ]"
                 @click="navigate('')"
@@ -733,16 +701,18 @@ const ingestingCount = computed(() =>
             </template>
           </nav>
 
-          <div v-if="ingestingCount" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div v-if="ingestingCount" class="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <Loader2 class="size-3.5 animate-spin"/>
             Processing {{ ingestingCount }}…
           </div>
+        </div>
 
-          <!-- Search box -->
-          <div class="relative hidden lg:block">
+        <!-- Row 2: what you can do -->
+        <div class="flex flex-row items-center gap-2">
+          <div class="relative min-w-0 flex-1 sm:max-w-xs">
             <Search
                 class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
-            <Input v-model="query" placeholder="Search" class="h-9 w-40 pl-8 sm:w-56"
+            <Input v-model="query" placeholder="Search" class="h-9 w-full pl-8"
                    @focus="trashView = false"/>
             <button v-if="query"
                     class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
@@ -751,12 +721,13 @@ const ingestingCount = computed(() =>
             </button>
           </div>
 
+          <span class="ml-auto"/>
+
           <!-- Sort (grid view only; list uses column headers) -->
           <DropdownMenu v-if="view === 'grid'">
             <DropdownMenuTrigger as-child>
-              <Button size="sm" variant="outline" class="gap-1.5">
+              <Button size="icon-sm" variant="ghost" class="shrink-0" title="Sort">
                 <ArrowUpDown class="size-4"/>
-                Sort
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -767,7 +738,7 @@ const ingestingCount = computed(() =>
 
           <!-- View toggle -->
           <ToggleGroup
-              :model-value="view" type="single" variant="outline" size="sm" class="shrink-0 ml-auto lg:ml-0"
+              :model-value="view" type="single" variant="outline" size="sm" class="shrink-0"
               @update:model-value="(v) => { if (v === 'list' || v === 'grid') view = v; }">
             <ToggleGroupItem value="list" title="List view">
               <ListIcon class="size-4"/>
@@ -777,53 +748,36 @@ const ingestingCount = computed(() =>
             </ToggleGroupItem>
           </ToggleGroup>
 
-          <!-- Trash toggle -->
-          <Button size="sm" :variant="trashView ? 'secondary' : 'outline'" class="gap-1.5"
-                  :title="`Trash${trashCount ? ` (${trashCount})` : ''}`" @click="trashView = !trashView; query = ''">
-            <Trash2 class="size-4"/>
-            <span v-if="trashCount" class="text-xs">{{ trashCount }}</span>
-          </Button>
-
-          <div class="hidden lg:flex flex-row gap-2">
-            <template v-if="!readonly && !trashView">
-              <Button size="sm" variant="outline" class="gap-1.5" @click="showUpload = !showUpload">
-                <Upload class="size-4"/>
-                Upload
+          <!-- Overflow: trash lives here, not one pixel from Upload -->
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button size="icon-sm" variant="ghost" class="shrink-0" title="More">
+                <MoreHorizontal class="size-4"/>
               </Button>
-              <Button size="sm" variant="outline" class="gap-1.5" @click="newOpen = true">
-                <FolderPlus class="size-4"/>
-                New folder
-              </Button>
-            </template>
-          </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem @select="trashView = !trashView; query = ''">
+                <Trash2 class="mr-2 size-4"/>
+                {{ trashView ? 'Back to files' : 'Trash' }}
+                <span v-if="trashCount && !trashView" class="ml-auto pl-2 text-xs text-muted-foreground">
+                  {{ trashCount }}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem v-if="trashView && trashCount" class="text-destructive" @select="emptyTrash">
+                <Trash2 class="mr-2 size-4"/>
+                Empty trash
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-          <Button v-if="trashView && trashCount" size="sm" variant="outline"
-                  class="gap-1.5 text-destructive hover:text-destructive" @click="emptyTrash">
-            <Trash2 class="size-4"/>
-            Empty trash
-          </Button>
-        </div>
-
-        <div class="relative w-full lg:hidden">
-          <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
-          <Input v-model="query" placeholder="Search" class="h-9 w-full pl-8 sm:w-56"
-                 @focus="trashView = false"/>
-          <button v-if="query"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  @click="query = ''">
-            <X class="size-4"/>
-          </button>
-        </div>
-
-        <div class="lg:hidden flex flex-row gap-2 items-center">
           <template v-if="!readonly && !trashView">
-            <Button size="sm" variant="outline" class="gap-1.5" @click="showUpload = !showUpload">
+            <Button size="sm" variant="outline" class="shrink-0 gap-1.5" @click="newOpen = true">
+              <FolderPlus class="size-4"/>
+              <span class="hidden sm:inline">New folder</span>
+            </Button>
+            <Button size="sm" class="shrink-0 gap-1.5" @click="showUpload = !showUpload">
               <Upload class="size-4"/>
               Upload
-            </Button>
-            <Button size="sm" variant="outline" class="gap-1.5" @click="newOpen = true">
-              <FolderPlus class="size-4"/>
-              New folder
             </Button>
           </template>
         </div>
@@ -936,7 +890,27 @@ const ingestingCount = computed(() =>
           />
         </div>
 
-        <!-- Empty -->
+        <!-- Empty: an empty folder's job is to invite the first upload, so the
+             dropzone *is* the empty state rather than a message that repeats
+             the toolbar's own buttons underneath it. -->
+        <div v-else-if="!readonly && !trashView && !searching" class="flex flex-col items-center gap-3">
+          <SharedVaultUploadDropzone
+              :scope="scope"
+              :scope-id="scopeId"
+              :folder="currentFolder"
+              class="w-full"
+              @disabled="$emit('disabled')"
+          />
+          <p class="max-w-sm text-center text-xs text-muted-foreground">
+            Uploaded documents are read by the AI and become searchable knowledge — or
+            <button class="font-medium text-foreground underline underline-offset-2" @click="newOpen = true">
+              create a folder
+            </button>
+            first to get organised.
+          </p>
+        </div>
+
+        <!-- Empty: trash, no search matches, or a read-only library -->
         <div v-else
              class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-10 text-center">
           <div class="grid size-11 place-items-center rounded-full bg-muted text-muted-foreground">
@@ -948,21 +922,8 @@ const ingestingCount = computed(() =>
           <p class="max-w-sm text-xs text-muted-foreground">
             <template v-if="trashView">Deleted documents and folders will appear here, ready to restore.</template>
             <template v-else-if="searching">No documents or folders match “{{ query.trim() }}”.</template>
-            <template v-else-if="readonly">No documents have been added here yet.</template>
-            <template v-else>Upload case files or create a folder to get organised. Uploaded documents are read by the
-              AI and become searchable knowledge.
-            </template>
+            <template v-else>No documents have been added here yet.</template>
           </p>
-          <div v-if="!readonly && !trashView && !searching" class="mt-1 flex gap-2">
-            <Button size="sm" variant="outline" class="gap-1.5" @click="showUpload = true">
-              <Upload class="size-4"/>
-              Upload
-            </Button>
-            <Button size="sm" variant="outline" class="gap-1.5" @click="newOpen = true">
-              <FolderPlus class="size-4"/>
-              New folder
-            </Button>
-          </div>
         </div>
       </template>
 
