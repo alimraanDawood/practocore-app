@@ -601,7 +601,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { toast } from 'vue-sonner'
-import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser, acceptInvite, getOrganisationInviteReference } from '~/services/auth'
+import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser, acceptInvite, verifyInvitation } from '~/services/auth'
 import { pb, SERVER_URL } from '~/lib/pocketbase'
 import { createMatter } from '~/services/matters'
 import dayjs from 'dayjs'
@@ -815,7 +815,7 @@ onMounted(async () => {
   const ref = useRoute().query.ref as string | undefined
   if (!ref) return
   try {
-    const details = await getOrganisationInviteReference(ref)
+    const details = await verifyInvitation(ref)
     if (details?.invite) {
       persona.value = 'JOIN'
       inviteToken.value = ref
@@ -860,7 +860,7 @@ const joinWorkspace = async () => {
     inviteToken.value = data.token
 
     // Step 2: fetch invite details for confirmation card
-    const details = await getOrganisationInviteReference(data.token)
+    const details = await verifyInvitation(data.token)
     if (!details?.invite) throw new Error('Could not load invitation details.')
     inviteDetails.value = {
       orgName: details.invite.organisation.name,

@@ -11,25 +11,6 @@ export async function getOrganisationUsers(page : number, perPage: number, optio
     return pocketbase.collection('Users').getList(page, perPage, options);
 }
 
-// Legacy invite requests (from shareable links)
-export async function getInviteRequests(page : number, perPage: number, options : Object) {
-    return pocketbase.collection('OrganisationInviteRequests').getList(page, perPage, options);
-}
-
-export function subscribeToInviteRequests(callBack : Function) {
-    pocketbase.collection('OrganisationInviteRequests').subscribe('*', callBack);
-}
-
-export async function approveInviteRequest(inviteId : string) {
-    return fetch(`${SERVER_URL}/api/practocore/auth/approve-invite/${inviteId}`, {
-        method: 'GET',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
-}
-
 // Direct invitations (new system)
 export async function getDirectInvites(page : number, perPage: number, options : Object) {
     return pocketbase.collection('OrganisationDirectInvites').getList(page, perPage, options);

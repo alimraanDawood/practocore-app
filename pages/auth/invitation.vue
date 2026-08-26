@@ -5,7 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import {X, Minus, Maximize2, Minimize2, AlertCircle} from "lucide-vue-next";
 import {computed, ref} from "vue";
 import DarkModeSwitch from "~/components/shared/DarkModeSwitch/DarkModeSwitch.vue";
-import {acceptInvite, rejectInvite, getOrganisationInviteReference, getSignedInUser} from "~/services/auth";
+import {acceptInvite, rejectInvite, verifyInvitation, getSignedInUser} from "~/services/auth";
 import {toast} from "vue-sonner";
 import { pb } from '~/lib/pocketbase';
 
@@ -47,7 +47,7 @@ const loading = ref(false);
 const isLoading = ref(true);
 
 onMounted(async () => {
-  organisationRef.value = await getOrganisationInviteReference(query?.ref);
+  organisationRef.value = await verifyInvitation(query?.ref);
   isLoading.value = false;
 })
 

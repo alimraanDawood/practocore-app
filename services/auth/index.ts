@@ -393,23 +393,7 @@ export async function inviteUsers(emails : string[]) {
     })
 }
 
-export async function requestInviteLink(organisationId : string) {
-    const user = getSignedInUser();
-
-    if (!user) {
-        throw("No user found");
-    }
-
-    return await fetch(`${SERVER_URL}/api/practocore/auth/request-invite-link/${organisationId}`, {
-        method: "GET",
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
-}
-
-export async function getOrganisationInviteReference(token : string) {
+export async function verifyInvitation(token : string) {
     return fetch(`${SERVER_URL}/api/invitations/verify/${token}`, { method: 'GET',
         headers: {
             "Content-Type": "application/json; charset=utf-8",

@@ -78,7 +78,7 @@
 <script setup lang="ts">
 import { Mail, CheckCircle2 } from 'lucide-vue-next'
 import { useRegisterStore } from '~/stores/register'
-import { getOrganisationInviteReference } from '~/services/auth'
+import { verifyInvitation } from '~/services/auth'
 import { SERVER_URL } from '~/lib/pocketbase'
 
 const store = useRegisterStore()
@@ -94,7 +94,7 @@ onMounted(async () => {
   const ref = route.query.ref as string | undefined
   if (!ref) return
   try {
-    const details = await getOrganisationInviteReference(ref)
+    const details = await verifyInvitation(ref)
     if (details?.invite) {
       store.persona = 'JOIN'
       store.inviteToken = ref
@@ -138,7 +138,7 @@ const verifyCode = async () => {
     if (!res.ok) throw new Error(data.message ?? 'Invalid code. Please check and try again.')
     store.inviteToken = data.token
 
-    const details = await getOrganisationInviteReference(data.token)
+    const details = await verifyInvitation(data.token)
     if (!details?.invite) throw new Error('Could not load invitation details.')
     store.inviteDetails = {
       orgName: details.invite.organisation.name,

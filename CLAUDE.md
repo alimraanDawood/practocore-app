@@ -206,8 +206,7 @@ Core PocketBase collections:
 - **Deadlines**: Matter deadlines with adjournments
 - **DeadlineAdjournments**: Deadline modifications
 - **DeadlineTemplates**: Reusable deadline templates
-- **OrganisationInviteRequests**: Legacy invite system
-- **OrganisationDirectInvites**: New direct invite system
+- **OrganisationDirectInvites**: Per-email invitations, served by `/api/invitations/*`. The legacy shareable-link collections (`OrganisationInviteReferences`, `OrganisationInviteRequests`) were dropped 2026-08-26.
 
 **Important Patterns**:
 - Manual data expansion: The `/api/practocore/matters` endpoint returns manually expanded/nested deadlines and adjournments for performance (see `services/matters/index.ts:9-28`)
