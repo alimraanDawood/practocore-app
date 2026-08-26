@@ -71,6 +71,15 @@ export interface CreateOrganisationResult {
   /** True when the server already moved the caller into the new workspace. */
   switched: boolean
   subscription?: { id: string }
+  /**
+   * What the firm is running on. Decided by the server, because eligibility is
+   * per account and this client cannot see the caller's trial history:
+   *   trial       — a fresh free trial
+   *   transferred — the caller's existing plan, moved across as a single seat
+   *   none        — the trial was already used and nothing was current; the
+   *                 firm exists but needs a subscription
+   */
+  billing: 'trial' | 'transferred' | 'none'
   /** Only present for an upgrade: rows moved, keyed by collection. */
   moved?: Record<string, number>
 }

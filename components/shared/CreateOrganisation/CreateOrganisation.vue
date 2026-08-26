@@ -19,14 +19,21 @@
           </div>
           <h2 class="text-2xl font-bold ibm-plex-serif">{{ created.organisation.name }} is ready</h2>
           <p class="text-muted-foreground text-sm">
-            <template v-if="created.switched">
-              You're now working in {{ created.organisation.name }}, on a free trial.
-            </template>
-            <template v-else>
-              Your new firm is on a free trial. You're still working in your current
-              workspace — switch whenever you're ready.
-            </template>
+            {{ billingMessage }}
           </p>
+        </div>
+
+        <!-- No subscription: say so here rather than letting them discover it at
+             the first locked screen. -->
+        <div v-if="created.billing === 'none'" class="flex flex-col gap-2 w-full max-w-sm p-4 rounded-lg border border-amber-500/40 bg-amber-500/5">
+          <span class="text-sm font-medium">This firm needs a subscription</span>
+          <span class="text-xs text-muted-foreground">
+            Free trials are once per account, and yours has been used. Set up billing to
+            start using {{ created.organisation.name }}.
+          </span>
+          <NuxtLink to="/main/settings?tab=billing" class="text-xs underline underline-offset-2" @click="close">
+            Go to billing
+          </NuxtLink>
         </div>
 
         <!-- What moved. Shown because a migration the user can't see is one they
@@ -65,16 +72,28 @@
             <span class="flex flex-col gap-0.5">
               <span class="text-sm font-medium">Move my existing work into this firm</span>
               <span class="text-xs text-muted-foreground">
-                Your matters, engagements, reminders and assistant conversations move across
-                and you start working inside the firm. Your saved templates stay private to
-                you. This can't be undone from here.
+                Your matters, engagements, reminders and assistant conversations move across,
+                your subscription comes with you as a single seat, and you start working
+                inside the firm. Your saved templates stay private to you. This can't be
+                undone from here.
               </span>
             </span>
           </label>
         </div>
 
+        <!-- Deliberately not a promise. Trial eligibility is per account and the
+             server decides it — this client cannot know whether the trial has
+             already been used, and claiming one that never arrives is worse
+             than describing the rule. -->
         <p class="text-xs text-muted-foreground">
-          New firms start on a free trial.
+          <template v-if="isUpgrade">
+            If you already subscribe, your current plan moves across as a single seat and
+            keeps the time you've paid for. Otherwise your firm starts on a free trial, if
+            you haven't already used one.
+          </template>
+          <template v-else>
+            New firms start on a free trial, if you haven't already used one on this account.
+          </template>
         </p>
 
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
@@ -155,6 +174,23 @@ const movedLabels: Record<string, string> = {
   AiConversations: 'Assistant conversations',
   Notifications: 'Notifications',
 }
+
+/** What the new firm is running on, in the user's terms. */
+const billingMessage = computed(() => {
+  const c = created.value
+  if (!c) return ''
+  const where = c.switched
+    ? `You're now working in ${c.organisation.name}`
+    : `${c.organisation.name} is set up. You're still working in your current workspace — switch whenever you're ready`
+  switch (c.billing) {
+    case 'transferred':
+      return `${where}. Your existing plan came with you as a single seat, and the time you've paid for is unchanged.`
+    case 'trial':
+      return `${where}, on a free trial.`
+    default:
+      return `${where}.`
+  }
+})
 
 const movedRows = computed(() =>
   Object.entries(created.value?.moved ?? {})
