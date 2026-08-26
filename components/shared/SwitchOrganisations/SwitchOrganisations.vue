@@ -30,12 +30,10 @@
         </button>
       </div>
 
-      <!-- Joining lives here because this is where a user already looks for
-           "what workspaces do I have?" — it is mounted in the sidebar header
-           and the profile menu, on desktop and mobile, so no new navigation is
-           needed. Creating an organisation belongs here too, but the server
-           endpoint for it does not exist yet; see ORG_MEMBERSHIP_PLAN.md. -->
-      <div class="px-3 pb-3">
+      <!-- Both live here because this is where a user already looks for "what
+           workspaces do I have?" — mounted in the sidebar header and the profile
+           menu, on desktop and mobile, so no new navigation is needed. -->
+      <div class="flex flex-col gap-2 px-3 pb-3">
         <SharedJoinOrganisationDialog>
           <button
             class="flex items-center gap-2 w-full p-3 rounded-lg border border-dashed text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
@@ -44,6 +42,14 @@
             Join an organisation
           </button>
         </SharedJoinOrganisationDialog>
+        <SharedCreateOrganisation>
+          <button
+            class="flex items-center gap-2 w-full p-3 rounded-lg border border-dashed text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+          >
+            <Building2 class="size-4" />
+            Create an organisation
+          </button>
+        </SharedCreateOrganisation>
       </div>
 
       <div class="flex flex-row justify-end p-3 border-t gap-2">
@@ -64,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { Loader2, Plus } from 'lucide-vue-next';
+import { Loader2, Plus, Building2 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { getOrganisations, getSignedInUser, updateUser } from '~/services/auth';
 import { DialogClose } from '@/components/ui/dialog';

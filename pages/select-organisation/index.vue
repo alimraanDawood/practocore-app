@@ -58,6 +58,12 @@
           I have an invite code
         </Button>
       </SharedJoinOrganisationDialog>
+      <SharedCreateOrganisation>
+        <Button variant="outline" class="w-full max-w-sm">
+          <Building2 class="size-4 mr-2" aria-hidden="true" />
+          Set up my own firm
+        </Button>
+      </SharedCreateOrganisation>
       <div class="flex items-center gap-2">
         <Button variant="outline" @click="reload">Try again</Button>
         <Button variant="ghost" @click="logout">Sign out</Button>

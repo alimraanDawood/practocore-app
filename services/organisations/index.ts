@@ -53,3 +53,49 @@ export async function joinOrganisation(code: string): Promise<JoinResult> {
   })
   return unwrap(res, 'We could not join that organisation. Please try again.') as Promise<JoinResult>
 }
+
+export type CreateOrganisationMode = 'create' | 'upgrade'
+
+export interface CreateOrganisationInput {
+  name: string
+  mode: CreateOrganisationMode
+  contactName?: string
+  contactEmail?: string
+  contactPhone?: string
+  emailDomain?: string
+}
+
+export interface CreateOrganisationResult {
+  organisation: { id: string; name: string }
+  mode: CreateOrganisationMode
+  /** True when the server already moved the caller into the new workspace. */
+  switched: boolean
+  subscription?: { id: string }
+  /** Only present for an upgrade: rows moved, keyed by collection. */
+  moved?: Record<string, number>
+}
+
+/**
+ * Create an organisation, or upgrade a solo account into one.
+ *
+ * `create` makes an additional firm: existing work stays where it is and the
+ * caller keeps their current workspace. `upgrade` turns a solo account into a
+ * firm and moves that person's own work across — only valid when the caller has
+ * no workspace, because someone already inside a firm has nothing to upgrade
+ * and their work belongs to that firm.
+ *
+ * Both modes start a fresh trial.
+ */
+export async function createOrganisation(
+  input: CreateOrganisationInput,
+): Promise<CreateOrganisationResult> {
+  const res = await fetch(`${SERVER_URL}/api/organisations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${pocketbase.authStore.token}`,
+    },
+    body: JSON.stringify(input),
+  })
+  return unwrap(res, 'We could not create that organisation. Please try again.') as Promise<CreateOrganisationResult>
+}
