@@ -30,6 +30,13 @@
         <Loader v-if="selecting === (opt.id ?? 'individual')" class="animate-spin size-4" aria-hidden="true" />
         <ChevronRight v-else class="size-4 opacity-50" aria-hidden="true" />
       </Button>
+
+      <SharedJoinOrganisationDialog>
+        <Button variant="ghost" class="justify-center h-auto py-3 text-muted-foreground">
+          <Plus class="size-4 mr-2" aria-hidden="true" />
+          Join another organisation
+        </Button>
+      </SharedJoinOrganisationDialog>
     </div>
 
     <!-- Locked: no organisation membership and no individual subscription -->
@@ -38,12 +45,21 @@
         <p class="font-semibold text-foreground">No workspace available</p>
         <p class="text-sm text-muted-foreground">
           You’re not a member of any organisation and don’t have an active individual
-          subscription. Ask your firm’s administrator to add you to their organisation,
-          or set up an individual plan to continue.
+          subscription. If your firm has sent you an invite code, you can join with it
+          below — otherwise set up an individual plan to continue.
         </p>
       </div>
+      <!-- This screen used to dead-end by telling the user to ask their firm's
+           administrator. That administrator has usually already sent them a
+           code, and until now there was nowhere in the product to type it. -->
+      <SharedJoinOrganisationDialog>
+        <Button class="w-full max-w-sm">
+          <Plus class="size-4 mr-2" aria-hidden="true" />
+          I have an invite code
+        </Button>
+      </SharedJoinOrganisationDialog>
       <div class="flex items-center gap-2">
-        <Button @click="reload">Try again</Button>
+        <Button variant="outline" @click="reload">Try again</Button>
         <Button variant="ghost" @click="logout">Sign out</Button>
       </div>
     </div>
@@ -51,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { Scale, Loader, Building2, User, ChevronRight } from "lucide-vue-next";
+import { Scale, Loader, Building2, User, ChevronRight, Plus } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { updateUser, signOut } from "~/services/auth";
 import { loadAccountAccess, clearAccountAccessCache, type AccountOrg } from "~/composables/useAccountAccess";

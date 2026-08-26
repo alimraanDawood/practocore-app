@@ -54,82 +54,21 @@
 
             <!-- JOIN INFO STEP -->
             <div v-else-if="currentStep === 'join-info'" class="flex flex-col flex-1 min-h-full p-6">
-              <div class="my-auto flex flex-col items-center gap-6 w-full">
-
-                <!-- Code entry state -->
-                <template v-if="joinInfoState === 'enter-code'">
-                  <div class="flex flex-col items-center gap-2 text-center max-w-md">
-                    <div class="flex items-center justify-center size-16 rounded-full bg-primary/10">
-                      <Mail class="size-8 text-primary" />
-                    </div>
-                    <h2 class="text-2xl font-bold ibm-plex-serif">Join your firm's workspace</h2>
-                    <p class="text-muted-foreground text-sm">
-                      Check your email for an 8-character invite code from your firm administrator.
-                    </p>
-                  </div>
-
-                  <div class="flex flex-col items-center gap-3 w-full max-w-sm">
-                    <label class="text-sm font-medium self-start">Invite code</label>
-                    <PinInput
-                      :model-value="inviteCode"
-                      @update:model-value="onInviteCodeChange"
-                      type="text"
-                      otp
-                      placeholder="·"
-                      class="justify-center"
-                      @keydown.enter="canProceed && nextStep()"
-                    >
-                      <PinInputGroup>
-                        <template :key="i" v-for="i in 8">
-                          <PinInputSlot :index="i - 1" />
-                          <template v-if="i === 4">
-                            <PinInputSeparator />
-                          </template>
-                        </template>
-                      </PinInputGroup>
-                    </PinInput>
-                    <p v-if="joinError" class="text-sm text-destructive text-center">{{ joinError }}</p>
-                    <p class="text-xs text-muted-foreground text-center">Uppercase letters and numbers only</p>
-                  </div>
-                </template>
-
-                <!-- Confirmed state -->
-                <template v-else-if="joinInfoState === 'confirmed' && inviteDetails">
-                  <div class="flex flex-col items-center gap-2 text-center max-w-md">
-                    <div class="flex items-center justify-center size-16 rounded-full bg-green-500/10">
-                      <CheckCircle2 class="size-8 text-green-500" />
-                    </div>
-                    <h2 class="text-2xl font-bold ibm-plex-serif">Invitation verified</h2>
-                    <p class="text-muted-foreground text-sm">
-                      Create your account to join the workspace below.
-                    </p>
-                  </div>
-
-                  <div class="flex flex-col gap-3 w-full max-w-sm p-4 rounded-lg border bg-card">
-                    <div class="flex flex-col gap-0.5">
-                      <span class="text-xs text-muted-foreground uppercase tracking-wide">Firm</span>
-                      <span class="font-semibold">{{ inviteDetails.orgName }}</span>
-                    </div>
-                    <div class="flex flex-col gap-0.5">
-                      <span class="text-xs text-muted-foreground uppercase tracking-wide">Invited by</span>
-                      <span class="text-sm">{{ inviteDetails.inviterName }}</span>
-                    </div>
-                    <div class="flex flex-col gap-0.5">
-                      <span class="text-xs text-muted-foreground uppercase tracking-wide">For email</span>
-                      <span class="text-sm font-mono">{{ inviteDetails.email }}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    class="text-xs text-muted-foreground underline underline-offset-2"
-                    @click="joinInfoState = 'enter-code'; inviteDetails = null; inviteToken = ''"
-                  >
-                    Use a different code
-                  </button>
-                </template>
-
+              <div class="my-auto w-full">
+                <!-- Shared with components/Register/StepJoinInfo.vue. This block
+                     was a near-verbatim third copy of the same markup and verify
+                     logic, and the copies had already drifted — only this one
+                     rendered the mid-code separator. -->
+                <SharedJoinOrganisation
+                  ref="joinForm"
+                  :auto-ref="autoRef"
+                  separator
+                  @verified="onInviteVerified"
+                  @reset="onInviteReset"
+                />
               </div>
             </div>
+
 
             <!-- ORG DETAILS STEP -->
             <div v-else-if="currentStep === 'org-details'" class="flex flex-col flex-1 min-h-full p-6">
@@ -595,14 +534,14 @@
 import { ref, computed, reactive } from 'vue'
 import {
   ArrowLeft, ArrowRight, Bell, Calendar, Building2,
-  Users, User, Loader2, UserPlus, Download, CheckCircle2, Phone, Mail,
+  Users, User, Loader2, UserPlus, Download, CheckCircle2, Phone,
 } from 'lucide-vue-next'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { toast } from 'vue-sonner'
-import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser, acceptInvite, verifyInvitation } from '~/services/auth'
-import { pb, SERVER_URL } from '~/lib/pocketbase'
+import { individualSignUp, organisationSignUp, signUpWithGoogle, getUserPreferences, updateUserPreferencesById, updateUser, acceptInvite } from '~/services/auth'
+import { pb } from '~/lib/pocketbase'
 import { createMatter } from '~/services/matters'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -773,7 +712,7 @@ const canProceed = computed(() => {
     case 'account-create': return accountMeta.value.valid && !isCreatingUser.value
     case 'join-info': return joinInfoState.value === 'confirmed'
       ? true
-      : inviteCodeString.value.length === 8 && !isJoiningWorkspace.value
+      : !!joinForm.value?.canProceed
     case 'matter-form': return scratchMatterRef.value?.canSubmit ?? false
     case 'trial-payment': return !(trialPaymentRef.value?.isSubmitting ?? false)
     case 'reminders': return !reminderPrefs.sms || /^7[0-9]{8}$/.test(reminderPrefs.phone)
@@ -787,7 +726,7 @@ const footerNextLabel = computed(() => {
     case 'account-create': return isCreatingUser.value ? 'Creating account…' : 'Continue'
     case 'join-info': return joinInfoState.value === 'confirmed'
       ? 'Create my account'
-      : isJoiningWorkspace.value ? 'Verifying…' : 'Verify code'
+      : joinForm.value?.isVerifying ? 'Verifying…' : 'Verify code'
     case 'matter-form': return 'Calculate Preview'
     case 'trial-payment': return (trialPaymentRef.value?.isSubmitting) ? 'Processing…' : 'Continue to Payment'
     case 'invite-team': return invitesSentCount.value > 0 ? 'Go to app' : 'Skip for now'
@@ -804,75 +743,47 @@ const skipTargets = computed((): Partial<Record<Step, Step>> => ({
 }))
 
 // --- Join workspace (JOIN persona) ---
-const inviteCode = ref<string[]>(Array(8).fill(''))
-const isJoiningWorkspace = ref(false)
-const joinError = ref('')
+//
+// Code entry, verification and the confirmation card live in
+// SharedJoinOrganisation, shared with the register flow. This keeps only what
+// is specific to this page: mirroring the verified invitation into local state
+// and driving the step footer.
+const joinForm = ref<any>(null)
 const inviteToken = ref('')
 const inviteDetails = ref<{ orgName: string; inviterName: string; email: string } | null>(null)
 const joinInfoState = ref<'enter-code' | 'confirmed'>('enter-code')
+const autoRef = computed(() => (useRoute().query.ref as string | undefined) ?? '')
 
-onMounted(async () => {
-  const ref = useRoute().query.ref as string | undefined
-  if (!ref) return
-  try {
-    const details = await verifyInvitation(ref)
-    if (details?.invite) {
-      persona.value = 'JOIN'
-      inviteToken.value = ref
-      inviteDetails.value = {
-        orgName: details.invite.organisation.name,
-        inviterName: details.invite.invitedBy.name,
-        email: details.invite.email,
-      }
-      joinInfoState.value = 'confirmed'
-      currentStep.value = 'join-info'
-    }
-  } catch (e) {
-    // Fall through — user can enter code manually
+// A ?ref= link lands the user straight on the join step. The component verifies
+// the token itself; this only reacts to the result.
+onMounted(() => {
+  if (autoRef.value) {
+    persona.value = 'JOIN'
+    currentStep.value = 'join-info'
   }
 })
 
-const onInviteCodeChange = (val: string[]) => {
-  inviteCode.value = val.map(c => c.replace(/[^A-Za-z0-9]/g, '').toUpperCase())
+const onInviteVerified = ({ token, details }: { token: string; details: any }) => {
+  inviteToken.value = token
+  inviteDetails.value = details
+  joinInfoState.value = 'confirmed'
 }
 
-const inviteCodeString = computed(() => inviteCode.value.join(''))
+const onInviteReset = () => {
+  joinInfoState.value = 'enter-code'
+  inviteDetails.value = null
+  inviteToken.value = ''
+}
 
 const joinWorkspace = async () => {
-  // If already confirmed, advance to account-create
+  // Verified already: the token is carried into account creation, which is what
+  // actually redeems it. Verification alone joins nothing — there is no account
+  // yet to join with.
   if (joinInfoState.value === 'confirmed') {
     advanceStep()
     return
   }
-
-  if (inviteCodeString.value.length !== 8 || isJoiningWorkspace.value) return
-  isJoiningWorkspace.value = true
-  joinError.value = ''
-  try {
-    // Step 1: resolve code → token
-    const res = await fetch(`${SERVER_URL}/api/invitations/get-link`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: inviteCodeString.value }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.message ?? 'Invalid code. Please check and try again.')
-    inviteToken.value = data.token
-
-    // Step 2: fetch invite details for confirmation card
-    const details = await verifyInvitation(data.token)
-    if (!details?.invite) throw new Error('Could not load invitation details.')
-    inviteDetails.value = {
-      orgName: details.invite.organisation.name,
-      inviterName: details.invite.invitedBy.name,
-      email: details.invite.email,
-    }
-    joinInfoState.value = 'confirmed'
-  } catch (e: any) {
-    joinError.value = e.message ?? 'Invalid code. Please check and try again.'
-  } finally {
-    isJoiningWorkspace.value = false
-  }
+  await joinForm.value?.verify()
 }
 
 // --- Invite team (ORG only) ---

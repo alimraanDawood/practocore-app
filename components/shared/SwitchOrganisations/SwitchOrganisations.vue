@@ -30,6 +30,22 @@
         </button>
       </div>
 
+      <!-- Joining lives here because this is where a user already looks for
+           "what workspaces do I have?" — it is mounted in the sidebar header
+           and the profile menu, on desktop and mobile, so no new navigation is
+           needed. Creating an organisation belongs here too, but the server
+           endpoint for it does not exist yet; see ORG_MEMBERSHIP_PLAN.md. -->
+      <div class="px-3 pb-3">
+        <SharedJoinOrganisationDialog>
+          <button
+            class="flex items-center gap-2 w-full p-3 rounded-lg border border-dashed text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+          >
+            <Plus class="size-4" />
+            Join an organisation
+          </button>
+        </SharedJoinOrganisationDialog>
+      </div>
+
       <div class="flex flex-row justify-end p-3 border-t gap-2">
         <DialogClose as-child>
           <Button size="sm" variant="outline">Cancel</Button>
@@ -48,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { Loader2 } from 'lucide-vue-next';
+import { Loader2, Plus } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { getOrganisations, getSignedInUser, updateUser } from '~/services/auth';
 import { DialogClose } from '@/components/ui/dialog';
@@ -66,8 +82,7 @@ const currentOrg = computed(() => {
 
 const selectedOrg = ref<string>(currentOrg.value);
 
-onMounted(async () => {
-  selectedOrg.value = currentOrg.value;
+const loadOrganisations = async () => {
   try {
     const response = await getOrganisations();
     organisations.value = (await response.json())?.organisations || [];
@@ -76,7 +91,17 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+};
+
+onMounted(async () => {
+  selectedOrg.value = currentOrg.value;
+  await loadOrganisations();
 });
+
+// Refetch each time the dialog opens. Without this a firm joined during this
+// session is absent from the list until a page reload — the join dialog is
+// mounted inside this one, so the two are always open in sequence.
+watch(open, isOpen => { if (isOpen) loadOrganisations(); });
 
 const switchOrganisation = async () => {
   if (!selectedOrg.value || selectedOrg.value === currentOrg.value) return;
