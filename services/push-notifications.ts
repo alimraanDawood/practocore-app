@@ -534,25 +534,46 @@ export async function removeAllDeliveredNotifications() {
 }
 
 /**
- * Unregister from push notifications (call when user logs out)
+ * Unregister from push notifications (call when user logs out).
+ *
+ * Until 2026-08-26 this was exported and called by nothing: `signOut()` only did
+ * `authStore.clear()`, so a signed-out user's `DeviceTokens` rows stayed
+ * `is_active: true` forever. The device therefore kept receiving that user's
+ * notifications on a session they had ended — and when a second person signed in
+ * on the same device it accumulated a second active row against the same FCM
+ * token, so one phone delivered two people's notifications at once.
+ *
+ * It runs on the way OUT of a session, which makes its auth lifetime the whole
+ * problem: `signOut()` clears the shared `pocketbase` authStore synchronously
+ * and its callers don't await, so by the time the `getFullList` above resolved
+ * the token backing the follow-up `update` calls would be gone. We therefore
+ * snapshot the credentials into a private client up front and do the whole
+ * deactivation against that, which cannot be raced by the clear.
  */
 export async function unregisterPushNotifications() {
   try {
     const platform = getPlatform();
 
     // Mark tokens as inactive in backend
-    const user = pocketbase.authStore.model;
-    if (user) {
-      const tokens = await pocketbase
+    const user = pocketbase.authStore.record;
+    const token = pocketbase.authStore.token;
+    if (user && token) {
+      // Detached client: see the note above. It shares nothing with the app's
+      // authStore, so clearing that one mid-flight leaves these calls authorised.
+      const client = new PocketBase(SERVER_URL);
+      client.autoCancellation(false);
+      client.authStore.save(token, user);
+
+      const tokens = await client
         .collection('DeviceTokens')
         .getFullList({
           filter: `user="${user.id}" && is_active=true && platform="${platform}"`,
         });
 
-      for (const token of tokens) {
-        await pocketbase
+      for (const deviceToken of tokens) {
+        await client
           .collection('DeviceTokens')
-          .update(token.id, { is_active: false });
+          .update(deviceToken.id, { is_active: false });
       }
     }
 

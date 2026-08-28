@@ -329,6 +329,19 @@ export async function signOut() {
     // than being reset from here — see the reset functions in those
     // composables. Most callers don't await this function, so anything queued
     // behind an await here would run after they'd already navigated.
+
+    // Deactivate this device's push registration. Deliberately NOT awaited, for
+    // the reason above — a caller that navigates immediately must not be held up,
+    // and this must not be able to throw on the way out of a session. It snapshots
+    // its own credentials internally, so the `clear()` below cannot race it.
+    import('~/services/push-notifications')
+        .then(({ unregisterPushNotifications }) => unregisterPushNotifications())
+        .catch(() => {
+            // A device that fails to deregister must still sign out locally. The
+            // stale row is a delivery problem, not a reason to trap the user in a
+            // session they asked to leave.
+        });
+
     pocketbase.authStore.clear();
 
     return true;
