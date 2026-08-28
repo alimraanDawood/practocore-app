@@ -142,6 +142,7 @@ import { DialogClose } from '@/components/ui/dialog'
 import { createOrganisation, type CreateOrganisationResult } from '~/services/organisations'
 import { getSignedInUser, updateUser } from '~/services/auth'
 import { clearAccountAccessCache } from '~/composables/useAccountAccess'
+import { beginLocalSwitch } from '~/composables/useWorkspace'
 
 const open = ref(false)
 const busy = ref(false)
@@ -203,6 +204,12 @@ const submit = async () => {
   busy.value = true
   error.value = ''
   try {
+    // An upgrade moves the workspace pointer server-side, inside the migration
+    // transaction. That is a deliberate switch initiated from this tab, so flag it
+    // before the request rather than letting the drift watcher reload the success
+    // screen out from under the user before they've read what moved.
+    if (form.mode === 'upgrade') beginLocalSwitch()
+
     created.value = await createOrganisation({
       name: form.name.trim(),
       mode: form.mode,
@@ -228,6 +235,9 @@ const switchToCreated = async () => {
   if (!created.value || switching.value) return
   switching.value = true
   try {
+    // See the note in SwitchOrganisations: this tab's own pointer write must not
+    // be mistaken for drift.
+    beginLocalSwitch()
     await updateUser({ organisation: created.value.organisation.id })
     clearAccountAccessCache()
     window.location.reload()

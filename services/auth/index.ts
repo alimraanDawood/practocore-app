@@ -452,7 +452,10 @@ export function unsubscribeFromUser() {
 }
 
 export function refreshUserData() {
-    pocketbase.collection('Users').authRefresh();
+    // Returns the promise so callers that need the refreshed record — the
+    // workspace drift check reads `authStore.record.organisation` straight after
+    // — can await it. Existing callers ignore it, exactly as before.
+    return pocketbase.collection('Users').authRefresh();
 }
 
 export function getUserPermissions() {

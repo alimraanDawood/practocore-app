@@ -11,6 +11,7 @@
 <script setup lang="ts">
 import { getOrganisations, getSignedInUser, updateUser } from '~/services/auth';
 import { toast } from 'vue-sonner';
+import { beginLocalSwitch } from '~/composables/useWorkspace';
 
 definePageMeta({
   layout: 'blank'
@@ -51,6 +52,9 @@ onMounted(async () => {
       const exists = organisations.find(org => normalise(org.id) === targetOrg);
 
       if (exists) {
+        // This page exists to switch, so its own pointer write must not be read
+        // as another tab moving the workspace under it.
+        beginLocalSwitch();
         // Pass actual null when switching to personal (no-org) account
         await updateUser({ organisation: targetOrg === 'null' ? null : targetOrg });
         await redirect();

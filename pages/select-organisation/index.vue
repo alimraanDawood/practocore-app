@@ -77,6 +77,7 @@ import { Scale, Loader, Building2, User, ChevronRight, Plus } from "lucide-vue-n
 import { toast } from "vue-sonner";
 import { updateUser, signOut } from "~/services/auth";
 import { loadAccountAccess, clearAccountAccessCache, type AccountOrg } from "~/composables/useAccountAccess";
+import { beginLocalSwitch } from '~/composables/useWorkspace';
 
 definePageMeta({ layout: "blank" });
 
@@ -102,6 +103,9 @@ const choose = async (opt: { id: string | null; name: string }) => {
   selecting.value = opt.id ?? "individual";
   try {
     // Setting the active organisation pointer (null = individual context).
+    // Flagged as a local switch so the drift watcher doesn't read this tab's own
+    // write as another tab moving the workspace under it.
+    beginLocalSwitch();
     await updateUser({ organisation: opt.id });
     clearAccountAccessCache();
     // Full reload so session singletons (permissions, plan, account access) re-init
