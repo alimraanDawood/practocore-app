@@ -76,6 +76,66 @@ describe('resolveNotificationRoute', () => {
     expect(resolveNotificationRoute(null)).toBeNull();
   });
 
+  // A notification belongs to a workspace. Following it while the user is in a
+  // different one resolves the matter id to nothing they can read — a silent 404
+  // that reads as a broken link. `?org=` routes through `organisation.global` →
+  // `/org-switch`, which verifies membership before moving the pointer.
+  describe('carries the notification\'s workspace', () => {
+    test('appends ?org= to a bare-id matter route', () => {
+      expect(resolveNotificationRoute({
+        organisation: 'O1',
+        metadata: { matterId: 'M1' },
+      })).toBe('/main/matters/matter/M1?org=O1');
+    });
+
+    test('a query string must precede the fragment', () => {
+      expect(resolveNotificationRoute({
+        organisation: 'O1',
+        metadata: { matterId: 'M1', deadlineId: 'D1' },
+      })).toBe('/main/matters/matter/M1?org=O1#deadline-D1');
+    });
+
+    test('uses & when the route already has a query', () => {
+      expect(resolveNotificationRoute({
+        organisation: 'O1',
+        metadata: { conversationId: 'C1' },
+      })).toBe('/main?c=C1&org=O1');
+    });
+
+    test('appends to a clickAction that lacks one', () => {
+      expect(resolveNotificationRoute({
+        organisation: 'O1',
+        metadata: { clickAction: '/main/eccmis' },
+      })).toBe('/main/eccmis?org=O1');
+    });
+
+    // The notifier knows more than we do: it may be pointing at a workspace
+    // other than the one the record is filed under.
+    test('never overrides an org already on the path', () => {
+      expect(resolveNotificationRoute({
+        organisation: 'O1',
+        metadata: { clickAction: '/main/matters/matter/M1?org=O2' },
+      })).toBe('/main/matters/matter/M1?org=O2');
+    });
+
+    // Personal-workspace notifications have an empty organisation, and `?org=`
+    // is meaningless for them.
+    test('adds nothing when there is no workspace', () => {
+      expect(resolveNotificationRoute({
+        organisation: '',
+        metadata: { matterId: 'M1' },
+      })).toBe('/main/matters/matter/M1');
+    });
+
+    // A push `data` payload arrives flattened, without the record wrapper.
+    test('reads the workspace off a flattened push payload', () => {
+      expect(resolveNotificationRoute({
+        matterId: 'M1',
+        organisation: 'O1',
+      })).toBe('/main/matters/matter/M1?org=O1');
+    });
+  });
+
   describe('rejects off-site destinations', () => {
     // These strings reach a navigation call, and the sender is not always
     // trusted — an AI-authored notification is model output.

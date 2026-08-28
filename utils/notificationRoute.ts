@@ -46,6 +46,43 @@ function toSafePath(raw: unknown): string | null {
 }
 
 /**
+ * Attach the workspace a notification belongs to, so the destination opens in the
+ * workspace that can actually read it.
+ *
+ * A notification is addressed to a person *in a firm*: `Notifications.organisation`
+ * records which one. Follow it while the user is in a different workspace and the
+ * matter id resolves to nothing they can see — a silent 404 that reads as a broken
+ * link rather than as "you're in the wrong workspace".
+ *
+ * `?org=` is the existing, already-working mechanism for this: `organisation.global`
+ * middleware intercepts it and routes through `/org-switch`, which verifies
+ * membership before moving the pointer. Some backend links (reminders, ECCMIS
+ * matter links) already carry it. This fills in the ones that don't — the
+ * `clickAction` hint and the bare-id fallbacks below, which build bare paths.
+ *
+ * An org already on the path always wins: it came from the notifier, which knows
+ * more than we do here.
+ */
+function withWorkspace(path: string, notification: any): string {
+  const org = notification?.organisation ?? notification?.metadata?.organisation;
+  if (typeof org !== 'string' || org === '') return path;
+  if (/[?&]org=/.test(path)) return path;
+
+  const [beforeHash, hash] = splitHash(path);
+  const separator = beforeHash.includes('?') ? '&' : '?';
+  return `${beforeHash}${separator}org=${encodeURIComponent(org)}${hash}`;
+}
+
+/**
+ * A query string must come before the fragment, so a path carrying a
+ * `#deadline-<id>` anchor has to be split rather than appended to.
+ */
+function splitHash(path: string): [string, string] {
+  const index = path.indexOf('#');
+  return index === -1 ? [path, ''] : [path.slice(0, index), path.slice(index)];
+}
+
+/**
  * @param notification  A Notifications record, or a push data payload.
  * @returns A relative in-app path, or null when there's nowhere to go — callers
  *          should leave the user where they are rather than guess.
@@ -57,22 +94,25 @@ export function resolveNotificationRoute(notification: any): string | null {
   const metadata = notification.metadata ?? notification;
 
   const explicit = toSafePath(metadata?.clickAction) ?? toSafePath(notification.link);
-  if (explicit) return explicit;
+  if (explicit) return withWorkspace(explicit, notification);
 
   // Fall back to bare ids. Note the matter route is /main/matters/matter/<id> —
   // there is no /main/matters/<id> page.
   const matterId = metadata?.matterId;
   const deadlineId = metadata?.deadlineId;
   if (matterId) {
-    return deadlineId
-      ? `/main/matters/matter/${matterId}#deadline-${deadlineId}`
-      : `/main/matters/matter/${matterId}`;
+    return withWorkspace(
+      deadlineId
+        ? `/main/matters/matter/${matterId}#deadline-${deadlineId}`
+        : `/main/matters/matter/${matterId}`,
+      notification,
+    );
   }
-  if (metadata?.engagementId) return `/main/engagements/${metadata.engagementId}`;
+  if (metadata?.engagementId) return withWorkspace(`/main/engagements/${metadata.engagementId}`, notification);
   // Deep research opens as a conversation on the assistant, matching how the
   // backend builds its own deep link.
-  if (metadata?.conversationId) return `/main?c=${metadata.conversationId}`;
-  if (metadata?.taskId) return '/main/deep-research';
+  if (metadata?.conversationId) return withWorkspace(`/main?c=${metadata.conversationId}`, notification);
+  if (metadata?.taskId) return withWorkspace('/main/deep-research', notification);
 
   return null;
 }
