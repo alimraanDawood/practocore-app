@@ -257,6 +257,60 @@ export function listDocuments(scope: VaultScope, scopeId: string): Promise<Vault
   });
 }
 
+// ── Cross-library reads (mobile home) ───────────────────────────────────────
+// The mobile vault home is category-first rather than library-first, so it needs
+// "every document this user can see" rather than one scope's listing. No client
+// scoping is applied: AiVaultDocuments' list rule already restricts rows to the
+// caller's org libraries and the custom vaults they're a member of, so an
+// unfiltered listing returns exactly the readable set.
+
+/** Mime predicates for the home's category tiles. `documents` is "everything else". */
+export const VAULT_MIME_FILTERS = {
+  images: 'mime ~ "image/%"',
+  audio: 'mime ~ "audio/%"',
+  documents: 'mime !~ "image/%" && mime !~ "audio/%" && mime !~ "video/%"',
+} as const;
+
+export type VaultMimeCategory = keyof typeof VAULT_MIME_FILTERS;
+
+function withLive(extra?: string): string {
+  // `trashed != true` rather than `trashed = false`: rows written before the
+  // soft-delete field existed carry null, and `!=` matches those.
+  return extra ? `trashed != true && (${extra})` : 'trashed != true';
+}
+
+/** Newest documents across every readable library. */
+export async function listRecentDocuments(limit = 30, extra?: string): Promise<VaultDocument[]> {
+  const res = await pb.collection(DOCS).getList<VaultDocument>(1, limit, {
+    filter: withLive(extra),
+    sort: '-created',
+    skipTotal: true,
+  });
+  return res.items;
+}
+
+/** Row count across every readable library (used for the home's subtitles). */
+export async function countDocuments(extra?: string): Promise<number> {
+  const res = await pb.collection(DOCS).getList<VaultDocument>(1, 1, { filter: withLive(extra) });
+  return res.totalItems;
+}
+
+/** Soft-deleted rows across every readable library — the mobile Recycle bin. */
+export async function listTrashedDocuments(limit = 200): Promise<VaultDocument[]> {
+  const res = await pb.collection(DOCS).getList<VaultDocument>(1, limit, {
+    filter: 'trashed = true',
+    sort: '-trashed_at',
+    skipTotal: true,
+  });
+  return res.items;
+}
+
+/** Trashed rows across every readable library — the home's Recycle bin count. */
+export async function countTrashedDocuments(): Promise<number> {
+  const res = await pb.collection(DOCS).getList<VaultDocument>(1, 1, { filter: 'trashed = true' });
+  return res.totalItems;
+}
+
 // Fetch a single document by id (used to open a citation's source document).
 // Resolves to null if the document is missing or the caller can't view it — the
 // AiVaultDocuments collection's view rule still governs access here.

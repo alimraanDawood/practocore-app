@@ -21,6 +21,12 @@ const props = defineProps<{
   folder?: string;
   /** Compact variant for embedding (e.g. matter page). */
   compact?: boolean;
+  /**
+   * Render no drop target — only the hidden file input and the add-document flow.
+   * For hosts that already have their own affordance (the mobile browser drives it
+   * from the page header's overflow menu) and open the picker via exposed `pick()`.
+   */
+  headless?: boolean;
 }>();
 const emit = defineEmits<{ uploaded: [docId: string]; disabled: [] }>();
 
@@ -49,6 +55,9 @@ const ACCEPT = '.pdf,.txt,.md,.docx,application/pdf,text/plain,text/markdown,app
 function pick() {
   fileInput.value?.click();
 }
+
+// Lets a host open the picker from its own control — see `headless`.
+defineExpose({ pick });
 
 function onPicked(e: Event) {
   const input = e.target as HTMLInputElement;
@@ -107,6 +116,7 @@ async function confirmUpload() {
   <div>
     <button
       type="button"
+      v-if="!headless"
       class="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-center transition-colors"
       :class="[
         dragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/40 hover:bg-accent/30',
