@@ -32,7 +32,14 @@ function resolveServerUrl(): string {
 
 // Shared PocketBase instance used across the entire app
 // This ensures the authStore is consistent in plugins, middleware, and services
-export const SERVER_URL = resolveServerUrl();
+//
+// The trailing slash is stripped deliberately. Everything hand-rolled in the app
+// builds URLs as `${SERVER_URL}/api/...`, so a base ending in "/" yields a double
+// slash; Go's mux answers that with a bare 301 that carries NO CORS headers, and
+// the browser rejects the cross-origin redirect before it can be followed. The
+// PocketBase SDK normalises the slash itself, so only the raw fetches break —
+// which is why the app looks fine while e.g. the Vault reports itself disabled.
+export const SERVER_URL = resolveServerUrl().replace(/\/+$/, '');
 export const pb = new PocketBase(SERVER_URL);
 
 // Disable auto cancellation (as per project requirements)
