@@ -16,6 +16,9 @@ import {
 } from '~/services/engagements';
 
 const open = defineModel<boolean>('open', { default: false });
+// When opened from a playbook's "Use →" button, the flow skips straight to step 2
+// with that playbook already picked. Blank (the default) starts at the picker.
+const props = defineProps<{ templateId?: string }>();
 const emit = defineEmits<{ created: [id: string] }>();
 
 const router = useRouter();
@@ -49,6 +52,12 @@ watch(open, async (v) => {
   templatesLoading.value = true;
   try {
     templates.value = await listEngagementTemplates();
+    // Preselected playbook: jump to naming. If the id no longer resolves (deleted
+    // between the library listing it and this open), fall back to the picker.
+    if (props.templateId) {
+      const t = templates.value.find((x) => x.id === props.templateId);
+      if (t) pick(t);
+    }
   } catch (e: any) {
     error.value = e?.message || 'Could not load playbooks.';
   } finally {
