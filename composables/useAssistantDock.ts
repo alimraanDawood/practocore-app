@@ -49,6 +49,13 @@ export function useAssistantDock() {
   // specifically — e.g. jump the calendar to a freshly-scheduled reminder's date so
   // the new event is actually in view, not just silently present on some other cell.
   const lastWrite = useState<AiActionResult | null>('assistant-dock-last-write', () => null);
+  // Pages that put their own bar across the bottom of the screen raise this while
+  // it is up. The launcher is `fixed bottom-6 right-6`, which is exactly where a
+  // full-width action bar puts its rightmost button — so without this the dock
+  // silently covers a "Move here" or a "Delete" and the tap goes to the assistant.
+  // A counter, not a flag: two bars can overlap in time (a selection handing off
+  // to a move), and the second one must not un-suppress on the first one's exit.
+  const suppressed = useState<number>('assistant-dock-suppressed', () => 0);
 
   function open() { if (context.value) isOpen.value = true; }
   function close() { isOpen.value = false; }
@@ -58,7 +65,26 @@ export function useAssistantDock() {
     writeSignal.value++; // bump last so watchers see lastWrite already set
   }
 
-  return { isOpen, context, owner, writeSignal, lastWrite, open, close, toggle, signalWrite };
+  return {
+    isOpen, context, owner, writeSignal, lastWrite, suppressed,
+    open, close, toggle, signalWrite,
+  };
+}
+
+/**
+ * Hide the dock launcher for as long as `active` is true and this scope is alive —
+ * for a page that needs the bottom-right corner for a bar of its own.
+ */
+export function useSuppressDockLauncher(active: MaybeRefOrGetter<boolean>) {
+  const { suppressed } = useAssistantDock();
+  let held = false;
+  const set = (v: boolean) => {
+    if (v === held) return;
+    held = v;
+    suppressed.value = Math.max(0, suppressed.value + (v ? 1 : -1));
+  };
+  watchEffect(() => { set(!!toValue(active)); });
+  onScopeDispose(() => { set(false); });
 }
 
 /**
