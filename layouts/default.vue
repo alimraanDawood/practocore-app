@@ -346,7 +346,11 @@ watch(onAssistant, (on) => { if (!on) historyOpen.value = false; });
       <LayoutChatHistoryPanel v-model:open="historyOpen" />
 
       <!-- ── Main panel ──────────────────────────────────────────────── -->
-      <SidebarInset class="relative min-h-0">
+      <!-- `min-w-0`: a flex item defaults to `min-width: auto`, so this panel cannot
+           shrink below the min-content width of whatever page is inside it — one wide
+           child and the panel grows past the viewport, taking every page with it. The
+           sidebar's own width is fixed, so the panel is the one that has to yield. -->
+      <SidebarInset class="relative min-h-0 min-w-0">
         <!-- Mobile-only bar: the sidebar is an offcanvas sheet on small
              screens, so its trigger must live outside it. Hidden on desktop,
              where the in-sidebar trigger + rail handle toggling. -->
@@ -357,7 +361,7 @@ watch(onAssistant, (on) => { if (!on) historyOpen.value = false; });
 
         <div class="min-h-0 flex-1 flex-col flex w-full overflow-hidden">
           <!--                    <SharedDesktopTitleBar class="hidden lg:flex" />-->
-          <div class="flex flex-col w-full h-full">
+          <div class="flex flex-col w-full min-w-0 h-full">
             <slot/>
           </div>
 
