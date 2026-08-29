@@ -9,7 +9,14 @@
         @focus="prefetchMatter(matter.id)"
     >
 
-        <span class="font-semibold truncate">{{ matter?.name }}</span>
+        <div class="flex flex-row items-center gap-2 w-full min-w-0">
+            <span class="font-semibold truncate">{{ matter?.name }}</span>
+            <!-- A closed file is reachable through the status filter, so it has to
+                 announce itself in the list rather than look like live work. -->
+            <Badge v-if="status !== 'active'" variant="outline" class="shrink-0 text-[10px] px-1.5">
+                {{ MATTER_STATUS_LABELS[status] }}
+            </Badge>
+        </div>
         <span>{{ deadlineText }}</span>
 
         <div class="flex flex-col gap-2">
@@ -52,6 +59,7 @@ import { Clock, CheckCircle } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { usePrefetch } from '~/composables/usePrefetch';
+import { matterStatusOf, MATTER_STATUS_LABELS } from '~/services/matters';
 
 dayjs.extend(relativeTime);
 
@@ -71,6 +79,8 @@ const props = defineProps({
         default: 'active'
     },
 });
+
+const status = computed(() => matterStatusOf(props.matter));
 
 const deadlineText = computed(() => {
     let deadlineCount = props.matter.expand.deadlines.filter(d => (d.status === 'pending')).length;

@@ -197,6 +197,14 @@
               <span
                 class="text-sm font-medium leading-snug truncate"
                 :class="deadline.status === 'fulfilled' ? 'text-muted-foreground' : 'text-foreground'"
+              >{{ displayName(deadline) }}</span>
+
+              <!-- The rule's own wording, kept visible whenever a firm name sits
+                   over it. This is what the authority, the registry and the court
+                   will call the same obligation. -->
+              <span
+                v-if="isRenamed(deadline)"
+                class="text-[10px] text-muted-foreground truncate mt-0.5"
               >{{ deadline.name }}</span>
 
               <div v-if="deadline.party_context" class="flex flex-row items-center gap-1 mt-0.5">
@@ -379,6 +387,49 @@
               </div>
             </div>
 
+            <!-- L7: rename. Offered on EVERY Deadlines row regardless of origin,
+                 because it writes `label` and never `name` — no date moves, no
+                 dependant recomputes, and the rule's wording stays on the record.
+                 This is the one customisation a statutory row can safely take. -->
+            <div
+              v-if="canAddDeadline && deadline.collectionName === 'Deadlines'"
+              class="flex flex-col gap-1.5 border-t border-border/60 pt-2"
+            >
+              <template v-if="renamingId === deadline.id">
+                <Input
+                  v-model="renameDraft"
+                  :maxlength="200"
+                  placeholder="What you want to call this"
+                  class="h-8 text-sm"
+                  @keyup.enter="saveRename(deadline)"
+                  @keyup.esc="cancelRename()"
+                />
+                <p class="text-[10px] text-muted-foreground">
+                  Only changes what you see here. The rule still reads
+                  &ldquo;{{ deadline.name }}&rdquo;, and the date is unaffected.
+                </p>
+                <div class="flex flex-row gap-2">
+                  <Button size="sm" :disabled="renameBusy" @click="saveRename(deadline)">Save</Button>
+                  <Button size="sm" variant="ghost" :disabled="renameBusy" @click="cancelRename()">Cancel</Button>
+                </div>
+              </template>
+              <div v-else class="flex flex-row gap-2 flex-wrap">
+                <Button size="sm" variant="outline" @click="startRename(deadline)">
+                  <PencilLine class="size-3"/>
+                  {{ isRenamed(deadline) ? 'Change name' : 'Rename' }}
+                </Button>
+                <Button
+                  v-if="isRenamed(deadline)"
+                  size="sm"
+                  variant="ghost"
+                  :disabled="renameBusy"
+                  @click="clearRename(deadline)"
+                >
+                  Use original name
+                </Button>
+              </div>
+            </div>
+
             <!-- Assignees -->
             <SharedDeadlineAssignees
               v-if="matterMembers.length > 0 && deadline.collectionName === 'Deadlines'"
@@ -392,17 +443,6 @@
         </div>
       </div>
 
-    </div>
-
-    <!-- L4: the second track. Deliberately BELOW the timeline and visually
-         separate — a matter's court dates and a firm's own tasks are different
-         kinds of thing, and interleaving them would invite reading an internal
-         task as a court date. -->
-    <div class="border-t border-border pt-4">
-      <SharedMattersMatterMilestones
-        :matter-id="matter.id"
-        :can-edit="canAddDeadline"
-      />
     </div>
   </div>
 
@@ -450,7 +490,7 @@ import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue"
 import OverrideDeadline from "../../Deadline/OverrideDeadline/OverrideDeadline.vue";
 import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
 import { pb } from "~/lib/pocketbase";
-import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline } from "~/services/matters";
+import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline, renameDeadline } from "~/services/matters";
 import { toast } from "vue-sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -478,9 +518,47 @@ const toggleExpand = (id) => {
 
 const isExpanded = (id) => expandedSet.value.has(id);
 
-// ── All deadlines (same logic, bug fixed: '1-1-1' → safe ISO fallback) ───────
+// ── Timeline order (L8) ───────────────────────────────────────────────────────
+//
+// Three keys, in this order:
+//
+//   1. Dated rows before undated ones. A date is a commitment; no date is an
+//      unknown, and an unknown is not "very old". The previous sort mapped a
+//      missing date to 1970-01-01, so every undated row floated above a hearing
+//      that was due today — the top of the timeline showed the rows needing the
+//      least attention.
+//   2. Date ascending. Once a date exists it is the operative fact and the
+//      lawyer works to a calendar, so it outranks the procedural order.
+//   3. `seq` — the engine's resolution order over the procedure's DAG. This is
+//      what orders the undated tail (two sequential appeal steps must not be
+//      free to swap places just because neither has a date yet) and what breaks
+//      same-day ties that otherwise fell back to array order.
+//
+// Rows the engine did not generate carry seq 0: an ECCMIS sitting and an ad-hoc
+// row have no place in a blueprint. They sort last within their group, by
+// creation, rather than being given an invented position.
+const procIndex = (d) => Number(d?.seq) || Number.POSITIVE_INFINITY;
+
+const byTimelineOrder = (a, b) => {
+  const aDated = a?.date ? 1 : 0;
+  const bDated = b?.date ? 1 : 0;
+  if (aDated !== bDated) return bDated - aDated;
+
+  if (aDated === 1) {
+    const byDate = new Date(a.date) - new Date(b.date);
+    if (byDate !== 0) return byDate;
+  }
+
+  const aSeq = procIndex(a);
+  const bSeq = procIndex(b);
+  // Written as a comparison rather than a subtraction so two positionless rows
+  // (both Infinity) fall through to creation order instead of yielding NaN.
+  if (aSeq !== bSeq) return aSeq < bSeq ? -1 : 1;
+
+  return String(a?.created || "").localeCompare(String(b?.created || ""));
+};
+
 const allDeadlines = computed(() => {
-  const EPOCH = "1970-01-01";
   if (props.applicationFilter === "all" || !props.applicationFilter) {
     return [
       ...(props?.matter?.expand?.deadlines || []),
@@ -488,12 +566,16 @@ const allDeadlines = computed(() => {
       ...(props?.matter?.expand?.applications?.flatMap((app) => app?.expand?.deadlines || []) || []),
     ]
       .filter((d) => d.status !== "unavailable")
-      .sort((a, b) => new Date(a.date || EPOCH) - new Date(b.date || EPOCH));
+      .sort(byTimelineOrder);
   }
+  // The single-application view was never sorted at all — it rendered in
+  // whatever order the expand came back in. Same ordering applies.
   return (
     props?.matter?.expand?.applications
       ?.find((ap) => ap.id === props.applicationFilter)
-      ?.expand?.deadlines?.filter((d) => d.status !== "unavailable") ?? []
+      ?.expand?.deadlines?.filter((d) => d.status !== "unavailable")
+      ?.slice()
+      ?.sort(byTimelineOrder) ?? []
   );
 });
 
@@ -587,6 +669,16 @@ watch(
 // t_id — see the ad-hoc block below and internal/deadlinev2/adhoc.go. Declared
 // here because isProjected/urgencyOf depend on it.
 const isAdhoc = (deadline) => deadline?.origin === "adhoc";
+
+// L7: what the row is CALLED, as opposed to what the rule calls it.
+//
+// `label` is the firm's own wording ("Lodge John's notice of appeal"); `name` is
+// the blueprint node's label, or the registry's own wording for a court sitting.
+// The override wins on screen, but `name` is never overwritten and is still shown
+// underneath whenever the two differ — a timeline that hides which rule a row came
+// from is worse than one that reads awkwardly.
+const displayName = (deadline) => (deadline?.label || "").trim() || deadline?.name || "";
+const isRenamed = (deadline) => Boolean((deadline?.label || "").trim());
 
 // L2: the most recent correction on a deadline, if any. Returns the row rather
 // than a boolean because the computed date it superseded (adj.from) is the part
@@ -796,6 +888,62 @@ async function removeAdhoc(deadline) {
   } finally {
     adhocBusy.value = null;
   }
+}
+
+// ── Renaming ──────────────────────────────────────────────────────────────────
+// Deliberately NOT part of the ad-hoc block above. Renaming applies to every row
+// on the timeline, including the statutory ones the engine owns, because it only
+// ever writes `label` — see internal/deadlinev2/label.go. The permission mirrors
+// canAddDeadline (anyone working the matter) rather than the narrower supervisor/
+// assignee rule that guards real obligations.
+
+const renamingId = ref(null);
+const renameDraft = ref("");
+const renameBusy = ref(false);
+
+function startRename(deadline) {
+  renamingId.value = deadline.id;
+  // Seed with the current display name so "rename" reads as editing what is on
+  // screen, not as filling in an empty box.
+  renameDraft.value = displayName(deadline);
+}
+
+function cancelRename() {
+  renamingId.value = null;
+  renameDraft.value = "";
+}
+
+async function applyRename(deadline, label) {
+  renameBusy.value = true;
+  try {
+    const res = await renameDeadline(deadline.id, label);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    cancelRename();
+    toast.success(label ? "Deadline renamed" : "Original name restored");
+    emits("updated");
+  } catch (err) {
+    toast.error(err?.message || "Could not rename deadline");
+  } finally {
+    renameBusy.value = false;
+  }
+}
+
+function saveRename(deadline) {
+  const next = renameDraft.value.trim();
+  if (!next) {
+    // An empty box means "go back to the rule's wording", which is the same
+    // operation as the explicit reset button — the server clears on empty.
+    applyRename(deadline, "");
+    return;
+  }
+  applyRename(deadline, next);
+}
+
+function clearRename(deadline) {
+  applyRename(deadline, "");
 }
 
 // Kept for future use when reset is re-enabled

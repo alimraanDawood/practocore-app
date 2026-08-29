@@ -6,6 +6,11 @@
 </template>
 
 <script setup>
+
+definePageMeta({
+  layout: 'blank'
+});
+
 import {getMatters, subscribeToMatters} from "~/services/matters/index.ts";
 import {toast} from "vue-sonner";
 import { pb as pocketbase } from '@/lib/pocketbase.ts';

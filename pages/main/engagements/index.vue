@@ -76,7 +76,19 @@ function onLibraryChanged() { /* no-op: create flow reloads templates on open */
 
 // ── Create flow (multi-step Drawer on mobile, Dialog on desktop) ─────────────
 const createOpen = ref(false);
-function openCreate() { createOpen.value = true; }
+// Set only by the library's "Use →" button; cleared for a plain "New engagement"
+// so the flow opens on the picker rather than the last-used playbook.
+const createTemplateId = ref('');
+function openCreate() { createTemplateId.value = ''; createOpen.value = true; }
+
+// The library closes itself before emitting, so the create Dialog/Drawer doesn't
+// stack on the Sheet.
+function onUsePlaybook(templateId: string) {
+  createTemplateId.value = templateId;
+  // Let the Sheet finish its exit animation first: opening a second overlay while
+  // the first is still unmounting fights over the body scroll lock.
+  setTimeout(() => { createOpen.value = true; }, 200);
+}
 
 // ── Multi-select + delete ──────────────────────────────────────────────────
 // Mirrors the Matters grid: long-press (or the "Select" toggle) enters a
@@ -259,9 +271,13 @@ async function deleteSelected() {
       </div>
     </template>
 
-    <SharedEngagementsCreateEngagement v-model:open="createOpen" />
+    <SharedEngagementsCreateEngagement v-model:open="createOpen" :template-id="createTemplateId" />
 
-    <SharedEngagementsPlaybookLibrary v-model:open="libraryOpen" @changed="onLibraryChanged" />
+    <SharedEngagementsPlaybookLibrary
+      v-model:open="libraryOpen"
+      @changed="onLibraryChanged"
+      @use="onUsePlaybook"
+    />
 
     <!-- Floating selection bar (mirrors the Matters grid): count + Select All +
          bulk delete + cancel. -->

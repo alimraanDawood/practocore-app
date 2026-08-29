@@ -51,13 +51,13 @@ import { ref, computed, watch } from 'vue';
 import { useVModel } from '@vueuse/core';
 import { toast } from 'vue-sonner';
 import { LoaderIcon } from 'lucide-vue-next';
-import { updateMatter } from '~/services/matters';
+import { updateMatter, coerceOpposingCounsel } from '~/services/matters';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '~/components/ui/sheet';
 import { Button } from '~/components/ui/button';
 
 const props = defineProps<{
   matter: any;
-  opposingCounsel?: any[];
+  opposingCounsel?: any;
   /** Optional controlled open state — lets a parent (e.g. a deep link) drive the sheet. */
   open?: boolean;
 }>();
@@ -78,7 +78,9 @@ const _opposingCounsel = ref<any[]>([]);
 
 // Initialize local state when props change or sheet opens
 const initializeState = () => {
-  _opposingCounsel.value = props.opposingCounsel ? JSON.parse(JSON.stringify(props.opposingCounsel)) : [];
+  // Coerced, so a matter still holding the legacy bare-string value opens as one
+  // named lawyer rather than a broken list — and saving repairs the column.
+  _opposingCounsel.value = JSON.parse(JSON.stringify(coerceOpposingCounsel(props.opposingCounsel)));
 };
 
 // Watch for sheet opening to reset state

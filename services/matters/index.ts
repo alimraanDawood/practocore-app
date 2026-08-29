@@ -4,6 +4,82 @@ import { pb as pocketbase, SERVER_URL} from '~/lib/pocketbase';
 import { track } from '~/utils/analytics';
 
 
+/**
+ * A matter's lifecycle state. Empty is treated as 'active' everywhere: rows written
+ * before the status migration must read as live, never as closed.
+ */
+export type MatterStatus = 'active' | 'closed' | 'archived';
+
+/** Lifecycle values the matters list can filter by; 'all' disables the filter. */
+export type MatterStatusFilter = MatterStatus | 'all';
+
+export const MATTER_STATUS_LABELS: Record<MatterStatus, string> = {
+    active: 'Active',
+    closed: 'Closed',
+    archived: 'Archived',
+};
+
+/** Reads a matter's status, defaulting a missing or empty value to 'active'. */
+export function matterStatusOf(matter: any): MatterStatus {
+    const s = matter?.status;
+    return s === 'closed' || s === 'archived' ? s : 'active';
+}
+
+/** One opposing-counsel entry as stored on a matter. */
+export interface OpposingCounsel {
+    id?: string;
+    name: string;
+    firm?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+}
+
+/**
+ * Reads a matter's opposingCounsel as a list.
+ *
+ * The column has historically held two shapes: the list of lawyer objects the
+ * editor writes, and a bare string that an older AI write path stored. Rendering
+ * a string with v-for iterates its CHARACTERS — one empty card per letter — so
+ * every read goes through here. Mirrors loadCounsel in the Go tools package; the
+ * value is repaired in the database the next time the matter's counsel is saved.
+ */
+export function coerceOpposingCounsel(value: any): OpposingCounsel[] {
+    if (!value) return [];
+    if (typeof value === 'string') {
+        const name = value.trim();
+        return name ? [{ name }] : [];
+    }
+    if (!Array.isArray(value)) return [];
+    return value.filter((e) => e && typeof e === 'object' && typeof e.name === 'string');
+}
+
+/**
+ * Escapes a value for interpolation into a PocketBase filter string literal.
+ * Without it an apostrophe in a case name ("O'Brien v Nakato") closes the literal
+ * early and the whole filter is rejected or silently mis-parsed.
+ */
+export function escapeFilterValue(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+/**
+ * Sets a matter's lifecycle status. Closing records when and why; reopening clears
+ * both. Reminder stand-down is the backend's job (see set_matter_status) — this is
+ * the direct-manipulation path, which only moves the file's own state.
+ */
+export async function setMatterStatus(matterId: string, status: MatterStatus, reason?: string) {
+    const data: Record<string, any> = { status };
+    if (status === 'active') {
+        data.closedAt = null;
+        data.closureReason = '';
+    } else {
+        data.closedAt = new Date().toISOString().slice(0, 10);
+        if (reason !== undefined) data.closureReason = reason;
+    }
+    return updateMatter(matterId, data);
+}
+
 export async function getMatters(page: number, perPage: number, options: { filter?: string, sort?: string, expand?: string }) {
     // Use optimized backend route that fetches everything in one request
     const params = new URLSearchParams({
@@ -304,6 +380,7 @@ export async function updateMatterFields(
  * Ad-hoc deadlines — rows the firm added to a matter itself (origin: 'adhoc'),
  * as opposed to the court deadlines generated from the matter's procedure.
  * Only ad-hoc rows can be edited or deleted; the backend refuses the rest.
+ * Renaming is the exception and works on every row — see renameDeadline below.
  */
 export interface AdhocDeadlineInput {
     name: string
@@ -350,6 +427,26 @@ export async function completeAdhocDeadline(deadlineId: string, undo = false) {
     return await fetch(`${SERVER_URL}/api/practocore/deadlines/adhoc/${deadlineId}/complete`, {
         method: 'POST',
         body: JSON.stringify({ undo }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+/**
+ * Rename any deadline — statutory, court or ad-hoc alike.
+ *
+ * Separate from updateAdhocDeadline because it is not an ad-hoc operation: it
+ * writes `label`, a display override, and never `name`. The rule's own wording
+ * (or the registry's, for a court sitting) stays on the row, which is what keeps
+ * this safe on a deadline nobody may otherwise touch. Pass an empty string to
+ * clear the override and go back to the canonical name.
+ */
+export async function renameDeadline(deadlineId: string, label: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/label/${deadlineId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ label }),
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'

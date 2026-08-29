@@ -1,24 +1,30 @@
 <template>
-  <div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-5">
     <!-- Party Roles -->
     <div
       v-for="role in partyRoles"
       :key="role.id"
       class="flex flex-col gap-3"
     >
-      <div class="flex flex-row items-center justify-between">
-        <div>
-          <h3 class="font-semibold text-sm">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+          <h3 class="font-semibold text-sm break-words">
             {{ role.labels.plural || role.name }}
-            <span v-if="role.memberCount.minimum" class="text-muted-foreground text-xs font-normal">
-              (Min: {{ role.memberCount.minimum }})
-            </span>
           </h3>
-          <p v-if="role.memberCount.minimum" class="text-xs text-muted-foreground">
-            At least {{ role.memberCount.minimum }} {{ role.labels.singular || role.name }} required
+          <!-- The minimum is stated once, here — it used to appear three times
+               per role (beside the title, under it, and again in an empty-state
+               box). It turns red while the role is short, so collapsing the three
+               into one didn't lose the signal that someone is still needed. -->
+          <p
+            v-if="role.memberCount.minimum"
+            class="text-xs"
+            :class="(modelValue[role.id]?.length || 0) < role.memberCount.minimum
+              ? 'text-destructive' : 'text-muted-foreground'"
+          >
+            At least {{ role.memberCount.minimum }} required
           </p>
         </div>
-        <Button variant="secondary" size="sm" @click="addPartyMember(role.id, role.name)">
+        <Button variant="secondary" size="sm" class="w-full sm:w-auto" @click="addPartyMember(role.id, role.name)">
           <Plus class="size-3 mr-1" /> Add {{ role.labels.singular || role.name }}
         </Button>
       </div>
@@ -107,17 +113,6 @@
               </div>
             </CollapsibleContent>
           </Collapsible>
-        </div>
-
-        <!-- Empty State -->
-        <div
-          v-if="!modelValue[role.id]?.length"
-          class="text-xs text-muted-foreground italic p-3 border border-dashed rounded-lg text-center"
-        >
-          No {{ role.labels.plural || role.name }} added yet.
-          <span v-if="role.memberCount.minimum" class="text-destructive block mt-1">
-            Please add at least {{ role.memberCount.minimum }}.
-          </span>
         </div>
       </div>
     </div>

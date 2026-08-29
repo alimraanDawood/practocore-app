@@ -1,76 +1,6 @@
 <template>
     <div class="flex flex-col w-full h-full overflow-y-auto lg:overflow-y-hidden border-x">
         <div class="flex flex-col h-full w-full">
-            <DefineSearchFilterTemplate>
-                <div class="flex flex-row items-center gap-2 w-full">
-                    <InputGroup class="bg-background lg:w-fit">
-                        <InputGroupInput v-model="query" placeholder="Search..." />
-                        <InputGroupAddon>
-                            <Search />
-                        </InputGroupAddon>
-                        <InputGroupAddon v-if="query.length > 0" align="inline-end">
-                            {{ matters.totalItems }} results
-                        </InputGroupAddon>
-                    </InputGroup>
-
-                    <Dialog>
-                        <DialogTrigger>
-                            <Button class="hidden lg:flex" variant="outline">
-                                <span>{{ sortLabel?.label }}</span>
-                                <SortAsc v-if="sortLabel?.asc" />
-                                <SortDesc v-else />
-                            </Button>
-
-                            <Button class="flex lg:hidden" size="icon" variant="outline" aria-label="Sort matters">
-                                <SortAsc v-if="sortLabel?.asc" />
-                                <SortDesc v-else />
-                            </Button>
-                        </DialogTrigger>
-
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Sort Matters</DialogTitle>
-                            </DialogHeader>
-
-                            <div class="flex flex-col space-y-3 w-full p-3">
-                                <RadioGroup :model-value="sort" @update:model-value="v => sort = v">
-                                    <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="created" value="created" />
-                                        <SortAsc class="size-4" />
-                                        <Label for="created">Date Created (Oldest First)</Label>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="-created" value="-created" />
-                                        <SortDesc class="size-4" />
-                                        <Label for="-created">Date Created (Newest First)</Label>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="updated" value="updated" />
-                                        <SortAsc class="size-4" />
-                                        <Label for="updated">Last Updated (Oldest First)</Label>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="-updated" value="-updated" />
-                                        <SortDesc class="size-4" />
-                                        <Label for="-updated">Last Updated (Newest First)</Label>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="name" value="name" />
-                                        <SortAsc class="size-4" />
-                                        <Label for="name">Name (A-Z)</Label>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <RadioGroupItem id="-name" value="-name" />
-                                        <SortDesc class="size-4" />
-                                        <Label for="-name">Name (Z-A)</Label>
-                                    </div>
-                                </RadioGroup>
-                            </div>
-                        </DialogContent>
-                    </Dialog>
-                </div>
-            </DefineSearchFilterTemplate>
-
             <DefinePaginationTemplate>
                 <div v-if="(mattersStore?.totalItems / mattersStore?.perPage) > 1"
                     class="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t">
@@ -117,85 +47,104 @@
             </DefinePaginationTemplate>
 
             <div class="flex flex-col w-full h-full">
-                <div class="flex flex-row items-center p-3 border-b justify-between">
-                    <div class="flex items-center gap-2">
-                        <SidebarTrigger class="lg:hidden" />
-                        <span class="font-semibold text-xl ibm-plex-serif">Your Matters</span>
-                        <span v-if="_offlineFallback" class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                            <WifiOff class="size-3" /> Cached
-                        </span>
+                <!-- Header -->
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b p-3">
+                    <div class="flex flex-col gap-1">
+                        <h1 class="text-xl font-semibold flex items-center gap-2 ibm-plex-serif">
+                            <SidebarTrigger class="lg:hidden" />
+                            Your Matters
+                            <span
+                                v-if="_offlineFallback"
+                                class="flex items-center gap-1 text-xs font-normal text-amber-600 dark:text-amber-400"
+                            >
+                                <WifiOff class="size-3" /> Cached
+                            </span>
+                        </h1>
+                        <p class="text-sm text-muted-foreground">
+                            Court cases, and the deadlines the rules compute for them.
+                        </p>
                     </div>
 
-                    <div class="flex flex-row gap-3 items-center">
-                        <ReuseSearchFilterTemplate class="hidden lg:flex" />
+                    <div class="flex flex-row lg:items-center gap-2 w-full lg:w-fit">
+                        <!-- Hidden on mobile, where a long press enters selection. -->
+                        <Button
+                            v-if="matters?.items?.length > 0"
+                            :variant="selection.active ? 'secondary' : 'outline'"
+                            class="hidden lg:flex"
+                            @click="toggleSelectionMode"
+                        >
+                            <ListChecks class="size-4 mr-1.5" />
+                            {{ selection.active ? 'Cancel' : 'Select' }}
+                        </Button>
 
-                        <Tabs v-model="displayMode" class="hidden lg:flex">
-                          <TabsList>
-                            <TabsTrigger value="grid">
-                              <Grid2X2 /> Grid
-                            </TabsTrigger>
-                            <TabsTrigger value="table">
-                              <Table /> Table
-                            </TabsTrigger>
-                          </TabsList>
-                        </Tabs>
+                        <Button variant="outline" class="flex-1 lg:flex-none" @click="procedureLibraryOpen = true">
+                            <Scale class="size-4 mr-1.5" />
+                            Procedures
+                        </Button>
 
-                        <div class="flex-row gap-2 items-center hidden lg:flex">
-                          <Button
-                              v-if="matters?.items?.length > 0"
-                              size="sm"
-                              :variant="selection.active ? 'secondary' : 'outline'"
-                              @click="toggleSelectionMode"
-                          >
-                              <ListChecks class="size-4" />
-                              {{ selection.active ? 'Cancel' : 'Select' }}
-                          </Button>
-
-                          <Button
-                              v-if="hasPermission('canCreateMatters')"
-                              variant="outline"
-                              :disabled="!!createDisabledReason"
-                              :title="createDisabledReason"
-                              @click="navigateTo('/main/eccmis')"
-                          >
-                              <Download /> Import
-                          </Button>
-
-                          <Button
-                              v-if="hasPermission('canCreateMatters')"
-                              @click="navigateTo('/main/matters/create?next=/main/matters')"
-                              :disabled="!!createDisabledReason"
-                              :title="createDisabledReason"
-                          >
-                              <Plus /> Add Matter
-                          </Button>
-                        </div>
+                        <Button
+                            v-if="hasPermission('canCreateMatters')"
+                            class="flex-1 lg:flex-none"
+                            :disabled="!!createDisabledReason"
+                            :title="createDisabledReason"
+                            @click="createOpen = true"
+                        >
+                            <Plus class="size-4 mr-1.5" />
+                            Add Matter
+                        </Button>
                     </div>
                 </div>
 
-              <div class="flex-row gap-2 items-center px-3 py-2 border-b justify-between flex lg:hidden">
-                <Button
-                    v-if="matters?.items?.length > 0"
-                    :variant="selection.active ? 'secondary' : 'outline'"
-                    @click="toggleSelectionMode"
-                >
-                  <ListChecks class="size-4" />
-                  {{ selection.active ? 'Cancel' : 'Select' }}
-                </Button>
+                <!-- Search, status, sort -->
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3 p-3 border-b">
+                    <div class="relative w-full sm:max-w-xs">
+                        <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
+                        <Input v-model="query" placeholder="Search matters…" class="pl-9" />
+                        <span
+                            v-if="query.length > 0"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground"
+                        >
+                            {{ matters?.totalItems }} results
+                        </span>
+                    </div>
 
-                <Button
-                    v-if="hasPermission('canCreateMatters')"
-                    @click="navigateTo('/main/matters/create?next=/main/matters')"
-                    :disabled="!!createDisabledReason"
-                    :title="createDisabledReason"
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <Button
+                            v-for="f in statusFilters"
+                            :key="f.value"
+                            size="sm"
+                            :variant="statusFilter === f.value ? 'secondary' : 'ghost'"
+                            @click="statusFilter = f.value"
+                        >
+                            {{ f.label }}
+                        </Button>
+                    </div>
 
-                >
-                  <Plus /> Add Matter
-                </Button>
-              </div>
+                    <Dialog v-if="false">
+                        <DialogTrigger as-child>
+                            <Button variant="ghost" size="sm" class="gap-1.5 sm:ml-auto" aria-label="Sort matters">
+                                <SortAsc v-if="sortLabel?.asc" class="size-4" />
+                                <SortDesc v-else class="size-4" />
+                                <span class="hidden md:inline">{{ sortLabel?.label }}</span>
+                                <span class="md:hidden">Sort</span>
+                            </Button>
+                        </DialogTrigger>
 
-                <div class="flex flex-col p-3 border-b gap-2 lg:hidden">
-                  <ReuseSearchFilterTemplate />
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Sort matters</DialogTitle>
+                            </DialogHeader>
+
+                            <RadioGroup :model-value="sort" class="flex flex-col gap-3 p-1" @update:model-value="v => sort = v">
+                                <div v-for="o in sortOptions" :key="o.value" class="flex items-center gap-2">
+                                    <RadioGroupItem :id="o.value" :value="o.value" />
+                                    <SortAsc v-if="o.asc" class="size-4 text-muted-foreground" />
+                                    <SortDesc v-else class="size-4 text-muted-foreground" />
+                                    <Label :for="o.value" class="font-normal cursor-pointer">{{ o.label }}</Label>
+                                </div>
+                            </RadioGroup>
+                        </DialogContent>
+                    </Dialog>
                 </div>
 
                 <XyzTransition mode="out-in" xyz="fade">
@@ -206,7 +155,6 @@
                     <template v-else-if="matters !== null && matters?.items?.length > 0">
                         <div class="flex flex-col w-full h-full overflow-y-hidden">
                             <div
-                                v-if="displayMode === 'grid' || $viewport.isLessThan('customxs')"
                                 role="list"
                                 aria-label="Matters"
                                 class="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 h-full gap-3 p-3 content-start overflow-y-scroll">
@@ -243,14 +191,6 @@
                                 </div>
                             </div>
 
-                            <div v-else class="flex flex-col w-full h-full p-3">
-                                <SharedMattersMatterTable
-                                    :columns="columns"
-                                    :data="matters?.items || []"
-                                    @selection-change="onTableSelectionChange"
-                                />
-                            </div>
-
                             <div class="hidden sm:block">
                                 <ReusePaginationTemplate />
                             </div>
@@ -265,7 +205,7 @@
                                 <span class="font-semibold text-foreground">No matters yet</span>
                                 <span class="text-sm text-muted-foreground">Add your first matter to start tracking litigation deadlines.</span>
                             </div>
-                            <Button v-if="hasPermission('canCreateMatters')" @click="navigateTo('/main/matters/create?next=/main/matters')" :disabled="!!createDisabledReason" :title="createDisabledReason">
+                            <Button v-if="hasPermission('canCreateMatters')" @click="createOpen = true" :disabled="!!createDisabledReason" :title="createDisabledReason">
                                 <Plus class="size-4" />
                                 Add your first matter
                             </Button>
@@ -273,6 +213,12 @@
                     </div>
                 </XyzTransition>
             </div>
+
+            <SharedMattersProcedureLibrary v-model:open="procedureLibraryOpen" />
+
+            <!-- Compact two-step create flow. The full-page flow at
+                 /main/matters/create is still reachable directly and unchanged. -->
+            <SharedMattersCreateMatterDialog v-model:open="createOpen" />
 
             <XyzTransition xyz="fade down">
                 <div v-if="selection.active"
@@ -323,13 +269,12 @@
 
 <script setup lang="ts">
 import { vOnLongPress } from '@vueuse/components'
-import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, Table, Grid2X2, ListChecks, WifiOff, Download } from 'lucide-vue-next';
+import { Scale, SortAsc, SortDesc, Check, Trash, X, Plus, Search, ChevronLeft, ChevronRight, ListChecks, WifiOff } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { deleteMatter } from '~/services/matters';
 import { storeToRefs } from 'pinia';
 import { useMattersStore } from '@/stores/matters';
 import { useDashboardStore } from '~/stores/dashboard';
-import { columns } from '@/components/shared/Matters/MatterTable/columns';
 import { Capacitor } from "@capacitor/core";
 import { Haptics } from "@capacitor/haptics";
 
@@ -359,14 +304,30 @@ definePageMeta({
   layout: 'default'
 })
 
-const [DefineSearchFilterTemplate, ReuseSearchFilterTemplate] = createReusableTemplate();
 const [DefinePaginationTemplate, ReusePaginationTemplate] = createReusableTemplate();
+
+const statusFilters: { value: string; label: string }[] = [
+    { value: 'active', label: 'Active' },
+    { value: 'closed', label: 'Closed' },
+    { value: 'archived', label: 'Archived' },
+    { value: 'all', label: 'All' },
+];
+
+const sortOptions: { value: string; label: string; asc: boolean }[] = [
+    { value: '-created', label: 'Created (Newest)', asc: false },
+    { value: 'created', label: 'Created (Oldest)', asc: true },
+    { value: '-updated', label: 'Updated (Newest)', asc: false },
+    { value: 'updated', label: 'Updated (Oldest)', asc: true },
+    { value: 'name', label: 'Name (A-Z)', asc: true },
+    { value: '-name', label: 'Name (Z-A)', asc: false },
+];
+
+const procedureLibraryOpen = ref(false);
+const createOpen = ref(false);
 
 const mattersStore = useMattersStore();
 const dashboardStore = useDashboardStore();
-const { result: matters, loading, sort, query, selection, activeTab } = storeToRefs(mattersStore);
-
-const displayMode = useLocalStorage('matters-display-mode', 'grid')
+const { result: matters, loading, sort, query, selection, activeTab, statusFilter } = storeToRefs(mattersStore);
 
 // Precomputed Set for O(1) selection lookups in template
 const selectedIds = computed(() => new Set(selection.value.selected.map((p: any) => p.id)));
@@ -455,21 +416,15 @@ watch(activeTab, () => {
     mattersStore.fetchMatters();
 })
 
+watch(statusFilter, () => {
+    mattersStore.page = 1;
+    mattersStore.fetchMatters();
+})
+
 watch(query, () => {
     mattersStore.page = 1;
     mattersStore.fetchMatters();
 });
-
-const onTableSelectionChange = (selectedRows: any[]) => {
-    if (selectedRows.length > 0) {
-        selection.value.active = true;
-        selection.value.selected = selectedRows;
-    } else {
-        selection.value.active = false;
-        selection.value.selected = [];
-    }
-    triggerSelectionHaptic();
-}
 
 const onMatterTap = (matter: any) => {
     if (selectionJustActivated) return;

@@ -2,7 +2,7 @@
 import {
   Loader2, Wand2, Copy, Trash2, ChevronDown, ChevronRight, Layers,
   CalendarClock, FileText, Milestone, Lock, Users, Globe, Plus, Bell, BellOff,
-  History, RotateCcw,
+  History, RotateCcw, Settings2, ArrowRight,
 } from 'lucide-vue-next';
 import {
   listEngagementTemplates, duplicateEngagementTemplate, deleteEngagementTemplate,
@@ -13,7 +13,7 @@ import {
 import { pb } from '~/lib/pocketbase';
 
 const open = defineModel<boolean>('open', { default: false });
-const emit = defineEmits<{ changed: [] }>();
+const emit = defineEmits<{ changed: []; use: [templateId: string] }>();
 
 const router = useRouter();
 const { hasPermission } = usePermissions();
@@ -95,6 +95,84 @@ async function duplicate(t: EngagementTemplate) {
   }
 }
 
+// ── Manage menu ──────────────────────────────────────────────────────────────
+// The per-row actions (edit / history / duplicate / delete) used to sit as four
+// bare icon buttons in the header, which on a phone left the name two words wide
+// and gave no hint what any glyph did. They now live behind one Manage control —
+// a Drawer on mobile, a Popover anchored to the button on desktop — so the row
+// carries just the two things you actually reach for: manage, or use.
+const manageFor = ref<EngagementTemplate | null>(null);
+// One markup definition for the action list, reused by both shells.
+const [DefineManageList, ReuseManageList] = createReusableTemplate<{ template: EngagementTemplate }>();
+
+interface ManageAction {
+  key: string;
+  label: string;
+  hint?: string;
+  icon: any;
+  danger?: boolean;
+  disabled?: boolean;
+  run: () => void;
+}
+
+function manageActions(t: EngagementTemplate): ManageAction[] {
+  const editable = canEditTemplate(t);
+  const actions: ManageAction[] = [
+    {
+      key: 'edit',
+      label: 'Edit in Studio',
+      hint: !editable
+        ? 'A colleague authored this firm playbook — duplicate it, or ask an administrator for the manage-templates permission'
+        : t.isPublic ? 'Creates your own copy to change' : 'Change stages, milestones and documents',
+      icon: Wand2,
+      disabled: !editable,
+      run: () => editInStudio(t.id),
+    },
+  ];
+  if (!t.isPublic) {
+    actions.push({
+      key: 'history',
+      label: 'Version history',
+      hint: 'Review earlier revisions and restore one',
+      icon: History,
+      run: () => openHistory(t),
+    });
+  }
+  actions.push({
+    key: 'duplicate',
+    label: 'Duplicate',
+    hint: 'Make an editable copy of your own',
+    icon: Copy,
+    disabled: busyId.value === t.id,
+    run: () => duplicate(t),
+  });
+  if (canManageTemplate(t)) {
+    actions.push({
+      key: 'delete',
+      label: 'Delete',
+      hint: "Engagements already created from it aren't affected",
+      icon: Trash2,
+      danger: true,
+      run: () => { deleteTarget.value = t; },
+    });
+  }
+  return actions;
+}
+
+function runManageAction(a: ManageAction) {
+  if (a.disabled) return;
+  manageFor.value = null;
+  a.run();
+}
+
+// Starting work from a playbook hands the id up to the page, which opens the
+// create flow with it already picked — the library itself closes, since the
+// create Dialog/Drawer would otherwise stack on top of this Sheet.
+function useTemplate(t: EngagementTemplate) {
+  open.value = false;
+  emit('use', t.id);
+}
+
 // ── Version history ──────────────────────────────────────────────────────────
 // Editing a playbook rewrites it wholesale, so history is what makes editing safe
 // to attempt. Loaded lazily — only when someone actually opens it.
@@ -157,6 +235,26 @@ async function confirmDelete() {
 </script>
 
 <template>
+  <!-- Shared body for the manage Popover (desktop) and Drawer (mobile). -->
+  <DefineManageList v-slot="{ template: t }">
+    <div class="flex flex-col">
+      <button
+        v-for="a in manageActions(t)" :key="a.key"
+        type="button"
+        class="flex items-start gap-2.5 rounded-md p-2 text-left transition-colors disabled:opacity-50 disabled:pointer-events-none"
+        :class="a.danger ? 'text-destructive hover:bg-destructive/10' : 'hover:bg-muted'"
+        :disabled="a.disabled"
+        @click="runManageAction(a)"
+      >
+        <component :is="a.icon" class="mt-0.5 size-4 shrink-0" />
+        <span class="min-w-0">
+          <span class="block text-sm">{{ a.label }}</span>
+          <span v-if="a.hint" class="block text-[11px] leading-snug text-muted-foreground">{{ a.hint }}</span>
+        </span>
+      </button>
+    </div>
+  </DefineManageList>
+
   <Sheet v-model:open="open">
     <SheetContent side="right" class="w-full sm:max-w-lg p-0 flex flex-col">
       <SheetHeader class="p-4 border-b">
@@ -211,34 +309,37 @@ async function confirmDelete() {
                     </span>
                   </div>
                 </div>
-                <div class="flex items-center gap-0.5 shrink-0">
-                  <Button
-                    size="icon-sm" variant="ghost"
-                    :disabled="!canEditTemplate(t)"
-                    :title="!canEditTemplate(t)
-                      ? 'A colleague authored this firm playbook — duplicate it to make your own, or ask an administrator for the manage-templates permission'
-                      : t.isPublic ? 'Edit in Studio (creates your own copy)' : 'Edit in Studio'"
-                    @click="editInStudio(t.id)"
+                <div class="flex items-center gap-1 shrink-0">
+                  <!-- Desktop: the manage menu hangs off the button as a Popover.
+                       Mobile falls through to the shared Drawer below. -->
+                  <Popover
+                    v-if="$viewport.isGreaterOrEquals('customxs')"
+                    :open="manageFor?.id === t.id"
+                    @update:open="(v) => { manageFor = v ? t : null; }"
                   >
-                    <Wand2 class="size-3.5" />
-                  </Button>
+                    <PopoverTrigger as-child>
+                      <Button size="icon-sm" variant="ghost" title="Manage playbook">
+                        <Settings2 class="size-3.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" class="w-64 p-1">
+                      <ReuseManageList :template="t" />
+                    </PopoverContent>
+                  </Popover>
                   <Button
-                    v-if="!t.isPublic"
-                    size="icon-sm" variant="ghost" title="Version history" @click="openHistory(t)"
+                    v-else
+                    size="icon-sm" variant="ghost" title="Manage playbook"
+                    @click="manageFor = t"
                   >
-                    <History class="size-3.5" />
+                    <Settings2 class="size-3.5" />
                   </Button>
-                  <Button size="icon-sm" variant="ghost" title="Duplicate" :disabled="busyId === t.id" @click="duplicate(t)">
-                    <Loader2 v-if="busyId === t.id" class="size-3.5 animate-spin" />
-                    <Copy v-else class="size-3.5" />
-                  </Button>
+
                   <Button
-                    v-if="canManageTemplate(t)"
-                    size="icon-sm" variant="ghost" title="Delete"
-                    class="text-muted-foreground hover:text-destructive"
-                    @click="deleteTarget = t"
+                    size="sm" variant="secondary" class="h-7 gap-1 px-2 text-xs"
+                    title="Start an engagement from this playbook"
+                    @click="useTemplate(t)"
                   >
-                    <Trash2 class="size-3.5" />
+                    Use <ArrowRight class="size-3" />
                   </Button>
                 </div>
               </div>
@@ -338,6 +439,23 @@ async function confirmDelete() {
       </div>
     </SheetContent>
   </Sheet>
+
+  <!-- Mobile: the same actions as a bottom Drawer. Desktop uses the per-row
+       Popover above, so this only mounts on small viewports. -->
+  <Drawer
+    v-if="!$viewport.isGreaterOrEquals('customxs')"
+    :open="!!manageFor" @update:open="(v) => { if (!v) manageFor = null; }"
+  >
+    <DrawerContent>
+      <DrawerHeader class="text-left">
+        <DrawerTitle class="text-base">Manage playbook</DrawerTitle>
+        <DrawerDescription class="truncate">{{ manageFor?.name }}</DrawerDescription>
+      </DrawerHeader>
+      <div class="px-3 pb-6">
+        <ReuseManageList v-if="manageFor" :template="manageFor" />
+      </div>
+    </DrawerContent>
+  </Drawer>
 
   <AlertDialog :open="!!deleteTarget" @update:open="(v) => { if (!v) deleteTarget = null; }">
     <AlertDialogContent>

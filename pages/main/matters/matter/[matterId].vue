@@ -68,7 +68,19 @@
 
         <!-- Title -->
         <div class="xs:flex flex-col w-full hidden p-3">
-          <Badge variant="secondary" v-if="matter?.parent">Application</Badge>
+          <div class="flex flex-row items-center gap-2">
+            <Badge variant="secondary" v-if="matter?.parent">Application</Badge>
+            <Badge
+              v-if="matterStatusOf(currentMatterOrApplication) !== 'active'"
+              variant="outline"
+              class="gap-1.5"
+            >
+              {{ MATTER_STATUS_LABELS[matterStatusOf(currentMatterOrApplication)] }}
+              <span v-if="currentMatterOrApplication?.closureReason" class="text-muted-foreground font-normal">
+                · {{ currentMatterOrApplication.closureReason }}
+              </span>
+            </Badge>
+          </div>
           <span class="text-3xl font-semibold ibm-plex-serif">{{ currentMatterOrApplication?.name }}</span>
           <span class="text-sm ibm-plex-sans text-muted-foreground">{{ currentMatterOrApplication?.caseNumber }}</span>
         </div>
@@ -89,6 +101,12 @@
               </Badge>
             </Button>
           </SharedMattersMemberManagement>
+
+          <SharedMattersMatterStatus
+            :matter="currentMatterOrApplication"
+            :can-manage="isSupervisor || currentMatterOrApplication?.owner === currentUser?.id"
+            @updated="reloadMatter"
+          />
 
           <SharedMattersOpposingCounselMatterOpposingCounsel @updated="reloadMatter" :matter="currentMatterOrApplication"/>
           <SharedMattersCourtOfficersMatterCourtOfficers @updated="reloadMatter" :matter="currentMatterOrApplication"/>
@@ -185,6 +203,7 @@
           <Tabs class="w-full h-full" v-model="activeTab">
             <TabsList>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="milestones">Milestones</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="details">Details</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
               <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="drafts">AI Drafts</TabsTrigger>
@@ -384,6 +403,22 @@
             </TabsContent>
 
             <!-- Details — the blueprint's intake fields plus the firm's own -->
+            <!-- L4: the second track, its own tab. A matter's court dates and a
+                 firm's own tasks are different kinds of thing, so they are never
+                 interleaved — reading an internal task as a court date is exactly
+                 the mistake the separation exists to prevent. -->
+            <TabsContent value="milestones">
+              <template v-if="currentMatterOrApplication?.id">
+                <Separator />
+                <div class="flex flex-col gap-3 p-3 max-w-3xl">
+                  <SharedMattersMatterMilestones
+                    :matter-id="currentMatterOrApplication.id"
+                    :can-edit="canEditMatterFields"
+                  />
+                </div>
+              </template>
+            </TabsContent>
+
             <TabsContent value="details">
               <template v-if="currentMatterOrApplication?.id">
                 <Separator />
@@ -465,6 +500,8 @@ import {
   unsubscribeToAllDeadlines,
   unsubscribeToDeadline,
   unsubscribeToMatter,
+  matterStatusOf,
+  MATTER_STATUS_LABELS,
 } from '~/services/matters';
 import { useDebounceFn, useMediaQuery } from '@vueuse/core';
 import { useMattersStore } from '~/stores/matters';
@@ -509,7 +546,9 @@ const assistantHidesDeadlines = computed(
 
 // Tab selection is URL-backed (`?tab=`) so links can deep-link into a matter's
 // Case Documents or AI Drafts (e.g. the assistant handing off to a tab).
-const MATTER_TABS = ['timeline', 'details', 'documents', 'drafts'];
+// Keep in step with the TabsTrigger list above — a value missing here silently
+// falls back to 'timeline', so the tab renders but never selects.
+const MATTER_TABS = ['timeline', 'milestones', 'details', 'documents', 'drafts'];
 const activeTab = computed({
   get() {
     const t = route.query.tab;

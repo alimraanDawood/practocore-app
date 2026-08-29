@@ -12,6 +12,11 @@ export interface DetailField {
   type: 'text' | 'number' | 'boolean' | 'select' | 'date';
   options?: string[];
   required?: boolean;
+  // Optional secondary text shown under the control. Litigation labels are
+  // authored as a question plus the rule it comes from; `hint` is where the
+  // second half goes so the ask stays one line. Nothing writes it to storage —
+  // the create dialog derives it from the label (utils/splitFieldLabel).
+  hint?: string;
 }
 
 // A labelled group of fields. Engagement playbooks declare sections; a litigation

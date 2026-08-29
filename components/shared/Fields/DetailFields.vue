@@ -30,6 +30,12 @@ const props = withDefaults(defineProps<{
   emptyHint?: string;
   /** Hide the Edit affordance for read-only viewers. */
   canEdit?: boolean;
+  /**
+   * Display names for recorded keys that have no field definition. A matter's
+   * trigger date is the case in point: it lives in fieldValues but is not one of
+   * the procedure's intake fields, so only the caller knows what to call it.
+   */
+  labels?: Record<string, string>;
 }>(), {
   sections: () => [],
   extraFields: () => [],
@@ -37,6 +43,7 @@ const props = withDefaults(defineProps<{
   title: 'Details',
   emptyHint: 'Record the facts this matter needs, or add your own fields.',
   canEdit: true,
+  labels: () => ({}),
 });
 
 const emit = defineEmits<{
@@ -73,11 +80,35 @@ const hasAnything = computed(() =>
 
 function displayValue(f: DetailField | undefined, raw: any): string {
   // A boolean always reads as an answer (unset switch = No), matching the editor.
-  if (f?.type === 'boolean') return raw ? 'Yes' : 'No';
+  if (f?.type === 'boolean' || typeof raw === 'boolean') return raw ? 'Yes' : 'No';
   if (raw === undefined || raw === null || raw === '') return '—';
-  if (f?.type === 'date') return new Date(raw).toLocaleDateString();
+  if (f?.type === 'date' || isDateString(raw)) {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+  }
+  // A stored option is often an identifier ("unfair_termination"); nobody chose
+  // to read it that way. Only touch strings that are unmistakably identifiers,
+  // so an authored option ("Yes, served personally") is left exactly as written.
+  if (typeof raw === 'string' && isIdentifier(raw)) return humanise(raw);
   return String(raw);
 }
+
+const isDateString = (v: any) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}(T|$)/.test(v);
+const isIdentifier = (v: string) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(v);
+
+// "f_dismissal_type" → "Dismissal type". The `f_` and `x_` prefixes mark where a
+// field came from (blueprint vs ad-hoc) and mean nothing to a reader.
+function humanise(key: string): string {
+  const words = key.replace(/^[fx]_/, '').replace(/_/g, ' ').trim();
+  if (!words) return key;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// A value with no definition still has a key, and the key is usually a legible
+// name underneath its punctuation. Better than showing the raw id.
+const orphanLabel = (k: string) => props.labels?.[k] || humanise(k);
 
 function startEdit() {
   for (const k of Object.keys(draftValues)) delete draftValues[k];
@@ -171,7 +202,7 @@ function save() {
       <div v-else class="flex flex-col gap-4">
         <div v-for="s in sectionsWithFields" :key="s.id" class="flex flex-col gap-2">
           <h3 v-if="s.label" class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{{ s.label }}</h3>
-          <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <dl class="flex flex-col gap-3 text-sm">
             <div v-for="f in s.fields" :key="f.id">
               <dt class="text-muted-foreground">{{ f.label }}</dt>
               <dd>{{ displayValue(f, values?.[f.id]) }}</dd>
@@ -182,7 +213,7 @@ function save() {
         <!-- Ad-hoc fields added to this record -->
         <div v-if="extraFields.length" class="flex flex-col gap-2">
           <h3 class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Additional details</h3>
-          <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <dl class="flex flex-col gap-3 text-sm">
             <div v-for="f in extraFields" :key="f.id">
               <dt class="text-muted-foreground">{{ f.label }}</dt>
               <dd>{{ displayValue(f, values?.[f.id]) }}</dd>
@@ -192,9 +223,9 @@ function save() {
 
         <!-- Values with no field definition (kept visible, editable-as-text on Edit) -->
         <div v-if="orphanKeys.length" class="flex flex-col gap-2">
-          <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <dl class="flex flex-col gap-3 text-sm">
             <div v-for="k in orphanKeys" :key="k">
-              <dt class="text-muted-foreground">{{ k }}</dt>
+              <dt class="text-muted-foreground">{{ orphanLabel(k) }}</dt>
               <dd>{{ displayValue(undefined, values?.[k]) }}</dd>
             </div>
           </dl>
@@ -230,7 +261,7 @@ function save() {
       <!-- Orphan values, editable as plain text so they aren't lost -->
       <div v-if="orphanKeys.length" class="flex flex-col gap-3">
         <div v-for="k in orphanKeys" :key="k" class="flex flex-col gap-1.5">
-          <Label class="text-sm">{{ k }}</Label>
+          <Label class="text-sm">{{ orphanLabel(k) }}</Label>
           <Input v-model="draftValues[k]" />
         </div>
       </div>

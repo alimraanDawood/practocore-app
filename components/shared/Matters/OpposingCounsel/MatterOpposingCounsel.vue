@@ -167,6 +167,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "~/components/ui/popover";
 import { Sheet, SheetTrigger, SheetContent } from "~/components/ui/sheet";
+import { coerceOpposingCounsel } from "~/services/matters";
 
 interface Props {
   matter: any;
@@ -178,15 +179,12 @@ const emits = defineEmits<{
   updated: [];
 }>();
 
-// Check if matter has opposing counsel
-const hasOpposingCounsel = computed(() => {
-  return props.matter?.opposingCounsel && props.matter.opposingCounsel.length > 0;
-});
+// Get opposing counsel from matter. Coerced rather than read raw: a matter whose
+// column still holds the legacy bare string would otherwise be iterated by
+// character, rendering one empty lawyer card per letter.
+const opposingCounsel = computed(() => coerceOpposingCounsel(props.matter?.opposingCounsel));
 
-// Get opposing counsel from matter
-const opposingCounsel = computed(() => {
-  return props.matter?.opposingCounsel || [];
-});
+const hasOpposingCounsel = computed(() => opposingCounsel.value.length > 0);
 
 // Opposing counsel count
 const opposingCounselCount = computed(() => {

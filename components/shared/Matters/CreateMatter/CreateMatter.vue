@@ -8,7 +8,7 @@
         keep-values
         :validation-schema="toTypedSchema(__formSchema[steps[stepIndex - 1]?.id])"
         :initial-values="{
-          template: { id: template?.id, fields: template?.template?.fields, triggerDatePrompt: '' },
+          template: { id: template?.id, fields: template?.template?.data?.fields ?? template?.template?.fields, triggerDatePrompt: template?.template?.data?.triggerDatePrompt ?? '' },
           members: [],
         }"
         class="h-full flex flex-col w-full"
@@ -371,7 +371,7 @@
   <div v-else-if="hasPermission('canCreateMatters')">
     <!-- DIALOG -->
     <Dialog v-if="$viewport.isGreaterOrEquals('customxs')" v-model:open="open">
-      <DialogTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
+      <DialogTrigger v-if="$slots.default" :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
         <slot />
       </DialogTrigger>
 
@@ -390,7 +390,7 @@
 
     <!-- SHEET -->
     <Drawer v-else v-model:open="open">
-      <DrawerTrigger :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
+      <DrawerTrigger v-if="$slots.default" :disabled="!usePlanActive()?.value?.active" class="disabled:opacity-60">
         <slot />
       </DrawerTrigger>
 
@@ -465,6 +465,14 @@ function onTemplateSelected(t: any) {
   selectedTemplate.value = t;
 }
 
+// Adopt a procedure handed in as a prop, so skipping the picker still populates
+// everything the picker would have set.
+watch(
+  () => props.template,
+  (t) => { if (t?.id) selectedTemplate.value = t; },
+  { immediate: true },
+);
+
 // Single reactive source of truth for party configuration, read from the selected
 // template record (DeadlineTemplates.template.data.parties).
 // After normalizeTemplateRecord, .data always exists regardless of v1/v2 storage shape.
@@ -516,11 +524,16 @@ const steps = computed(() => {
   const hasPartyConfig = hasParties.value;
   const hasOrg = !!getSignedInUser()?.organisation;
 
-  const list: { title: string; id: string; required: boolean }[] = [
-    { title: "Choose Matter Type", id: "matter_type", required: true },
+  const list: { title: string; id: string; required: boolean }[] = [];
+  // Arriving with a procedure already chosen (e.g. "Use this procedure" in the
+  // library) skips the picker rather than showing a step with one answer in it.
+  if (!props.template?.id) {
+    list.push({ title: "Choose Matter Type", id: "matter_type", required: true });
+  }
+  list.push(
     { title: "Timeline", id: "field_values", required: true },
     { title: "Matter Details (optional)", id: "matter_details", required: false },
-  ];
+  );
   if (hasPartyConfig) {
     list.push({ title: "Add Parties (optional)", id: "parties", required: false });
   }
@@ -626,7 +639,10 @@ const __formSchema = computed(() => {
 });
 
 const loading = ref(false);
-const open = ref(false);
+// v-model:open so the flow can be started from elsewhere (the procedure library
+// opens it with a procedure already chosen). Callers that pass nothing keep the
+// old behaviour and drive it entirely through the trigger slot.
+const open = defineModel<boolean>("open", { default: false });
 
 // 🔹 Reset dynamic fields and parties if template changes
 watch(

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getMatters, getMatter, subscribeToMatters } from '~/services/matters';
+import { getMatters, getMatter, subscribeToMatters, escapeFilterValue, type MatterStatusFilter } from '~/services/matters';
 import {toast} from "vue-sonner";
 import { Capacitor } from '@capacitor/core';
 import { db } from '~/lib/db';
@@ -35,6 +35,10 @@ export const useMattersStore = defineStore('matters', {
     query: '' as string,
     sort: '-created' as string,
     activeTab: 'all' as string,
+    // Lifecycle filter. Defaults to 'active' so finished files stop crowding the
+    // list — every matter is backfilled to 'active' by the status migration, so
+    // nothing pre-existing disappears.
+    statusFilter: 'active' as MatterStatusFilter,
     // pagination
     page: 1 as number,
     perPage: 12 as number,
@@ -50,6 +54,7 @@ export const useMattersStore = defineStore('matters', {
     _lastQuery: '' as string,
     _lastSort: '' as string,
     _lastActiveTab: 'all' as string,
+    _lastStatusFilter: 'active' as MatterStatusFilter,
     _offlineFallback: false as boolean
   }),
   getters: {
@@ -59,6 +64,7 @@ export const useMattersStore = defineStore('matters', {
       if (state._lastQuery !== state.query) return true;
       if (state._lastSort !== state.sort) return true;
       if (state._lastActiveTab !== state.activeTab) return true;
+      if (state._lastStatusFilter !== state.statusFilter) return true;
 
       return Date.now() - state.lastFetched > CACHE_TTL;
     },
@@ -119,18 +125,33 @@ export const useMattersStore = defineStore('matters', {
             break;
         }
 
-        // Build search filter if query exists
-        const searchFilter = this.query.trim() ? `name ~ '${this.query}' || caseNumber ~ '${this.query}'` : '';
-
-        // Combine filters
-        let combinedFilter = '';
-        if (searchFilter && tabFilter) {
-          combinedFilter = `${searchFilter} && ${tabFilter}`;
-        } else if (searchFilter) {
-          combinedFilter = searchFilter;
-        } else if (tabFilter) {
-          combinedFilter = tabFilter;
+        // Lifecycle filter. Empty status reads as active so rows written before the
+        // status migration (or by any path that forgets to set it) stay visible.
+        let statusFilter = '';
+        switch (this.statusFilter) {
+          case 'all':
+            statusFilter = '';
+            break;
+          case 'active':
+            statusFilter = `(status = 'active' || status = '' || status = null)`;
+            break;
+          default:
+            statusFilter = `status = '${this.statusFilter}'`;
         }
+
+        // Build search filter if query exists. The query is escaped, not
+        // interpolated raw: an apostrophe in a case name ("O'Brien") would
+        // otherwise terminate the string literal and produce a broken filter.
+        const q = escapeFilterValue(this.query.trim());
+        const searchFilter = q ? `(name ~ '${q}' || caseNumber ~ '${q}')` : '';
+
+        // Parenthesised before joining. Previously the search clause was combined
+        // unbracketed, so `A || B && tab` bound as `A || (B && tab)` and a name
+        // match quietly escaped the personal/organisation filter.
+        const combinedFilter = [searchFilter, tabFilter, statusFilter]
+          .filter(Boolean)
+          .map((f) => `(${f})`)
+          .join(' && ');
 
         const res = await getMatters(this.page, this.perPage, {
           expand: '',
@@ -143,6 +164,7 @@ export const useMattersStore = defineStore('matters', {
         this._lastQuery = this.query;
         this._lastSort = this.sort;
         this._lastActiveTab = this.activeTab;
+        this._lastStatusFilter = this.statusFilter;
         this._offlineFallback = false;
 
         // Update individual matter caches
@@ -155,7 +177,7 @@ export const useMattersStore = defineStore('matters', {
 
         // Write-through to Dexie for offline access
         if (Capacitor.isNativePlatform()) {
-          const fingerprint = `${this.page}-${this.perPage}-${this.sort}-${combinedFilter}-${this.activeTab}`;
+          const fingerprint = `${this.page}-${this.perPage}-${this.sort}-${combinedFilter}-${this.activeTab}-${this.statusFilter}`;
           db.mattersList.put({ fingerprint, data: res, fetchedAt: Date.now() }).catch(() => {});
           const orgId = (pb as any).authStore?.record?.organisation || 'default';
           db.matters.bulkPut(
@@ -168,7 +190,7 @@ export const useMattersStore = defineStore('matters', {
         console.error(e);
         // Offline fallback: serve cached list snapshot from Dexie (native only)
         if (Capacitor.isNativePlatform()) {
-          const fingerprint = `${this.page}-${this.perPage}-${this.sort}-${combinedFilter}-${this.activeTab}`;
+          const fingerprint = `${this.page}-${this.perPage}-${this.sort}-${combinedFilter}-${this.activeTab}-${this.statusFilter}`;
           const cached = await db.mattersList.get(fingerprint);
           if (cached) {
             this.result = cached.data;

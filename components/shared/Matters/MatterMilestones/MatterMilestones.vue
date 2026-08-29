@@ -136,7 +136,7 @@ const dueLabel = (m: EngagementMilestone) =>
       <div class="flex flex-col">
         <span class="text-sm font-semibold ibm-plex-serif">Milestones</span>
         <span class="text-xs text-muted-foreground">
-          Your firm's own steps on this matter. Court deadlines stay on the timeline above.
+          Your firm's own steps on this matter. Court deadlines stay on the Timeline tab.
         </span>
       </div>
       <Button v-if="canEdit && !adding" size="sm" variant="outline" @click="adding = true">
@@ -149,7 +149,7 @@ const dueLabel = (m: EngagementMilestone) =>
     <div v-if="adding" class="flex flex-col gap-2 rounded-lg border border-border p-3">
       <Input v-model="draftLabel" placeholder="e.g. Brief counsel on the WSD" @keyup.enter="add" />
       <div class="flex flex-row items-center gap-2 flex-wrap">
-        <Input v-model="draftDue" type="date" class="w-auto" />
+        <SharedFieldsDatePicker v-model="draftDue" size="sm" clearable placeholder="Due date" />
         <Button
           size="sm"
           :variant="draftRemind ? 'default' : 'outline'"
@@ -210,11 +210,13 @@ const dueLabel = (m: EngagementMilestone) =>
         </div>
 
         <template v-if="canEdit">
-          <Input
-            type="date"
-            class="w-auto h-8 text-xs"
-            :model-value="m.dueDate ? m.dueDate.slice(0, 10) : ''"
+          <SharedFieldsDatePicker
+            size="sm"
+            clearable
+            align="end"
+            placeholder="Set date"
             :disabled="busyId === m.id"
+            :model-value="m.dueDate ? m.dueDate.slice(0, 10) : ''"
             @update:model-value="(v) => changeDate(m, String(v ?? ''))"
           />
           <Button

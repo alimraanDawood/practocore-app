@@ -14,6 +14,12 @@ const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 't
 
 // ── Home summary (assigned to me) ───────────────────────────────────────────
 const uid = computed(() => getSignedInUser()?.id ?? '');
+// Active workspace. Deadlines are read straight from PocketBase, so — unlike the
+// matters half of this card, which goes through /api/practocore/matters and is
+// scoped server-side — nothing here narrows them to the workspace the user is
+// actually in. Scope them the same way the matters endpoint does: personal
+// account => organisation-less matters only, firm => that firm's matters only.
+const orgId = computed(() => getSignedInUser()?.organisation ?? '');
 const homeLoading = ref(false);
 
 interface HomeDeadline {
@@ -40,6 +46,9 @@ function startOfTodayMs(): number {
   return d.getTime();
 }
 
+const workspaceScope = computed(() =>
+  orgId.value ? `matter.organisation = "${orgId.value}"` : 'matter.organisation = null');
+
 async function loadHome() {
   const id = uid.value;
   if (!id) return;
@@ -50,7 +59,7 @@ async function loadHome() {
     const horizonStr = `${horizon.toISOString().slice(0, 10)} 23:59:59`;
     const [dls, matters] = await Promise.all([
       getAllDeadlines({
-        filter: `assignees ~ "${id}" && (status = "pending" || status = "overdue") && date != "" && date <= "${horizonStr}"`,
+        filter: `${workspaceScope.value} && assignees ~ "${id}" && (status = "pending" || status = "overdue") && date != "" && date <= "${horizonStr}"`,
         sort: 'date',
         expand: 'matter',
         fields: 'id,name,date,status,matter,expand.matter.id,expand.matter.name',

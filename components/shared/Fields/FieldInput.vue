@@ -15,6 +15,7 @@ const model = defineModel<any>();
 // unlabelled input to a screen reader (and clicking the label does nothing) —
 // which matters more here than usual, since every label is user-authored.
 const inputId = computed(() => `detail-field-${props.field.id}`);
+
 </script>
 
 <template>
@@ -36,11 +37,21 @@ const inputId = computed(() => `detail-field-${props.field.id}`);
       :model-value="model ?? ''"
       @update:model-value="(v: any) => (model = v)"
     >
-      <SelectTrigger :id="inputId">
+      <!-- w-full is not cosmetic: shadcn's trigger is w-fit by default, and the
+           content is capped at max-w-[--reka-select-trigger-width], so a trigger
+           sized to the word "Select…" clips every option in the list. -->
+      <SelectTrigger :id="inputId" class="w-full">
         <SelectValue placeholder="Select…" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</SelectItem>
+        <SelectItem
+          v-for="opt in field.options || []"
+          :key="opt"
+          :value="opt"
+          class="whitespace-normal break-words"
+        >
+          {{ opt }}
+        </SelectItem>
       </SelectContent>
     </Select>
 
@@ -54,13 +65,7 @@ const inputId = computed(() => `detail-field-${props.field.id}`);
     />
 
     <!-- date -->
-    <Input
-      v-else-if="field.type === 'date'"
-      :id="inputId"
-      type="date"
-      :model-value="(model ?? '').slice(0, 10)"
-      @update:model-value="(v: any) => (model = v)"
-    />
+    <SharedFieldsDatePicker v-else-if="field.type === 'date'" :id="inputId" v-model="model" />
 
     <!-- text (default) -->
     <Input
@@ -70,5 +75,9 @@ const inputId = computed(() => `detail-field-${props.field.id}`);
       :placeholder="field.label"
       @update:model-value="(v: any) => (model = v)"
     />
+
+    <!-- Why the question is being asked, when the caller supplies it. Sits under
+         the control so the label above stays a single readable ask. -->
+    <p v-if="field.hint" class="text-xs leading-relaxed text-muted-foreground">{{ field.hint }}</p>
   </div>
 </template>
