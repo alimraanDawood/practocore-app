@@ -22,7 +22,7 @@ provideDockContext(() => ({
 
 <template>
   <SharedVaultShell :title="title" back>
-    <div class="flex min-h-0 flex-1 flex-col p-3">
+    <div class="flex min-h-0 flex-1 flex-col p-3 sm:px-4">
       <SharedVaultFlatList :key="category" :mode="category" />
     </div>
   </SharedVaultShell>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderLock, Upload, FolderPlus, Search, MoreVertical, Trash2, Settings2 } from 'lucide-vue-next';
+import { FolderLock, Search, MoreVertical, Trash2, Settings2 } from 'lucide-vue-next';
 import type { VaultScope } from '~/services/vault';
 import { useVaultLibrary } from '~/composables/useVaultLibrary';
 import { useVaultLibraries } from '~/composables/useVaultLibraries';
@@ -12,6 +12,19 @@ import { useVaultLibraries } from '~/composables/useVaultLibraries';
 // back — hardware, gesture or header arrow — pops exactly one level. Nothing
 // tracks the stack, because the stack IS the route.
 const TRASH = '~trash';
+
+// One page instance per LIBRARY, not per folder. Nuxt keys a page by its
+// interpolated path, so without this every folder you open is a different key —
+// the screen is torn down and rebuilt, and the library refetched, just to show a
+// list it already had. Keyed on scope + library id, opening a folder is a prop
+// change; switching library still remounts, which is what should happen.
+definePageMeta({
+  key: (route) => {
+    const raw = route.params.path;
+    const seg = (Array.isArray(raw) ? raw : [raw]).filter(Boolean) as string[];
+    return `vault-library:${seg[0] || ''}:${seg[1] || ''}`;
+  },
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -78,7 +91,7 @@ const title = computed(() => {
 });
 
 const explorer = ref<{
-  pickUpload: () => void; newFolder: () => void; openSearch: () => void;
+  pickUpload: () => void; pickPhoto: () => void; newFolder: () => void; openSearch: () => void;
 } | null>(null);
 
 const admin = ref<{ manageById: (id: string) => void } | null>(null);
@@ -96,18 +109,20 @@ provideDockContext(() => ({
   <SharedVaultShell
     :title="title"
     back
-    :active-scope="scope"
-    :active-scope-id="scopeId"
-    :active-path="folderPath"
-    :folders="lib.liveFolders.value">
-    <!-- The library's write actions live in the header on a phone: the
-         bottom-right corner belongs to the assistant dock, so a floating action
-         button there would sit under it. -->
+    band
+    flush>
+    <!-- Only search and the destinations live in the header on a phone. The
+         write actions — upload, photo, new folder — are the add FAB's, stacked
+         above the assistant launcher in the bottom-right corner. -->
     <template #actions>
+      <!-- The same search screen the vault home opens, arriving scoped to this
+           library — one search experience, not two. The explorer keeps its own
+           inline filter from lg up, where a toolbar has room for it and results
+           can appear beside the tree without leaving the folder. -->
       <button
         class="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent lg:hidden"
         title="Search this library"
-        @click="explorer?.openSearch()">
+        @click="navigateTo({ path: '/main/vault/search', query: { scope, scopeId } })">
         <Search class="size-5" />
       </button>
       <DropdownMenu>
@@ -120,14 +135,8 @@ provideDockContext(() => ({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <!-- From lg up these same three sit in the explorer's own toolbar,
-               where there is room for them. -->
-          <DropdownMenuItem class="lg:hidden" :disabled="trash" @select="explorer?.pickUpload()">
-            <Upload class="size-4" /> Upload documents
-          </DropdownMenuItem>
-          <DropdownMenuItem class="lg:hidden" :disabled="trash" @select="explorer?.newFolder()">
-            <FolderPlus class="size-4" /> New folder
-          </DropdownMenuItem>
+          <!-- Adding is the FAB's job below lg and the explorer toolbar's from
+               lg up, so this menu is left with the destinations. -->
           <DropdownMenuItem class="lg:hidden" @select="onTrashed(!trash)">
             <Trash2 class="size-4" />
             {{ trash ? 'Back to files' : 'Recycle bin' }}
@@ -140,7 +149,9 @@ provideDockContext(() => ({
       </DropdownMenu>
     </template>
 
-    <div class="flex min-h-0 flex-1 flex-col p-3">
+    <!-- No padding below lg: the explorer's path bar is the lower half of the
+         header band and has to reach both edges of the screen. -->
+    <div class="flex min-h-0 flex-1 flex-col p-0 lg:p-3">
       <SharedVaultExplorer
         ref="explorer"
         :scope="scope"
@@ -152,6 +163,15 @@ provideDockContext(() => ({
         @navigate="onNavigate"
         @trashed="onTrashed" />
     </div>
+
+    <!-- Adding lives in the corner, not the header: it is the one thing you
+         come to a library to do, and the header is a two-thumb reach. Hidden in
+         the recycle bin, where nothing can be added. -->
+    <SharedVaultAddFab
+      v-if="!trash"
+      @upload="explorer?.pickUpload()"
+      @photo="explorer?.pickPhoto()"
+      @folder="explorer?.newFolder()" />
 
     <SharedVaultAdmin ref="admin" />
   </SharedVaultShell>

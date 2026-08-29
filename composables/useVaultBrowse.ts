@@ -53,19 +53,27 @@ export function useVaultBrowse() {
     }
   }
 
-  async function load(mode: VaultCategory | 'search' | 'trash', query = '') {
+  /**
+   * `extra` is an additional PocketBase expression ANDed onto the mode's own —
+   * the search screen's time and type filters. It counts as a query in its own
+   * right: "every image from the past week" is a real search, so a filter with
+   * an empty box still runs.
+   */
+  async function load(mode: VaultCategory | 'search' | 'trash', query = '', extra = '') {
     // An empty search box lists nothing rather than the whole vault — results are a
     // response to a query, and showing everything reads as a failed search.
-    if (mode === 'search' && !query.trim()) {
+    if (mode === 'search' && !query.trim() && !extra) {
       docs.value = [];
       loaded.value = true;
       return;
     }
     loading.value = true;
     try {
+      const own = filterFor(mode, query);
+      const combined = [own, extra].filter(Boolean).join(' && ') || undefined;
       docs.value = mode === 'trash'
         ? await listTrashedDocuments()
-        : await listRecentDocuments(200, filterFor(mode, query));
+        : await listRecentDocuments(200, combined);
     } catch {
       docs.value = [];
     } finally {

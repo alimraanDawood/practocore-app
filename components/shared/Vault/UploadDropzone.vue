@@ -39,6 +39,7 @@ interface Item {
 const items = ref<Item[]>([]);
 const dragging = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+const cameraInput = ref<HTMLInputElement | null>(null);
 
 // ── Add-document dialog state ────────────────────────────────────────────────
 const dialogOpen = ref(false);
@@ -56,10 +57,18 @@ function pick() {
   fileInput.value?.click();
 }
 
+// A separate input, because `capture` is an attribute of the input rather than
+// of the click: on a phone this opens the camera straight away instead of the
+// file browser. On a desktop the attribute is ignored and it degrades to a
+// normal image picker, which is why hosts only offer it on touch.
+function pickPhoto() {
+  cameraInput.value?.click();
+}
+
 // Lets a host drive the flow from its own affordance — see `headless`. `accept`
 // is how a host that owns the drop surface (the explorer drops files anywhere on
 // itself, not just on a dashed rectangle) hands the files over.
-defineExpose({ pick, accept: (files: File[]) => { if (files.length) openDialog(files); } });
+defineExpose({ pick, pickPhoto, accept: (files: File[]) => { if (files.length) openDialog(files); } });
 
 function onPicked(e: Event) {
   const input = e.target as HTMLInputElement;
@@ -74,9 +83,12 @@ function onDrop(e: DragEvent) {
 
 function openDialog(files: File[]) {
   pendingFiles.value = files;
-  // Reset choices to sensible defaults each time.
+  // Reset choices to sensible defaults each time. A photo is the exception:
+  // extraction and OCR are PDF/Word/text only, so offering to read an image
+  // into the knowledge base would only queue a document that fails. It is
+  // stored for the record instead, and the toggle is still there to override.
   docType.value = 'case_document';
-  ingest.value = true;
+  ingest.value = !files.every((f) => f.type.startsWith('image/'));
   items.value = [];
   uploading.value = false;
   dialogOpen.value = true;
@@ -141,6 +153,9 @@ async function confirmUpload() {
       </div>
     </button>
     <input ref="fileInput" type="file" multiple :accept="ACCEPT" class="hidden" @change="onPicked" />
+    <input
+      ref="cameraInput" type="file" accept="image/*" capture="environment"
+      class="hidden" @change="onPicked" />
 
     <!-- Add-document flow: classification + AI ingestion choice.
          Dialog on wider screens, bottom Drawer on phones. -->

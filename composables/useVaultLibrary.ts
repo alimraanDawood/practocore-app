@@ -47,54 +47,148 @@ export const VAULT_KIND_LABELS: Record<VaultKindFilter, string> = {
  * per folder), so the app's tab history owns the folder stack and back needs no
  * bookkeeping. Callers pass the folder id in and get that level's entries out.
  */
+// ── Shared cache ────────────────────────────────────────────────────────────
+// One store per library, outside any component, for two reasons.
+//
+// The first is that opening a folder REMOUNTS the page. Nuxt keys a page by its
+// interpolated path, so `/library/org/x/f1` and `/library/org/x/f1/f2` are
+// different keys even though they are the same screen at a different depth —
+// without a stable `key` in definePageMeta the component is destroyed and rebuilt
+// on every folder you open. That is worth defending against here as well as
+// there: a cache means even a remount is a cache hit rather than two round trips.
+//
+// The second is that a library is fetched whole — every folder and document in it
+// — so walking into a folder needs no request at all. Refetching per visit was
+// paying a network cost for data already in memory.
+//
+// What is NOT cached is file content: previews resolve their URL when the preview
+// opens, never as part of a listing.
+interface LibraryData {
+  folders: VaultFolder[];
+  documents: VaultDocument[];
+  /** True only while there is nothing to show — a revalidation of cached data is
+   *  silent, or every return to a library would flash its skeleton. */
+  loading: boolean;
+  failed: boolean;
+  /** Has ever completed a load. */
+  loaded: boolean;
+}
+
+interface LibraryMeta {
+  /** Mounted consumers; the realtime subscription lives while this is > 0. */
+  consumers: number;
+  unsub: (() => void) | null;
+  /** In-flight load, so two components mounting together make one request. */
+  inflight: Promise<void> | null;
+}
+
+const libraryData = reactive(new Map<string, LibraryData>());
+const libraryMeta = new Map<string, LibraryMeta>();
+
+function ensureLibrary(key: string): LibraryData {
+  let d = libraryData.get(key);
+  if (!d) {
+    d = { folders: [], documents: [], loading: true, failed: false, loaded: false };
+    libraryData.set(key, d);
+    libraryMeta.set(key, { consumers: 0, unsub: null, inflight: null });
+  }
+  return d;
+}
+
+function splitKey(key: string): [VaultScope, string] {
+  const i = key.indexOf(':');
+  return [key.slice(0, i) as VaultScope, key.slice(i + 1)];
+}
+
+function loadLibrary(key: string): Promise<void> {
+  const meta = libraryMeta.get(key)!;
+  if (meta.inflight) return meta.inflight;
+  const d = ensureLibrary(key);
+  const [scope, scopeId] = splitKey(key);
+
+  d.loading = !d.loaded;
+  d.failed = false;
+  meta.inflight = (async () => {
+    try {
+      const [f, docs] = await Promise.all([listFolders(scope, scopeId), listDocuments(scope, scopeId)]);
+      d.folders = f;
+      d.documents = docs;
+      d.loaded = true;
+    } catch {
+      d.failed = true;
+      // Only shout when there is nothing on screen. A failed background
+      // revalidation of a list the user is already reading is not their problem.
+      if (!d.loaded) toast.error('Could not load this library.');
+    } finally {
+      d.loading = false;
+      meta.inflight = null;
+    }
+  })();
+  return meta.inflight;
+}
+
+async function bindLibrary(key: string) {
+  const meta = libraryMeta.get(key)!;
+  if (meta.unsub) return;
+  const d = ensureLibrary(key);
+  const [scope, scopeId] = splitKey(key);
+  try {
+    meta.unsub = await subscribeVault(scope, scopeId, (ev: VaultRealtimeEvent) => {
+      const arr = (ev.kind === 'document' ? d.documents : d.folders) as any[];
+      const idx = arr.findIndex((r) => r.id === ev.record.id);
+      if (ev.action === 'delete') {
+        if (idx !== -1) arr.splice(idx, 1);
+      } else if (idx !== -1) arr[idx] = ev.record;
+      else arr.unshift(ev.record);
+    });
+  } catch { /* realtime is an enhancement — the listing still works without it */ }
+}
+
 export function useVaultLibrary(
   scope: Ref<VaultScope> | ComputedRef<VaultScope>,
   scopeId: Ref<string> | ComputedRef<string>,
 ) {
-  const folders = ref<VaultFolder[]>([]);
-  const documents = ref<VaultDocument[]>([]);
-  const loading = ref(true);
-  const failed = ref(false);
+  const key = computed(() => `${scope.value}:${scopeId.value}`);
+  ensureLibrary(key.value);
 
-  let unsub: (() => void) | null = null;
+  const data = computed(() => libraryData.get(key.value) ?? ensureLibrary(key.value));
 
-  async function load() {
-    loading.value = true;
-    failed.value = false;
-    try {
-      const [f, d] = await Promise.all([
-        listFolders(scope.value, scopeId.value),
-        listDocuments(scope.value, scopeId.value),
-      ]);
-      folders.value = f;
-      documents.value = d;
-    } catch {
-      failed.value = true;
-      toast.error('Could not load this library.');
-    } finally {
-      loading.value = false;
-    }
+  // Writable, because callers mutate the listing optimistically (a moved row
+  // leaves its folder before the server has confirmed it) and `load` replaces it.
+  const folders = computed({
+    get: () => data.value.folders,
+    set: (v: VaultFolder[]) => { data.value.folders = v; },
+  });
+  const documents = computed({
+    get: () => data.value.documents,
+    set: (v: VaultDocument[]) => { data.value.documents = v; },
+  });
+  const loading = computed(() => data.value.loading);
+  const failed = computed(() => data.value.failed);
+
+  async function load() { await loadLibrary(key.value); }
+
+  function attach(k: string) {
+    const meta = libraryMeta.get(k)!;
+    meta.consumers++;
+    // Cached rows render immediately; this only reconciles anything missed while
+    // the subscription was down.
+    void loadLibrary(k);
+    void bindLibrary(k);
   }
 
-  function applyEvent(ev: VaultRealtimeEvent) {
-    const arr = (ev.kind === 'document' ? documents : folders).value as any[];
-    const idx = arr.findIndex((r) => r.id === ev.record.id);
-    if (ev.action === 'delete') {
-      if (idx !== -1) arr.splice(idx, 1);
-    } else if (idx !== -1) arr[idx] = ev.record;
-    else arr.unshift(ev.record);
+  function release(k: string) {
+    const meta = libraryMeta.get(k);
+    if (!meta) return;
+    meta.consumers = Math.max(0, meta.consumers - 1);
+    // The rows stay cached; only the socket goes. Holding a subscription per
+    // library the user once opened would accumulate for the whole session.
+    if (meta.consumers === 0 && meta.unsub) { meta.unsub(); meta.unsub = null; }
   }
 
-  async function bind() {
-    if (unsub) { unsub(); unsub = null; }
-    try {
-      unsub = await subscribeVault(scope.value, scopeId.value, applyEvent);
-    } catch { /* realtime is an enhancement — the listing still works without it */ }
-  }
-
-  onMounted(async () => { await load(); await bind(); });
-  onBeforeUnmount(() => { if (unsub) unsub(); });
-  watch([scope, scopeId], async () => { await load(); await bind(); });
+  onMounted(() => attach(key.value));
+  onBeforeUnmount(() => release(key.value));
+  watch(key, (k, prev) => { release(prev); ensureLibrary(k); attach(k); });
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const liveFolders = computed(() => folders.value.filter((f) => !f.trashed));

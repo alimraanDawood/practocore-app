@@ -42,7 +42,12 @@ function openLibrary(lib: VaultLibrary) { navigateTo(libraryPath(lib)); }
 </script>
 
 <template>
-  <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-3 pb-24 sm:p-4">
+  <!-- Full width, not a centred column. The screen header above is flush to the
+       panel, so centring the body left the title and the content it belongs to
+       starting in two different places — which is what read as odd padding once
+       the desktop rail stopped taking up the difference. The grids gain columns
+       instead of the cards gaining width. -->
+  <div class="flex w-full min-w-0 flex-col gap-6 p-3 pb-24 sm:p-4">
     <!-- Search is the first thing on the page because it is the fastest route to
          a named document, and the vault's whole job is named documents. -->
     <button
@@ -53,7 +58,7 @@ function openLibrary(lib: VaultLibrary) { navigateTo(libraryPath(lib)); }
     </button>
 
     <!-- ── Categories ───────────────────────────────────────────────────── -->
-    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-6">
       <NuxtLink
         v-for="c in VAULT_CATEGORIES"
         :key="c"
@@ -107,7 +112,7 @@ function openLibrary(lib: VaultLibrary) { navigateTo(libraryPath(lib)); }
         </Button>
       </div>
 
-      <div v-if="loading && !primary" class="grid gap-2 sm:grid-cols-2">
+      <div v-if="loading && !primary" class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         <Skeleton v-for="i in 4" :key="i" class="h-16 rounded-xl" />
       </div>
 
@@ -130,11 +135,11 @@ function openLibrary(lib: VaultLibrary) { navigateTo(libraryPath(lib)); }
 
         <div v-for="g in groups" :key="g.key" class="mt-2 flex flex-col gap-2">
           <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">{{ g.label }}</p>
-          <div class="grid gap-2 sm:grid-cols-2">
+          <div class="grid w-full gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <button
               v-for="lib in g.items"
               :key="`${lib.scope}:${lib.scopeId}`"
-              class="flex items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-accent"
+              class="flex items-center gap-3 rounded-xl w-full overflow-hidden border p-3 text-left transition-colors hover:bg-accent"
               @click="openLibrary(lib)">
               <div class="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
                 <component :is="g.icon" class="size-5" />

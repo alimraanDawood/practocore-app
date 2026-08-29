@@ -3,7 +3,7 @@ import {
   ChevronRight, ChevronsUpDown, FolderLock, FolderPlus, Upload, Search, X,
   LayoutGrid, List as ListIcon, ArrowUpDown, ArrowUp, Loader2, Trash2, RotateCcw,
   FolderInput, Download, Pencil, FolderOpen, Eye, Sparkles, EyeOff, CheckCheck,
-  MoreHorizontal, Check,
+  MoreHorizontal, Check, Info, FolderRoot,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
@@ -13,7 +13,7 @@ import {
   type VaultScope, type VaultDocument, type VaultFolder,
 } from '~/services/vault';
 import {
-  useVaultLibrary, VAULT_KIND_LABELS,
+  useVaultLibrary, docRow, VAULT_KIND_LABELS,
   type VaultLibraryApi, type VaultRow, type VaultKindFilter, type VaultSortKey,
 } from '~/composables/useVaultLibrary';
 import { fileIcon, fileTint } from '~/utils/vaultDisplay';
@@ -124,6 +124,30 @@ function switchTo(depth: number, id: string) {
   emit('navigate', [...props.path.slice(0, depth), id]);
 }
 
+// The crumb strip scrolls rather than truncates, so a deep path stays walkable
+// backwards. It is pinned to its right end because the folder you are IN is the
+// one you need to see; the ancestors are what you scroll back for.
+const pathBar = ref<HTMLElement | null>(null);
+watch(() => [props.path.join('/'), props.trash], async () => {
+  await nextTick();
+  // A frame after the DOM update, not just after it: the crumb widths are not
+  // final until layout has run, and scrollWidth read too early is the old path's.
+  requestAnimationFrame(() => {
+    const el = pathBar.value;
+    if (el) el.scrollLeft = el.scrollWidth;
+  });
+}, { immediate: true, flush: 'post' });
+
+// Crumb widths. The folder you are in is the one that must be readable, so it
+// gets the whole strip and truncates inside it; the ancestors are capped short,
+// because a long name three levels up must never be what pushes the current
+// folder out of view. `calc` against the viewport rather than a percentage: the
+// strip. `max-w-full` measures against the scroller's own box — its visible
+// width, since it is a flex child with a definite width — so the current crumb
+// can never be wider than the space there is to show it in.
+const CRUMB_CURRENT = 'max-w-full lg:max-w-96';
+const CRUMB_ANCESTOR = 'max-w-28 lg:max-w-40';
+
 const canGoUp = computed(() => props.trash || props.path.length > 0);
 function goUp() {
   if (props.trash) { emit('trashed', false); return; }
@@ -160,6 +184,20 @@ const selectedRows = computed(() =>
 
 function clearSelection() { selected.value = new Set(); anchor = -1; }
 function selectAll() { selected.value = new Set(rows.value.map(keyOf)); }
+
+// The shell's header shows the count and owns select-all/clear while a selection
+// is live, so this screen only has to publish them. An embedded explorer is not
+// inside a vault shell — it is a section of someone else's page — so it keeps
+// its own inline strip and publishes nothing.
+provideVaultSelectionUi(() => (props.embedded || !selecting.value ? null : {
+  count: selected.value.size,
+  total: rows.value.length,
+  allSelected: selected.value.size >= rows.value.length && rows.value.length > 0,
+  clear: clearSelection,
+  toggleAll: () => {
+    if (selected.value.size >= rows.value.length) clearSelection(); else selectAll();
+  },
+}));
 
 function onSelect(row: VaultRow, o: { additive: boolean; range: boolean; index: number }) {
   const next = new Set(selected.value);
@@ -218,13 +256,26 @@ watch(() => lib.documents.value, () => {
   previewRow.value = { ...previewRow.value, name: live.filename || 'Untitled', doc: live };
 }, { deep: true });
 
-async function download(row: VaultRow) {
-  if (row.kind !== 'doc' || !row.doc) return;
-  try {
-    const url = await vaultFileUrl(row.doc);
-    if (!url) { toast.error('No file is available for this document.'); return; }
-    window.open(url, '_blank');
-  } catch { toast.error('Could not open the file.'); }
+const { downloadOne, downloadMany } = useVaultDownload();
+
+/**
+ * One row, or a selection, saved to disk. A lone document goes straight to
+ * storage; a folder or anything plural becomes one zip, because a download per
+ * document loses everything after the first to the popup blocker — and a folder
+ * had no download at all, so the button was there and did nothing.
+ */
+function downloadRows(list: VaultRow[]) {
+  if (list.length === 1 && list[0].kind === 'doc' && list[0].doc) {
+    downloadOne(list[0].doc);
+    return;
+  }
+  const folders = list.filter((r) => r.kind === 'folder').map((r) => r.id);
+  const documents = list.filter((r) => r.kind === 'doc').map((r) => r.id);
+  if (!folders.length && !documents.length) return;
+  downloadMany(
+    { scope: props.scope, scopeId: props.scopeId, folders, documents },
+    list.length === 1 ? `Zipping “${list[0].name}”` : `Zipping ${list.length} items`,
+  );
 }
 
 // ── Moves ───────────────────────────────────────────────────────────────────
@@ -295,10 +346,13 @@ function onPressStart(row: VaultRow, index: number, e: PointerEvent) {
 function beginDrag(p: Press, x: number, y: number) {
   // Dragging a row that is part of the selection drags the whole selection —
   // otherwise dragging one of six highlighted files would move only that one.
+  //
+  // A row OUTSIDE the selection is dragged on its own and is deliberately not
+  // selected on the way: a drag that is abandoned, or that lands on nothing,
+  // used to leave the row selected — which is how a slightly imprecise click
+  // ended up looking like click-to-select.
   const inSelection = selected.value.has(keyOf(p.row));
-  const rows = inSelection ? selectedRows.value : [p.row];
-  if (!inSelection) { selected.value = new Set([keyOf(p.row)]); anchor = p.index; }
-  drag.value = { rows, x, y };
+  drag.value = { rows: inSelection ? selectedRows.value : [p.row], x, y };
 }
 
 /** What is under the pointer, if it will take a drop. `""` is the library root. */
@@ -348,7 +402,7 @@ onBeforeUnmount(() => {
 });
 
 // ── Files dragged in from the desktop ───────────────────────────────────────
-const dropzone = ref<{ pick: () => void; accept: (f: File[]) => void } | null>(null);
+const dropzone = ref<{ pick: () => void; pickPhoto: () => void; accept: (f: File[]) => void } | null>(null);
 const fileDragDepth = ref(0);
 
 function hasFiles(e: DragEvent) {
@@ -395,6 +449,10 @@ async function submitNewFolder() {
   } finally { busy.value = false; }
 }
 
+const detailsRow = ref<VaultRow | null>(null);
+/** The library + folder path, spelled out for the details panel. */
+const detailsLocation = computed(() => [props.rootLabel, ...trail.value.map((f) => f.name)].join(' / '));
+
 const renameRow = ref<VaultRow | null>(null);
 const renameValue = ref('');
 
@@ -414,19 +472,104 @@ async function submitRename() {
   } finally { busy.value = false; }
 }
 
-// ── Move dialog ─────────────────────────────────────────────────────────────
+// ── Moving ──────────────────────────────────────────────────────────────────
+// Two ways, chosen by what the screen can hold rather than by what it is:
+//
+//   • wide — a dialog showing the whole tree at once, because choosing a
+//     destination is a comparison and a mouse can see and click all of it.
+//   • narrow — carry the items. The picker becomes the browser itself: you
+//     navigate to the folder the normal way and a bar drops them there. A tree
+//     picker on a phone is a second, worse way to walk folders you already know
+//     how to walk, in a viewport that fits about six rows of it.
+//
+// Both end in `moveRows`, so nothing about the actual move differs.
+const isNarrow = useMediaQuery('(max-width: 1023px)');
+
 const moveRowsList = ref<VaultRow[]>([]);
 const moveOpen = computed({
   get: () => moveRowsList.value.length > 0,
   set: (v: boolean) => { if (!v) moveRowsList.value = []; },
 });
+
+const move = useVaultMove();
+
+// Both of this screen's bottom bars land under the assistant launcher, so hold it
+// out of the way while either is up. Not for an embedded explorer — that sits in
+// someone else's page, which owns its own corner.
+useSuppressDockLauncher(() => !props.embedded && (selecting.value || !!move.pending.value));
+
 function askMove(list: VaultRow[]) {
-  if (list.length) defer(() => { moveRowsList.value = list; });
+  if (!list.length) return;
+  if (!isNarrow.value) { defer(() => { moveRowsList.value = list; }); return; }
+
+  // A folder cannot land inside itself or anything under it. Resolve that now,
+  // while this explorer still has the tree: the destination may be reached in a
+  // different explorer instance after several navigations.
+  const blocked = new Set<string>();
+  list.filter((r) => r.kind === 'folder').forEach((r) => {
+    blocked.add(r.id);
+    lib.descendantFolderIds(r.id).forEach((id) => blocked.add(id));
+  });
+
+  move.start({
+    scope: props.scope,
+    scopeId: props.scopeId,
+    from: currentFolder.value,
+    blocked: [...blocked],
+    items: list.map((r) => ({
+      id: r.id, kind: r.kind === 'folder' ? 'folder' : 'doc', name: r.name,
+      // markRaw: this lands in a ref, and Vue proxying a component definition
+      // warns and costs a deep walk of it for nothing.
+      icon: markRaw(fileIcon(r)), tint: fileTint(r),
+    })),
+  });
+  clearSelection();
 }
+
 function onMovePicked(folderId: string) {
   const list = moveRowsList.value;
   moveRowsList.value = [];
   moveRows(list, folderId);
+}
+
+// Can the carried items land where we are standing? Same library (the API only
+// rewrites a parent id — it cannot move a document between libraries), not the
+// folder they already live in, and not inside themselves.
+const moveTarget = computed(() => {
+  const p = move.pending.value;
+  if (!p) return null;
+  if (p.scope !== props.scope || p.scopeId !== props.scopeId) {
+    return { ok: false, reason: 'Open the library they came from to move them' };
+  }
+  if (props.trash) return { ok: false, reason: 'The recycle bin cannot hold moved items' };
+  if (p.from === currentFolder.value) return { ok: false, reason: 'Already in this folder' };
+  if (p.blocked.includes(currentFolder.value)) return { ok: false, reason: 'A folder cannot move inside itself' };
+  return { ok: true, reason: '' };
+});
+
+/**
+ * Re-resolve the carried ids against this library's live records. The rows the
+ * move started from belong to a listing that is several navigations gone, and
+ * may have been re-fetched since; only the ids are still trustworthy. `moveRows`
+ * reads `kind`, `id`, `name` and the underlying record, so a minimal row is a
+ * complete one here.
+ */
+function commitMove() {
+  const p = move.pending.value;
+  if (!p || !moveTarget.value?.ok) return;
+  const carried: VaultRow[] = [];
+  for (const it of p.items) {
+    if (it.kind === 'folder') {
+      const f = lib.folders.value.find((x) => x.id === it.id);
+      if (f) carried.push({ kind: 'folder', id: f.id, name: f.name, modified: f.updated || f.created, folder: f });
+    } else {
+      const d = lib.documents.value.find((x) => x.id === it.id);
+      if (d) carried.push(docRow(d));
+    }
+  }
+  move.cancel();
+  if (!carried.length) { toast.error('Those items are no longer here.'); return; }
+  moveRows(carried, currentFolder.value);
 }
 
 // ── Trash / restore / purge ─────────────────────────────────────────────────
@@ -513,6 +656,59 @@ async function toggleIngest(row: VaultRow) {
 }
 
 // ── The action list, defined once ───────────────────────────────────────────
+// What the bottom bar offers for the whole selection. Same shape as a row's
+// menu, so an action can never look different depending on where it is invoked.
+// What sits under the bar's "More". Rows carry no menu of their own any more, so
+// everything a single item's menu used to offer has to be reachable from here —
+// which also means it can only offer what makes sense for what is selected.
+const bulkMore = computed<VaultAction[]>(() => {
+  const rows0 = selectedRows.value;
+  const one = rows0.length === 1 ? rows0[0] : null;
+  const out: VaultAction[] = [];
+  if (props.trash) return out;
+
+  if (one) {
+    out.push(one.kind === 'folder'
+      ? { id: 'open', label: 'Open', icon: FolderOpen, run: () => { clearSelection(); open(one); } }
+      : { id: 'open', label: 'Preview', icon: Eye, run: () => { clearSelection(); open(one); } });
+  }
+  if (one && !props.readonly && one.kind === 'folder') {
+    out.push({ id: 'rename', label: 'Rename', icon: Pencil, run: () => askRename(one) });
+  }
+  if (one && !props.readonly && one.kind === 'doc') {
+    out.push({
+      id: 'ingest',
+      label: one.doc?.ingest ? 'Stop the AI reading this' : 'Let the AI read this',
+      icon: one.doc?.ingest ? EyeOff : Sparkles,
+      run: () => toggleIngest(one),
+    });
+  }
+  if (one) {
+    out.push({
+      id: 'details', label: 'Details', icon: Info, divider: out.length > 0,
+      run: () => { detailsRow.value = one; },
+    });
+  }
+  return out;
+});
+
+const bulkActions = computed<VaultAction[]>(() => {
+  if (props.trash) {
+    return [
+      { id: 'restore', label: 'Restore', icon: RotateCcw, run: () => restoreRows(selectedRows.value) },
+      { id: 'purge', label: 'Delete forever', icon: Trash2, danger: true, run: () => askPurge(selectedRows.value) },
+    ];
+  }
+  const out: VaultAction[] = [
+    { id: 'download', label: 'Download', icon: Download, run: () => downloadRows(selectedRows.value) },
+  ];
+  if (!props.readonly) {
+    out.push({ id: 'move', label: 'Move', icon: FolderInput, run: () => askMove(selectedRows.value) });
+    out.push({ id: 'trash', label: 'Delete', icon: Trash2, danger: true, run: () => trashRows(selectedRows.value) });
+  }
+  return out;
+});
+
 function actionsFor(row: VaultRow): VaultAction[] {
   // A menu opened on a row inside a multi-selection acts on the whole selection —
   // otherwise "Move to…" would silently move one of the five things highlighted.
@@ -532,9 +728,10 @@ function actionsFor(row: VaultRow): VaultAction[] {
 
   if (row.kind === 'folder') {
     out.push({ id: 'open', label: 'Open', icon: FolderOpen, shortcut: '↵', run: () => open(row) });
+    out.push({ id: 'download', label: `Download as zip${suffix}`, icon: Download, run: () => downloadRows(targets) });
   } else {
     out.push({ id: 'open', label: 'Preview', icon: Eye, shortcut: '↵', run: () => open(row) });
-    out.push({ id: 'download', label: `Download${suffix}`, icon: Download, run: () => targets.forEach(download) });
+    out.push({ id: 'download', label: `Download${suffix}`, icon: Download, run: () => downloadRows(targets) });
   }
 
   if (!props.readonly) {
@@ -628,6 +825,7 @@ function onKeydown(e: KeyboardEvent) {
 // The host's header drives these on a phone, where the toolbar has no room.
 defineExpose({
   pickUpload: () => dropzone.value?.pick(),
+  pickPhoto: () => dropzone.value?.pickPhoto(),
   newFolder,
   openSearch: () => { searchOpen.value = true; },
   canGoUp,
@@ -648,10 +846,31 @@ defineExpose({
          Each crumb is both a jump target and a drop target, and carries a
          chevron that lists its siblings — so moving sideways between folders at
          the same depth costs one click instead of a trip back up. -->
-    <div class="flex shrink-0 items-center gap-1 overflow-x-auto px-1 pb-2 text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div
+      class="flex shrink-0 items-center gap-1 text-sm"
+      :class="embedded
+        ? 'px-1 pb-2'
+        : 'border-b bg-muted/50 px-3 py-2 lg:border-0 lg:bg-transparent lg:px-1 lg:pb-2'">
+      <!-- Out of the library entirely, back to the vault's own home. It is the
+           one crumb that is not part of this path, so it gets a box rather than
+           a name — and it sits OUTSIDE the scroller, so it is still there after
+           the strip has scrolled the ancestors away. -->
+      <button
+        v-if="!embedded"
+        class="mr-1 shrink-0 rounded-md border bg-background p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        title="All libraries"
+        aria-label="All libraries"
+        @click="navigateTo('/main/vault')">
+        <FolderRoot class="size-4" />
+      </button>
+
+      <!-- The scrolling half: everything that belongs to the current path. -->
+      <div
+        ref="pathBar"
+        class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <button
         v-if="canGoUp"
-        class="mr-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        class="mr-0.5 hidden shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground lg:block"
         title="Up one level (Backspace)"
         @click="goUp">
         <ArrowUp class="size-4" />
@@ -659,15 +878,18 @@ defineExpose({
 
       <div class="flex shrink-0 items-center">
         <button
-          class="flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 hover:bg-accent"
+          class="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent"
           :class="[
-            !path.length && !trash ? 'font-medium text-foreground' : 'text-muted-foreground',
+            !path.length && !trash ? `font-medium text-primary ${CRUMB_CURRENT}` : `text-muted-foreground ${CRUMB_ANCESTOR}`,
             dropTarget === '' && drag ? 'bg-primary/10 ring-1 ring-primary' : '',
           ]"
           data-drop-id=""
           @click="goTo(0)">
           <FolderLock class="size-3.5 shrink-0 text-sky-500" />
-          {{ rootLabel }}
+          <!-- The span carries the ellipsis: `truncate` on the flex button
+               itself would have a text node for a flex item, which does not
+               ellipsize. -->
+          <span class="truncate">{{ rootLabel }}</span>
         </button>
         <DropdownMenu v-if="siblingsAt(0).length">
           <DropdownMenuTrigger as-child>
@@ -689,9 +911,11 @@ defineExpose({
         <ChevronRight class="size-3.5 shrink-0 text-muted-foreground/40" />
         <div class="flex shrink-0 items-center">
           <button
-            class="max-w-40 truncate rounded-md px-1.5 py-1 hover:bg-accent"
+            class="truncate rounded-md px-1.5 py-1 hover:bg-accent"
             :class="[
-              i === trail.length - 1 && !trash ? 'font-medium text-foreground' : 'text-muted-foreground',
+              i === trail.length - 1 && !trash
+                ? `font-medium text-primary ${CRUMB_CURRENT}`
+                : `text-muted-foreground ${CRUMB_ANCESTOR}`,
               dropTarget === f.id && drag ? 'bg-primary/10 ring-1 ring-primary' : '',
             ]"
             :data-drop-id="f.id"
@@ -722,14 +946,18 @@ defineExpose({
         </span>
       </template>
 
-      <span v-if="lib.ingestingCount.value" class="ml-auto flex shrink-0 items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+      </div>
+
+      <!-- Also outside the scroller: a progress note that scrolled off with the
+           crumbs would be a progress note nobody sees. -->
+      <span v-if="lib.ingestingCount.value" class="flex shrink-0 items-center gap-1.5 pl-2 text-xs text-muted-foreground">
         <Loader2 class="size-3.5 animate-spin" />
-        Reading {{ lib.ingestingCount.value }}…
+        <span class="hidden sm:inline">Reading {{ lib.ingestingCount.value }}…</span>
       </span>
     </div>
 
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
-    <div class="flex shrink-0 items-center gap-1.5 px-1 pb-2">
+    <div class="flex shrink-0 items-center gap-1.5 pb-2 pt-2 lg:pt-0" :class="embedded ? 'px-1' : 'px-3 lg:px-1'">
       <!-- Search is a button until it is needed, then it takes the bar. A
            permanent field here would compete with the path for the same space
            on a phone, and the path is what tells you where you are. -->
@@ -749,7 +977,12 @@ defineExpose({
           <X class="size-4" />
         </button>
       </div>
-      <Button v-else size="icon-sm" variant="ghost" title="Search this library" @click="searchOpen = true">
+      <!-- Below lg the screen header already carries a search button; two of
+           them in the same corner is the clutter, not the feature. -->
+      <Button
+        v-else size="icon-sm" variant="ghost" title="Search this library"
+        :class="embedded ? '' : 'hidden lg:inline-flex'"
+        @click="searchOpen = true">
         <Search class="size-4" />
       </Button>
 
@@ -797,8 +1030,12 @@ defineExpose({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <!-- A phone gets this from the ⋯ menu instead: switching view is a
+           once-in-a-while choice and does not deserve a permanent button in a
+           row that has to stay readable at 360px. -->
       <Button
         size="icon-sm" variant="ghost"
+        :class="embedded ? '' : 'hidden lg:inline-flex'"
         :title="view === 'list' ? 'Grid view' : 'List view'"
         @click="view = view === 'list' ? 'grid' : 'list'">
         <component :is="view === 'list' ? LayoutGrid : ListIcon" class="size-4" />
@@ -811,6 +1048,13 @@ defineExpose({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-52">
+          <DropdownMenuItem
+            :class="embedded ? 'hidden' : 'lg:hidden'"
+            @select="view = view === 'list' ? 'grid' : 'list'">
+            <component :is="view === 'list' ? LayoutGrid : ListIcon" class="size-4" />
+            {{ view === 'list' ? 'Grid view' : 'List view' }}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator :class="embedded ? 'hidden' : 'lg:hidden'" />
           <DropdownMenuItem @select="emit('trashed', !trash)">
             <Trash2 class="size-4" />
             {{ trash ? 'Back to files' : 'Recycle bin' }}
@@ -826,11 +1070,21 @@ defineExpose({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <!-- Below lg the page's add FAB owns these, so the toolbar drops them
+           rather than offering the same two actions twice. An embedded explorer
+           has no FAB — it is a section of someone else's page — so there they
+           stay at every width. -->
       <template v-if="!readonly && !trash">
-        <Button size="sm" variant="outline" class="hidden gap-1.5 sm:inline-flex" @click="newFolder">
+        <Button
+          size="sm" variant="outline" class="gap-1.5"
+          :class="embedded ? 'hidden sm:inline-flex' : 'hidden lg:inline-flex'"
+          @click="newFolder">
           <FolderPlus class="size-4" /> New folder
         </Button>
-        <Button size="sm" class="gap-1.5" @click="dropzone?.pick()">
+        <Button
+          size="sm" class="gap-1.5"
+          :class="embedded ? '' : 'hidden lg:inline-flex'"
+          @click="dropzone?.pick()">
           <Upload class="size-4" />
           <span class="hidden sm:inline">Upload</span>
         </Button>
@@ -838,7 +1092,14 @@ defineExpose({
     </div>
 
     <!-- ── Listing ──────────────────────────────────────────────────────── -->
-    <div class="min-h-0 flex-1 overflow-y-auto px-1 pb-24 sm:pb-2">
+    <!-- `.self`: a click that lands on the scroll surface rather than on a row is
+         a click on nothing, and clicking nothing is how every file manager drops
+         a selection. Rows stop their own clicks from reaching here by being the
+         target themselves, so no guard is needed on them. -->
+    <div
+      class="min-h-0 flex-1 overflow-y-auto pb-24 sm:pb-2"
+      :class="embedded ? 'px-1' : 'px-2 lg:px-1'"
+      @click.self="clearSelection">
       <div v-if="lib.loading.value" class="space-y-1.5">
         <Skeleton v-for="i in 6" :key="i" class="h-12 rounded-lg" />
       </div>
@@ -868,7 +1129,9 @@ defineExpose({
           {{ rows.length }} result{{ rows.length === 1 ? '' : 's' }} in {{ rootLabel }}
         </div>
 
-        <div :class="view === 'list' ? 'space-y-0.5' : 'grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'">
+        <div
+          :class="view === 'list' ? 'space-y-0.5' : 'grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'"
+          @click.self="clearSelection">
           <SharedVaultEntry
             v-for="(row, i) in rows"
             :key="`${row.kind}:${row.id}`"
@@ -890,47 +1153,49 @@ defineExpose({
     </div>
 
     <!-- ── Selection bar ────────────────────────────────────────────────────
-         Pinned to the bottom on a phone (thumb reach, and it can't be scrolled
-         away mid-selection); an inline strip from `sm` up. -->
-    <Transition
-      enter-active-class="transition duration-150" enter-from-class="translate-y-2 opacity-0"
-      leave-active-class="transition duration-150" leave-to-class="translate-y-2 opacity-0">
-      <div
-        v-if="selecting"
-        class="fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 border-t bg-background/95 px-2 py-2 backdrop-blur
-               sm:absolute sm:inset-x-auto sm:bottom-3 sm:left-1/2 sm:w-auto sm:-translate-x-1/2 sm:rounded-xl sm:border sm:px-2 sm:shadow-lg">
-        <Button size="icon-sm" variant="ghost" title="Clear selection" @click="clearSelection">
-          <X class="size-4" />
-        </Button>
-        <span class="px-1 text-sm font-medium">{{ selected.size }}</span>
-        <Button size="sm" variant="ghost" class="gap-1.5" title="Select all (⌘A)" @click="selectAll">
-          <CheckCheck class="size-4" />
-          <span class="hidden sm:inline">All</span>
-        </Button>
+         The actions only. The count, select-all and the way out are the shell
+         header's while a selection is live; an embedded explorer has no shell,
+         so it keeps them here. -->
+    <template v-if="embedded">
+      <Transition
+        enter-active-class="transition duration-150" enter-from-class="translate-y-2 opacity-0"
+        leave-active-class="transition duration-150" leave-to-class="translate-y-2 opacity-0">
+        <div
+          v-if="selecting"
+          class="fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 border-t bg-background/95 px-2 py-2 backdrop-blur
+                 sm:absolute sm:inset-x-auto sm:bottom-3 sm:left-1/2 sm:w-auto sm:-translate-x-1/2 sm:rounded-xl sm:border sm:px-2 sm:shadow-lg">
+          <Button size="icon-sm" variant="ghost" title="Clear selection" @click="clearSelection">
+            <X class="size-4" />
+          </Button>
+          <span class="px-1 text-sm font-medium">{{ selected.size }}</span>
+          <Button size="sm" variant="ghost" class="gap-1.5" title="Select all (⌘A)" @click="selectAll">
+            <CheckCheck class="size-4" />
+            <span class="hidden sm:inline">All</span>
+          </Button>
+          <span class="ml-auto" />
+          <Button
+            v-for="a in bulkActions" :key="a.id" size="sm" variant="ghost"
+            class="gap-1.5" :class="a.danger ? 'text-destructive hover:text-destructive' : ''"
+            @click="a.run()">
+            <component :is="a.icon" class="size-4" />
+            <span class="hidden sm:inline">{{ a.label }}</span>
+          </Button>
+        </div>
+      </Transition>
+    </template>
+    <SharedVaultSelectionBar
+      v-else
+      :actions="selecting ? bulkActions : []"
+      :more="selecting ? bulkMore : []" />
 
-        <span class="ml-auto" />
-
-        <template v-if="trash">
-          <Button size="sm" variant="ghost" class="gap-1.5" @click="restoreRows(selectedRows)">
-            <RotateCcw class="size-4" /> Restore
-          </Button>
-          <Button size="sm" variant="ghost" class="gap-1.5 text-destructive hover:text-destructive" @click="askPurge(selectedRows)">
-            <Trash2 class="size-4" /> <span class="hidden sm:inline">Delete forever</span>
-          </Button>
-        </template>
-        <template v-else>
-          <Button size="sm" variant="ghost" class="gap-1.5" @click="selectedRows.forEach(download)">
-            <Download class="size-4" /> <span class="hidden sm:inline">Download</span>
-          </Button>
-          <Button v-if="!readonly" size="sm" variant="ghost" class="gap-1.5" @click="askMove(selectedRows)">
-            <FolderInput class="size-4" /> <span class="hidden sm:inline">Move</span>
-          </Button>
-          <Button v-if="!readonly" size="sm" variant="ghost" class="gap-1.5 text-destructive hover:text-destructive" @click="trashRows(selectedRows)">
-            <Trash2 class="size-4" /> <span class="hidden sm:inline">Delete</span>
-          </Button>
-        </template>
-      </div>
-    </Transition>
+    <!-- Carrying items to a new folder. Outranks the selection bar by being the
+         only one that can be up at once — `askMove` clears the selection. -->
+    <SharedVaultMoveBar
+      :can-drop="!!moveTarget?.ok"
+      :reason="moveTarget?.reason"
+      :destination="trail.length ? trail[trail.length - 1].name : rootLabel"
+      @commit="commitMove"
+      @cancel="move.cancel()" />
 
     <!-- ── Drag ghost ───────────────────────────────────────────────────────
          The thing being dragged has to be visible under the finger or cursor,
@@ -970,7 +1235,36 @@ defineExpose({
       @disabled="emit('disabled')" />
 
     <!-- ── Dialogs ──────────────────────────────────────────────────────── -->
-    <Dialog v-model:open="newOpen">
+    <!-- New folder — a bottom drawer on a phone, a centred dialog with a mouse.
+         Same cutoff the rest of this screen uses (`isNarrow`), so a viewport does
+         not get phone-shaped move mode and a desktop-shaped dialog at once.
+         Deliberately no `autofocus` in the drawer: the keyboard opening while
+         vaul is still animating the sheet up fights the drag it is positioned
+         with, and lands the field under the keyboard about half the time. -->
+    <Drawer v-if="isNarrow" v-model:open="newOpen">
+      <DrawerContent>
+        <DrawerHeader class="text-left">
+          <DrawerTitle>New folder</DrawerTitle>
+          <DrawerDescription>
+            It will be created in {{ trail.length ? trail[trail.length - 1].name : rootLabel }}.
+          </DrawerDescription>
+        </DrawerHeader>
+        <div class="px-4">
+          <Input v-model="newName" placeholder="Folder name" @keydown.enter="submitNewFolder" />
+        </div>
+        <!-- No Cancel: a drawer is dismissed by dragging it down or tapping
+             away, and a button that duplicates the gesture only crowds the one
+             that does something. The dialog keeps its Cancel — a mouse has no
+             equivalent gesture. -->
+        <DrawerFooter>
+          <Button :disabled="busy || !newName.trim()" class="gap-1.5" @click="submitNewFolder">
+            <Loader2 v-if="busy" class="size-4 animate-spin" /> Create
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+
+    <Dialog v-else v-model:open="newOpen">
       <DialogContent class="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>New folder</DialogTitle>
@@ -988,7 +1282,28 @@ defineExpose({
       </DialogContent>
     </Dialog>
 
-    <Dialog :open="!!renameRow" @update:open="(v) => { if (!v) renameRow = null; }">
+    <!-- Rename, same split as New folder above: drawer on a phone, dialog with a
+         mouse, and no Cancel in the drawer. -->
+    <Drawer
+      v-if="isNarrow" :open="!!renameRow"
+      @update:open="(v) => { if (!v) renameRow = null; }">
+      <DrawerContent>
+        <DrawerHeader class="text-left">
+          <DrawerTitle>Rename folder</DrawerTitle>
+          <DrawerDescription>{{ renameRow?.name }}</DrawerDescription>
+        </DrawerHeader>
+        <div class="px-4">
+          <Input v-model="renameValue" @keydown.enter="submitRename" />
+        </div>
+        <DrawerFooter>
+          <Button :disabled="busy || !renameValue.trim()" class="gap-1.5" @click="submitRename">
+            <Loader2 v-if="busy" class="size-4 animate-spin" /> Rename
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+
+    <Dialog v-else :open="!!renameRow" @update:open="(v) => { if (!v) renameRow = null; }">
       <DialogContent class="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Rename folder</DialogTitle>
@@ -1002,6 +1317,11 @@ defineExpose({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <SharedVaultDetails
+      :row="detailsRow"
+      :location="detailsLocation"
+      @close="detailsRow = null" />
 
     <SharedVaultMoveDialog
       v-model:open="moveOpen"
@@ -1034,8 +1354,13 @@ defineExpose({
          the sidebar and the assistant dock. It registers with the overlay stack,
          so Android's back gesture closes the preview before leaving the folder. -->
     <Sheet v-model:open="previewOpen">
+      <!-- `hide-x`: the preview draws its own close button in its header row,
+           next to Download — the sheet's would be a second X a few pixels away,
+           and it is the one the three non-sheet hosts of this component do
+           without. -->
       <SheetContent
         :side="isTouch ? 'bottom' : 'right'"
+        hide-x
         class="flex flex-col gap-0 p-0"
         :class="isTouch ? 'h-[92dvh]' : 'w-full sm:max-w-2xl'">
         <SharedVaultDocumentPreview

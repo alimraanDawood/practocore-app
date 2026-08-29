@@ -53,7 +53,7 @@ defineExpose({
 
 <template>
   <div>
-    <Dialog v-model:open="createOpen">
+    <Dialog v-if="$viewport.isGreaterThan('tablet')" v-model:open="createOpen">
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New vault</DialogTitle>
@@ -82,6 +82,36 @@ defineExpose({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Drawer v-else v-model:open="createOpen">
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>New vault</DrawerTitle>
+          <DrawerDescription>
+            A private document library you can share with chosen colleagues. The AI reads its
+            files, so you can ask about them in chat.
+          </DrawerDescription>
+        </DrawerHeader>
+        <div class="flex flex-col gap-3 p-3">
+          <div class="flex flex-col gap-1.5">
+            <Label class="text-xs">Name</Label>
+            <Input
+                v-model="name" placeholder="e.g. Banking Litigation, Due Diligence"
+                autofocus @keydown.enter.prevent="submitCreate" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <Label class="text-xs">Description <span class="text-muted-foreground">(optional)</span></Label>
+            <Textarea v-model="description" rows="2" placeholder="What this vault is for" />
+          </div>
+        </div>
+        <DrawerFooter>
+          <Button :disabled="creating || !name.trim()" @click="submitCreate">
+            {{ creating ? 'Creating…' : 'Create vault' }}
+          </Button>
+          <Button variant="outline" :disabled="creating" @click="createOpen = false">Cancel</Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
 
     <SharedVaultManageDialog
       :vault="manageTarget"

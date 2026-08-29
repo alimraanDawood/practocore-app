@@ -1,5 +1,6 @@
 <script lang="ts" setup>
-import { MoreVertical, Check } from 'lucide-vue-next';
+import { Check } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
 import type { VaultRow } from '~/composables/useVaultLibrary';
 import type { VaultDocument } from '~/services/vault';
 import { fileIcon, fileTint, fileWash, whenLabel, typeLabel } from '~/utils/vaultDisplay';
@@ -14,11 +15,18 @@ import type { VaultAction } from './MenuItems.vue';
 // The interaction model is the desktop one for a mouse and the touch one for a
 // finger, told apart by `pointerType` rather than a media query — a touchscreen
 // laptop is both, and whichever the user just used should win:
-//   • mouse — click selects, double-click opens, ⌘/ctrl-click adds, shift-click
-//     extends, right-click opens the context menu on the row it hit, and a drag
-//     off the row moves it.
+//   • mouse — click OPENS. Selecting is ⌘/ctrl-click (add), shift-click (extend),
+//     or the checkbox that fades in on hover; right-click opens the context menu
+//     on the row it hit, and a drag off the row moves it. Click-to-select was the
+//     desktop file-manager model, but opening is what people come to a row to do,
+//     and a click that drifted a few pixels selected the row instead.
 //   • finger — a tap opens, a long press starts a selection (Android's Files
 //     idiom), a tap then toggles, and dragging from the long press moves it.
+//     There is no per-row menu on a finger at all — no long-press menu (see
+//     `coarsePointer`) and no ⋯ button. Acting on something means selecting it
+//     first, and the selection bar's "More" carries everything a row's own menu
+//     used to. That is the phone file-manager model, and it means one list of
+//     actions instead of two that can drift apart.
 //
 // Dragging is reported as pointer events rather than done with HTML5 drag-and-
 // drop: `dragstart` never fires from a touch, so the native API would have made
@@ -72,6 +80,16 @@ let pressTimer: ReturnType<typeof setTimeout> | null = null;
 let pressed: { x: number; y: number; touch: boolean } | null = null;
 let longFired = false;
 
+// Reka's ContextMenuTrigger arms a long-press-to-open of its own on touch, at a
+// delay longer than ours — so a long press would start a selection and then have
+// a context menu land on top of it. Worse, dismissing that menu can leave the
+// page's `pointer-events: none` body lock behind (see CLAUDE.md on nested
+// modals), after which the selection's action bar stops responding to taps at
+// all. Disabling the trigger is decided by media query rather than by the live
+// pointer type because reka reads `disabled` when the gesture starts, so the
+// answer has to be settled before the finger lands.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+
 // Set once a finger's long press has fired: the row stops claiming the scroll
 // gesture, so the next move drags the row instead of scrolling the list. Only
 // this row is pinned — the rest of the list still scrolls normally.
@@ -86,6 +104,7 @@ function cancelPress() {
 function onPointerDown(e: PointerEvent) {
   if (e.button === 2) return; // right-click is the context menu's business
   longFired = false;
+  travelled = false;
   const touch = e.pointerType !== 'mouse';
   pressed = { x: e.clientX, y: e.clientY, touch };
   emit('pressstart', props.row, props.index, e);
@@ -101,17 +120,25 @@ function onPointerDown(e: PointerEvent) {
   }, 420);
 }
 
-// Scrolling must never turn into a long press: a few pixels of travel cancels.
+// Travel means this was not a click. For a finger it cancels the long press (the
+// gesture was a scroll); for a mouse it marks the press as a drag, so the click
+// that follows it does not also open the row.
+const CLICK_SLOP = 6;
+let travelled = false;
+
 function onPointerMove(e: PointerEvent) {
-  if (!pressed || !pressTimer) return;
-  if (Math.abs(e.clientX - pressed.x) > 8 || Math.abs(e.clientY - pressed.y) > 8) cancelPress();
+  if (!pressed || travelled) return;
+  if (Math.abs(e.clientX - pressed.x) <= CLICK_SLOP && Math.abs(e.clientY - pressed.y) <= CLICK_SLOP) return;
+  travelled = true;
+  if (pressTimer) cancelPress();
 }
 
 function onClick(e: MouseEvent) {
   // The long press already acted; the finger lifting must not also open the row.
   if (longFired) { longFired = false; cancelPress(); return; }
-  const touch = pressed?.touch ?? false;
+  const dragged = travelled;
   cancelPress();
+  travelled = false;
 
   const additive = e.metaKey || e.ctrlKey;
   const range = e.shiftKey;
@@ -125,18 +152,20 @@ function onClick(e: MouseEvent) {
     emit('select', props.row, { additive: true, range: false, index: props.index });
     return;
   }
-  if (touch) emit('open', props.row);
-  else emit('select', props.row, { additive: false, range: false, index: props.index });
-}
-
-function onDblClick() {
-  if (!props.selecting) emit('open', props.row);
+  // The pointer moved, so that was a drag rather than a click on this row.
+  // Doing nothing is right: opening a row the user was dragging is the more
+  // surprising of the two mistakes.
+  if (dragged) return;
+  emit('open', props.row);
 }
 
 // Right-clicking a row that is not in the selection makes it the selection first,
 // so the menu that opens always acts on what the user is pointing at.
-function onContextMenu() {
+function onContextMenu(e: MouseEvent) {
   cancelPress();
+  // On a finger, suppress the WebView's own long-press menu too — reka's trigger
+  // is disabled there, so nothing else is preventing it.
+  if (coarsePointer.value) { e.preventDefault(); return; }
   if (!props.selected) emit('select', props.row, { additive: false, range: false, index: props.index });
 }
 
@@ -144,11 +173,11 @@ function onContextMenu() {
 
 <template>
   <ContextMenu>
-    <ContextMenuTrigger as-child>
+    <ContextMenuTrigger as-child :disabled="coarsePointer">
       <div
         :data-idx="index"
         :data-drop-id="droppable ? row.id : undefined"
-        :style="armed ? { touchAction: 'none' } : undefined"
+        :style="{ WebkitTouchCallout: 'none', ...(armed ? { touchAction: 'none' } : {}) }"
         class="group relative select-none outline-none transition-colors"
         :class="[
           view === 'list'
@@ -164,8 +193,33 @@ function onContextMenu() {
         @pointerup="cancelPress"
         @pointercancel="cancelPress"
         @click="onClick"
-        @dblclick="onDblClick"
         @contextmenu="onContextMenu">
+
+        <!-- ── Selection tick (list) ────────────────────────────────────────
+             In a column of its own, ahead of the file, so it reads as a
+             checkbox rather than a badge. It widens from nothing instead of
+             appearing, and the negative margin swallows the flex gap while it
+             is closed, so the row slides rather than jumps. -->
+        <div
+          v-if="view === 'list'"
+          :aria-hidden="!(selecting || selected)"
+          class="shrink-0 transition-all duration-200 ease-out"
+          :class="selecting || selected
+            ? 'w-5 opacity-100'
+            : '-ml-3 w-0 opacity-0 lg:group-hover:ml-0 lg:group-hover:w-5 lg:group-hover:opacity-100'">
+          <button
+            class="grid size-5 place-items-center rounded-full transition-all duration-200 ease-out"
+            :class="[
+              selected ? 'scale-100 bg-primary text-primary-foreground' : 'bg-background text-transparent ring-1 ring-border hover:ring-primary',
+              selecting || selected ? 'scale-100' : 'scale-75',
+            ]"
+            :tabindex="selecting || selected ? 0 : -1"
+            :aria-label="selected ? 'Deselect' : 'Select'"
+            @click.stop="emit('select', row, { additive: true, range: false, index })"
+            @pointerdown.stop>
+            <Check class="size-3" stroke-width="3.5" />
+          </button>
+        </div>
 
         <!-- ── Icon / thumbnail ─────────────────────────────────────────── -->
         <div
@@ -179,16 +233,21 @@ function onContextMenu() {
             class="relative"
             :class="[tint, view === 'list' ? 'size-5' : 'size-9']" />
 
-          <!-- The selection tick sits on the icon rather than in a column of its
-               own, so turning selection on never reflows the list. -->
-          <button
-            v-if="selecting || selected"
-            class="absolute -right-1 -top-1 grid size-4.5 place-items-center rounded-full border-2 border-background transition-colors"
-            :class="selected ? 'bg-primary text-primary-foreground' : 'bg-background text-transparent ring-1 ring-border hover:ring-primary'"
-            :aria-label="selected ? 'Deselect' : 'Select'"
-            @click.stop="emit('select', row, { additive: true, range: false, index })">
-            <Check class="size-2.5" stroke-width="4" />
-          </button>
+          <!-- A tile has no leading column to put the tick in, so it keeps the
+               top-left overlay — the same corner the list column occupies. -->
+          <Transition
+            enter-active-class="transition duration-200 ease-out" enter-from-class="scale-75 opacity-0"
+            leave-active-class="transition duration-150 ease-in" leave-to-class="scale-75 opacity-0">
+            <button
+              v-if="view === 'grid' && (selecting || selected)"
+              class="absolute -left-1 -top-1 grid size-5 place-items-center rounded-full border-2 border-background transition-colors"
+              :class="selected ? 'bg-primary text-primary-foreground' : 'bg-background text-transparent ring-1 ring-border hover:ring-primary'"
+              :aria-label="selected ? 'Deselect' : 'Select'"
+              @click.stop="emit('select', row, { additive: true, range: false, index })"
+              @pointerdown.stop>
+              <Check class="size-3" stroke-width="3.5" />
+            </button>
+          </Transition>
         </div>
 
         <!-- ── Name + meta ──────────────────────────────────────────────── -->
@@ -229,22 +288,6 @@ function onContextMenu() {
           </span>
         </template>
 
-        <!-- ── Row overflow ─────────────────────────────────────────────── -->
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <button
-              class="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-100 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
-              :class="view === 'grid' ? 'absolute right-1 top-1 bg-background/80 backdrop-blur' : ''"
-              title="More"
-              @click.stop
-              @pointerdown.stop>
-              <MoreVertical class="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="w-52">
-            <SharedVaultMenuItems :actions="actions" variant="dropdown" />
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </ContextMenuTrigger>
 

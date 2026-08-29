@@ -15,7 +15,7 @@ provideDockContext(() => ({
 
 <template>
   <SharedVaultShell title="Vault">
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <SharedVaultHome />
     </div>
   </SharedVaultShell>

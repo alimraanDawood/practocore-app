@@ -65,6 +65,8 @@ export interface VaultDocument {
   file: string;
   filename: string;
   mime: string;
+  /** Byte size of the stored file, recorded at upload. 0 on rows that predate it. */
+  size?: number;
   status: VaultStatus;
   facts_count: number;
   /** True when the text was recovered by OCR (a scanned/image PDF) rather than extracted. */
@@ -222,6 +224,24 @@ export function listFolders(scope: VaultScope, scopeId: string): Promise<VaultFo
   });
 }
 
+/**
+ * Folders whose NAME matches, across every readable library. Search asked only
+ * about filenames before, which meant a folder called "Pleadings" could not be
+ * found by typing "pleadings" — the one thing the word obviously refers to.
+ */
+export async function searchFolders(query: string, limit = 50): Promise<VaultFolder[]> {
+  // Same treatment as the document filter: the value is interpolated into a
+  // PocketBase expression, and a stray quote would break it.
+  const q = query.trim().replace(/["\\]/g, '');
+  if (!q) return [];
+  const res = await pb.collection(FOLDERS).getList<VaultFolder>(1, limit, {
+    filter: `trashed != true && name ~ "${q}"`,
+    sort: 'name',
+    skipTotal: true,
+  });
+  return res.items;
+}
+
 export function listDocuments(scope: VaultScope, scopeId: string): Promise<VaultDocument[]> {
   return pb.collection(DOCS).getFullList<VaultDocument>({
     filter: scopeFilter(scope, scopeId),
@@ -360,6 +380,80 @@ export async function vaultFileUrl(doc: VaultDocument): Promise<string> {
   if (!doc.file) return '';
   const token = await pb.files.getToken();
   return pb.files.getURL(doc as any, doc.file, { token });
+}
+
+/**
+ * A folder, or a multi-selection, as one zip.
+ *
+ * On progress: the archive is streamed, so there is no Content-Length. The server
+ * instead sends the UNCOMPRESSED total it is about to write (from the per-document
+ * sizes recorded at upload) and the file count, and stores rather than deflates
+ * everything already compressed — so bytes received over that total is a real
+ * fraction, not an estimate. It reads 0 only when every document in the selection
+ * predates the size column, and the UI falls back to an indeterminate ring there.
+ *
+ * The body is read here rather than handed to the browser as a plain download,
+ * which is what makes progress possible at all — and what makes it hold the
+ * archive in memory. That is the trade, and it is why the server caps the file
+ * count: a bounded archive is one a phone can hold.
+ */
+export async function downloadArchive(
+  scope: VaultScope,
+  scopeId: string,
+  sel: { folders?: string[]; documents?: string[] },
+  onProgress?: (p: { bytes: number; files: number; total: number }) => void,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/vault/download`, {
+    method: 'POST',
+    headers: { Authorization: pb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope, scope_id: scopeId, folders: sel.folders || [], documents: sel.documents || [] }),
+  });
+  if (!res.ok) {
+    let msg = `Download failed (${res.status})`;
+    try { msg = (await res.json())?.message || msg; } catch { /* not json */ }
+    throw new Error(msg);
+  }
+
+  const files = Number(res.headers.get('X-Vault-Zip-Files') || 0);
+  const total = Number(res.headers.get('X-Vault-Zip-Bytes') || 0);
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition')) || 'documents.zip';
+
+  // No reader (an old WebView, or a response the runtime buffered anyway): take
+  // the blob whole. The download still works, it just arrives without progress.
+  if (!res.body?.getReader) {
+    return { blob: await res.blob(), filename };
+  }
+
+  const reader = res.body.getReader();
+  const chunks: BlobPart[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    bytes += value.byteLength;
+    onProgress?.({ bytes, files, total });
+  }
+  return { blob: new Blob(chunks, { type: 'application/zip' }), filename };
+}
+
+function filenameFromDisposition(header: string | null): string {
+  const m = header?.match(/filename="([^"]+)"/);
+  return m ? m[1] : '';
+}
+
+/** Hand a finished blob to the browser as a save. */
+export function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked on the next tick, not immediately: Safari and the Android WebView
+  // start the save asynchronously and a revoked URL cancels it.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 // ── Writes (gated endpoints) ────────────────────────────────────────────────
