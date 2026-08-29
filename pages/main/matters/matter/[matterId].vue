@@ -410,7 +410,7 @@
                     Upload pleadings, correspondence and evidence. The AI reads them so it can answer questions and
                     draft with this case's facts.
                   </p>
-                  <SharedVaultBrowser scope="matter" :scope-id="matter.id" root-label="Case Documents" />
+                  <SharedVaultEmbedded scope="matter" :scope-id="matter.id" root-label="Case Documents" />
                 </div>
               </template>
             </TabsContent>

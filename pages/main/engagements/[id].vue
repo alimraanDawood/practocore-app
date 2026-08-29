@@ -685,7 +685,7 @@ const goBackOrHome = () => {
                 Upload contracts, correspondence and supporting files. The AI reads them so it can answer questions and
                 draft with this engagement's facts.
               </p>
-              <SharedVaultBrowser scope="engagement" :scope-id="engagement.id" root-label="Engagement documents" />
+              <SharedVaultEmbedded scope="engagement" :scope-id="engagement.id" root-label="Engagement documents" />
             </div>
           </TabsContent>
 

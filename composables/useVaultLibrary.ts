@@ -13,9 +13,23 @@ export interface VaultRow {
   modified: string;
   /** Direct child count (folders only). */
   count?: number;
+  /** "Firm Library / Pleadings" — set only in the flat views, where a row has
+   *  travelled away from the folder it lives in and needs to say where it came from. */
+  path?: string;
+  /** Soft-delete flag, mirrored for the recycle bin. */
+  trashed?: boolean;
   /** The underlying record. */
   folder?: VaultFolder;
   doc?: VaultDocument;
+}
+
+/** Build a row from a document that arrived outside a library listing (the
+ *  cross-library recents / category / search / bin screens). */
+export function docRow(d: VaultDocument, path?: string): VaultRow {
+  return {
+    kind: 'doc', id: d.id, name: d.filename || 'Untitled',
+    modified: d.updated || d.created, path, trashed: d.trashed, doc: d,
+  };
 }
 
 export type VaultSortKey = 'name' | 'date';
@@ -148,8 +162,99 @@ export function useVaultLibrary(
     });
   }
 
+  /** "Firm Library / Pleadings / Annexures" for whatever contains `folderId`. */
+  function pathLabel(folderId: string, rootLabel: string): string {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let cur = folderId;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const f = folders.value.find((x) => x.id === cur);
+      if (!f) break;
+      names.unshift(f.name);
+      cur = f.parent || '';
+    }
+    return [rootLabel, ...names].join(' / ');
+  }
+
+  /** Every folder beneath `rootId` (not including it). */
+  function descendantFolderIds(rootId: string): string[] {
+    const out: string[] = [];
+    const queue = [rootId];
+    for (let i = 0; i < queue.length; i++) {
+      for (const f of folders.value) {
+        if ((f.parent || '') === queue[i]) { queue.push(f.id); out.push(f.id); }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Library-wide name match. Flat by design: a search that only looked inside the
+   * open folder would answer a question nobody asked, and one that hid which folder
+   * a hit lives in would leave the user unable to get back to it — so every row
+   * carries its path.
+   */
+  function searchRows(q: string, rootLabel: string): VaultRow[] {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return [];
+    const out: VaultRow[] = [];
+    for (const f of liveFolders.value) {
+      if (!f.name.toLowerCase().includes(needle)) continue;
+      out.push({
+        kind: 'folder', id: f.id, name: f.name, modified: f.updated || f.created,
+        count: childCount(f.id), path: pathLabel(f.parent || '', rootLabel), folder: f,
+      });
+    }
+    for (const d of liveDocs.value) {
+      if (!(d.filename || '').toLowerCase().includes(needle)) continue;
+      out.push(docRow(d, pathLabel(d.folder || '', rootLabel)));
+    }
+    return out;
+  }
+
+  /**
+   * The library's recycle bin. Only the top of each deleted subtree is listed —
+   * a document inside a deleted folder comes back with its folder, so listing it
+   * separately would offer a restore that cannot mean anything on its own.
+   */
+  function trashRows(rootLabel: string): VaultRow[] {
+    const trashedFolders = new Set(folders.value.filter((f) => f.trashed).map((f) => f.id));
+    const out: VaultRow[] = [];
+    for (const f of folders.value) {
+      if (!f.trashed || (f.parent && trashedFolders.has(f.parent))) continue;
+      out.push({
+        kind: 'folder', id: f.id, name: f.name, modified: f.trashed_at || f.updated,
+        trashed: true, path: pathLabel(f.parent || '', rootLabel), folder: f,
+      });
+    }
+    for (const d of documents.value) {
+      if (!d.trashed || (d.folder && trashedFolders.has(d.folder))) continue;
+      out.push({
+        ...docRow(d, pathLabel(d.folder || '', rootLabel)),
+        modified: d.trashed_at || d.updated,
+      });
+    }
+    return out.sort((a, b) => (a.modified < b.modified ? 1 : -1));
+  }
+
+  const trashCount = computed(() => {
+    const trashedFolders = new Set(folders.value.filter((f) => f.trashed).map((f) => f.id));
+    return folders.value.filter((f) => f.trashed && !(f.parent && trashedFolders.has(f.parent))).length
+      + documents.value.filter((d) => d.trashed && !(d.folder && trashedFolders.has(d.folder))).length;
+  });
+
+  /** Documents this library is still reading — drives the header's progress hint. */
+  const ingestingCount = computed(() =>
+    liveDocs.value.filter((d) => d.status === 'pending' || d.status === 'processing').length);
+
   return {
     folders, documents, liveFolders, liveDocs, loading, failed,
-    folderById, resolvePath, childCount, entriesIn, reload: load,
+    folderById, resolvePath, childCount, entriesIn,
+    pathLabel, descendantFolderIds, searchRows, trashRows, trashCount, ingestingCount,
+    reload: load,
   };
 }
+
+/** The shape a host hands down when it owns the library instance (see Explorer). */
+export type VaultLibraryApi = ReturnType<typeof useVaultLibrary>;

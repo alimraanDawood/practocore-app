@@ -56,8 +56,10 @@ function pick() {
   fileInput.value?.click();
 }
 
-// Lets a host open the picker from its own control — see `headless`.
-defineExpose({ pick });
+// Lets a host drive the flow from its own affordance — see `headless`. `accept`
+// is how a host that owns the drop surface (the explorer drops files anywhere on
+// itself, not just on a dashed rectangle) hands the files over.
+defineExpose({ pick, accept: (files: File[]) => { if (files.length) openDialog(files); } });
 
 function onPicked(e: Event) {
   const input = e.target as HTMLInputElement;

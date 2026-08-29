@@ -79,34 +79,6 @@ export interface VaultDocument {
   updated: string;
 }
 
-// A normalized list entry (folder or document) for the unified explorer view, so
-// folders and documents can share one row/card component and one sort.
-export interface VaultEntry {
-  kind: 'folder' | 'doc';
-  id: string;
-  name: string;
-  /** ISO timestamp used for the "Modified" column / sorting. */
-  modified: string;
-  /** Direct child count (folders only). */
-  count?: number;
-  /** Folder path label, set in the flat search / trash views. */
-  path?: string;
-  /** Ingestion fields (documents only). */
-  status?: VaultStatus;
-  factsCount?: number;
-  mime?: string;
-  filename?: string;
-  failedError?: string;
-  /** Classification + AI-ingestion flag (documents only). */
-  docType?: string;
-  ingest?: boolean;
-  /** Soft-delete flag mirrored onto the entry for the Trash view. */
-  trashed?: boolean;
-  trashedAt?: string;
-  /** The underlying record. */
-  raw: VaultFolder | VaultDocument;
-}
-
 export interface Entitlements {
   memory: boolean;
   skills: boolean;

@@ -1,11 +1,15 @@
 <script lang="ts" setup>
 // Page-aware section of the global sidebar, rendered between the workspace nav
-// and the footer. On the assistant/research it shows recent conversations; on
-// the vault it shows the firm + case-file libraries as quick-clicks. Selection
-// is URL-driven (`?c=` for chat, `?lib=` for vault) so clicking here drives the
-// page without the sidebar reaching into page state. Hidden when the sidebar is
-// collapsed to icons (the rail stays clean).
-import { MessageSquareText, Plus, Building2, Briefcase, ChevronDown, Telescope } from 'lucide-vue-next';
+// and the footer. On the assistant/research it shows recent conversations.
+// Selection is URL-driven (`?c=`) so clicking here drives the page without the
+// sidebar reaching into page state. Hidden when the sidebar is collapsed to
+// icons (the rail stays clean).
+//
+// The vault used to duplicate its library list here. It no longer does: the
+// vault owns a rail of its own on desktop and a home screen listing the same
+// libraries on a phone, and two sidebars offering the same links — one of which
+// could not show the folder you were in — was one too many.
+import { MessageSquareText, Plus, ChevronDown, Telescope } from 'lucide-vue-next';
 
 const route = useRoute();
 
@@ -13,14 +17,12 @@ const route = useRoute();
 // startsWith('/main') would wrongly fire on every /main/* page (vault, matters…).
 const onAssistant = computed(() => route.path === '/main' || route.path === '/main/');
 const onResearch = computed(() => route.path === '/main/research' || route.path === '/main/research/');
-const onVault = computed(() => route.path.startsWith('/main/vault'));
-
 // On desktop the assistant's chat list moved into the Chat History flyout
 // (LayoutChatHistoryPanel), so showing it inline here too would duplicate it.
 // The mobile sidebar keeps the inline list.
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const showChats = computed(() => onAssistant.value && !isDesktop.value);
-const visible = computed(() => showChats.value || onResearch.value || onVault.value);
+const visible = computed(() => showChats.value || onResearch.value);
 
 // ── Chat: recent conversations ──────────────────────────────────────────────
 const { conversations, loading: chatLoading, refresh: refreshChats } = useAssistantHistory();
@@ -38,20 +40,12 @@ const visibleResearch = computed(() =>
   researchExpanded.value ? researchConvs.value : researchConvs.value.slice(0, RECENT_LIMIT));
 const hasMoreResearch = computed(() => researchConvs.value.length > RECENT_LIMIT);
 
-// ── Vault: libraries ────────────────────────────────────────────────────────
-const { matters, loading: vaultLoading, orgId, personalLibrary, refresh: refreshVault, libraryQuery } = useVaultLibraries();
-const activeLib = computed(() => (typeof route.query.lib === 'string' ? route.query.lib : ''));
-const vaultExpanded = ref(false);
-const visibleMatters = computed(() =>
-  vaultExpanded.value ? matters.value : matters.value.slice(0, RECENT_LIMIT));
-const hasMoreMatters = computed(() => matters.value.length > RECENT_LIMIT);
 
 // Lazily load each section's data the first time its page is opened.
 watch(visible, (on) => {
   if (!on) return;
   if (onAssistant.value) refreshChats();
   if (onResearch.value) refreshResearch();
-  if (onVault.value) refreshVault();
 }, { immediate: true });
 </script>
 
@@ -137,62 +131,5 @@ watch(visible, (on) => {
       </SidebarGroupContent>
     </template>
 
-    <!-- ── Vault: libraries ─────────────────────────────────────────────── -->
-    <template v-else-if="onVault">
-      <SidebarGroupLabel>Libraries</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          <SidebarMenuItem v-if="orgId">
-            <SidebarMenuButton
-              as-child
-              :is-active="activeLib === `org:${orgId}`"
-              tooltip="Firm Library">
-              <NuxtLink :to="{ path: '/main/vault', query: libraryQuery({ scope: 'org', scopeId: orgId, label: 'Firm Library' }) }">
-                <Building2 />
-                <span>Firm Library</span>
-              </NuxtLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem v-else-if="personalLibrary">
-            <SidebarMenuButton
-              as-child
-              :is-active="activeLib === `user:${personalLibrary.scopeId}`"
-              tooltip="Personal Library">
-              <NuxtLink :to="{ path: '/main/vault', query: libraryQuery(personalLibrary) }">
-                <Building2 />
-                <span>Personal Library</span>
-              </NuxtLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem v-if="vaultLoading && !matters.length">
-            <span class="block px-2 py-1.5 text-xs text-muted-foreground">Loading…</span>
-          </SidebarMenuItem>
-          <SidebarMenuItem v-else-if="!matters.length && !orgId && !personalLibrary">
-            <span class="block px-2 py-1.5 text-xs text-muted-foreground">No case files yet.</span>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem v-for="m in visibleMatters" :key="m.id">
-            <SidebarMenuButton
-              as-child
-              :is-active="activeLib === `matter:${m.id}`"
-              :tooltip="m.name || 'Matter'">
-              <NuxtLink :to="{ path: '/main/vault', query: libraryQuery({ scope: 'matter', scopeId: m.id, label: m.name || 'Matter' }) }">
-                <Briefcase />
-                <span class="truncate">{{ m.name || 'Matter' }}</span>
-              </NuxtLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem v-if="hasMoreMatters">
-            <SidebarMenuButton class="text-muted-foreground" @click="vaultExpanded = !vaultExpanded">
-              <ChevronDown :class="['transition-transform', vaultExpanded ? 'rotate-180' : '']" />
-              <span>{{ vaultExpanded ? 'Show less' : `All case files (${matters.length})` }}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </template>
   </SidebarGroup>
 </template>
