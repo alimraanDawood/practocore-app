@@ -23,10 +23,10 @@ appear twice.
 | 7 | Privacy Policy URL reachable | ⏳ built, **not deployed** — `practocore-landing` `/privacy` |
 | 8 | Terms of Use URL reachable | ⏳ built, **not deployed** — `practocore-landing` `/terms` |
 | 9 | Support URL reachable (`<SupportUrl>` target) | ⏳ built, **not deployed** — `practocore-landing` `/contact` |
-| 10 | Registered company address confirmed on the legal pages | ✅ set 2026-08-16 — Makerere Incubation and Innovation Centre, COCIS Block B Level 5, Makerere University, Kampala, Uganda |
+| 10 | Registered company address confirmed on the legal pages | ✅ updated 2026-08-24 — Kiswa, Zone 2, Nakawa Division, Kampala, Uganda; P.O. Box 216701, Kampala GPO (registered office of PractoCore Technologies Limited) |
 | 11 | Google OAuth redirect registered for `app.practocore.com` | ✅ registered 2026-08-16 — not yet exercised from a real task pane |
 | 12 | Reviewer test account that can actually sign in | ❌ **TODO(owner)** — see §5 |
-| 13 | Partner Center account enrolled in Microsoft 365 & Copilot | ❌ **TODO(owner)** |
+| 13 | Partner Center account enrolled in Microsoft 365 & Copilot | ❌ **TODO(owner)** — see `PARTNER_CENTER_VERIFICATION.md`; 3 blockers to clear first |
 | 14 | Listing assets (logo, screenshots) | ❌ **TODO** — see §4 |
 
 Items 7–9 become ✅ the moment `practocore-landing` is deployed. Nothing else in
@@ -41,12 +41,12 @@ this package can be finished by anyone but the account owner.
 | Manifest file | `word-manifest.xml` | `outlook-manifest.xml` |
 | Add-in GUID | `cf8f85d3-85c9-4b6e-9994-ea81ff9d22eb` | `12c1ef45-58c8-45ea-915b-3a7f6a5838c8` |
 | Version | `1.0.0.0` | `1.0.0.0` |
-| Publisher (`ProviderName`) | Fiika Tech Solutions Limited | Fiika Tech Solutions Limited |
+| Publisher (`ProviderName`) | PractoCore Technologies Limited | PractoCore Technologies Limited |
 | Permission requested | `ReadWriteDocument` | `ReadWriteItem` |
 | Host platforms certified by validator | Word on Windows, Mac, web, iPad | Outlook on Windows, Mac, web |
 
 > The publisher name in Partner Center **must match `<ProviderName>` exactly** —
-> "Fiika Tech Solutions Limited", not "PractoCore". Verification is against the
+> "PractoCore Technologies Limited", not "PractoCore". Verification is against the
 > registered entity.
 
 ---

@@ -21,7 +21,7 @@
 
   <Id>2c7b9e10-4d8a-49f6-9b2a-7e1d6c3f0a55</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <ProviderName>PractoCore Technologies Limited</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="PractoCore (Dev)" />
   <Description DefaultValue="Triage, summarise, and reply to correspondence against your PractoCore matters — inside Outlook." />

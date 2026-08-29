@@ -23,7 +23,7 @@
   <!-- Production GUID (distinct from the dev manifest so both can coexist during rollout). -->
   <Id>cf8f85d3-85c9-4b6e-9994-ea81ff9d22eb</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <ProviderName>PractoCore Technologies Limited</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="PractoCore" />
   <Description DefaultValue="Draft, cite, and revise legal documents against your PractoCore matters — inside Word. Insert AI drafts, apply Ugandan court formats, pull precedent clauses and authorities, and save work product straight back to the matter vault." />

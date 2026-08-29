@@ -23,7 +23,7 @@
   <!-- New GUID so it can coexist with the standalone add-in during the transition. -->
   <Id>1d6f2a4c-9b3e-4d77-bf21-3c5e8a90b1d4</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <ProviderName>PractoCore Technologies Limited</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="PractoCore (Dev)" />
   <Description DefaultValue="Draft, cite, and revise legal documents against your PractoCore matters — inside Word." />

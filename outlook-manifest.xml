@@ -23,7 +23,7 @@
   <!-- Production GUID (distinct from the dev manifest so both can coexist during rollout). -->
   <Id>12c1ef45-58c8-45ea-915b-3a7f6a5838c8</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Fiika Tech Solutions Limited</ProviderName>
+  <ProviderName>PractoCore Technologies Limited</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="PractoCore" />
   <Description DefaultValue="Triage, summarise, and reply to correspondence against your PractoCore matters — inside Outlook. Draft matter-grounded replies, pull matter context, and file emails to the case." />

@@ -2,7 +2,7 @@
   "name": "practocore-app",
   "version": "1.0.0",
   "description": "Litigation Deadline Management for Ugandan Litigators",
-  "author": "Fiika Tech Solutions Limited",
+  "author": "PractoCore Technologies Limited",
   "private": true,
   "type": "module",
   "scripts": {

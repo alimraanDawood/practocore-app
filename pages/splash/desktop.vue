@@ -11,7 +11,7 @@
       </div>
 
       <div class="flex flex-col p-2">
-        <span class="text-xs text-primary-foreground">All rights reserved. Software by Fiika Tech Solutions Limited</span>
+        <span class="text-xs text-primary-foreground">All rights reserved. Software by PractoCore Technologies Limited</span>
       </div>
 
     </div>
