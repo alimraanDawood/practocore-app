@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<SidebarProps>(), {
   collapsible: 'offcanvas',
 })
 
-const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+const { isMobile, state, openMobile, setOpenMobile, setOpen } = useSidebar()
 
 // ── Interactive drag-to-open drawer (mobile, left side) ───────────────────────
 // On mobile we replace the plain Sheet with a panel that tracks the finger:
@@ -203,6 +203,21 @@ onBeforeUnmount(() => {
   if (rafId)
     cancelAnimationFrame(rafId)
 })
+
+// ── Click the collapsed rail's whitespace to expand (desktop, icon mode) ──────
+// Expand only — clicking inside an expanded sidebar must never collapse it, and
+// a click that lands on an actual control (nav button, avatar, input, …) does
+// that control's job instead of expanding.
+const INTERACTIVE = 'a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="switch"], [contenteditable="true"]'
+
+function onRailClick(e: MouseEvent) {
+  if (props.collapsible !== 'icon' || state.value !== 'collapsed')
+    return
+  const target = e.target as HTMLElement | null
+  if (target?.closest(INTERACTIVE))
+    return
+  setOpen(true)
+}
 </script>
 
 <template>
@@ -297,7 +312,8 @@ onBeforeUnmount(() => {
     >
       <div
         data-sidebar="sidebar"
-        class="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
+        class="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm group-data-[collapsible=icon]:cursor-pointer"
+        @click="onRailClick"
       >
         <slot />
       </div>

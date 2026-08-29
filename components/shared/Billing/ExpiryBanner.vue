@@ -7,11 +7,20 @@
         <button class="font-bold underline ml-1">{{ actionLabel }}</button>
       </SharedBillingSubscribe>
     </span>
+    <button
+      v-if="dismissible"
+      type="button"
+      class="shrink-0 rounded p-0.5 opacity-80 hover:opacity-100"
+      aria-label="Dismiss"
+      @click="dismiss"
+    >
+      <X class="size-4" />
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { AlertTriangle, Lock, FileLock2 } from 'lucide-vue-next';
+import { AlertTriangle, Lock, FileLock2, X } from 'lucide-vue-next';
 import { useAccess } from '~/composables/useAccess';
 
 // The banner renders the server's access decision rather than recomputing
@@ -79,7 +88,33 @@ const message = computed(() => {
   return '';
 });
 
-const shouldShow = computed(() => !!message.value);
+/**
+ * Only the pre-expiry warning can be dismissed. Once the term has actually
+ * ended — grace, read-only, locked, suspended — the banner is the one place
+ * the user is told why the product is behaving differently, so it stays put.
+ */
+const dismissible = computed(() => expiringSoon.value);
+
+// Dismissal is remembered against the day count, so the warning returns each
+// day as the date closes in rather than being silenced for the whole week.
+const DISMISS_KEY = 'billing.expiryBanner.dismissed';
+const dismissedAt = ref<string | null>(null);
+const dismissToken = computed(() => `${access.value?.reason ?? ''}:${daysRemaining.value}`);
+
+onMounted(() => {
+  try { dismissedAt.value = localStorage.getItem(DISMISS_KEY); } catch { /* noop */ }
+});
+
+function dismiss() {
+  dismissedAt.value = dismissToken.value;
+  try { localStorage.setItem(DISMISS_KEY, dismissToken.value); } catch { /* noop */ }
+}
+
+const shouldShow = computed(() => {
+  if (!message.value) return false;
+  if (dismissible.value && dismissedAt.value === dismissToken.value) return false;
+  return true;
+});
 
 const bannerIcon = computed(() => {
   if (isLocked.value || suspended.value) return Lock;
