@@ -110,20 +110,20 @@ await sendPushToOrganization({
 
 ### Handle notification taps:
 
-The default handler in `services/push-notifications.ts` (line ~180) needs customization:
+Already wired. `handleNotificationAction` in `services/push-notifications.ts`
+resolves the destination through the shared resolver, the same one the in-app
+notification list uses:
 
 ```typescript
 function handleNotificationAction(action: ActionPerformed) {
-  const data = action.notification.data;
-
-  // Navigate based on your app's routing
-  if (data.matter_id) {
-    navigateTo(`/main/matters/${data.matter_id}`);
-  } else if (data.deadline_id) {
-    navigateTo(`/main/deadlines/${data.deadline_id}`);
-  }
+  const route = resolveNotificationRoute(action.notification.data);
+  if (route) navigateTo(route);
 }
 ```
+
+To send a tap somewhere new, set `metadata.clickAction` on the notification in
+the Go writer, or add a fallback to `utils/notificationRoute.ts`. See
+docs/NOTIFICATION_NAVIGATION_GUIDE.md.
 
 ## 🔧 Customization Points
 

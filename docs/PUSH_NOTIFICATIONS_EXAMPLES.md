@@ -55,8 +55,8 @@ export async function sendDeadlineReminder(deadline: any, matter: any) {
     body: `${matter.title}: ${deadline.title} is due tomorrow`,
     data: {
       type: 'deadline_approaching',
-      deadline_id: deadline.id,
-      matter_id: matter.id,
+      deadlineId: deadline.id,
+      matterId: matter.id,
       deadline_date: deadline.date
     },
     priority: 'high'
@@ -79,7 +79,7 @@ export async function notifyMatterUpdate(matterId: string, updateType: string) {
     body: `${matter.title} has been ${updateType}`,
     data: {
       type: 'matter_updated',
-      matter_id: matterId,
+      matterId: matterId,
       update_type: updateType
     }
   });
@@ -326,14 +326,12 @@ const clearNotification = async (id: string) => {
 };
 
 const handleNotificationClick = (notification: any) => {
-  const data = notification.data;
-
-  // Navigate based on notification type
-  if (data.matter_id) {
-    navigateTo(`/main/matters/${data.matter_id}`);
-  } else if (data.deadline_id) {
-    navigateTo(`/main/deadlines/${data.deadline_id}`);
-  }
+  // One resolver for every surface (see docs/NOTIFICATION_NAVIGATION_GUIDE.md).
+  // Do not hand-roll paths here: the matter route is /main/matters/matter/<id>,
+  // a deadline is an anchor on it, and the metadata keys are matterId /
+  // deadlineId — not matter_id.
+  const route = resolveNotificationRoute(notification.data);
+  if (route) navigateTo(route);
 
   // Clear the notification
   clearNotification(notification.id);
@@ -378,7 +376,7 @@ const handleNotificationClick = (notification: any) => {
 // In your matter/deadline service
 import { sendPushToOrganization } from '~/services/notifications';
 
-export async function createDeadline(matterIddlineData: any) {
+export async function createDeadline(matterId: string, deadlineData: any) {
   const { $pb } = useNuxtApp();
 
   // Create the deadline
@@ -394,8 +392,8 @@ export async function createDeadline(matterIddlineData: any) {
     body: `${deadline.title} has been added to ${matter.title}`,
     data: {
       type: 'deadline_created',
-      deadline_id: deadline.id,
-      matter_id: matterId,
+      deadlineId: deadline.id,
+      matterId: matterId,
       deadline_date: deadline.date
     }
   });
@@ -543,7 +541,7 @@ export async function testNotificationFlow() {
     body: 'This notification contains custom data',
     data: {
       type: 'test',
-      matter_id: 'test_matter_123',
+      matterId: 'test_matter_123',
       custom_field: 'custom_value'
     }
   });

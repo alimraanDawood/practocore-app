@@ -6,7 +6,7 @@ export type NotificationType = 'REMINDER' | 'ERROR' | 'WARNING' | 'SUCCESS' | 'I
 
 export interface NotificationAction {
   label: string;
-  url?: string; // Internal route (e.g., "/main/matters/abc123")
+  url?: string; // Internal route (e.g., "/main/matters/matter/abc123")
   variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
   callback?: string; // Name of a callback function to execute
   external?: boolean; // Whether URL is external (opens in new tab)
@@ -63,75 +63,4 @@ export interface CreateNotificationPayload {
   metadata?: NotificationMetadata;
   read?: boolean;
   sent?: boolean;
-}
-
-/**
- * Helper function to create notification with matter link
- */
-export function createMatterNotification(
-  recipient: string,
-  organisation: string,
-  matterId: string,
-  title: string,
-  body: string,
-  options?: Partial<CreateNotificationPayload>
-): CreateNotificationPayload {
-  return {
-    recipient,
-    organisation,
-    title,
-    body,
-    type: 'INFO',
-    metadata: {
-      matterId,
-      clickAction: `/main/matters/${matterId}`,
-    },
-    actions: [
-      {
-        label: 'View Matter',
-        url: `/main/matters/${matterId}`,
-        variant: 'default',
-      },
-    ],
-    ...options,
-  };
-}
-
-/**
- * Helper function to create notification with deadline link
- */
-export function createDeadlineNotification(
-  recipient: string,
-  organisation: string,
-  deadlineId: string,
-  matterId: string,
-  title: string,
-  body: string,
-  options?: Partial<CreateNotificationPayload>
-): CreateNotificationPayload {
-  return {
-    recipient,
-    organisation,
-    title,
-    body,
-    type: 'REMINDER',
-    metadata: {
-      deadlineId,
-      matterId,
-      clickAction: `/main/matters/${matterId}#deadline-${deadlineId}`,
-    },
-    actions: [
-      {
-        label: 'View Deadline',
-        url: `/main/matters/${matterId}#deadline-${deadlineId}`,
-        variant: 'default',
-      },
-      {
-        label: 'View Matter',
-        url: `/main/matters/${matterId}`,
-        variant: 'outline',
-      },
-    ],
-    ...options,
-  };
 }

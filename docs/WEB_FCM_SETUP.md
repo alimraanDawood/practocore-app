@@ -124,14 +124,19 @@ The system automatically detects the platform:
 When a notification is clicked, the app can navigate to specific pages based on the `data` payload:
 
 ```javascript
-// Example notification payload from backend
+// Example notification payload from backend.
+// The keys are the ones utils/notificationRoute.ts actually reads — camelCase,
+// and `clickAction` wins over the bare ids. See
+// docs/NOTIFICATION_NAVIGATION_GUIDE.md.
 {
   title: "New Deadline",
   body: "Matter XYZ has a new deadline",
   data: {
-    matter_id: "abc123",        // Navigate to /main/matters/abc123
-    deadline_id: "def456",      // Or navigate to /main/deadlines/def456
-    click_action: "/some/path"  // Or custom path
+    matterId: "abc123",
+    deadlineId: "def456",
+    // The full route, and the one that is used when present. A deadline is an
+    // anchor on the matter page, not a route of its own.
+    clickAction: "/main/matters/matter/abc123#deadline-def456"
   }
 }
 ```
@@ -320,12 +325,12 @@ Example payload structure for web:
       "body": "Body text here"
     },
     "data": {
-      "matter_id": "123",
-      "click_action": "/main/matters/123"
+      "matterId": "123",
+      "clickAction": "/main/matters/matter/123"
     },
     "webpush": {
       "fcm_options": {
-        "link": "/main/matters/123"
+        "link": "/main/matters/matter/123"
       }
     }
   }

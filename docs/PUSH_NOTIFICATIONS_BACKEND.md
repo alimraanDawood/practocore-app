@@ -363,8 +363,8 @@ onRecordAfterCreateRequest((e) => {
         `A new deadline has been added to ${matter.getString("title")}`,
         {
           type: "deadline_created",
-          deadline_id: deadline.id,
-          matter_id: matter.id
+          deadlineId: deadline.id,
+          matterId: matter.id
         }
       );
     } catch (err) {
@@ -413,8 +413,8 @@ await sendPushNotification({
   title: 'New Deadline',
   body: 'A deadline is approaching',
   data: {
-    deadline_id: 'deadline123',
-    matter_id: 'matter456'
+    deadlineId: 'deadline123',
+    matterId: 'matter456'
   }
 });
 ```
