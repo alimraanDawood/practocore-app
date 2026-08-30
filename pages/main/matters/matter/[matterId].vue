@@ -161,8 +161,11 @@
              the timeline to that application and offers a link to its full matter page. -->
         <div v-if="!matter?.parent" class="flex flex-row gap-2 p-2 items-center">
           <div class="flex flex-row flex-wrap gap-1 items-center">
-            <Tabs default-value="all" v-model="currentApplicationOption">
-              <TabsList class="gap-2 items-center">
+            <!-- Same unbounded growth as the view tabs below, and worse here
+                 because the count is data-driven: one trigger per interlocutory
+                 application, each labelled with a case number. -->
+            <Tabs class="max-w-full overflow-x-auto no-scrollbar" default-value="all" v-model="currentApplicationOption">
+              <TabsList class="w-max gap-2 items-center">
                 <TabsTrigger value="all">All</TabsTrigger>
 
                 <TabsTrigger
@@ -201,13 +204,22 @@
 
         <div class="flex flex-row gap-2 p-2 h-full">
           <Tabs class="w-full h-full" v-model="activeTab">
-            <TabsList>
-              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="milestones">Milestones</TabsTrigger>
-              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="details">Details</TabsTrigger>
-              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
-              <TabsTrigger class="text-sm ibm-plex-serif font-medium" value="drafts">AI Drafts</TabsTrigger>
-            </TabsList>
+            <!-- The five triggers are wider than a phone. TabsList is `w-fit
+                 inline-flex` with `whitespace-nowrap` triggers and nothing
+                 clipping it, so it grew the PAGE instead of itself and the whole
+                 matter view scrolled sideways. Scroll the bar inside its own
+                 box: max-w-full to cap it, w-max on the list so it still sizes
+                 to its content, shrink-0 so the triggers keep their width
+                 instead of being squeezed by flex-1. -->
+            <div class="max-w-full overflow-x-auto no-scrollbar">
+              <TabsList class="w-max">
+                <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
+                <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="milestones">Milestones</TabsTrigger>
+                <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="details">Details</TabsTrigger>
+                <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="documents">Case Documents</TabsTrigger>
+                <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="drafts">AI Drafts</TabsTrigger>
+              </TabsList>
+            </div>
 
             <!-- Timeline -->
             <TabsContent  value="timeline" class="h-full">
