@@ -11,6 +11,10 @@ const props = defineProps<{
   engagement: Engagement;
 }>();
 
+// Per-card: every card in the grid rendered the same static id, so the duplicate
+// ids were invalid and every bar's aria-labelledby resolved to the first card's.
+const completionLabelId = computed(() => `eng-completion-${props.engagement.id}`);
+
 const templateName = computed(() => props.engagement.expand?.template?.name ?? 'Engagement');
 
 const stages = computed(() =>
@@ -68,10 +72,10 @@ function statusVariant(status: string) {
     <!-- Stage completion (mirrors matter deadline completion) -->
     <div v-if="hasStages" class="flex flex-col gap-2">
       <div class="flex flex-row items-center justify-between">
-        <span id="eng-completion-label" class="font-bold text-xs">Progress</span>
+        <span :id="completionLabelId" class="font-bold text-xs">Progress</span>
         <span class="font-bold text-xs">{{ completion }}%</span>
       </div>
-      <Progress class="h-1" :model-value="completion" aria-labelledby="eng-completion-label" />
+      <Progress class="h-1" :model-value="completion" :aria-labelledby="completionLabelId" />
     </div>
 
     <!-- Where it's at -->

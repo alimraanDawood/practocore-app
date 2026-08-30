@@ -45,7 +45,11 @@ import { createAdjournment, adjournDeadline } from '~/services/matters';
 import { LoaderIcon } from 'lucide-vue-next';
 
 const [CreateTemplate, ReuseTemplate] = createReusableTemplate();
-const open = ref(false);
+// Openable from outside as well as by its own trigger: `defineModel` keeps a local
+// value when no parent binds it, so every existing `<slot>`-triggered usage is
+// unchanged, while a context menu can open this dialog with `v-model:open` and no
+// button to click.
+const open = defineModel('open', { default: false });
 const loading = ref(false);
 const emits = defineEmits(['updated']);
 const props = defineProps(['matter', 'deadline']);

@@ -2,8 +2,9 @@
 import {
   Loader2, Wand2, Copy, Trash2, ChevronDown, ChevronRight, Layers,
   CalendarClock, FileText, Milestone, Lock, Users, Globe, Plus, Bell, BellOff,
-  History, RotateCcw, Settings2, ArrowRight,
+  History, RotateCcw, Settings2, ArrowRight, RefreshCw,
 } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
 import {
   listEngagementTemplates, duplicateEngagementTemplate, deleteEngagementTemplate,
   canManageTemplate, describeCompliance,
@@ -11,6 +12,7 @@ import {
   type EngagementTemplate, type EngagementTemplateVersion,
 } from '~/services/engagements';
 import { pb } from '~/lib/pocketbase';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 
 const open = defineModel<boolean>('open', { default: false });
 const emit = defineEmits<{ changed: []; use: [templateId: string] }>();
@@ -108,7 +110,10 @@ const [DefineManageList, ReuseManageList] = createReusableTemplate<{ template: E
 interface ManageAction {
   key: string;
   label: string;
+  /** The full explanation, for the roomy Manage panel. */
   hint?: string;
+  /** A few words' version of `hint`, for a menu row that cannot wrap. */
+  shortHint?: string;
   icon: any;
   danger?: boolean;
   disabled?: boolean;
@@ -124,6 +129,7 @@ function manageActions(t: EngagementTemplate): ManageAction[] {
       hint: !editable
         ? 'A colleague authored this firm playbook — duplicate it, or ask an administrator for the manage-templates permission'
         : t.isPublic ? 'Creates your own copy to change' : 'Change stages, milestones and documents',
+      shortHint: !editable ? 'needs the manage-templates permission' : undefined,
       icon: Wand2,
       disabled: !editable,
       run: () => editInStudio(t.id),
@@ -164,6 +170,62 @@ function runManageAction(a: ManageAction) {
   manageFor.value = null;
   a.run();
 }
+
+// ── Right-click menus ───────────────────────────────────────────────────────
+// The same actions the Manage button opens, reachable by right-clicking the row
+// itself — the shape the engagements grid and the vault already use. Manage stays
+// where it is: it is the discoverable route, the only route on a touchscreen, and
+// the one with room for each action's full explanation.
+//
+// Built by mapping `manageActions` rather than restating it, so the two lists
+// cannot come apart.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+
+// What the open menu is aimed at: a row, or null for the sheet itself. There is
+// ONE menu for the whole list rather than one per row — a menu per row meant each
+// was its own dismissable layer, so right-clicking a second row opened a second
+// menu with the first still standing. Set in the target phase by the row, cleared
+// first by the list's CAPTURE handler, which runs top-down before it.
+const ctxRow = ref<EngagementTemplate | null>(null);
+
+// A menu and a dialog are separate overlay layers; opening the second while the
+// first is still closing makes them race for the body scroll lock (CLAUDE.md).
+const defer = (fn: () => void) => setTimeout(fn, 0);
+
+function rowActions(t: EngagementTemplate): MenuAction[] {
+  const expanded = expandedId.value === t.id;
+  const out: MenuAction[] = [
+    {
+      id: 'use', label: 'Start an engagement', icon: ArrowRight,
+      run: () => defer(() => useTemplate(t)),
+    },
+    {
+      id: 'details', label: expanded ? 'Hide details' : 'Show details',
+      icon: expanded ? ChevronDown : ChevronRight,
+      run: () => toggle(t.id),
+    },
+  ];
+  manageActions(t).forEach((a, i) => {
+    out.push({
+      id: a.key,
+      // A greyed row with no reason is a dead end, so the short reason rides in
+      // the label — the vault's disabled-Paste pattern.
+      label: a.disabled && a.shortHint ? `${a.label} — ${a.shortHint}` : a.label,
+      icon: a.icon,
+      danger: a.danger,
+      disabled: a.disabled,
+      divider: i === 0,
+      run: () => defer(a.run),
+    });
+  });
+  return out;
+}
+
+/** The menu on the sheet's own space, rather than on any one playbook. */
+const surfaceActions = computed<MenuAction[]>(() => [
+  { id: 'new', label: 'Build a new playbook in Studio', icon: Plus, run: () => defer(() => editInStudio('')) },
+  { id: 'refresh', label: 'Refresh', icon: RefreshCw, divider: true, run: () => { load(); } },
+]);
 
 // Starting work from a playbook hands the id up to the page, which opens the
 // create flow with it already picked — the library itself closes, since the
@@ -264,7 +326,14 @@ async function confirmDelete() {
         </SheetDescription>
       </SheetHeader>
 
-      <div class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-5">
+      <!-- The list body carries the sheet's own menu (build a new playbook,
+           refresh); each playbook row carries its own and stops the event, so the
+           two never both open. -->
+      <ContextMenu>
+      <ContextMenuTrigger as-child :disabled="coarsePointer">
+      <div
+        class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-5"
+        @contextmenu.capture="ctxRow = null">
         <Button variant="outline" class="gap-1.5 w-full" @click="editInStudio('')">
           <Plus class="size-4" /> Build a new playbook in Studio
         </Button>
@@ -279,7 +348,7 @@ async function confirmDelete() {
             <h3 class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ g.label }}</h3>
             <p v-if="!g.items.length && g.empty" class="text-sm text-muted-foreground">{{ g.empty }}</p>
 
-            <div v-for="t in g.items" :key="t.id" class="rounded-lg border bg-muted/40">
+            <div v-for="t in g.items" :key="t.id" class="rounded-lg border bg-muted/40" @contextmenu="ctxRow = t">
               <!-- Header row -->
               <div class="flex items-start gap-2 p-3">
                 <button class="mt-0.5 shrink-0 text-muted-foreground" @click="toggle(t.id)">
@@ -384,6 +453,13 @@ async function confirmDelete() {
           </section>
         </template>
       </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent class="w-72">
+        <SharedActionMenuItems
+          :actions="ctxRow ? rowActions(ctxRow) : surfaceActions"
+          variant="context" />
+      </ContextMenuContent>
+      </ContextMenu>
     </SheetContent>
   </Sheet>
 

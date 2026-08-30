@@ -6,8 +6,12 @@
 // which sits on a higher stacking layer — and clicking anywhere outside dismisses
 // it. Mobile keeps its own history sheet in the chat toolbar, so this is
 // desktop-only and is never mounted while the sidebar is in its mobile state.
-import { MessageSquareText, Plus, Search, X, Loader2 } from 'lucide-vue-next';
+import { MessageSquareText, Plus, Search, X, Loader2, Pencil, Trash2, RefreshCw } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
+import { toast } from 'vue-sonner';
+import { renameConversation, deleteConversation, type AiConversationSummary } from '~/services/ai';
 import { useSidebar } from '~/components/ui/sidebar';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 
 const open = defineModel<boolean>('open', { default: false });
 
@@ -77,7 +81,98 @@ function startNewChat() {
   router.push({ path: '/main', query: {} });
 }
 
+// ── Right-click menus ───────────────────────────────────────────────────────
+// Renaming and deleting a chat exist in the service and had no UI anywhere. This
+// panel is where a lawyer actually looks at their chats — a list of eleven rows
+// called "Hello, can you hear me?" is exactly the list that needs tidying — so it
+// carries the same menu the assistant's own history sheet does.
+//
+// One menu for the whole list: a row sets the aim in the target phase, the list
+// clears it in the capture phase, so empty space gets the panel's own menu.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+const defer = (fn: () => void) => setTimeout(fn, 0);
+const ctxConv = ref<AiConversationSummary | null>(null);
+
+const renameTarget = ref<AiConversationSummary | null>(null);
+const renameValue = ref('');
+const renaming = ref(false);
+const deleteTarget = ref<AiConversationSummary | null>(null);
+const deleting = ref(false);
+
+function askRename(conv: AiConversationSummary) {
+  defer(() => { renameTarget.value = conv; renameValue.value = conv.title || ''; });
+}
+
+async function submitRename() {
+  const title = renameValue.value.trim();
+  const conv = renameTarget.value;
+  if (!title || !conv || renaming.value) return;
+  renaming.value = true;
+  try {
+    const ok = await renameConversation(conv.id, title);
+    if (!ok) throw new Error('The server refused the new name.');
+    // Patched in place rather than refetched: `conversations` is shared state, so
+    // the assistant's own history sheet sees the new title too, and the buckets
+    // don't re-sort under the pointer.
+    const row = conversations.value.find(c => c.id === conv.id);
+    if (row) row.title = title;
+    renameTarget.value = null;
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not rename that conversation.');
+  } finally {
+    renaming.value = false;
+  }
+}
+
+async function confirmDelete() {
+  const conv = deleteTarget.value;
+  if (!conv || deleting.value) return;
+  deleting.value = true;
+  try {
+    const ok = await deleteConversation(conv.id);
+    if (!ok) throw new Error('The server refused the delete.');
+    conversations.value = conversations.value.filter(c => c.id !== conv.id);
+    deleteTarget.value = null;
+    // Deleting the chat that is currently on screen has to leave the page
+    // somewhere real, not on a dead `?c`.
+    if (activeConvId.value === conv.id) startNewChat();
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not delete that conversation.');
+  } finally {
+    deleting.value = false;
+  }
+}
+
+function convActions(conv: AiConversationSummary): MenuAction[] {
+  return [
+    {
+      id: 'open', label: 'Open', icon: MessageSquareText,
+      disabled: activeConvId.value === conv.id,
+      run: () => select(conv.id),
+    },
+    { id: 'rename', label: 'Rename', icon: Pencil, divider: true, run: () => askRename(conv) },
+    {
+      id: 'delete', label: 'Delete', icon: Trash2, danger: true, divider: true,
+      run: () => defer(() => { deleteTarget.value = conv; }),
+    },
+  ];
+}
+
+const panelActions = computed<MenuAction[]>(() => {
+  const out: MenuAction[] = [
+    { id: 'new', label: 'New chat', icon: Plus, run: () => defer(startNewChat) },
+  ];
+  if (query.value.trim()) {
+    out.push({ id: 'clear', label: 'Clear search', icon: X, divider: true, run: () => { query.value = ''; } });
+  }
+  out.push({ id: 'refresh', label: 'Refresh', icon: RefreshCw, divider: true, run: () => { refresh(true); } });
+  return out;
+});
+
 useEventListener('keydown', (e: KeyboardEvent) => {
+  // A dialog opened from a row's menu is its own world: Escape there closes the
+  // dialog, and must not also dismiss the panel underneath it.
+  if (renameTarget.value || deleteTarget.value) return;
   if (e.key === 'Escape' && open.value) open.value = false;
 });
 </script>
@@ -124,7 +219,9 @@ useEventListener('keydown', (e: KeyboardEvent) => {
           </Button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
+        <ContextMenu>
+        <ContextMenuTrigger as-child :disabled="coarsePointer">
+        <div class="min-h-0 flex-1 overflow-y-auto px-1.5 py-2" @contextmenu.capture="ctxConv = null">
           <div v-if="loading && !conversations.length" class="flex justify-center py-6">
             <Loader2 class="size-4 animate-spin text-muted-foreground" />
           </div>
@@ -144,13 +241,59 @@ useEventListener('keydown', (e: KeyboardEvent) => {
               :class="activeConvId === conv.id ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : ''"
               :title="conv.title"
               @click="select(conv.id)"
+              @contextmenu="ctxConv = conv"
             >
               <MessageSquareText class="size-3.5 shrink-0 text-muted-foreground" />
               <span class="truncate">{{ conv.title }}</span>
             </button>
           </div>
         </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent class="w-48">
+          <SharedActionMenuItems
+            :actions="ctxConv ? convActions(ctxConv) : panelActions"
+            variant="context" />
+        </ContextMenuContent>
+        </ContextMenu>
       </div>
     </Transition>
+
+    <!-- Rename / delete. Both live outside the panel's Transition so dismissing
+         the panel (or its click-away catcher) can't take a dialog with it. -->
+    <Dialog :open="!!renameTarget" @update:open="(v: boolean) => { if (!v) renameTarget = null; }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename conversation</DialogTitle>
+          <DialogDescription class="break-words">{{ renameTarget?.title }}</DialogDescription>
+        </DialogHeader>
+        <Input v-model="renameValue" autofocus @keydown.enter="submitRename" />
+        <DialogFooter>
+          <Button variant="outline" @click="renameTarget = null">Cancel</Button>
+          <Button :disabled="renaming || !renameValue.trim()" class="gap-1.5" @click="submitRename">
+            <Loader2 v-if="renaming" class="size-4 animate-spin" />
+            Rename
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog :open="!!deleteTarget" @update:open="(v: boolean) => { if (!v) deleteTarget = null; }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{{ deleteTarget?.title }}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This removes the conversation and everything said in it. Documents it
+            produced are kept. This can't be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="deleting">Cancel</AlertDialogCancel>
+          <Button variant="destructive" :disabled="deleting" @click="confirmDelete">
+            <Loader2 v-if="deleting" class="size-4 animate-spin mr-1.5" />
+            Delete
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

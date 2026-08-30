@@ -14,7 +14,7 @@ import type {VoiceContext} from '~/services/ai/voice';
 import {initials} from '~/components/shared/AI/proposals/theme';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt,
-  getConversation, deleteConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
+  getConversation, deleteConversation, renameConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
   newTurnId, stopAiTurn, buildCopyText,
   type AiMessage, type AiContentBlock,
@@ -24,6 +24,7 @@ import {
   type ContextType, type ContextItem,
 } from '~/services/ai';
 import { useMediaQuery, useClipboard } from '@vueuse/core';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 import MessageAttachments, { type AttachmentView } from '~/components/shared/AI/MessageAttachments.vue';
 import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
 import {getMatters, getAllDeadlines} from '~/services/matters';
@@ -181,6 +182,9 @@ function messageChips(msg: DisplayAiMessage): AttachmentView[] {
 // AI-generated documents from the Documents panel (previewGenDoc). Only one is set
 // at a time; previewDoc/resolvePreviewUrl pick whichever is active.
 const isDesktop = useMediaQuery('(min-width: 1024px)');
+// Touch gets no context menu anywhere in the app: reka's trigger arms a long-press
+// of its own, and dismissing it can strand the body pointer-events lock.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
 const previewTarget = ref<AttachmentView | null>(null);
 const previewGenDoc = ref<GeneratedDocument | null>(null);
 const previewOpen = computed({
@@ -1375,6 +1379,169 @@ async function removeConversation(id: string) {
   if (conversationId.value === id) newChat();
 }
 
+// ── Right-click menus ───────────────────────────────────────────────────────
+// Three regions, one menu each (a menu per row makes each its own dismissable
+// layer, and right-clicking a second row leaves the first standing): the thread,
+// the conversation history, and the documents panel.
+//
+// The history menu is the one that adds rather than shortens — `renameConversation`
+// and `deleteConversation` have existed in the service with no way to reach them,
+// so a thread could not be renamed or deleted from here at all.
+const defer = (fn: () => void) => setTimeout(fn, 0);
+
+// Controlled so the menu can close the sheet, exactly as a row's SheetClose does.
+const historyOpen = ref(false);
+const ctxConv = ref<AiConversationSummary | null>(null);
+const ctxMsg = ref<{ index: number; msg: ChatMessage } | null>(null);
+const ctxDoc = ref<any>(null);
+
+// A menu on a message would steal the browser's own menu for selected text, and
+// "select a paragraph, right-click, Copy" is how people quote an answer. So when
+// there IS a selection the event is stopped before reka's trigger sees it: no
+// preventDefault, so the native menu opens exactly as it always did.
+function textIsSelected(): boolean {
+  return !!window.getSelection()?.toString().trim();
+}
+
+function onMessageContext(e: MouseEvent, index: number, msg: ChatMessage) {
+  if (textIsSelected()) { e.stopPropagation(); return; }
+  ctxMsg.value = { index, msg };
+}
+
+// ── Conversation history ────────────────────────────────────────────────────
+const renameConv = ref<AiConversationSummary | null>(null);
+const renameConvValue = ref('');
+const renamingConv = ref(false);
+const deleteConvTarget = ref<AiConversationSummary | null>(null);
+const deletingConv = ref(false);
+
+function askRenameConv(conv: AiConversationSummary) {
+  defer(() => { renameConv.value = conv; renameConvValue.value = conv.title || ''; });
+}
+
+async function submitRenameConv() {
+  const title = renameConvValue.value.trim();
+  const conv = renameConv.value;
+  if (!title || !conv || renamingConv.value) return;
+  renamingConv.value = true;
+  try {
+    const ok = await renameConversation(conv.id, title);
+    if (!ok) throw new Error('The server refused the new name.');
+    // Patch the list in place — a full refresh would re-sort and lose the scroll.
+    const list = isShared.value ? sharedHistory.value.conversations.value : localConversations.value;
+    const row = list.find(c => c.id === conv.id);
+    if (row) row.title = title;
+    renameConv.value = null;
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not rename that conversation.');
+  } finally {
+    renamingConv.value = false;
+  }
+}
+
+async function confirmDeleteConv() {
+  const conv = deleteConvTarget.value;
+  if (!conv || deletingConv.value) return;
+  deletingConv.value = true;
+  try {
+    await removeConversation(conv.id);
+    deleteConvTarget.value = null;
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not delete that conversation.');
+  } finally {
+    deletingConv.value = false;
+  }
+}
+
+function convActions(conv: AiConversationSummary): MenuAction[] {
+  return [
+    {
+      id: 'open', label: 'Open', icon: MessageSquareText,
+      disabled: conversationId.value === conv.id,
+      run: () => { historyOpen.value = false; selectConversation(conv.id); },
+    },
+    { id: 'rename', label: 'Rename', icon: Pencil, divider: true, run: () => askRenameConv(conv) },
+    {
+      id: 'delete', label: 'Delete', icon: Trash2, danger: true, divider: true,
+      run: () => defer(() => { deleteConvTarget.value = conv; }),
+    },
+  ];
+}
+
+const historyActions = computed<MenuAction[]>(() => [
+  { id: 'new', label: 'New chat', icon: Plus, run: () => { historyOpen.value = false; defer(newChat); } },
+]);
+
+// ── Messages ────────────────────────────────────────────────────────────────
+// The actions the hover row already carries, which is the point: on a touchscreen
+// they never appear at all, and on a mouse they are three faint icons that only
+// exist while the pointer is inside the bubble.
+function messageActions(index: number, msg: any): MenuAction[] {
+  const out: MenuAction[] = [];
+  const isUser = msg.role === 'user';
+  const text = stripAttachmentPlaceholders(messageText(msg.content));
+
+  if (msg.role !== 'user' && msg.role !== 'assistant') return out;
+
+  out.push({
+    id: 'copy', label: 'Copy message', icon: Copy,
+    disabled: !text,
+    run: () => copyMessage(index, msg as DisplayAiMessage),
+  });
+
+  if (isUser) {
+    out.push({
+      id: 'edit', label: 'Edit and resend', icon: Pencil, divider: true,
+      disabled: loading.value,
+      run: () => startEdit(index, text),
+    });
+    const sib = branches.siblings(index);
+    if (sib.count > 1) {
+      out.push({
+        id: 'prev', label: `Previous version (${sib.current + 1} of ${sib.count})`, icon: ChevronLeft,
+        divider: true, disabled: loading.value, run: () => switchBranch(index, -1),
+      });
+      out.push({
+        id: 'next', label: 'Next version', icon: ChevronRight,
+        disabled: loading.value, run: () => switchBranch(index, 1),
+      });
+    }
+    return out;
+  }
+
+  // Assistant. Retry drops the active leaf, so it can only mean anything on the
+  // last turn — the same rule the inline button follows.
+  if (msg.steps?.length) {
+    out.push({
+      id: 'steps', label: msg.stepsOpen ? 'Hide the work' : 'Show the work', icon: Eye,
+      divider: true, run: () => { msg.stepsOpen = !msg.stepsOpen; },
+    });
+  }
+  if (index === messages.value.length - 1 && !loading.value) {
+    out.push({ id: 'retry', label: 'Retry', icon: RotateCcw, divider: true, run: () => retryTurn() });
+  }
+  return out;
+}
+
+const threadActions = computed<MenuAction[]>(() => {
+  const out: MenuAction[] = [];
+  if (loading.value) out.push({ id: 'stop', label: 'Stop generating', icon: Square, run: () => stopTurn() });
+  out.push({ id: 'new', label: 'New chat', icon: Plus, divider: out.length > 0, run: () => defer(newChat) });
+  return out;
+});
+
+// ── Documents ───────────────────────────────────────────────────────────────
+function docActions(doc: any): MenuAction[] {
+  return [
+    { id: 'preview', label: 'Preview', icon: Eye, run: () => defer(() => openDocument(doc)) },
+    {
+      id: 'download', label: 'Download .docx', icon: Download,
+      disabled: downloadingDocId.value === doc.id,
+      run: () => downloadDoc(doc),
+    },
+  ];
+}
+
 // Clear the in-memory thread WITHOUT touching the router. The route watcher
 // below is the single source of truth and calls this whenever `?c` disappears
 // (e.g. the sidebar "New Chat" link, which navigates to /main with empty query).
@@ -1476,7 +1643,7 @@ defineExpose({
           </span>
         </Button>
         <!-- Conversation history -->
-        <Sheet>
+        <Sheet v-model:open="historyOpen">
           <SheetTrigger as-child>
             <Button size="icon-sm" variant="ghost" title="Conversation history">
               <History class="size-4"/>
@@ -1500,9 +1667,11 @@ defineExpose({
                 </SheetClose>
               </div>
 
-              <div class="flex flex-col gap-1">
+              <ContextMenu>
+              <ContextMenuTrigger as-child :disabled="coarsePointer">
+              <div class="flex flex-col gap-1" @contextmenu.capture="ctxConv = null">
                 <SheetClose v-for="conv in conversations" :key="conv.id" class="w-full">
-                  <div class="group/conv flex items-center gap-1 px-1.5">
+                  <div class="group/conv flex items-center gap-1 px-1.5" @contextmenu="ctxConv = conv">
                     <button
                         class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                         :class="conversationId === conv.id ? 'bg-accent' : ''"
@@ -1513,6 +1682,13 @@ defineExpose({
                   </div>
                 </SheetClose>
               </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent class="w-48">
+                <SharedActionMenuItems
+                  :actions="ctxConv ? convActions(ctxConv) : historyActions"
+                  variant="context" />
+              </ContextMenuContent>
+              </ContextMenu>
             </div>
             <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No conversations yet.</p>
           </SheetContent>
@@ -1547,8 +1723,13 @@ defineExpose({
         <slot name="empty" :ask="askAbout" :send="send" />
       </div>
 
-      <!-- Thread -->
-      <div v-else class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
+      <!-- Thread. One menu for the whole transcript: a message sets the aim in the
+           target phase, the column clears it here in the capture phase. A message
+           with text selected stops the event instead, leaving the browser's own
+           menu (and its Copy) exactly where it was. -->
+      <ContextMenu v-else>
+      <ContextMenuTrigger as-child :disabled="coarsePointer">
+      <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6" @contextmenu.capture="ctxMsg = null">
         <template v-for="(msg, i) in messages" :key="i">
           <!-- Tool event -->
           <div v-if="msg.role === 'tool-event'" class="flex justify-center">
@@ -1599,7 +1780,8 @@ defineExpose({
               </div>
             </div>
 
-            <div v-else class="flex max-w-[80%] flex-col items-end gap-1">
+            <div v-else class="flex max-w-[80%] flex-col items-end gap-1"
+                 @contextmenu="onMessageContext($event, i, msg)">
               <MessageAttachments v-if="messageChips(msg).length" :attachments="messageChips(msg)" align="end" @preview="openPreview"/>
               <div v-if="stripAttachmentPlaceholders(messageText(msg.content))"
                    class="whitespace-pre-wrap rounded-2xl bg-muted px-4 py-2.5 text-sm leading-relaxed">
@@ -1634,7 +1816,7 @@ defineExpose({
           </div>
 
           <!-- Assistant -->
-          <div v-else class="flex items-start gap-2.5 group/msg">
+          <div v-else class="flex items-start gap-2.5 group/msg" @contextmenu="onMessageContext($event, i, msg)">
             <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
               <Sparkles class="size-3.5"/>
             </div>
@@ -1725,6 +1907,13 @@ defineExpose({
 
         <div ref="messagesEnd"/>
       </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent class="w-56">
+        <SharedActionMenuItems
+          :actions="ctxMsg ? messageActions(ctxMsg.index, ctxMsg.msg) : threadActions"
+          variant="context" />
+      </ContextMenuContent>
+      </ContextMenu>
     </div>
 
     <!-- ░░ Composer (widget-style InputGroup) ░░ -->
@@ -2042,9 +2231,12 @@ defineExpose({
         <div v-if="docsLoading && !conversationDocs.length" class="flex justify-center py-8">
           <Loader2 class="size-4 animate-spin text-muted-foreground"/>
         </div>
-        <div v-else-if="conversationDocs.length" class="flex flex-col overflow-y-auto py-1">
+        <ContextMenu v-else-if="conversationDocs.length">
+        <ContextMenuTrigger as-child :disabled="coarsePointer">
+        <div class="flex flex-col overflow-y-auto py-1" @contextmenu.capture="ctxDoc = null">
           <div v-for="doc in conversationDocs" :key="doc.id"
-               class="group/doc flex items-start gap-2 border-b px-3 py-2.5 transition-colors last:border-0 hover:bg-accent">
+               class="group/doc flex items-start gap-2 border-b px-3 py-2.5 transition-colors last:border-0 hover:bg-accent"
+               @contextmenu="ctxDoc = doc">
             <button type="button" class="flex min-w-0 flex-1 items-start gap-2 text-left" @click="openDocument(doc)">
               <div class="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
                 <FileType2 class="size-3.5"/>
@@ -2068,9 +2260,53 @@ defineExpose({
             </div>
           </div>
         </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent v-if="ctxDoc" class="w-48">
+          <SharedActionMenuItems :actions="docActions(ctxDoc)" variant="context" />
+        </ContextMenuContent>
+        </ContextMenu>
         <p v-else class="px-3 py-6 text-center text-xs text-muted-foreground">No documents yet.</p>
       </SheetContent>
     </Sheet>
+
+    <!-- Renaming and deleting a conversation had no UI at all before this; both
+         calls already existed in the service. A Dialog over the history Sheet is
+         fine — reka layers share one dismissable stack (see CLAUDE.md). -->
+    <Dialog :open="!!renameConv" @update:open="(v: boolean) => { if (!v) renameConv = null; }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename conversation</DialogTitle>
+          <DialogDescription class="break-words">{{ renameConv?.title }}</DialogDescription>
+        </DialogHeader>
+        <Input v-model="renameConvValue" autofocus @keydown.enter="submitRenameConv" />
+        <DialogFooter>
+          <Button variant="outline" @click="renameConv = null">Cancel</Button>
+          <Button :disabled="renamingConv || !renameConvValue.trim()" class="gap-1.5" @click="submitRenameConv">
+            <Loader2 v-if="renamingConv" class="size-4 animate-spin" />
+            Rename
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog :open="!!deleteConvTarget" @update:open="(v: boolean) => { if (!v) deleteConvTarget = null; }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{{ deleteConvTarget?.title }}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This removes the conversation and everything said in it. Documents it produced
+            are kept. This can't be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="deletingConv">Cancel</AlertDialogCancel>
+          <Button variant="destructive" :disabled="deletingConv" @click="confirmDeleteConv">
+            <Loader2 v-if="deletingConv" class="size-4 animate-spin mr-1.5" />
+            Delete
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
 

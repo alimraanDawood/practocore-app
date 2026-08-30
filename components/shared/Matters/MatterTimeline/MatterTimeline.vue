@@ -72,8 +72,12 @@
       @saved="emits('updated')"
     />
 
-    <!-- Timeline -->
-    <div class="flex flex-col">
+    <!-- Timeline. One right-click menu for the whole list: the row under the
+         pointer sets the aim in the target phase, the list clears it here in the
+         capture phase, so empty space gets the timeline's own menu. -->
+    <ContextMenu>
+    <ContextMenuTrigger as-child :disabled="coarsePointer">
+    <div class="flex flex-col" @contextmenu.capture="ctxRow = null">
 
       <!-- Trigger date node -->
       <div class="flex flex-row">
@@ -128,6 +132,7 @@
         v-for="(deadline, index) in filteredDeadlines"
         :key="deadline.id"
         class="flex flex-row"
+        @contextmenu="ctxRow = deadline"
       >
         <!-- Left: connecting lines + status node -->
         <div class="flex flex-col items-center w-9 shrink-0">
@@ -454,7 +459,64 @@
       </div>
 
     </div>
+    </ContextMenuTrigger>
+    <ContextMenuContent class="w-64">
+      <SharedActionMenuItems
+        :actions="ctxRow ? rowActions(ctxRow) : surfaceActions"
+        variant="context" />
+    </ContextMenuContent>
+    </ContextMenu>
+
   </div>
+
+
+  <!-- The date dialogs, opened from the menu rather than from their own button
+       inside an expanded row. Mounted only while open and keyed by row, because
+       each seeds a form from the deadline it was opened on. The empty span is
+       the trigger slot they expect; nothing renders it. -->
+  <SharedDeadlineCompleteDeadline
+    v-if="completeFor"
+    :key="`complete-${completeFor.id}`"
+    :deadline="completeFor"
+    :open="true"
+    @update:open="(v) => { if (!v) completeFor = null; }"
+    @updated="emits('updated')"
+  >
+    <span class="hidden" />
+  </SharedDeadlineCompleteDeadline>
+
+  <AdjournDeadline
+    v-if="adjournFor"
+    :key="`adjourn-${adjournFor.id}`"
+    :deadline="adjournFor"
+    :open="true"
+    @update:open="(v) => { if (!v) adjournFor = null; }"
+    @updated="emits('updated')"
+  >
+    <span class="hidden" />
+  </AdjournDeadline>
+
+  <OverrideDeadline
+    v-if="overrideFor"
+    :key="`override-${overrideFor.id}`"
+    :deadline="overrideFor"
+    :open="true"
+    @update:open="(v) => { if (!v) overrideFor = null; }"
+    @updated="emits('updated')"
+  >
+    <span class="hidden" />
+  </OverrideDeadline>
+
+  <SharedEventsCompleteEvent
+    v-if="eventDateFor"
+    :key="`event-${eventDateFor.id}`"
+    :event="eventDateFor"
+    :open="true"
+    @update:open="(v) => { if (!v) eventDateFor = null; }"
+    @updated="emits('updated')"
+  >
+    <span class="hidden" />
+  </SharedEventsCompleteEvent>
 
   <!-- Loading skeleton -->
   <div v-else class="flex flex-col gap-4 animate-pulse">
@@ -495,12 +557,24 @@ import {
   UserX,
   Users,
   PencilLine,
+  ChevronRight,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  ListFilter,
 } from "lucide-vue-next";
+import { useMediaQuery } from "@vueuse/core";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
 import OverrideDeadline from "../../Deadline/OverrideDeadline/OverrideDeadline.vue";
 import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
 import { pb } from "~/lib/pocketbase";
 import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline, renameDeadline, listDeadlineEvidence } from "~/services/matters";
+import {
+  deadlineUrgency,
+  isAdhoc as isAdhocDeadline,
+  isOtherSide as isOtherSideDeadline,
+  isProjected as isProjectedDeadline,
+} from "~/services/deadlines/urgency";
 import { toast } from "vue-sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -661,14 +735,11 @@ const representedRoleId = computed(() => {
   return r.role_id ?? r.roleId ?? "";
 });
 
-const isOtherSide = (deadline) => {
-  const role = deadline?.role;
-  if (!role) return false;
-  // Until the firm says who it acts for, claim nothing — showing every step as
-  // the other side's would empty the timeline.
-  if (!representedRoleId.value) return false;
-  return role !== representedRoleId.value;
-};
+// Until the firm says who it acts for, claim nothing — showing every step as
+// the other side's would empty the timeline. That rule, and the rest of the
+// urgency derivation below, live in ~/services/deadlines/urgency so the matter
+// card, the calendar and the assistant all answer this the same way.
+const isOtherSide = (deadline) => isOtherSideDeadline(deadline, representedRoleId.value);
 
 const otherSideRoleLabel = (deadline) => {
   const roles = normalizePartyConfig(props.matter?.partyConfig)?.roles ?? [];
@@ -716,7 +787,7 @@ watch(
 // A firm-added deadline (origin 'adhoc') is an ordinary Deadlines row with no
 // t_id — see the ad-hoc block below and internal/deadlinev2/adhoc.go. Declared
 // here because isProjected/urgencyOf depend on it.
-const isAdhoc = (deadline) => deadline?.origin === "adhoc";
+const isAdhoc = (deadline) => isAdhocDeadline(deadline);
 
 // L7: what the row is CALLED, as opposed to what the rule calls it.
 //
@@ -743,32 +814,25 @@ const overrideOf = (deadline) => correctionOf(deadline);
 // the template to label it as the rule's calculation rather than the real date.
 const promptOf = (deadline, prompt) => formatDeadlinePrompt(prompt, deadline?.date, deadline);
 
-const isProjected = (deadline) => {
-  // A firm-added deadline is a date the lawyer entered themselves, not one
-  // computed off an estimated trigger date — so it is never "projected", even on
-  // a provisional matter. This matches the backend, which materialises its
-  // reminders regardless of triggerStatus.
-  if (isAdhoc(deadline)) return false;
+// The record whose trigger date governs this deadline: the child application
+// when the deadline belongs to one, otherwise the matter itself.
+const ownerOf = (deadline) => {
   if (deadline?.application) {
-    const app = props.matter?.expand?.applications?.find((a) => a.id === deadline.application);
-    return app?.triggerStatus === "provisional";
+    return props.matter?.expand?.applications?.find((a) => a.id === deadline.application) ?? null;
   }
-  return props.matter?.triggerStatus === "provisional";
+  return props.matter ?? null;
 };
 
-const urgencyOf = (deadline) => {
-  if (deadline.status === "fulfilled") return "done";
-  // Checked before the date arithmetic: the other side's step is context, so it
-  // must never render as this firm's overdue or urgent work.
-  if (isOtherSide(deadline)) return "theirs";
-  if (isProjected(deadline)) return "projected";
-  if (!deadline.date) return "pending"; // undated ad-hoc task
+const isProjected = (deadline) => isProjectedDeadline(deadline, ownerOf(deadline));
 
-  const days = dayjs(deadline.date).diff(dayjs(), "day");
-  if (days < 0) return "overdue";
-  if (days <= 7) return "urgent";
-  return "pending";
-};
+// The shared derivation, given this timeline's owner and represented role. It
+// returns "undated" where this used to return "pending" for a dateless ad-hoc
+// task; both fall through to the same muted styling below.
+const urgencyOf = (deadline) =>
+  deadlineUrgency(deadline, {
+    owner: ownerOf(deadline),
+    representedRoleId: representedRoleId.value,
+  });
 
 const nodeClass = (deadline) => {
   const u = urgencyOf(deadline);
@@ -887,6 +951,153 @@ const canChangeTriggerDate = computed(() => {
   if (!userId || !props.matter) return false;
   if (props.matter.triggerStatus === 'provisional') return false;
   return props.matter.supervisors?.includes(userId) ?? false;
+});
+
+// ── Right-click menus ───────────────────────────────────────────────────────
+// Every action on a row lives behind expanding it, which is three clicks to
+// adjourn a date you can already see. The menu is the shortcut: the same actions
+// the expanded row offers, aimed at the row under the pointer, with the expanded
+// panel still the place that explains them.
+//
+// ONE menu for the whole timeline, not one per row — a menu per row makes each
+// its own dismissable layer, and right-clicking a second row leaves the first
+// standing. The list clears the aim in the capture phase, each row sets it in the
+// target phase, and reka re-anchors the single menu at the new point.
+//
+// Touch has no context menu: reka's trigger arms a long-press of its own, and the
+// row's own tap-to-expand is the touch route to all of this.
+const coarsePointer = useMediaQuery("(pointer: coarse)");
+const ctxRow = ref(null);
+
+// A menu and a dialog are separate overlay layers; opening the second while the
+// first is still closing makes them race for the body scroll lock (CLAUDE.md).
+const defer = (fn) => setTimeout(fn, 0);
+
+// The date dialogs are normally opened by their own trigger button inside the
+// expanded row. Held here instead, they are mounted open and unmounted on close,
+// so a menu item can reach them with no button to click. Keyed by row id, because
+// each carries a form seeded from the deadline it was opened on.
+const completeFor = ref(null);
+const adjournFor = ref(null);
+const overrideFor = ref(null);
+const eventDateFor = ref(null);
+
+// The same gate the trigger buttons carry, said out loud instead of greying a row
+// with no explanation.
+const planActive = usePlanActive();
+const { isOffline: netOffline } = useNetwork();
+const dateActionsBlocked = computed(() => {
+  if (netOffline.value) return "offline";
+  if (!planActive.value?.active) return "subscription expired";
+  return "";
+});
+
+function expandRow(id) {
+  if (!expandedSet.value.has(id)) toggleExpand(id);
+}
+
+/** What the row under the pointer can do — the expanded row's actions, in a menu. */
+function rowActions(deadline) {
+  const out = [];
+  const expanded = isExpanded(deadline.id);
+  const blocked = dateActionsBlocked.value;
+  const suffix = blocked ? ` — ${blocked}` : "";
+
+  out.push({
+    id: "expand",
+    label: expanded ? "Collapse" : "Show details",
+    icon: expanded ? ChevronDown : ChevronRight,
+    run: () => toggleExpand(deadline.id),
+  });
+
+  if (isAdhoc(deadline)) {
+    // A firm's own row: not an engine node, so it never routes through
+    // fulfill/adjourn — the same branch the expanded row takes.
+    out.push(deadline.status === "fulfilled"
+      ? {
+          id: "reopen", label: "Reopen", icon: RotateCcw, divider: true,
+          disabled: adhocBusy.value === deadline.id,
+          run: () => completeAdhoc(deadline, true),
+        }
+      : {
+          id: "done", label: "Mark done", icon: CheckCheck, divider: true,
+          disabled: adhocBusy.value === deadline.id,
+          run: () => completeAdhoc(deadline),
+        });
+    out.push({ id: "edit", label: "Edit…", icon: Pencil, run: () => defer(() => openEditDeadline(deadline)) });
+    out.push({
+      id: "remove", label: "Delete", icon: Trash2, danger: true, divider: true,
+      disabled: adhocBusy.value === deadline.id,
+      run: () => removeAdhoc(deadline),
+    });
+    return out;
+  }
+
+  if (deadline.collectionName !== "Deadlines") {
+    // A milestone/event row — its date is recorded, nothing is computed from it.
+    out.push({
+      id: "event-date", label: `Set date…${suffix}`, icon: CalendarIcon, divider: true,
+      disabled: !!blocked, run: () => defer(() => { eventDateFor.value = deadline; }),
+    });
+    return out;
+  }
+
+  if (deadline.status === "fulfilled") {
+    out.push({
+      id: "recorded-date", label: `Change the recorded date…${suffix}`, icon: CalendarIcon, divider: true,
+      disabled: !!blocked, run: () => defer(() => { completeFor.value = deadline; }),
+    });
+  } else {
+    if (!deadline.disableFulfill) {
+      out.push({
+        id: "set-date", label: `Set date…${suffix}`, icon: CalendarIcon, divider: true,
+        disabled: !!blocked, run: () => defer(() => { completeFor.value = deadline; }),
+      });
+    }
+    out.push({
+      id: "adjourn", label: `Adjourn…${suffix}`, icon: CalendarSync, divider: out.length === 1,
+      disabled: !!blocked, run: () => defer(() => { adjournFor.value = deadline; }),
+    });
+    // Nothing was adjourned — the computed date is simply not the real one.
+    out.push({
+      id: "correct", label: `Correct date…${suffix}`, icon: PencilLine,
+      disabled: !!blocked, run: () => defer(() => { overrideFor.value = deadline; }),
+    });
+  }
+
+  // Renaming writes `label`, never `name`: no date moves and the rule's own
+  // wording stays on the record, which is why it is offered on every row.
+  if (canAddDeadline.value) {
+    out.push({
+      id: "rename", label: isRenamed(deadline) ? "Change name" : "Rename", icon: Pencil, divider: true,
+      run: () => { expandRow(deadline.id); startRename(deadline); },
+    });
+    if (isRenamed(deadline)) {
+      out.push({
+        id: "unrename", label: "Use the original name", icon: RotateCcw,
+        disabled: renameBusy.value, run: () => clearRename(deadline),
+      });
+    }
+  }
+  return out;
+}
+
+/** The menu on the timeline itself, rather than on any one row. */
+const surfaceActions = computed(() => {
+  const out = [];
+  if (canAddDeadline.value) {
+    out.push({ id: "add", label: "Add deadline…", icon: CalendarPlus, run: () => defer(openAddDeadline) });
+  }
+  filterTabs.value
+    .filter((t) => t.value !== activeFilter.value)
+    .forEach((t, i) => out.push({
+      id: `filter-${t.value}`,
+      label: `Show ${t.label.toLowerCase()} (${t.count})`,
+      icon: ListFilter,
+      divider: i === 0 && out.length > 0,
+      run: () => { activeFilter.value = t.value; },
+    }));
+  return out;
 });
 
 function openAddDeadline() {

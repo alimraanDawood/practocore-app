@@ -46,6 +46,7 @@
              class="flex flex-col items-center justify-center aspect-square shrink-0 lg:aspect-auto lg:min-h-28 lg:p-2 gap-[5px] bg-background relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
              :class="[cell.inCurrentMonth ? '' : 'bg-muted/40 text-muted-foreground']"
              @click="onCellActivate(cell.date, idx)"
+             @contextmenu.capture="emits('day-context', toISO(cell.date))"
              @keydown.enter.prevent="onCellActivate(cell.date, idx)"
              @keydown.space.prevent="onCellActivate(cell.date, idx)"
              @keydown.left.prevent="moveFocus(idx, -1)"
@@ -68,6 +69,7 @@
               <div class="text-[11px] px-1.5 py-0.5 rounded cursor-pointer truncate border overflow-visible font-semibold relative"
                    :class="`bg-${evt.color} text-white border-${evt.color}`"
                    @click.stop="eventClicked(cell.date, evt)"
+                   @contextmenu="emits('event-context', evt)"
                    :aria-label="evt.title">
                 <div v-if="evt.completed"
                      class="absolute size-4 grid place-items-center rounded-full top-0 left-0 translate-x-[-50%] translate-y-[-50%] text-primary-foreground"
@@ -127,6 +129,12 @@ const props = withDefaults(defineProps<{
 const emits = defineEmits<{
   (e: 'day-click', isoDate: string): void
   (e: 'event-click', event: any): void
+  // Right-click. The host owns the menu (one for the whole grid, anchored at the
+  // pointer); the grid only reports what the pointer was over. The cell reports in
+  // the CAPTURE phase and an event pill in the target phase, so a right-click on a
+  // pill lands on the pill and one on bare cell space lands on the day.
+  (e: 'day-context', isoDate: string): void
+  (e: 'event-context', event: any): void
   (e: 'month-change', payload: { year: number, month: number }): void
   (e: 'date-change', payload: { date: Date }): void
 }>();

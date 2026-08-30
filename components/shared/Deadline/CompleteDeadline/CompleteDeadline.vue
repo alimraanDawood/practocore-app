@@ -125,7 +125,11 @@ const dateValue = ref(
     props.deadline?.date && props.deadline?.status === "fulfilled" ? parseDate(props.deadline.date.slice(0, 10)) : today('utc')
 ) as Ref<DateValue>;
 const loading = ref(false);
-const open = ref(false);
+// Openable from outside as well as by its own trigger: `defineModel` keeps a local
+// value when no parent binds it, so every existing `<slot>`-triggered usage is
+// unchanged, while a context menu can open this dialog with `v-model:open` and no
+// button to click.
+const open = defineModel('open', { default: false });
 
 // Evidence is captured alongside the date and posted with it, so a completion
 // and its proof land in one transaction — or neither does.

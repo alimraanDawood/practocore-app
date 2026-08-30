@@ -3,7 +3,11 @@ import { marked } from 'marked';
 import {
   Scroll, Plus, Search, Copy, Pencil, Trash2, Check, Loader2,
   Wand2, Wrench, Lightbulb, Scale, GlobeLock, Building2,
+  Eye, Power, PowerOff, RefreshCw, X,
 } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
+import { toast } from 'vue-sonner';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 import {
   listSkills, getSkill, duplicateSkill, updateSkill, deleteSkill, setSkillStatus,
   type SkillSummary, type SkillDetail, type SkillWrite,
@@ -91,7 +95,7 @@ async function saveEdit() {
     editing.value = false;
     await refresh();
   } catch (e: any) {
-    alert(e?.message || 'Could not save.');
+    toast.error(e?.message || 'Could not save.');
   } finally {
     saving.value = false;
   }
@@ -105,7 +109,7 @@ async function doDuplicate(id: string) {
     detail.value = copy; // jump to the editable copy
     editing.value = false;
   } catch (e: any) {
-    alert(e?.message || 'Could not duplicate.');
+    toast.error(e?.message || 'Could not duplicate.');
   } finally {
     busyAction.value = '';
   }
@@ -119,26 +123,120 @@ async function toggleActive() {
     detail.value = await setSkillStatus(detail.value.id, next);
     await refresh();
   } catch (e: any) {
-    alert(e?.message || 'Could not change status.');
+    toast.error(e?.message || 'Could not change status.');
   } finally {
     busyAction.value = '';
   }
 }
 
-async function doDelete() {
-  if (!detail.value) return;
+async function doDelete(target?: { id: string }) {
+  const victim = target ?? detail.value;
+  if (!victim) return;
   busyAction.value = 'delete';
   try {
-    await deleteSkill(detail.value.id);
-    detailOpen.value = false;
+    await deleteSkill(victim.id);
+    // Close the sheet only if it was showing the skill that just went away.
+    if (detail.value?.id === victim.id) detailOpen.value = false;
+    deleteTarget.value = null;
     await refresh();
+    toast.success('Skill deleted.');
   } catch (e: any) {
-    alert(e?.message || 'Could not delete.');
+    toast.error(e?.message || 'Could not delete.');
   } finally {
     busyAction.value = '';
     confirmDelete.value = false;
   }
 }
+
+// ── Right-click menus ───────────────────────────────────────────────────────
+// Everything a skill can do lives in the detail sheet, which means fetching the
+// whole skill before you can so much as deactivate it. The card's menu offers the
+// same actions off the summary the grid already has — `editable` rides on the
+// summary, so the menu gates exactly as the sheet's footer does.
+//
+// ONE menu for the whole body rather than one per card: a menu per card makes
+// each its own dismissable layer, and right-clicking a second card leaves the
+// first standing. The body clears the aim in the capture phase, a card sets it in
+// the target phase, and reka re-anchors the single menu at the new point.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+const defer = (fn: () => void) => setTimeout(fn, 0);
+const ctxSkill = ref<SkillSummary | null>(null);
+const deleteTarget = ref<SkillSummary | { id: string; title: string } | null>(null);
+
+/** Open the sheet and drop straight into its edit form. */
+async function openAndEdit(sk: SkillSummary) {
+  await open(sk);
+  if (detail.value) startEdit();
+}
+
+/** Activate/deactivate from the grid, without opening anything. */
+async function toggleActiveFor(sk: SkillSummary) {
+  if (busyAction.value) return;
+  busyAction.value = 'status';
+  const next = sk.status === 'active' ? 'draft' : 'active';
+  try {
+    const updated = await setSkillStatus(sk.id, next);
+    // Keep an open sheet in step when it happens to show the same skill.
+    if (detail.value?.id === sk.id) detail.value = updated;
+    await refresh();
+    toast.success(next === 'active' ? 'Skill activated.' : 'Skill deactivated.');
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not change status.');
+  } finally {
+    busyAction.value = '';
+  }
+}
+
+function cardActions(sk: SkillSummary): MenuAction[] {
+  const out: MenuAction[] = [
+    { id: 'open', label: 'Open', icon: Eye, run: () => defer(() => open(sk)) },
+  ];
+
+  if (sk.editable) {
+    out.push({
+      id: 'ai', label: 'Edit with AI', icon: Wand2, divider: true,
+      run: () => navigateTo(`/main/skills/studio?skill=${sk.id}`),
+    });
+    out.push({ id: 'edit', label: 'Edit', icon: Pencil, run: () => defer(() => openAndEdit(sk)) });
+    out.push({
+      id: 'status',
+      label: sk.status === 'active' ? 'Deactivate' : 'Activate',
+      icon: sk.status === 'active' ? PowerOff : Power,
+      disabled: busyAction.value === 'status',
+      run: () => toggleActiveFor(sk),
+    });
+  }
+
+  // Duplicating is the route in for everyone else — a standard skill, or a firm
+  // one a colleague authored. Say which it is, as the sheet's footer does.
+  out.push({
+    id: 'duplicate',
+    label: sk.owned ? 'Duplicate' : 'Duplicate to my firm',
+    icon: Copy, divider: true,
+    disabled: busyAction.value === 'duplicate',
+    run: () => doDuplicate(sk.id),
+  });
+
+  if (sk.editable) {
+    out.push({
+      id: 'delete', label: 'Delete', icon: Trash2, danger: true, divider: true,
+      run: () => defer(() => { deleteTarget.value = sk; }),
+    });
+  }
+  return out;
+}
+
+/** The menu on the page itself, rather than on any one skill. */
+const surfaceActions = computed<MenuAction[]>(() => {
+  const out: MenuAction[] = [
+    { id: 'new', label: 'Create skill', icon: Plus, run: () => navigateTo('/main/skills/studio') },
+  ];
+  if (search.value.trim()) {
+    out.push({ id: 'clear', label: 'Clear search', icon: X, divider: true, run: () => { search.value = ''; } });
+  }
+  out.push({ id: 'refresh', label: 'Refresh', icon: RefreshCw, divider: true, run: () => { refresh(); } });
+  return out;
+});
 
 const statusTone: Record<string, string> = {
   active: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
@@ -173,8 +271,14 @@ const statusTone: Record<string, string> = {
       </div>
     </div>
 
-    <!-- Body -->
-    <div class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
+    <!-- Body. One right-click menu for both sections: the card under the pointer
+         sets the aim in the target phase, the body clears it here in the capture
+         phase, so empty space gets the page's own menu. -->
+    <ContextMenu>
+    <ContextMenuTrigger as-child :disabled="coarsePointer">
+    <div
+      class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 flex flex-col gap-8"
+      @contextmenu.capture="ctxSkill = null">
       <div v-if="loading" class="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 class="size-4 animate-spin" /> Loading skills…
       </div>
@@ -193,6 +297,7 @@ const statusTone: Record<string, string> = {
               v-for="s in ownedSkills" :key="s.id"
               class="text-left rounded-xl border p-4  hover:bg-muted transition-colors flex flex-col gap-2"
               @click="open(s)"
+              @contextmenu="ctxSkill = s"
             >
               <div class="flex items-start justify-between gap-2">
                 <p class="font-medium leading-tight">{{ s.title }}</p>
@@ -220,6 +325,7 @@ const statusTone: Record<string, string> = {
               v-for="s in globalSkills" :key="s.id"
               class="text-left rounded-xl border p-4 hover:bg-muted transition-colors flex flex-col gap-2"
               @click="open(s)"
+              @contextmenu="ctxSkill = s"
             >
               <div class="flex items-start justify-between gap-2">
                 <p class="font-medium leading-tight">{{ s.title }}</p>
@@ -239,6 +345,39 @@ const statusTone: Record<string, string> = {
         </div>
       </template>
     </div>
+    </ContextMenuTrigger>
+    <ContextMenuContent class="w-56">
+      <SharedActionMenuItems
+        :actions="ctxSkill ? cardActions(ctxSkill) : surfaceActions"
+        variant="context" />
+    </ContextMenuContent>
+    </ContextMenu>
+
+    <!-- Deleting from a card's menu has no sheet to hold the two-step confirm the
+         footer uses, so it gets a dialog that names what it is about to remove. -->
+    <AlertDialog
+      :open="!!deleteTarget"
+      @update:open="(v: boolean) => { if (!v) deleteTarget = null; }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{{ deleteTarget?.title }}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This removes the skill from your firm. Anything the assistant has already
+            done with it is unaffected. This can't be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="busyAction === 'delete'">Cancel</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            :disabled="busyAction === 'delete'"
+            @click="doDelete(deleteTarget!)">
+            <Loader2 v-if="busyAction === 'delete'" class="size-4 animate-spin mr-1.5" />
+            Delete
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <!-- Detail / edit sheet -->
     <Sheet v-model:open="detailOpen">

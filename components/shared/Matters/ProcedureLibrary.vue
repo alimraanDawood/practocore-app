@@ -13,8 +13,9 @@
 import {
   CalendarClock, ChevronDown, ChevronRight, Building2, Layers, ListChecks,
   Loader2, Scale, Search, ShieldCheck, Wand2, ArrowRight, Settings2, CornerUpLeft,
-  Copy, History, RotateCcw, Trash2,
+  Copy, History, RotateCcw, Trash2, RefreshCw, X,
 } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
 import type { RecordModel } from 'pocketbase';
 import {
   getAllTemplates, canManageProcedure, duplicateTemplate, deleteTemplate,
@@ -23,6 +24,7 @@ import {
 import type { EnhancedTemplate } from '~/lib/types/template';
 import { normalizeTemplateRecord } from '~/utils/normalizeTemplate';
 import CreateMatterDialog from '~/components/shared/Matters/CreateMatterDialog.vue';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 
 const open = defineModel<boolean>('open', { default: false });
 
@@ -96,7 +98,10 @@ const [DefineManageList, ReuseManageList] = createReusableTemplate<{ template: E
 interface ManageAction {
   key: string;
   label: string;
+  /** The full explanation, for the roomy Manage panel. */
   hint?: string;
+  /** A few words' version of `hint`, for a menu row that cannot wrap. */
+  shortHint?: string;
   icon: any;
   danger?: boolean;
   disabled?: boolean;
@@ -146,6 +151,7 @@ function manageActions(t: EnhancedTemplate): ManageAction[] {
           hint: mine
             ? 'Change the trigger date, steps and intake fields'
             : 'A colleague authored this — ask an administrator for the manage-templates permission',
+          shortHint: mine ? undefined : 'needs the manage-templates permission',
           icon: Wand2,
           disabled: !mine,
           run: () => editInStudio(t),
@@ -226,6 +232,66 @@ function runManageAction(a: ManageAction) {
   manageFor.value = null;
   a.run();
 }
+
+// ── Right-click menus ───────────────────────────────────────────────────────
+// The same actions the Manage button opens, reachable by right-clicking the row
+// itself — the shape the vault, the matters grid and the playbook shelf already
+// use. Manage stays where it is: it is the discoverable route, the only route on
+// a touchscreen, and the one with room for each action's full explanation.
+//
+// Built by mapping `actionsFor` rather than restating it, so the two lists cannot
+// come apart — which matters more here than anywhere, because what a row offers
+// depends on who authored the procedure.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+
+// What the open menu is aimed at: a row, or null for the sheet itself. There is
+// ONE menu for the whole list rather than one per row — a menu per row meant each
+// was its own dismissable layer, so right-clicking a second row opened a second
+// menu with the first still standing. Set in the target phase by the row, cleared
+// first by the list's CAPTURE handler, which runs top-down before it.
+const ctxRow = ref<EnhancedTemplate | null>(null);
+
+// A menu and a dialog are separate overlay layers; opening the second while the
+// first is still closing makes them race for the body scroll lock (CLAUDE.md).
+const defer = (fn: () => void) => setTimeout(fn, 0);
+
+function menuActionsFor(t: EnhancedTemplate): MenuAction[] {
+  const expanded = expandedId.value === t.id;
+  const out: MenuAction[] = [
+    { id: 'use', label: 'Start a matter', icon: ArrowRight, run: () => defer(() => useProcedure(t)) },
+    {
+      id: 'details', label: expanded ? 'Hide the timeline' : 'Show the timeline',
+      icon: expanded ? ChevronDown : ChevronRight,
+      run: () => toggle(t.id),
+    },
+  ];
+  actionsFor(t).forEach((a, i) => {
+    out.push({
+      id: a.key,
+      // A greyed row with no reason is a dead end, so the short reason rides in
+      // the label — the vault's disabled-Paste pattern.
+      label: a.disabled && a.shortHint ? `${a.label} — ${a.shortHint}` : a.label,
+      icon: a.icon,
+      danger: a.danger,
+      disabled: a.disabled,
+      divider: i === 0,
+      run: () => defer(a.run),
+    });
+  });
+  return out;
+}
+
+/** The menu on the sheet's own space, rather than on any one procedure. */
+const surfaceActions = computed<MenuAction[]>(() => {
+  const out: MenuAction[] = [
+    { id: 'new', label: 'Author a procedure in Matter Studio', icon: Wand2, run: () => defer(openStudio) },
+  ];
+  if (query.value.trim()) {
+    out.push({ id: 'clear', label: 'Clear search', icon: X, divider: true, run: () => { query.value = ''; } });
+  }
+  out.push({ id: 'refresh', label: 'Refresh', icon: RefreshCw, divider: true, run: () => { load(); } });
+  return out;
+});
 
 // ── Duplicate / delete ──────────────────────────────────────────────────────
 const busyId = ref('');
@@ -442,7 +508,14 @@ function describeDeadline(d: any, all: any[] = []): string {
         </SheetDescription>
       </SheetHeader>
 
-      <div class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-5">
+      <!-- The list body carries the sheet's own menu (author a procedure,
+           refresh); each procedure row carries its own and stops the event, so
+           the two never both open. -->
+      <ContextMenu>
+      <ContextMenuTrigger as-child :disabled="coarsePointer">
+      <div
+        class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-5"
+        @contextmenu.capture="ctxRow = null">
         <Button variant="outline" class="gap-1.5 w-full" @click="openStudio()">
           <Wand2 class="size-4" /> Author a procedure in Matter Studio
         </Button>
@@ -465,7 +538,9 @@ function describeDeadline(d: any, all: any[] = []): string {
             </div>
             <p v-if="!g.items.length" class="text-sm text-muted-foreground">{{ g.empty }}</p>
 
-            <div v-for="t in g.items" :key="t.id" :id="`procedure-${t.id}`" class="rounded-lg border bg-muted/40">
+            <div
+              v-for="t in g.items" :key="t.id" :id="`procedure-${t.id}`"
+              class="rounded-lg border bg-muted/40" @contextmenu="ctxRow = t">
               <div class="flex items-start gap-2 p-3 cursor-pointer" @click="toggle(t.id)">
                 <component :is="expandedId === t.id ? ChevronDown : ChevronRight" class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 
@@ -567,6 +642,13 @@ function describeDeadline(d: any, all: any[] = []): string {
           </p>
         </template>
       </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent class="w-72">
+        <SharedActionMenuItems
+          :actions="ctxRow ? menuActionsFor(ctxRow) : surfaceActions"
+          variant="context" />
+      </ContextMenuContent>
+      </ContextMenu>
     </SheetContent>
   </Sheet>
 
