@@ -3,10 +3,11 @@ import type { MattersRecord, DeadlinesResponse, UsersResponse } from '~/lib/pock
 import { type ColumnDef } from '@tanstack/vue-table'
 import { CircleProgressBar } from 'vue3-m-circle-progress-bar'
 import dayjs from 'dayjs'
-import { ArrowUpDown, CalendarIcon } from 'lucide-vue-next'
+import { ArrowUpDown, CalendarIcon, AlertTriangle } from 'lucide-vue-next'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import Checkbox from '@/components/ui/checkbox/Checkbox.vue'
 import MatterRowActions from './MatterRowActions.vue'
+import { deadlineCountdown, isFulfilled, isOverdue, nextOpenDeadline } from '~/services/deadlines/urgency'
 
 dayjs.extend(relativeTime)
 
@@ -72,7 +73,10 @@ export const columns: ColumnDef<MatterWithExpand>[] = [
         header: () => h('div', { class: 'font-semibold ibm-plex-serif' }, 'Completion'),
         cell: ({ row }) => {
             const deadlines = row.original.expand?.deadlines ?? []
-            const completed = deadlines.filter((d: DeadlinesResponse) => d.completed === true).length
+            // `d.completed === true` was never true: Deadlines has no such
+            // column (see lib/pocketbase-types.ts), so this table reported 0%
+            // completion on every matter in every firm.
+            const completed = deadlines.filter(isFulfilled).length
             const total = deadlines.length
             const completionRate = total === 0 ? 0 : Number(((completed / total) * 100).toFixed(1))
 
@@ -94,26 +98,24 @@ export const columns: ColumnDef<MatterWithExpand>[] = [
                 h(ArrowUpDown, { class: 'h-4 w-4 opacity-50' })
             ])
         },
+        // `completed`/`missed` are fields Deadlines does not have, so this filter
+        // was false for every row and the column read "-" on every matter — the
+        // next date on the file, missing from the list view of the whole docket.
         accessorFn: (row) => {
-            const deadlines = row.expand?.deadlines ?? []
-            const nextDeadline = deadlines
-                .filter((d: DeadlinesResponse) => d.completed === false && d.missed === false)
-                .sort((d1: DeadlinesResponse, d2: DeadlinesResponse) => new Date(d1.date).getTime() - new Date(d2.date).getTime())
-                .at(0)
-            return nextDeadline?.date ? new Date(nextDeadline.date).getTime() : Infinity
+            const next = nextOpenDeadline(row.expand?.deadlines ?? [])
+            return next?.date ? new Date(next.date).getTime() : Infinity
         },
         cell: ({ row }) => {
-            const deadlines = row.original.expand?.deadlines ?? []
-            const nextDeadline = deadlines
-                .filter((d: DeadlinesResponse) => d.completed === false && d.missed === false)
-                .sort((d1: DeadlinesResponse, d2: DeadlinesResponse) => new Date(d1.date).getTime() - new Date(d2.date).getTime())
-                .at(0)
+            const nextDeadline = nextOpenDeadline(row.original.expand?.deadlines ?? [])
 
             if (nextDeadline) {
-                return h('div', { class: 'flex flex-row gap-1 items-center ibm-plex-serif' }, [
-                    h(CalendarIcon, { class: "size-4" }),
+                const overdue = isOverdue(nextDeadline, { owner: row.original })
+                return h('div', {
+                    class: `flex flex-row gap-1 items-center ibm-plex-serif${overdue ? ' text-destructive font-medium' : ''}`
+                }, [
+                    h(overdue ? AlertTriangle : CalendarIcon, { class: "size-4" }),
                     dayjs(nextDeadline.date).format('D MMM YYYY'),
-                    ` (${dayjs(nextDeadline.date).fromNow()})`
+                    ` (${deadlineCountdown(nextDeadline)})`
                 ])
             }
 

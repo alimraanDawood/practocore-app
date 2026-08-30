@@ -56,18 +56,18 @@
                      }">
                   <div class="flex flex-col px-2 items-center">
                     <div class="w-1 h-5 bg-muted group-first:opacity-0"
-                         :class="{ 'bg-primary': dl.completed }"></div>
+                         :class="{ 'bg-primary': isFulfilled(dl) }"></div>
                     <div class="size-8 shrink-0 rounded-full grid place-items-center border-2 transition-all"
                          :class="dl.id === deadline.id
                            ? 'bg-primary text-primary-foreground border-primary scale-110'
-                           : dl.completed
+                           : isFulfilled(dl)
                              ? 'bg-primary text-primary-foreground border-primary'
                              : 'bg-muted border-muted'">
-                      <CheckCircle v-if="dl.completed" class="size-4"/>
+                      <CheckCircle v-if="isFulfilled(dl)" class="size-4"/>
                       <Clock v-else class="size-4"/>
                     </div>
                     <div class="w-1 h-full bg-muted group-last:opacity-0"
-                         :class="{ 'bg-primary': dl.completed }"></div>
+                         :class="{ 'bg-primary': isFulfilled(dl) }"></div>
                   </div>
 
                   <div class="flex flex-col w-full justify-center gap-1 py-3 pr-2">
@@ -196,18 +196,18 @@
                              }">
                           <div class="flex flex-col px-2 items-center">
                             <div class="w-1 h-5 bg-muted group-first:opacity-0"
-                                 :class="{ 'bg-primary': dl.completed }"></div>
+                                 :class="{ 'bg-primary': isFulfilled(dl) }"></div>
                             <div class="size-8 shrink-0 rounded-full grid place-items-center border-2 transition-all"
                                  :class="dl.id === deadline.id
                                    ? 'bg-primary text-primary-foreground border-primary scale-110'
-                                   : dl.completed
+                                   : isFulfilled(dl)
                                      ? 'bg-primary text-primary-foreground border-primary'
                                      : 'bg-muted border-muted'">
-                              <CheckCircle v-if="dl.completed" class="size-4"/>
+                              <CheckCircle v-if="isFulfilled(dl)" class="size-4"/>
                               <Clock v-else class="size-4"/>
                             </div>
                             <div class="w-1 h-full bg-muted group-last:opacity-0"
-                                 :class="{ 'bg-primary': dl.completed }"></div>
+                                 :class="{ 'bg-primary': isFulfilled(dl) }"></div>
                           </div>
 
                           <div class="flex flex-col w-full justify-center gap-1 py-3 pr-2">
@@ -288,6 +288,7 @@ import {
     ExternalLink
 } from 'lucide-vue-next';
 import { getMatter } from '~/services/matters';
+import { deadlineUrgency, isFulfilled } from '~/services/deadlines/urgency';
 
 dayjs.extend(relativeTime);
 
@@ -339,12 +340,18 @@ const sortedDeadlines = computed(() => {
     });
 });
 
-// Get deadline status
+// Get deadline status. Delegates to the shared derivation so this dialog, the
+// timeline and the calendar cannot disagree about the same row; the local copy
+// also compared a date-only value against the current TIME, which made a
+// deadline due today read as overdue from one minute past midnight.
 const getDeadlineStatus = () => {
-    if (props.deadline.status === 'fulfilled') return 'completed';
-    const now = new Date();
-    const deadlineDate = new Date(props.deadline.date);
-    if (now > deadlineDate) return 'overdue';
+    const u = deadlineUrgency(props.deadline, {
+        owner: matter.value ?? null,
+        representedRoleId:
+            matter.value?.representing?.role_id ?? matter.value?.representing?.roleId ?? '',
+    });
+    if (u === 'done') return 'completed';
+    if (u === 'overdue') return 'overdue';
     return 'pending';
 };
 

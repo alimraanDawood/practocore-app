@@ -6,15 +6,9 @@
     <div class="flex flex-col gap-1 flex-1 min-w-0">
       <span class="font-semibold text-sm truncate">{{ deadline.name }}</span>
       <span class="text-xs text-muted-foreground truncate">{{ deadline.expand?.matter?.name }}</span>
-      <span class="text-xs font-semibold">{{ dayjs(deadline.date).format("DD MMM YYYY") }}</span>
-      <Badge v-if="status === 'pending'" class="w-fit">
-        <Clock class="size-3 mr-1" /> PENDING
-      </Badge>
-      <Badge v-else-if="status === 'overdue'" variant="destructive" class="w-fit">
-        <AlertCircle class="size-3 mr-1" /> OVERDUE
-      </Badge>
-      <Badge v-else-if="status === 'fulfilled'" class="w-fit">
-        <CheckCircle class="size-3 mr-1" /> COMPLETED
+      <span class="text-xs font-semibold">{{ dateLabel }}</span>
+      <Badge :variant="badge.variant" :class="['w-fit uppercase', badge.class]">
+        <component :is="badge.icon" class="size-3 mr-1" /> {{ badge.label }}
       </Badge>
     </div>
   </div>
@@ -29,16 +23,12 @@
       </div>
     </div>
     <div class="flex flex-row items-center gap-2">
-      <Badge v-if="status === 'pending'" class="text-xs">
-        <Clock class="size-3 mr-1" /> Pending
+      <Badge :variant="badge.variant" :class="['text-xs', badge.class]">
+        <component :is="badge.icon" class="size-3 mr-1" /> {{ badge.label }}
       </Badge>
-      <Badge v-else-if="status === 'overdue'" variant="destructive" class="text-xs">
-        <AlertCircle class="size-3 mr-1" /> Overdue
-      </Badge>
-      <Badge v-else-if="status === 'fulfilled'" class="text-xs">
-        <CheckCircle class="size-3 mr-1" /> Done
-      </Badge>
-      <span class="text-xs text-muted-foreground ml-auto">{{ dayjs(deadline.date).fromNow() }}</span>
+      <span class="text-xs ml-auto" :class="status === 'overdue' ? 'text-destructive font-medium' : 'text-muted-foreground'">
+        {{ countdown }}
+      </span>
     </div>
     <div v-if="deadline.description" class="text-xs text-muted-foreground mt-2 line-clamp-2">
       {{ deadline.description }}
@@ -47,9 +37,10 @@
 </template>
 
 <script setup lang="ts">
-import { CalendarIcon, Clock, CheckCircle, AlertCircle } from 'lucide-vue-next';
+import { CalendarIcon, Clock, CheckCircle, AlertCircle, CalendarClock, Users } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { deadlineCountdown, deadlineUrgency } from '~/services/deadlines/urgency';
 
 dayjs.extend(relativeTime);
 
@@ -58,5 +49,36 @@ const props = defineProps<{
   variant?: 'mobile' | 'desktop';
 }>();
 
-const status = computed(() => props.deadline.status);
+// Derived, never read off the column: `status` is only ever "pending" or
+// "fulfilled" (internal/deadlinev2/v1bridge.go:legacyStatus), so a card that
+// trusted it badged a deadline missed three weeks ago as PENDING.
+const status = computed(() =>
+  deadlineUrgency(props.deadline, {
+    owner: props.deadline?.expand?.application ?? props.deadline?.expand?.matter ?? null,
+    representedRoleId:
+      props.deadline?.expand?.matter?.representing?.role_id ??
+      props.deadline?.expand?.matter?.representing?.roleId ??
+      '',
+  })
+);
+
+// One badge per urgency, so a missed date can never wear the same badge as a
+// date three weeks out, and the other side's step can never wear this firm's.
+type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary';
+const BADGES: Record<string, { label: string; variant?: BadgeVariant; class?: string; icon: any }> = {
+  done: { label: 'Done', icon: CheckCircle },
+  overdue: { label: 'Overdue', variant: 'destructive', icon: AlertCircle },
+  urgent: { label: 'Due soon', variant: 'outline', class: 'border-accent-warning text-accent-warning', icon: Clock },
+  theirs: { label: 'Other party', variant: 'outline', class: 'text-muted-foreground', icon: Users },
+  projected: { label: 'Projected', variant: 'outline', class: 'text-muted-foreground', icon: CalendarClock },
+  undated: { label: 'No date', variant: 'outline', class: 'text-muted-foreground', icon: CalendarClock },
+  pending: { label: 'Pending', icon: Clock },
+};
+
+const badge = computed(() => BADGES[status.value] ?? BADGES.pending);
+const dateLabel = computed(() =>
+  props.deadline?.date ? dayjs(props.deadline.date).format('DD MMM YYYY') : 'No date'
+);
+const countdown = computed(() => deadlineCountdown(props.deadline));
+
 </script>

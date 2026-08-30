@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { isFulfilled } from '~/services/deadlines/urgency';
 import { getAllDeadlines, subscribeToDeadlines } from '~/services/matters';
 import { getReminders, subscribeToReminders } from '~/services/reminders';
 import { listCalendarMilestones, subscribeMilestones, listCalendarCompliance, subscribeCompliance, type EngagementMilestone, type ComplianceObligation } from '~/services/engagements';
@@ -45,7 +46,10 @@ export const useCalendarStore = defineStore('calendar', {
           date: d.date,
           title: d.name,
           color: `accent-${idx}`,
-          completed: d.completed,
+          // Derived from the only state that is stored. This read a `completed`
+          // field Deadlines has never had, so every dot on every calendar
+          // rendered as outstanding — including the ones already filed.
+          completed: isFulfilled(d),
         };
       });
     },
@@ -58,7 +62,11 @@ export const useCalendarStore = defineStore('calendar', {
       if (!force && this.deadlines.length > 0 && !this.isStale) return this.deadlines;
       this.loading = true;
       try {
-        const list = await getAllDeadlines({ sort: 'date' });
+        // The matter comes with them: the calendar names it on every card,
+        // searches by it, and needs its triggerStatus/representing to keep a
+        // provisional matter's estimated dates and the other side's steps out of
+        // the overdue count. Without the expand those all silently degrade.
+        const list = await getAllDeadlines({ sort: 'date', expand: 'matter' });
         this.deadlines = list;
         this.lastFetched = Date.now();
         this._offlineFallback = false;
@@ -125,7 +133,11 @@ export const useCalendarStore = defineStore('calendar', {
         const hadData = this.deadlines.length > 0;
         if (!hadData) this.loading = true;
         try {
-          const list = await getAllDeadlines({ sort: 'date' });
+          // The matter comes with them: the calendar names it on every card,
+        // searches by it, and needs its triggerStatus/representing to keep a
+        // provisional matter's estimated dates and the other side's steps out of
+        // the overdue count. Without the expand those all silently degrade.
+        const list = await getAllDeadlines({ sort: 'date', expand: 'matter' });
           this.deadlines = list;
           this.lastFetched = Date.now();
         } finally {
