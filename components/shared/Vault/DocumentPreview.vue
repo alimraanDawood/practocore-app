@@ -14,7 +14,16 @@ import { getDocumentFacts, type VaultFact } from '~/services/vault';
 // it. Source-agnostic — used both for vault documents (resolveUrl = vaultFileUrl)
 // and for AI chat attachments (resolveUrl = a pre-signed token/blob URL). Editing is
 // out of scope — read-only preview only. Supported: images, PDF (vue-pdf-embed),
-// Markdown + plain text/code (fetched + rendered), and Word .docx (mammoth → HTML).
+// Markdown + plain text/code (fetched + rendered), and Word .docx (docx-preview).
+//
+// A .docx is rendered as a DOCUMENT, not as an article. It used to go through
+// mammoth, which converts OOXML to semantic HTML — headings, lists, tables, bold
+// — and throws away everything that makes a filed document recognisable: the
+// page, its margins, the fonts, where things sit on the sheet. A pleading looked
+// like a blog post. docx-preview instead lays it out on its own pages, at the
+// size and margins the document itself declares, so it reads the way the PDF
+// beside it does. That is also what makes a page locator mean something here:
+// each page is a real element to scroll to.
 // Anything else falls back to a "can't preview" empty state. The host decides the
 // chrome around this — a desktop side panel or a sheet — so this component only owns
 // its own title bar + body.
@@ -83,9 +92,13 @@ const kindIcon = computed(() => {
 // ── Loading ───────────────────────────────────────────────────────────────────
 const loading = ref(false);
 const error = ref('');
+// The .docx is handed to SharedDocxView as a blob — it renders and pages it, the
+// way SharedPdfView is handed a URL.
+const docxBlob = ref<Blob | null>(null);
+
 const url = ref('');          // object URL for the downloaded blob (image / pdf)
 const textContent = ref('');  // raw text (markdown / text)
-const htmlContent = ref('');  // sanitized HTML (markdown rendered / docx converted)
+const htmlContent = ref('');  // sanitized HTML (markdown rendered)
 // Download progress (0..1). `indeterminate` is true when the server doesn't send a
 // Content-Length, so we can't compute a percentage and show a pulsing bar instead.
 const progress = ref(0);
@@ -147,9 +160,7 @@ async function load() {
     } else if (kind.value === 'text') {
       textContent.value = await blob.text();
     } else if (kind.value === 'docx') {
-      const mammoth = await import('mammoth');
-      const { value } = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
-      htmlContent.value = DOMPurify.sanitize(value || '<p><em>This document appears to be empty.</em></p>');
+      docxBlob.value = blob;
     }
   } catch (e: any) {
     error.value = e?.message || 'Could not load the file.';
@@ -161,14 +172,20 @@ async function load() {
 watch(() => props.doc.id, load, { immediate: true });
 onBeforeUnmount(revokeObjectUrl);
 
-// The PDF surface (page nav / zoom / scroll-vs-paged) is the shared reader used by
-// case-law citations — <SharedPdfView> parks page jumps itself until the canvases
-// exist, so we can forward a request at any time.
+// The reading surfaces (page nav / zoom / scroll-vs-paged) are the shared readers
+// also used by case-law citations. Both park a page jump until their content is
+// rendered, so a request can be forwarded at any time.
+// PDF and Word expose the same goToPage contract, so a page jump does not care
+// which reader is on screen.
 const pdfView = ref<{ goToPage: (page: number) => void } | null>(null);
+const docxView = ref<{ goToPage: (page: number) => void } | null>(null);
+
+/** Formats with real pages, and so with a page locator worth clicking. */
+const hasPages = computed(() => kind.value === 'pdf' || kind.value === 'docx');
 
 function scrollToPage(page: number) {
   if (!page || page < 1) return;
-  nextTick(() => pdfView.value?.goToPage(page));
+  nextTick(() => (kind.value === 'docx' ? docxView.value : pdfView.value)?.goToPage(page));
 }
 
 // ── Facts tab (per-document verification trail) ───────────────────────────────
@@ -218,7 +235,7 @@ function locatorPage(loc?: string): number | null {
 // and the file is a PDF). Otherwise it's a no-op label.
 function onFactClick(f: VaultFact) {
   const page = locatorPage(f.provenance?.locator);
-  if (page && kind.value === 'pdf') {
+  if (page && hasPages.value) {
     selectTab('document');
     scrollToPage(page);
   }
@@ -296,7 +313,7 @@ async function download() {
     <div
       v-show="activeTab === 'document'"
       class="min-h-0 flex-1"
-      :class="kind === 'pdf' && !loading && !error ? 'overflow-hidden' : 'overflow-auto'">
+      :class="hasPages && !loading && !error ? 'overflow-hidden' : 'overflow-auto'">
       <!-- Loading (with download progress) -->
       <div v-if="loading" class="flex h-full flex-col items-center justify-center gap-3 p-6">
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
@@ -329,13 +346,18 @@ async function download() {
       <!-- PDF — the shared citation reader surface (page nav, zoom, scroll/paged) -->
       <SharedPdfView v-else-if="kind === 'pdf'" ref="pdfView" :source="url" :initial-page="initialPage" class="h-full" />
 
-      <!-- Markdown / docx (rendered HTML) -->
-      <div v-else-if="kind === 'markdown' || kind === 'docx'" class="p-5">
+      <!-- Markdown (rendered HTML) -->
+      <div v-else-if="kind === 'markdown'" class="p-5">
         <div
           class="prose prose-pink prose-sm dark:prose-invert mx-auto max-w-3xl prose-headings:font-semibold prose-pre:bg-muted prose-pre:text-foreground"
           v-html="htmlContent"
         />
       </div>
+
+      <!-- Word — the same reading surface as the PDF above, page nav and all. -->
+      <SharedDocxView
+        v-else-if="kind === 'docx'" ref="docxView"
+        :source="docxBlob" :initial-page="initialPage" class="h-full" />
 
       <!-- Plain text / code -->
       <pre
@@ -394,8 +416,8 @@ async function download() {
               v-if="f.provenance?.locator"
               type="button"
               class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/20"
-              :class="locatorPage(f.provenance?.locator) && kind === 'pdf' ? 'cursor-pointer' : 'cursor-default'"
-              :title="locatorPage(f.provenance?.locator) && kind === 'pdf' ? 'Jump to this page in the document' : undefined"
+              :class="locatorPage(f.provenance?.locator) && hasPages ? 'cursor-pointer' : 'cursor-default'"
+              :title="locatorPage(f.provenance?.locator) && hasPages ? 'Jump to this page in the document' : undefined"
               @click="onFactClick(f)"
             >
               <Quote class="size-3" /> {{ f.provenance.locator }}

@@ -297,6 +297,22 @@ export async function listTrashedDocuments(limit = 200): Promise<VaultDocument[]
   return res.items;
 }
 
+/**
+ * Trashed FOLDERS across every readable library, unfiltered.
+ *
+ * The topmost-only filtering deliberately does NOT happen here: it has to be
+ * done against the documents as well (see `binRows` in useVaultBrowse), and a
+ * function that can only see folders would get it half right.
+ */
+export async function listTrashedFolders(limit = 200): Promise<VaultFolder[]> {
+  const res = await pb.collection(FOLDERS).getList<VaultFolder>(1, limit, {
+    filter: 'trashed = true',
+    sort: '-trashed_at',
+    skipTotal: true,
+  });
+  return res.items;
+}
+
 /** Trashed rows across every readable library — the home's Recycle bin count. */
 export async function countTrashedDocuments(): Promise<number> {
   const res = await pb.collection(DOCS).getList<VaultDocument>(1, 1, { filter: 'trashed = true' });
@@ -522,6 +538,58 @@ export function moveFolder(id: string, parent: string): Promise<VaultFolder> {
 }
 
 /**
+ * Where a copy or a relocation lands. Omitting `scope`/`scopeId` means "the
+ * library it is already in", which is what an ordinary in-folder copy wants;
+ * naming a different library is how a document crosses from a matter into an
+ * engagement, or out of a custom vault into the firm library.
+ */
+export interface VaultDest {
+  scope?: VaultScope;
+  scopeId?: string;
+  /** Folder id inside the destination library; "" is its root. */
+  folder?: string;
+}
+
+function destBody(dest: VaultDest, key: 'folder' | 'parent') {
+  return JSON.stringify({
+    scope: dest.scope ?? '',
+    scope_id: dest.scopeId ?? '',
+    [key]: dest.folder ?? '',
+  });
+}
+
+/**
+ * Duplicate a folder, its subfolders and every document under them into `dest`.
+ * The root of the copy is renamed ("… (copy)") when a sibling there already
+ * holds its name, so copying a folder next to itself works.
+ *
+ * The copies land stored-only: distilled facts belong to a library rather than a
+ * folder, so a copy that re-ingested would buy a second identical set of them.
+ * Use {@link setDocumentIngest} on a copy that should be read on its own.
+ */
+export function copyFolder(id: string, dest: VaultDest): Promise<VaultFolder> {
+  return vaultFetch(`/api/practocore/ai/vault/folders/${id}/copy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: destBody(dest, 'parent'),
+  });
+}
+
+/**
+ * Relocate a folder, possibly into ANOTHER library — which {@link moveFolder}
+ * cannot do, because rewriting a parent id only means anything inside one
+ * library. Within a library this is the same operation; across one it copies the
+ * subtree and removes the original, carrying each document's AI setting with it.
+ */
+export function relocateFolder(id: string, dest: VaultDest): Promise<VaultFolder> {
+  return vaultFetch(`/api/practocore/ai/vault/folders/${id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: destBody(dest, 'parent'),
+  });
+}
+
+/**
  * Move a folder (and its whole subtree) to the Trash, or restore it. Soft-delete:
  * the rows are hidden from the normal listing but kept for restore; distilled
  * facts are retired only on a permanent {@link deleteFolder}.
@@ -545,6 +613,33 @@ export function moveDocument(id: string, folder: string): Promise<VaultDocument>
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ folder }),
+  });
+}
+
+/**
+ * Duplicate a document into `dest`, file and all. The copy is a new document,
+ * not a second reference: deleting either side leaves the other whole. It lands
+ * stored-only — see {@link copyFolder}.
+ */
+export function copyDocument(id: string, dest: VaultDest): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}/copy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: destBody(dest, 'folder'),
+  });
+}
+
+/**
+ * Relocate a document, possibly into ANOTHER library — see
+ * {@link relocateFolder}. Crossing libraries retires the document's distilled
+ * facts from the one it leaves and re-distils them into the one it arrives in,
+ * because facts are scoped to a library; the document keeps its AI setting.
+ */
+export function relocateDocument(id: string, dest: VaultDest): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: destBody(dest, 'folder'),
   });
 }
 

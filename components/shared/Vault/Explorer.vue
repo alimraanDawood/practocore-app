@@ -3,20 +3,22 @@ import {
   ChevronRight, ChevronsUpDown, FolderLock, FolderPlus, Upload, Search, X,
   LayoutGrid, List as ListIcon, ArrowUpDown, ArrowUp, Loader2, Trash2, RotateCcw,
   FolderInput, Download, Pencil, FolderOpen, Eye, Sparkles, EyeOff, CheckCheck,
-  MoreHorizontal, Check, Info, FolderRoot,
+  MoreHorizontal, Check, Info, FolderRoot, CopyPlus, Scissors, ClipboardPaste, Files, FolderTree,
+  ChevronDown,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
 import {
-  createFolder, renameFolder, moveFolder, setFolderTrashed, deleteFolder,
-  moveDocument, setDocumentTrashed, setDocumentIngest, deleteDocument, vaultFileUrl,
-  type VaultScope, type VaultDocument, type VaultFolder,
+  createFolder, renameFolder, moveFolder, copyFolder, relocateFolder, setFolderTrashed, deleteFolder,
+  moveDocument, copyDocument, relocateDocument, setDocumentTrashed, setDocumentIngest, deleteDocument,
+  vaultFileUrl,
+  type VaultScope, type VaultDocument, type VaultFolder, type VaultDest,
 } from '~/services/vault';
 import {
-  useVaultLibrary, docRow, VAULT_KIND_LABELS,
+  useVaultLibrary, VAULT_KINDS,
   type VaultLibraryApi, type VaultRow, type VaultKindFilter, type VaultSortKey,
 } from '~/composables/useVaultLibrary';
-import { fileIcon, fileTint } from '~/utils/vaultDisplay';
+import { fileIcon, fileTint, middleTruncate } from '~/utils/vaultDisplay';
 import type { VaultAction } from './MenuItems.vue';
 
 // ── The file manager ────────────────────────────────────────────────────────
@@ -170,6 +172,40 @@ const rows = computed<VaultRow[]>(() => {
 });
 
 const isEmpty = computed(() => !lib.loading.value && rows.value.length === 0);
+
+/**
+ * What an empty listing should say. There are four different emptinesses here
+ * and they want four different answers — an empty bin, a search with no hits, a
+ * folder with nothing in it, and a folder whose contents the FILTER is hiding.
+ *
+ * The last is the one worth getting right: "This folder is empty" is simply
+ * false of a folder holding six PDFs while the Images tab is selected, and it
+ * sends people off to upload something they already have. So when the filter is
+ * what emptied the list, it says which filter, counts what is behind it, and
+ * offers to lift it instead of offering an upload.
+ */
+const hiddenByFilter = computed(() => {
+  if (props.trash || searching.value || kind.value === 'all') return 0;
+  return lib.entriesIn(currentFolder.value, { kind: 'all' }).length;
+});
+
+const emptyState = computed(() => {
+  if (props.trash) {
+    return { icon: Trash2, tint: '', title: 'The recycle bin is empty', filtered: false };
+  }
+  if (searching.value) {
+    return { icon: Search, tint: '', title: `Nothing matches “${query.value.trim()}”`, filtered: false };
+  }
+  const meta = VAULT_KINDS[kind.value];
+  if (kind.value !== 'all') {
+    return { icon: meta.icon, tint: meta.tint, title: meta.empty, filtered: hiddenByFilter.value > 0 };
+  }
+  return {
+    icon: FolderOpen, tint: '',
+    title: props.path.length ? 'This folder is empty' : 'Nothing here yet',
+    filtered: false,
+  };
+});
 
 // ── Selection ───────────────────────────────────────────────────────────────
 const keyOf = (r: VaultRow) => `${r.kind}:${r.id}`;
@@ -328,6 +364,48 @@ async function moveRows(list: VaultRow[], targetId: string) {
   clearSelection();
 }
 
+/**
+ * Copy or relocate items into `dest`, by id. The twin of `moveRows`, and it
+ * takes ids rather than rows for a reason: `dest` may be a DIFFERENT library, so
+ * by the time this runs the items need not exist in the listing on screen — the
+ * explorer showing the destination has never seen them.
+ *
+ * Deliberately not optimistic either. A move within a folder knows what the row
+ * will look like when it lands because the row already exists; a copy's id, name
+ * and status are the server's to decide (a folder copied beside itself comes
+ * back renamed), so this waits and then reloads.
+ */
+async function placeItems(items: { id: string; kind: 'folder' | 'doc'; name: string }[],
+                          mode: 'move' | 'copy', dest: VaultDest) {
+  if (!items.length || props.readonly || props.trash) return;
+  const verb = mode === 'copy' ? 'Copied' : 'Moved';
+  try {
+    for (const it of items) {
+      if (mode === 'copy') {
+        if (it.kind === 'folder') await copyFolder(it.id, dest);
+        else await copyDocument(it.id, dest);
+      } else if (it.kind === 'folder') {
+        await relocateFolder(it.id, dest);
+      } else {
+        await relocateDocument(it.id, dest);
+      }
+    }
+    toast.success(items.length === 1 ? `${verb} “${items[0].name}”` : `${verb} ${items.length} items`);
+  } catch (e: any) {
+    toast.error(e?.message || `Could not ${mode} the item.`);
+  }
+  await lib.reload();
+  clearSelection();
+}
+
+/** The dialog path, which always stays inside this library. */
+function copyRows(list: VaultRow[], targetId: string) {
+  const items = list
+    .filter((r) => r.kind !== 'folder' || !isDescendant(targetId, r.id))
+    .map((r) => ({ id: r.id, kind: r.kind === 'folder' ? 'folder' as const : 'doc' as const, name: r.name }));
+  return placeItems(items, 'copy', { scope: props.scope, scopeId: props.scopeId, folder: targetId });
+}
+
 // ── Dragging rows ───────────────────────────────────────────────────────────
 // Pointer events, not HTML5 drag-and-drop: `dragstart` never fires from a touch,
 // so the native API would have made moving a file something only a mouse can do.
@@ -402,7 +480,12 @@ onBeforeUnmount(() => {
 });
 
 // ── Files dragged in from the desktop ───────────────────────────────────────
-const dropzone = ref<{ pick: () => void; pickPhoto: () => void; accept: (f: File[]) => void } | null>(null);
+const dropzone = ref<{
+  pick: () => void; pickFolder: () => void; pickPhoto: () => void;
+  canPickFolder: boolean;
+  accept: (f: File[]) => void;
+  acceptDrop: (dt: DataTransfer) => void;
+} | null>(null);
 const fileDragDepth = ref(0);
 
 function hasFiles(e: DragEvent) {
@@ -419,9 +502,18 @@ function onSurfaceDragLeave(e: DragEvent) {
 function onSurfaceDrop(e: DragEvent) {
   fileDragDepth.value = 0;
   if (props.readonly || props.trash) return;
-  const files = Array.from(e.dataTransfer?.files || []);
-  if (files.length) dropzone.value?.accept(files);
+  // The whole DataTransfer, not its `files`: a dropped FOLDER is absent from
+  // `files` entirely, and the entries that describe it are readable only until
+  // this handler returns.
+  if (e.dataTransfer) dropzone.value?.acceptDrop(e.dataTransfer);
 }
+
+// Whether this browser can pick a directory at all — false in Android's WebView
+// and iOS Safari, where a .zip is the only way to bring a tree in. Mirrored into
+// a ref because a template ref is not reactive: read straight from `dropzone` the
+// toolbar would render its first pass before the child mounted and never re-run.
+const canImportFolder = ref(false);
+onMounted(() => { canImportFolder.value = !!dropzone.value?.canPickFolder; });
 
 // ── Create / rename ─────────────────────────────────────────────────────────
 // Opening a dialog straight from a menu item races reka-ui's dismissable-layer
@@ -472,20 +564,25 @@ async function submitRename() {
   } finally { busy.value = false; }
 }
 
-// ── Moving ──────────────────────────────────────────────────────────────────
-// Two ways, chosen by what the screen can hold rather than by what it is:
+// ── Moving and copying ──────────────────────────────────────────────────────
+// One verb pair, two ways to aim it:
 //
-//   • wide — a dialog showing the whole tree at once, because choosing a
-//     destination is a comparison and a mouse can see and click all of it.
-//   • narrow — carry the items. The picker becomes the browser itself: you
-//     navigate to the folder the normal way and a bar drops them there. A tree
-//     picker on a phone is a second, worse way to walk folders you already know
-//     how to walk, in a viewport that fits about six rows of it.
+//   • the CLIPBOARD (Cut / Copy, then Paste), at every width. The picker is the
+//     browser itself: you navigate to where the items should go — another folder,
+//     another matter, another engagement — and a bar drops them there. It is the
+//     only route that can cross a library, because a destination in another
+//     library is not something a tree of THIS library can offer.
+//   • a DIALOG showing this library's whole tree at once, on wide screens only.
+//     Choosing among sibling folders is a comparison, and a mouse can see and
+//     click all of them; on a phone the same tree is a second, worse way to walk
+//     folders you already know how to walk, in a viewport that fits six rows.
 //
-// Both end in `moveRows`, so nothing about the actual move differs.
+// Both end in `placeItems`, so nothing about the actual move or copy differs.
 const isNarrow = useMediaQuery('(max-width: 1023px)');
 
 const moveRowsList = ref<VaultRow[]>([]);
+/** Which verb the desktop dialog is asking about; the carry keeps its own. */
+const dialogMode = ref<'move' | 'copy'>('move');
 const moveOpen = computed({
   get: () => moveRowsList.value.length > 0,
   set: (v: boolean) => { if (!v) moveRowsList.value = []; },
@@ -498,9 +595,48 @@ const move = useVaultMove();
 // someone else's page, which owns its own corner.
 useSuppressDockLauncher(() => !props.embedded && (selecting.value || !!move.pending.value));
 
+// Android back cancels a carry in progress. It sits on the overlay stack, which
+// back consults before it navigates (see `useBackButton`), so the carry is put
+// down rather than the folder left — the same thing back does to a selection,
+// and what a phone file manager does with an in-progress paste.
+//
+// The cost is real and deliberate: back no longer walks up a folder while items
+// are carried. Going up is the breadcrumb's job, and it stays reachable the
+// whole time the bar is up; getting *out* of a carry had no gesture at all,
+// only the bar's Cancel button, which is the smaller of the two problems.
+const overlays = useOverlayStack();
+let carryHandle: number | null = null;
+watchEffect(() => {
+  const carrying = !!move.pending.value;
+  if (carrying && carryHandle === null) {
+    carryHandle = overlays.register(() => move.cancel());
+  } else if (!carrying && carryHandle !== null) {
+    overlays.unregister(carryHandle);
+    carryHandle = null;
+  }
+});
+onScopeDispose(() => {
+  if (carryHandle !== null) { overlays.unregister(carryHandle); carryHandle = null; }
+});
+
+/** Open the tree picker — a desktop-only second route to the same two verbs. */
 function askMove(list: VaultRow[]) {
   if (!list.length) return;
-  if (!isNarrow.value) { defer(() => { moveRowsList.value = list; }); return; }
+  defer(() => { dialogMode.value = 'move'; moveRowsList.value = list; });
+}
+function askCopy(list: VaultRow[]) {
+  if (!list.length) return;
+  defer(() => { dialogMode.value = 'copy'; moveRowsList.value = list; });
+}
+
+/**
+ * Pick the items up. This is Cut/Copy: they go on the clipboard and stay there
+ * across folders, across libraries and across routes until they are pasted or
+ * put down, which is why the clipboard is a module singleton rather than state
+ * belonging to this component.
+ */
+function askCarry(list: VaultRow[], mode: 'move' | 'copy') {
+  if (!list.length) return;
 
   // A folder cannot land inside itself or anything under it. Resolve that now,
   // while this explorer still has the tree: the destination may be reached in a
@@ -512,6 +648,7 @@ function askMove(list: VaultRow[]) {
   });
 
   move.start({
+    mode,
     scope: props.scope,
     scopeId: props.scopeId,
     from: currentFolder.value,
@@ -528,48 +665,53 @@ function askMove(list: VaultRow[]) {
 
 function onMovePicked(folderId: string) {
   const list = moveRowsList.value;
+  const mode = dialogMode.value;
   moveRowsList.value = [];
-  moveRows(list, folderId);
+  if (mode === 'copy') copyRows(list, folderId);
+  else moveRows(list, folderId);
 }
 
-// Can the carried items land where we are standing? Same library (the API only
-// rewrites a parent id — it cannot move a document between libraries), not the
-// folder they already live in, and not inside themselves.
+/**
+ * Can the carried items land where we are standing? Since both verbs write new
+ * records when they cross a library, "here" may be a different matter, a
+ * different engagement or another vault entirely — so the only bar to a
+ * cross-library paste is whether the server lets this account write here, which
+ * it answers when asked.
+ */
 const moveTarget = computed(() => {
   const p = move.pending.value;
   if (!p) return null;
-  if (p.scope !== props.scope || p.scopeId !== props.scopeId) {
-    return { ok: false, reason: 'Open the library they came from to move them' };
+  const copying = p.mode === 'copy';
+  const sameLibrary = p.scope === props.scope && p.scopeId === props.scopeId;
+  if (props.readonly) return { ok: false, reason: 'This library is read-only' };
+  if (props.trash) return { ok: false, reason: 'The recycle bin cannot hold carried items' };
+  // Within one library a folder still cannot swallow itself. Across libraries
+  // there is no path from here back up to it, so there is no cycle to make.
+  if (sameLibrary && p.blocked.includes(currentFolder.value)) {
+    return { ok: false, reason: `A folder cannot be ${copying ? 'copied' : 'moved'} inside itself` };
   }
-  if (props.trash) return { ok: false, reason: 'The recycle bin cannot hold moved items' };
-  if (p.from === currentFolder.value) return { ok: false, reason: 'Already in this folder' };
-  if (p.blocked.includes(currentFolder.value)) return { ok: false, reason: 'A folder cannot move inside itself' };
+  // A move back to where it started is a no-op; a copy back to where it started
+  // is a duplicate, which is the whole point of copying.
+  if (sameLibrary && !copying && p.from === currentFolder.value) {
+    return { ok: false, reason: 'Already in this folder' };
+  }
   return { ok: true, reason: '' };
 });
 
 /**
- * Re-resolve the carried ids against this library's live records. The rows the
- * move started from belong to a listing that is several navigations gone, and
- * may have been re-fetched since; only the ids are still trustworthy. `moveRows`
- * reads `kind`, `id`, `name` and the underlying record, so a minimal row is a
- * complete one here.
+ * Put the carried items down here. It works from the clipboard's own record of
+ * what is carried — id, kind and name — and never looks them up in this
+ * library's listing, because after a cross-library paste they were never in it.
  */
 function commitMove() {
   const p = move.pending.value;
   if (!p || !moveTarget.value?.ok) return;
-  const carried: VaultRow[] = [];
-  for (const it of p.items) {
-    if (it.kind === 'folder') {
-      const f = lib.folders.value.find((x) => x.id === it.id);
-      if (f) carried.push({ kind: 'folder', id: f.id, name: f.name, modified: f.updated || f.created, folder: f });
-    } else {
-      const d = lib.documents.value.find((x) => x.id === it.id);
-      if (d) carried.push(docRow(d));
-    }
-  }
+  const items = p.items.map((it) => ({ id: it.id, kind: it.kind, name: it.name }));
+  const mode = p.mode;
   move.cancel();
-  if (!carried.length) { toast.error('Those items are no longer here.'); return; }
-  moveRows(carried, currentFolder.value);
+  placeItems(items, mode, {
+    scope: props.scope, scopeId: props.scopeId, folder: currentFolder.value,
+  });
 }
 
 // ── Trash / restore / purge ─────────────────────────────────────────────────
@@ -597,7 +739,23 @@ async function setTrashed(list: VaultRow[], trashed: boolean) {
   }
 }
 
+// Binning is asked about before it happens, even though it is reversible. The
+// undo toast alone was a five-second window on a decision about a client's
+// documents, and it was easy to miss entirely on a folder, which takes its whole
+// subtree with it without ever saying so. The toast still appears afterwards, so
+// a confirmed delete is still undoable — the dialog is about knowing WHAT is
+// being binned, not about making it hard.
+const trashList = ref<VaultRow[]>([]);
 function trashRows(list: VaultRow[]) {
+  if (list.length) defer(() => { trashList.value = list; });
+}
+
+/** Folders in the pending set — the ones whose contents travel with them. */
+const trashFolders = computed(() => trashList.value.filter((r) => r.kind === 'folder'));
+
+function confirmTrash() {
+  const list = trashList.value;
+  trashList.value = [];
   if (!list.length) return;
   clearSelection();
   setTrashed(list, true);
@@ -703,7 +861,10 @@ const bulkActions = computed<VaultAction[]>(() => {
     { id: 'download', label: 'Download', icon: Download, run: () => downloadRows(selectedRows.value) },
   ];
   if (!props.readonly) {
-    out.push({ id: 'move', label: 'Move', icon: FolderInput, run: () => askMove(selectedRows.value) });
+    // The bar takes the clipboard verbs, not the picker: it is the phone's main
+    // route, and a carry is the only one of the two that can reach another library.
+    out.push({ id: 'cut', label: 'Move', icon: FolderInput, run: () => askCarry(selectedRows.value, 'move') });
+    out.push({ id: 'copy', label: 'Copy', icon: CopyPlus, run: () => askCarry(selectedRows.value, 'copy') });
     out.push({ id: 'trash', label: 'Delete', icon: Trash2, danger: true, run: () => trashRows(selectedRows.value) });
   }
   return out;
@@ -738,10 +899,25 @@ function actionsFor(row: VaultRow): VaultAction[] {
     if (row.kind === 'folder' && !many) {
       out.push({ id: 'rename', label: 'Rename', icon: Pencil, shortcut: 'F2', divider: true, run: () => askRename(row) });
     }
+    // Two routes to the same two verbs, as every desktop file manager has: pick
+    // the items up and paste them where you land (the only route that can reach
+    // another matter or engagement), or name a folder in this library outright.
+    // A phone gets the clipboard alone — a tree picker there is a second, worse
+    // way to walk folders it already knows how to walk.
+    const narrow = isNarrow.value;
     out.push({
-      id: 'move', label: `Move to…${suffix}`, icon: FolderInput,
-      divider: row.kind !== 'folder' || many, run: () => askMove(targets),
+      id: 'cut', label: narrow ? `Move${suffix}` : `Cut${suffix}`, icon: narrow ? FolderInput : Scissors,
+      shortcut: narrow ? undefined : 'Ctrl+X',
+      divider: row.kind !== 'folder' || many, run: () => askCarry(targets, 'move'),
     });
+    out.push({
+      id: 'copy', label: `Copy${suffix}`, icon: CopyPlus,
+      shortcut: narrow ? undefined : 'Ctrl+C', run: () => askCarry(targets, 'copy'),
+    });
+    if (!narrow) {
+      out.push({ id: 'move-to', label: `Move to…${suffix}`, icon: FolderInput, run: () => askMove(targets) });
+      out.push({ id: 'copy-to', label: `Copy to…${suffix}`, icon: CopyPlus, run: () => askCopy(targets) });
+    }
     if (row.kind === 'doc' && !many) {
       out.push({
         id: 'ingest',
@@ -757,6 +933,36 @@ function actionsFor(row: VaultRow): VaultAction[] {
   }
   return out;
 }
+
+/**
+ * What can be done to the folder itself rather than to anything in it — the menu
+ * on empty space, which is where Paste has to live: pasting is aimed at *here*,
+ * and every other menu in this screen is aimed at a row.
+ */
+const surfaceActions = computed<VaultAction[]>(() => {
+  const out: VaultAction[] = [];
+  if (props.readonly || props.trash) return out;
+  const p = move.pending.value;
+  if (p) {
+    const t = moveTarget.value;
+    const label = p.mode === 'copy' ? 'Paste a copy' : 'Paste';
+    // Shown but disabled-looking when it cannot land, with the reason in place of
+    // the shortcut — a Paste that silently does nothing is worse than one that
+    // says why.
+    out.push({
+      id: 'paste', label: t?.ok ? label : `${label} — ${t?.reason ?? ''}`, icon: ClipboardPaste,
+      shortcut: 'Ctrl+V', run: () => { if (t?.ok) commitMove(); },
+    });
+  }
+  out.push({ id: 'new-folder', label: 'New folder', icon: FolderPlus, divider: out.length > 0, run: newFolder });
+  out.push({ id: 'upload', label: 'Upload documents', icon: Upload, run: () => dropzone.value?.pick() });
+  // Bringing in a folder someone already has, with its layout intact. Offered
+  // only where the browser has a directory picker; a phone drops a .zip instead.
+  if (canImportFolder.value) {
+    out.push({ id: 'import', label: 'Upload a folder…', icon: FolderTree, run: () => dropzone.value?.pickFolder() });
+  }
+  return out;
+});
 
 // ── Keyboard ────────────────────────────────────────────────────────────────
 // Bound to the window rather than the panel: nothing gives the panel focus by
@@ -814,9 +1020,25 @@ function onKeydown(e: KeyboardEvent) {
     case 'Escape':
       if (searching.value) { query.value = ''; searchOpen.value = false; }
       else if (selecting.value) clearSelection();
+      // Putting the carried items down is the last thing Escape does, so it never
+      // costs someone their clipboard while they are only dismissing a search.
+      else if (move.pending.value) move.cancel();
       break;
     case 'a':
       if (e.metaKey || e.ctrlKey) { e.preventDefault(); selectAll(); }
+      break;
+    case 'x':
+      if ((e.metaKey || e.ctrlKey) && !props.readonly && selectedRows.value.length) {
+        e.preventDefault(); askCarry(selectedRows.value, 'move');
+      }
+      break;
+    case 'c':
+      if ((e.metaKey || e.ctrlKey) && !props.readonly && selectedRows.value.length) {
+        e.preventDefault(); askCarry(selectedRows.value, 'copy');
+      }
+      break;
+    case 'v':
+      if ((e.metaKey || e.ctrlKey) && moveTarget.value?.ok) { e.preventDefault(); commitMove(); }
       break;
     default: break;
   }
@@ -825,6 +1047,7 @@ function onKeydown(e: KeyboardEvent) {
 // The host's header drives these on a phone, where the toolbar has no room.
 defineExpose({
   pickUpload: () => dropzone.value?.pick(),
+  pickFolder: () => dropzone.value?.pickFolder(),
   pickPhoto: () => dropzone.value?.pickPhoto(),
   newFolder,
   openSearch: () => { searchOpen.value = true; },
@@ -986,15 +1209,18 @@ defineExpose({
         <Search class="size-4" />
       </Button>
 
-      <!-- Kind filter. Hidden while searching, where the answer set is the query's. -->
+      <!-- Kind filter. Hidden while searching, where the answer set is the query's.
+           Each tab wears the icon and colour its own rows wear, so the strip reads
+           as a filter over the list rather than as five more places to go. -->
       <div v-if="!searching && !trash" class="hidden items-center gap-1 sm:flex">
         <button
-          v-for="(label, k) in VAULT_KIND_LABELS"
+          v-for="(meta, k) in VAULT_KINDS"
           :key="k"
-          class="rounded-full border px-2.5 py-1 text-xs transition-colors"
+          class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors"
           :class="kind === k ? 'border-primary/40 bg-primary/10 text-foreground' : 'border-transparent text-muted-foreground hover:bg-accent'"
           @click="kind = k as VaultKindFilter">
-          {{ label }}
+          <component :is="meta.icon" class="size-3.5" :class="kind === k ? meta.tint : ''" />
+          {{ meta.label }}
         </button>
       </div>
 
@@ -1022,9 +1248,10 @@ defineExpose({
           <DropdownMenuSeparator class="sm:hidden" />
           <DropdownMenuLabel class="sm:hidden">Show</DropdownMenuLabel>
           <DropdownMenuItem
-            v-for="(label, k) in VAULT_KIND_LABELS" :key="k" class="sm:hidden"
+            v-for="(meta, k) in VAULT_KINDS" :key="k" class="sm:hidden"
             @select="kind = k as VaultKindFilter">
-            {{ label }}
+            <component :is="meta.icon" class="size-4" :class="meta.tint" />
+            {{ meta.label }}
             <Check v-if="kind === k" class="ml-auto size-3.5" />
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1081,13 +1308,40 @@ defineExpose({
           @click="newFolder">
           <FolderPlus class="size-4" /> New folder
         </Button>
-        <Button
-          size="sm" class="gap-1.5"
-          :class="embedded ? '' : 'hidden lg:inline-flex'"
-          @click="dropzone?.pick()">
-          <Upload class="size-4" />
-          <span class="hidden sm:inline">Upload</span>
-        </Button>
+        <!-- A split button: the left half is the ordinary upload people came for,
+             the right half opens the folder import beside it. Not a plain
+             dropdown — putting "Upload files" one click further away to make room
+             for something used once a matter would be the wrong trade. -->
+        <div
+          class="flex items-stretch"
+          :class="embedded ? '' : 'hidden lg:flex'">
+          <Button
+            size="sm"
+            class="gap-1.5"
+            :class="canImportFolder ? 'rounded-r-none' : ''"
+            @click="dropzone?.pick()">
+            <Upload class="size-4" />
+            <span class="hidden sm:inline">Upload</span>
+          </Button>
+          <DropdownMenu v-if="canImportFolder">
+            <DropdownMenuTrigger as-child>
+              <Button size="sm" class="rounded-l-none border-l border-primary-foreground/20 px-1.5" title="More ways to add">
+                <ChevronDown class="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" class="w-56">
+              <DropdownMenuItem @select="dropzone?.pick()">
+                <Upload class="size-4" /> Upload files
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="dropzone?.pickFolder()">
+                <FolderTree class="size-4" /> Upload a folder
+              </DropdownMenuItem>
+              <DropdownMenuLabel class="text-xs font-normal text-muted-foreground">
+                A folder keeps its layout. You can also drop one here, or a .zip.
+              </DropdownMenuLabel>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </template>
     </div>
 
@@ -1096,6 +1350,12 @@ defineExpose({
          a click on nothing, and clicking nothing is how every file manager drops
          a selection. Rows stop their own clicks from reaching here by being the
          target themselves, so no guard is needed on them. -->
+    <!-- The listing is itself a right-click target, for the actions aimed at this
+         folder rather than at a row — Paste above all. A row stops its own
+         contextmenu from reaching here (see Entry.vue), so the two menus never
+         both open. -->
+    <ContextMenu>
+    <ContextMenuTrigger as-child :disabled="isTouch">
     <div
       class="min-h-0 flex-1 overflow-y-auto pb-24 sm:pb-2"
       :class="embedded ? 'px-1' : 'px-2 lg:px-1'"
@@ -1108,20 +1368,39 @@ defineExpose({
            with no hits and an empty bin are three different situations. -->
       <div v-else-if="isEmpty" class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-16 text-center">
         <component
-          :is="trash ? Trash2 : searching ? Search : FolderOpen"
-          class="size-7 text-muted-foreground/60" />
-        <p class="text-sm font-medium">
-          {{ trash ? 'The recycle bin is empty'
-            : searching ? `Nothing matches “${query.trim()}”`
-            : path.length ? 'This folder is empty' : 'Nothing here yet' }}
-        </p>
-        <p v-if="!trash && !searching" class="max-w-xs text-xs text-muted-foreground">
-          Drop files anywhere on this panel, or use Upload. Documents you add can be read
-          into the AI's knowledge of this {{ scope === 'matter' ? 'case' : 'library' }}.
-        </p>
-        <Button v-if="!readonly && !trash && !searching" size="sm" class="mt-1 gap-1.5" @click="dropzone?.pick()">
-          <Upload class="size-4" /> Upload documents
-        </Button>
+          :is="emptyState.icon"
+          class="size-7"
+          :class="emptyState.tint || 'text-muted-foreground/60'" />
+        <p class="text-sm font-medium">{{ emptyState.title }}</p>
+
+        <!-- The filter is hiding things: say so, say how many, and offer the way
+             back. An upload button here would answer a question nobody asked. -->
+        <template v-if="emptyState.filtered">
+          <p class="max-w-xs text-xs text-muted-foreground">
+            {{ hiddenByFilter === 1 ? 'One other item is' : `${hiddenByFilter} other items are` }}
+            here, hidden by the {{ VAULT_KINDS[kind].label }} filter.
+          </p>
+          <Button size="sm" variant="outline" class="mt-1 gap-1.5" @click="kind = 'all'">
+            <Files class="size-4" /> Show all
+          </Button>
+        </template>
+
+        <template v-else-if="!trash && !searching">
+          <p class="max-w-xs text-xs text-muted-foreground">
+            Drop files anywhere on this panel, or use Upload. Documents you add can be read
+            into the AI's knowledge of this {{ scope === 'matter' ? 'case' : 'library' }}.
+          </p>
+          <div v-if="!readonly" class="mt-1 flex flex-wrap items-center justify-center gap-2">
+            <Button size="sm" class="gap-1.5" @click="dropzone?.pick()">
+              <Upload class="size-4" /> Upload documents
+            </Button>
+            <Button
+              v-if="canImportFolder" size="sm" variant="outline" class="gap-1.5"
+              @click="dropzone?.pickFolder()">
+              <FolderTree class="size-4" /> Upload a folder
+            </Button>
+          </div>
+        </template>
       </div>
 
       <template v-else>
@@ -1151,6 +1430,11 @@ defineExpose({
         </div>
       </template>
     </div>
+    </ContextMenuTrigger>
+    <ContextMenuContent v-if="surfaceActions.length" class="w-56">
+      <SharedVaultMenuItems :actions="surfaceActions" variant="context" />
+    </ContextMenuContent>
+    </ContextMenu>
 
     <!-- ── Selection bar ────────────────────────────────────────────────────
          The actions only. The count, select-all and the way out are the shell
@@ -1188,8 +1472,9 @@ defineExpose({
       :actions="selecting ? bulkActions : []"
       :more="selecting ? bulkMore : []" />
 
-    <!-- Carrying items to a new folder. Outranks the selection bar by being the
-         only one that can be up at once — `askMove` clears the selection. -->
+    <!-- Carrying items to a new folder, to be moved or copied there. Outranks the
+         selection bar by being the only one that can be up at once — `askCarry`
+         clears the selection. -->
     <SharedVaultMoveBar
       :can-drop="!!moveTarget?.ok"
       :reason="moveTarget?.reason"
@@ -1232,6 +1517,7 @@ defineExpose({
       :scope="scope"
       :scope-id="scopeId"
       :folder="currentFolder"
+      :folders="lib.folders.value"
       @disabled="emit('disabled')" />
 
     <!-- ── Dialogs ──────────────────────────────────────────────────────── -->
@@ -1290,7 +1576,7 @@ defineExpose({
       <DrawerContent>
         <DrawerHeader class="text-left">
           <DrawerTitle>Rename folder</DrawerTitle>
-          <DrawerDescription>{{ renameRow?.name }}</DrawerDescription>
+          <DrawerDescription class="break-words">{{ middleTruncate(renameRow?.name || '') }}</DrawerDescription>
         </DrawerHeader>
         <div class="px-4">
           <Input v-model="renameValue" @keydown.enter="submitRename" />
@@ -1328,13 +1614,42 @@ defineExpose({
       :rows="moveRowsList"
       :folders="lib.folders.value"
       :root-label="rootLabel"
+      :mode="dialogMode"
       @move="onMovePicked" />
+
+    <AlertDialog :open="trashList.length > 0" @update:open="(v) => { if (!v) trashList = []; }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle class="break-words">
+            Move
+            {{ trashList.length === 1 ? `“${middleTruncate(trashList[0].name)}”` : `${trashList.length} items` }}
+            to the recycle bin?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            <template v-if="trashFolders.length">
+              Everything inside
+              {{ trashFolders.length === 1 ? `“${middleTruncate(trashFolders[0].name)}”` : `${trashFolders.length} folders` }}
+              goes with {{ trashFolders.length === 1 ? 'it' : 'them' }}.
+            </template>
+            You can restore from the recycle bin, where items are kept for 30 days.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button variant="destructive" class="gap-1.5" @click="confirmTrash">
+            <Trash2 class="size-4" /> Move to recycle bin
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <AlertDialog :open="purgeList.length > 0" @update:open="(v) => { if (!v) purgeList = []; }">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            Delete {{ purgeList.length === 1 ? `“${purgeList[0].name}”` : `${purgeList.length} items` }} permanently?
+          <AlertDialogTitle class="break-words">
+            Delete
+            {{ purgeList.length === 1 ? `“${middleTruncate(purgeList[0].name)}”` : `${purgeList.length} items` }}
+            permanently?
           </AlertDialogTitle>
           <AlertDialogDescription>
             This cannot be undone. Anything the AI learned from these documents is retired with them.

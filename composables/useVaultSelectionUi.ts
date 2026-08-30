@@ -36,9 +36,11 @@ export function useVaultSelectionUi() {
  * behaves. It sits on the same stack as dialogs and menus, so an open menu is
  * still dismissed before the selection underneath it.
  *
- * A pending MOVE is deliberately not registered: back is how you walk up folders
- * while carrying items, so making it cancel the move would take away the
- * navigation the move exists to use.
+ * A pending move or copy registers on the same stack, from the Explorer rather
+ * than here (see its `carryHandle`), so back puts the carried items down instead
+ * of leaving the folder. That reverses an earlier call — back used to walk up
+ * folders while carrying — because a carry had no way out except the bar's
+ * Cancel button, while going up still has the breadcrumb.
  */
 export function provideVaultSelectionUi(get: () => VaultSelectionUi | null) {
   const overlays = useOverlayStack();

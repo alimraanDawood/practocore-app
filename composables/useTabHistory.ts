@@ -125,6 +125,33 @@ export function useTabHistory() {
     return true
   }
 
+  /**
+   * Navigate to a page you are RETURNING to rather than opening — going up a
+   * folder, or back out to an ancestor from a breadcrumb.
+   *
+   * The difference from a plain push matters: a screen whose location is its
+   * route (the vault library) stacks an entry every time it navigates, so
+   * ascending by pushing leaves the folder you just left sitting on top of the
+   * stack, and the next back press walks back DOWN into it. Unwinding to the
+   * existing entry instead is what makes "go up, then back" keep going up.
+   *
+   * When the target is literally the previous native entry, the browser's own
+   * back is used, so the native Back button and this model stay in step rather
+   * than the native stack growing on every ascent. A multi-level jump cannot do
+   * that and pushes; the model is still correct, only the native stack is longer
+   * than it strictly needs to be.
+   */
+  const ascendTo = (path: string) => {
+    const tab = getTabForPath(path)
+    const stack = tab ? tabStacks[tab] : null
+    const i = stack ? stack.lastIndexOf(path) : -1
+    // Truncate first: the route watcher only records a navigation when the top
+    // of the stack does not already match, so this makes the move a no-op there.
+    if (stack && i !== -1) stack.length = i + 1
+    if (window.history.state?.back === path) router.back()
+    else router.push(path)
+  }
+
   // Unified back for every caller (hardware back button and on-screen back
   // buttons alike). Tab model first; native history only for orphan routes
   // that live outside the tab shell.
@@ -134,5 +161,5 @@ export function useTabHistory() {
     else router.push('/main')
   }
 
-  return { navigateToTab, goBack, back, activeTab, tabStacks, tabOrder }
+  return { navigateToTab, goBack, back, ascendTo, activeTab, tabStacks, tabOrder }
 }

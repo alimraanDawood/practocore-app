@@ -1,9 +1,13 @@
 import type { Component } from 'vue';
 
 /**
- * A move in flight, phone-style: instead of picking a destination out of a tree
- * in a dialog, the items are *carried* — you keep browsing normally, and a bar
- * along the bottom drops them wherever you have landed.
+ * A move or a copy in flight, phone-style: instead of picking a destination out
+ * of a tree in a dialog, the items are *carried* — you keep browsing normally,
+ * and a bar along the bottom drops them wherever you have landed.
+ *
+ * Copy is the same gesture with a different verb at the end of it, so it is the
+ * same carry: one `mode` decides whether the bar says "Move here" or "Copy here"
+ * and which API the explorer calls. Nothing else about carrying differs.
  *
  * The reason it lives outside any component is that browsing is the interaction:
  * the route changes, breadcrumbs are used, folders are opened, and the carried
@@ -13,7 +17,9 @@ import type { Component } from 'vue';
  *
  * The destination is deliberately NOT stored. Whichever explorer is on screen
  * knows where "here" is and does the move itself; this only remembers what is
- * being carried and where it may not go.
+ * being carried and where it may not go. That is also what lets the items cross
+ * into another matter or engagement: nothing here names a library they must
+ * return to.
  */
 export interface PendingMoveItem {
   id: string;
@@ -25,13 +31,17 @@ export interface PendingMoveItem {
 }
 
 export interface PendingMove {
-  /** The library the items came from. `moveDocument`/`moveFolder` only rewrite a
-   *  parent id, so a move cannot cross into another library — the bar says so
-   *  rather than silently failing. */
+  /** What happens when the items are dropped. */
+  mode: 'move' | 'copy';
+  /** The library the items came from. Kept because "here" may be a DIFFERENT
+   *  library by the time they are put down — the destination explorer compares
+   *  the two to decide whether a folder can still swallow itself, and the server
+   *  writes new records rather than rewriting a parent id when they differ. */
   scope: string;
   scopeId: string;
   items: PendingMoveItem[];
-  /** Where they are now: dropping them back here is a no-op, not a move. */
+  /** Where they are now: dropping a MOVE back here is a no-op. A copy dropped
+   *  here is not — duplicating something beside itself is a normal thing to do. */
   from: string;
   /** Folder ids that cannot receive these items — a folder and its descendants. */
   blocked: string[];

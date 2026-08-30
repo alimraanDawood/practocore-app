@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {
   Search, Clock, FileText, Image as ImageIcon, AudioLines, Building2,
-  Vault as VaultIcon, Briefcase, Scale, ChevronRight, Loader2, Plus, Settings2,
+  Vault as VaultIcon, Briefcase, Scale, ChevronRight, Loader2, Plus, Settings2, Trash2,
 } from 'lucide-vue-next';
 import { listRecentDocuments, type VaultDocument } from '~/services/vault';
 import { useVaultLibraries, type VaultLibrary } from '~/composables/useVaultLibraries';
@@ -68,6 +68,20 @@ function openLibrary(lib: VaultLibrary) { navigateTo(libraryPath(lib)); }
           <component :is="CATEGORY_ICONS[c]" class="size-4" />
         </div>
         <span class="truncate text-sm font-medium">{{ VAULT_CATEGORY_LABELS[c] }}</span>
+      </NuxtLink>
+
+      <!-- The bin sits with the places rather than inside a library, because a
+           file you cannot find is exactly the file whose library you have
+           forgotten. Muted, not accented: it is somewhere you end up, not
+           somewhere you are being sent. This is the only route to it on a phone,
+           where the desktop rail does not exist. -->
+      <NuxtLink
+        :to="categoryPath('trash')"
+        class="flex items-center gap-2.5 rounded-xl border p-3 transition-colors hover:bg-accent">
+        <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <Trash2 class="size-4" />
+        </div>
+        <span class="truncate text-sm font-medium">{{ VAULT_CATEGORY_LABELS.trash }}</span>
       </NuxtLink>
     </div>
 

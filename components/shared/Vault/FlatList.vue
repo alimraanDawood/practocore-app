@@ -1,30 +1,42 @@
 <script lang="ts" setup>
 import {
   Search, Eye, Download, FolderOpen, Trash2, LayoutGrid, List as ListIcon,
-  ArrowUpDown, Check, FileQuestion, Info,
+  ArrowUpDown, Check, FileQuestion, Info, RotateCcw, Loader2,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
 import {
-  vaultFileUrl, setDocumentTrashed, type VaultDocument, type VaultScope,
+  vaultFileUrl, setDocumentTrashed, setFolderTrashed, deleteDocument, deleteFolder,
+  type VaultDocument, type VaultScope,
 } from '~/services/vault';
 import { docRow, type VaultRow, type VaultSortKey } from '~/composables/useVaultLibrary';
-import { useVaultBrowse, type VaultCategory } from '~/composables/useVaultBrowse';
+import { middleTruncate } from '~/utils/vaultDisplay';
+import {
+  useVaultBrowse, VAULT_TRASH_RETENTION_DAYS, type VaultBrowseMode,
+} from '~/composables/useVaultBrowse';
 import { useVaultLibraries } from '~/composables/useVaultLibraries';
 import type { VaultAction } from './MenuItems.vue';
 
-// The screens that cut ACROSS libraries: recents, the mime categories and search.
-// There is no folder tree here by design — these answer "where is that thing",
-// which is exactly the question a hierarchy cannot answer. Every row instead
-// carries the library it came from, and "Show in folder" walks back into it.
+// The screens that cut ACROSS libraries: recents, the mime categories, search,
+// and the recycle bin. There is no folder tree here by design — these answer
+// "where is that thing", which is exactly the question a hierarchy cannot
+// answer. Every row instead carries the library it came from, and "Show in
+// folder" walks back into it.
+//
+// The bin is the odd one and deliberately so. It lists FOLDERS as well as
+// documents (a deleted folder that never appeared in it could never be
+// restored), it offers restore and destroy where the others offer delete, and
+// nothing in it can be previewed or opened — a binned document is not a document
+// you are working with, it is one you are deciding about.
 const props = defineProps<{
-  mode: VaultCategory | 'search';
+  mode: VaultBrowseMode | 'search';
   query?: string;
   /** Extra PocketBase expression from the search screen's filter chips. */
   filter?: string;
 }>();
 
-const { docs, loading, loaded, load } = useVaultBrowse();
+const { docs, folders, loading, loaded, load } = useVaultBrowse();
+const isTrash = computed(() => props.mode === 'trash');
 const { resolveLibrary, refresh, libraryPath } = useVaultLibraries();
 
 const isTouch = useMediaQuery('(pointer: coarse)');
@@ -55,7 +67,16 @@ function libraryLabel(d: VaultDocument): string {
 }
 
 const rows = computed<VaultRow[]>(() => {
-  const out = docs.value.map((d) => docRow(d, libraryLabel(d)));
+  const out: VaultRow[] = folders.value.map((f) => ({
+    kind: 'folder' as const,
+    id: f.id,
+    name: f.name,
+    modified: f.trashed_at || f.updated,
+    path: resolveLibrary(f.scope, f.scope_id)?.label || 'Library',
+    trashed: true,
+    folder: f,
+  }));
+  out.push(...docs.value.map((d) => docRow(d, libraryLabel(d))));
   const dir = sortDesc.value ? -1 : 1;
   return out.sort((a, b) => (sortKey.value === 'name'
     ? a.name.localeCompare(b.name) * dir
@@ -63,7 +84,9 @@ const rows = computed<VaultRow[]>(() => {
 });
 
 // ── Selection (same model as the explorer, minus moves) ─────────────────────
-const keyOf = (r: VaultRow) => `doc:${r.id}`;
+// Keyed by kind as well as id: the bin holds folders and documents side by side,
+// and two collections can hand out the same id.
+const keyOf = (r: VaultRow) => `${r.kind}:${r.id}`;
 const selected = ref(new Set<string>());
 const selecting = computed(() => selected.value.size > 0);
 let anchor = -1;
@@ -141,6 +164,9 @@ const previewOpen = computed({
 
 function open(row: VaultRow) {
   if (selecting.value) return;
+  // Nothing in the bin opens. Restore it first — which is also the honest answer
+  // to "can I read this?", since a binned document is on its way out.
+  if (isTrash.value || row.kind === 'folder') return;
   previewRow.value = row;
 }
 
@@ -185,7 +211,17 @@ function showInFolder(row: VaultRow) {
   navigateTo(d.folder ? `${base}?reveal=${d.folder}` : base);
 }
 
-async function trashRows(list: VaultRow[]) {
+// Asked about first — see the note on the explorer's own trash flow. These
+// screens cut across libraries, so a selection here can be documents from three
+// different matters at once, which is all the more reason to name what is going.
+const trashList = ref<VaultRow[]>([]);
+function trashRows(list: VaultRow[]) {
+  if (list.length) trashList.value = list;
+}
+
+async function confirmTrash() {
+  const list = trashList.value;
+  trashList.value = [];
   if (!list.length) return;
   clearSelection();
   const ids = new Set(list.map((r) => r.id));
@@ -207,10 +243,75 @@ async function trashRows(list: VaultRow[]) {
   }
 }
 
+/** Put binned rows back where they came from. */
+async function restoreRows(list: VaultRow[]) {
+  if (!list.length) return;
+  clearSelection();
+  const ids = new Set(list.map(keyOf));
+  docs.value = docs.value.filter((d) => !ids.has(`doc:${d.id}`));
+  folders.value = folders.value.filter((f) => !ids.has(`folder:${f.id}`));
+  try {
+    for (const r of list) {
+      if (r.kind === 'folder') await setFolderTrashed(r.id, false);
+      else await setDocumentTrashed(r.id, false);
+    }
+    toast.success(list.length === 1 ? `“${list[0].name}” restored` : `${list.length} items restored`);
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not restore the item.');
+  }
+  load(props.mode, props.query || '', props.filter || '');
+}
+
+const purgeList = ref<VaultRow[]>([]);
+const purging = ref(false);
+
+/**
+ * The one destructive act with no undo, so it goes through a confirmation.
+ *
+ * The list is read from the ref here rather than taken as an argument, and the
+ * dialog's confirm is a plain Button rather than an AlertDialogAction — the same
+ * pair of choices the explorer makes, for the same reason. AlertDialogAction
+ * closes the dialog as part of its own click handling, which fires
+ * `update:open(false)` and empties `purgeList` before an argument expression in
+ * the template can be evaluated, so the handler would receive an empty list and
+ * silently do nothing.
+ */
+async function confirmPurge() {
+  const list = purgeList.value;
+  if (!list.length) return;
+  purging.value = true;
+  let retired = 0;
+  try {
+    for (const r of list) {
+      if (r.kind === 'folder') await deleteFolder(r.id);
+      else retired += (await deleteDocument(r.id))?.memories_retired ?? 0;
+    }
+    purgeList.value = [];
+    clearSelection();
+    toast.success(retired
+      ? `Deleted · ${retired} memory item${retired === 1 ? '' : 's'} retired`
+      : 'Deleted permanently');
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not delete the item.');
+  } finally {
+    purging.value = false;
+    load(props.mode, props.query || '', props.filter || '');
+  }
+}
+
 function actionsFor(row: VaultRow): VaultAction[] {
   const many = selected.value.has(keyOf(row)) && selected.value.size > 1;
   const targets = many ? selectedRows.value : [row];
   const suffix = many ? ` (${targets.length})` : '';
+  if (isTrash.value) {
+    return [
+      { id: 'restore', label: `Restore${suffix}`, icon: RotateCcw, run: () => restoreRows(targets) },
+      {
+        id: 'purge', label: `Delete forever${suffix}`, icon: Trash2, danger: true, divider: true,
+        run: () => { purgeList.value = targets; },
+      },
+    ];
+  }
   return [
     { id: 'open', label: 'Preview', icon: Eye, run: () => open(row) },
     { id: 'download', label: `Download${suffix}`, icon: Download, run: () => downloadRows(targets) },
@@ -225,17 +326,28 @@ function actionsFor(row: VaultRow): VaultAction[] {
 // The bottom bar's actions. There is no move here by design: these screens cut
 // across libraries, so "move" would have to ask which library first — that is
 // the explorer's job, reached by "Show in folder".
-const bulkActions = computed<VaultAction[]>(() => [
-  { id: 'download', label: 'Download', icon: Download, run: () => downloadRows(selectedRows.value) },
-  { id: 'trash', label: 'Delete', icon: Trash2, danger: true, run: () => trashRows(selectedRows.value) },
-]);
+const bulkActions = computed<VaultAction[]>(() => {
+  if (isTrash.value) {
+    return [
+      { id: 'restore', label: 'Restore', icon: RotateCcw, run: () => restoreRows(selectedRows.value) },
+      {
+        id: 'purge', label: 'Delete forever', icon: Trash2, danger: true,
+        run: () => { purgeList.value = selectedRows.value; },
+      },
+    ];
+  }
+  return [
+    { id: 'download', label: 'Download', icon: Download, run: () => downloadRows(selectedRows.value) },
+    { id: 'trash', label: 'Delete', icon: Trash2, danger: true, run: () => trashRows(selectedRows.value) },
+  ];
+});
 
 // Under "More". Rows carry no menu of their own, so the things that only make
 // sense for a single document live here.
 const detailsRow = ref<VaultRow | null>(null);
 const bulkMore = computed<VaultAction[]>(() => {
   const one = selectedRows.value.length === 1 ? selectedRows.value[0] : null;
-  if (!one) return [];
+  if (!one || isTrash.value) return [];
   return [
     { id: 'open', label: 'Preview', icon: Eye, run: () => { clearSelection(); previewRow.value = one; } },
     { id: 'locate', label: 'Show in folder', icon: FolderOpen, run: () => showInFolder(one) },
@@ -244,6 +356,12 @@ const bulkMore = computed<VaultAction[]>(() => {
 });
 
 const emptyCopy = computed(() => {
+  if (isTrash.value) {
+    return {
+      title: 'The recycle bin is empty',
+      body: `Deleted documents and folders wait here for ${VAULT_TRASH_RETENTION_DAYS} days before they are removed for good.`,
+    };
+  }
   if (props.mode === 'search') {
     return props.query?.trim()
       ? { title: `No documents match “${props.query.trim()}”`, body: 'Document search looks at filenames, not contents. Matching libraries and folders are listed above.' }
@@ -287,6 +405,13 @@ const emptyCopy = computed(() => {
       </Button>
     </div>
 
+    <!-- The bin states its own horizon. It can only say this because something
+         enforces it — the nightly sweep in ai/vault_purge.go — so the two are
+         changed together or not at all. -->
+    <p v-if="isTrash && rows.length" class="px-1 pb-2 text-xs text-muted-foreground">
+      Items here are deleted for good {{ VAULT_TRASH_RETENTION_DAYS }} days after they were binned.
+    </p>
+
     <div class="min-h-0 flex-1 overflow-y-auto px-1 pb-24 sm:pb-2"
       @click.self="clearSelection">
       <div v-if="loading" class="space-y-1.5">
@@ -296,7 +421,9 @@ const emptyCopy = computed(() => {
       <div
         v-else-if="!rows.length"
         class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-16 text-center">
-        <component :is="mode === 'search' ? Search : FileQuestion" class="size-7 text-muted-foreground/60" />
+        <component
+          :is="isTrash ? Trash2 : mode === 'search' ? Search : FileQuestion"
+          class="size-7 text-muted-foreground/60" />
         <p class="text-sm font-medium">{{ emptyCopy.title }}</p>
         <p class="max-w-xs text-xs text-muted-foreground">{{ emptyCopy.body }}</p>
       </div>
@@ -307,12 +434,12 @@ const emptyCopy = computed(() => {
         @click.self="clearSelection">
         <SharedVaultEntry
           v-for="(row, i) in rows"
-          :key="row.id"
+          :key="`${row.kind}:${row.id}`"
           :row="row"
           :index="i"
           :view="view"
           :actions="actionsFor(row)"
-          :selected="selected.has(`doc:${row.id}`)"
+          :selected="selected.has(`${row.kind}:${row.id}`)"
           :selecting="selecting"
           @open="open"
           @select="onSelect"
@@ -323,6 +450,50 @@ const emptyCopy = computed(() => {
     <SharedVaultSelectionBar
       :actions="selecting ? bulkActions : []"
       :more="selecting ? bulkMore : []" />
+
+    <AlertDialog :open="trashList.length > 0" @update:open="(v) => { if (!v) trashList = []; }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle class="break-words">
+            Move
+            {{ trashList.length === 1 ? `“${middleTruncate(trashList[0].name)}”` : `${trashList.length} documents` }}
+            to the recycle bin?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            You can restore from the recycle bin, where items are kept for
+            {{ VAULT_TRASH_RETENTION_DAYS }} days.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button variant="destructive" class="gap-1.5" @click="confirmTrash">
+            <Trash2 class="size-4" /> Move to recycle bin
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog :open="purgeList.length > 0" @update:open="(v) => { if (!v && !purging) purgeList = []; }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle class="break-words">
+            {{ purgeList.length === 1
+              ? `Delete “${middleTruncate(purgeList[0].name)}” forever?`
+              : `Delete ${purgeList.length} items forever?` }}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            This cannot be undone. The file is removed from storage, and anything the
+            AI learned from it is retired at the same time.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="purging">Cancel</AlertDialogCancel>
+          <Button variant="destructive" :disabled="purging" class="gap-1.5" @click="confirmPurge">
+            <Loader2 v-if="purging" class="size-4 animate-spin" /> Delete forever
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <!-- These screens cut across libraries, so the row already carries where it
          came from — hand that straight to the details panel. -->

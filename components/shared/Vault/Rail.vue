@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {
   Clock, FileText, Image as ImageIcon, AudioLines, FolderLock, ChevronRight,
-  Building2, Vault as VaultIcon, Briefcase, Scale, Loader2, Search, X, Plus, Settings2,
+  Building2, Vault as VaultIcon, Briefcase, Scale, Loader2, Search, X, Plus, Settings2, Trash2,
 } from 'lucide-vue-next';
 import type { VaultFolder } from '~/services/vault';
 import { useVaultLibraries, type VaultLibrary } from '~/composables/useVaultLibraries';
@@ -97,6 +97,21 @@ function openFolderPath(path: string[]) {
         : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
       <component :is="CATEGORY_ICONS[c]" class="size-4 shrink-0" />
       {{ VAULT_CATEGORY_LABELS[c] }}
+    </NuxtLink>
+
+    <!-- The bin is a place, listed last and set apart from the ways of slicing
+         the library above it — the position Finder, Drive and Dropbox all put it
+         in. It was previously reachable only from an overflow menu inside a
+         library, which meant a file deleted from a matter you could not name was
+         a file with nowhere to look for it. No count: a bin is not an inbox. -->
+    <NuxtLink
+      :to="categoryPath('trash')"
+      class="mt-1 flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors"
+      :class="route.path === categoryPath('trash')
+        ? 'bg-primary/10 font-medium text-foreground'
+        : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
+      <Trash2 class="size-4 shrink-0" />
+      {{ VAULT_CATEGORY_LABELS.trash }}
     </NuxtLink>
 
     <Separator class="my-2" />

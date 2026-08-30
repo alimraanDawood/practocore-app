@@ -105,3 +105,21 @@ export function typeLabel(e: FileLike): string {
   const m = e.mime || '';
   return m.split('/')[1]?.toUpperCase() || 'File';
 }
+
+/**
+ * Shorten a filename from the MIDDLE, keeping both ends.
+ *
+ * Vault filenames are frequently a 64-character hash with an extension, and in a
+ * dialog title an unbroken token like that has nothing to wrap on: it runs
+ * straight out of the dialog and across the page. Cutting the tail off instead
+ * would drop the extension, which is the one part that says what the thing is.
+ * So the head and the tail both survive and the middle goes.
+ */
+export function middleTruncate(name: string, max = 44): string {
+  if (!name || name.length <= max) return name;
+  // Weighted towards the front: the start of a name is what people recognise,
+  // while the tail only needs to carry the extension.
+  const head = Math.ceil((max - 1) * 0.6);
+  const tail = max - 1 - head;
+  return `${name.slice(0, head)}…${name.slice(-tail)}`;
+}

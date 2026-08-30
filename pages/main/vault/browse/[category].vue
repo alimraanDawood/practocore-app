@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { FolderLock } from 'lucide-vue-next';
-import { isVaultCategory, VAULT_CATEGORY_LABELS, type VaultCategory } from '~/composables/useVaultBrowse';
+import { isVaultBrowseMode, VAULT_CATEGORY_LABELS, type VaultBrowseMode } from '~/composables/useVaultBrowse';
 
-// One cross-library category (recents / images / documents / audio). A category
-// is a route rather than a tab so it takes its own place in the back stack.
+// One cross-library screen (recents / images / documents / audio / the recycle
+// bin). Each is a route rather than a tab so it takes its own place in the back
+// stack.
 const route = useRoute();
-const category = computed<VaultCategory>(() => {
+const category = computed<VaultBrowseMode>(() => {
   const raw = route.params.category as string;
-  return isVaultCategory(raw) ? raw : 'recents';
+  return isVaultBrowseMode(raw) ? raw : 'recents';
 });
 const title = computed(() => VAULT_CATEGORY_LABELS[category.value]);
 

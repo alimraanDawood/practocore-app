@@ -1,4 +1,6 @@
 import { toast } from 'vue-sonner';
+import type { Component } from 'vue';
+import { Files, Folder, FileText, FileImage, FileAudio } from 'lucide-vue-next';
 import {
   listFolders, listDocuments, subscribeVault,
   type VaultFolder, type VaultDocument, type VaultScope, type VaultRealtimeEvent,
@@ -35,9 +37,36 @@ export function docRow(d: VaultDocument, path?: string): VaultRow {
 export type VaultSortKey = 'name' | 'date';
 export type VaultKindFilter = 'all' | 'folders' | 'documents' | 'images' | 'audio';
 
-export const VAULT_KIND_LABELS: Record<VaultKindFilter, string> = {
-  all: 'All', folders: 'Folders', documents: 'Documents', images: 'Images', audio: 'Audio',
+/**
+ * What each filter is called, what it looks like, and what its absence reads as.
+ *
+ * The icon and tint are the ones the matching ROWS wear (utils/vaultDisplay), not
+ * a second set chosen for the tabs — a violet picture icon on the Images tab and
+ * a violet picture icon on every image in the list is what makes the tab legible
+ * as a filter rather than as another destination.
+ *
+ * `empty` is the headline when the filter finds nothing. It names the thing that
+ * is missing, because "This folder is empty" is untrue of a folder holding six
+ * PDFs and no pictures — which is the only situation in which most of these are
+ * ever read.
+ */
+export interface VaultKindMeta {
+  label: string;
+  icon: Component;
+  /** Tailwind text-colour class, matching the rows this filter keeps. */
+  tint: string;
+  /** Headline shown when this filter matches nothing here. */
+  empty: string;
+}
+
+export const VAULT_KINDS: Record<VaultKindFilter, VaultKindMeta> = {
+  all: { label: 'All', icon: Files, tint: 'text-muted-foreground', empty: 'This folder is empty' },
+  folders: { label: 'Folders', icon: Folder, tint: 'text-sky-500', empty: 'No folders here' },
+  documents: { label: 'Documents', icon: FileText, tint: 'text-muted-foreground', empty: 'No documents here' },
+  images: { label: 'Images', icon: FileImage, tint: 'text-violet-500', empty: 'No images here' },
+  audio: { label: 'Audio', icon: FileAudio, tint: 'text-amber-500', empty: 'No audio here' },
 };
+
 
 /**
  * One library's contents: folders + documents, kept live over the realtime

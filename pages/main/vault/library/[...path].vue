@@ -54,13 +54,29 @@ const lib = useVaultLibrary(scope, scopeId);
 
 const base = computed(() => libraryPath({ scope: scope.value, scopeId: scopeId.value }));
 
+const { ascendTo } = useTabHistory();
+
 function go(path: string[], toTrash = trash.value) {
   const parts = [base.value, ...path];
   if (toTrash) parts.push(TRASH);
   router.push(parts.join('/'));
 }
 
-function onNavigate(path: string[]) { go(path, false); }
+/** Is `path` a folder we are already inside — an ancestor of where we stand? */
+function isAncestor(path: string[]) {
+  if (trash.value || path.length >= folderPath.value.length) return false;
+  return path.every((id, i) => id === folderPath.value[i]);
+}
+
+// Opening a folder is a push and going up is an unwind, and the difference has
+// to be made here because the route is the only record of where we are. Pushing
+// on the way up would leave the folder just left sitting on top of the stack,
+// so the next back press would walk straight back down into it — which is what
+// made back feel like it was going the wrong way.
+function onNavigate(path: string[]) {
+  if (isAncestor(path)) ascendTo([base.value, ...path].join('/'));
+  else go(path, false);
+}
 function onTrashed(v: boolean) { go(v ? [] : folderPath.value, v); }
 
 // "Show in folder", arriving from a cross-library screen that knew the owning
@@ -91,7 +107,8 @@ const title = computed(() => {
 });
 
 const explorer = ref<{
-  pickUpload: () => void; pickPhoto: () => void; newFolder: () => void; openSearch: () => void;
+  pickUpload: () => void; pickFolder: () => void; pickPhoto: () => void;
+  newFolder: () => void; openSearch: () => void;
 } | null>(null);
 
 const admin = ref<{ manageById: (id: string) => void } | null>(null);
@@ -170,6 +187,7 @@ provideDockContext(() => ({
     <SharedVaultAddFab
       v-if="!trash"
       @upload="explorer?.pickUpload()"
+      @import-folder="explorer?.pickFolder()"
       @photo="explorer?.pickPhoto()"
       @folder="explorer?.newFolder()" />
 

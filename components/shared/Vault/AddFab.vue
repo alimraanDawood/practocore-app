@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Plus, Upload, Camera, FolderPlus } from 'lucide-vue-next';
+import { Plus, Upload, Camera, FolderPlus, FolderTree } from 'lucide-vue-next';
 import { useMediaQuery } from '@vueuse/core';
 
 // The vault's "add" affordance on a phone: a compact FAB opening a sheet of the
@@ -8,7 +8,7 @@ import { useMediaQuery } from '@vueuse/core';
 // From lg up it is hidden: the explorer's own toolbar has room for Upload and
 // New folder, and the desktop assistant panel pushes the page rather than
 // floating over this corner.
-const emit = defineEmits<{ upload: []; photo: []; folder: [] }>();
+const emit = defineEmits<{ upload: []; photo: []; folder: []; importFolder: [] }>();
 
 const open = ref(false);
 
@@ -29,10 +29,18 @@ const { pending: moving } = useVaultMove();
 // ignored and the row would just be a second, worse "Upload".
 const isTouch = useMediaQuery('(pointer: coarse)');
 
+// Importing a whole folder needs a directory picker, which Android's WebView and
+// iOS Safari do not have — so on a real phone this row is absent and a .zip
+// (which the file picker now accepts) is the way to bring a tree in. It appears
+// on a narrow desktop window, where the FAB is showing but the browser is a
+// full one.
+const canImportFolder = computed(() =>
+  typeof document !== 'undefined' && 'webkitdirectory' in document.createElement('input'));
+
 // The sheet has to be gone before the file input is clicked: an <input>.click()
 // while a modal still owns the page can be swallowed by the overlay, and the
 // native picker would appear behind it.
-function run(fn: 'upload' | 'photo' | 'folder') {
+function run(fn: 'upload' | 'photo' | 'folder' | 'importFolder') {
   open.value = false;
   nextTick(() => emit(fn));
 }
@@ -61,7 +69,7 @@ function run(fn: 'upload' | 'photo' | 'folder') {
       <DrawerContent side="bottom" hide-x class="gap-0 rounded-t-xl p-0">
         <DrawerHeader class="sr-only">
           <DrawerTitle>Add to this library</DrawerTitle>
-          <DrawerDescription>Upload a document, take a photo, or create a folder.</DrawerDescription>
+          <DrawerDescription>Upload a document or a folder, take a photo, or create a folder.</DrawerDescription>
         </DrawerHeader>
 
         <div class="flex flex-col py-2">
@@ -71,6 +79,17 @@ function run(fn: 'upload' | 'photo' | 'folder') {
             @click="run('upload')">
             <Upload class="size-5 shrink-0 text-muted-foreground" />
             <span>Upload a document</span>
+          </button>
+          <button
+            v-if="canImportFolder"
+            type="button"
+            class="flex items-center gap-4 px-5 py-3.5 text-left text-sm transition-colors hover:bg-accent active:bg-accent"
+            @click="run('importFolder')">
+            <FolderTree class="size-5 shrink-0 text-muted-foreground" />
+            <span class="flex min-w-0 flex-col">
+              Upload a folder
+              <span class="text-xs text-muted-foreground">Keeps the layout it already has</span>
+            </span>
           </button>
           <button
             v-if="isTouch"

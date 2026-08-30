@@ -161,8 +161,14 @@ function onClick(e: MouseEvent) {
 
 // Right-clicking a row that is not in the selection makes it the selection first,
 // so the menu that opens always acts on what the user is pointing at.
+//
+// The listing behind this row is a right-click target of its own (the folder's
+// own menu, where Paste lives). Stopping propagation is what keeps the two
+// apart: reka's trigger for THIS row is on this same element and still runs,
+// while the surface's trigger, being an ancestor, never hears the event.
 function onContextMenu(e: MouseEvent) {
   cancelPress();
+  e.stopPropagation();
   // On a finger, suppress the WebView's own long-press menu too — reka's trigger
   // is disabled there, so nothing else is preventing it.
   if (coarsePointer.value) { e.preventDefault(); return; }
@@ -199,19 +205,37 @@ function onContextMenu(e: MouseEvent) {
              In a column of its own, ahead of the file, so it reads as a
              checkbox rather than a badge. It widens from nothing instead of
              appearing, and the negative margin swallows the flex gap while it
-             is closed, so the row slides rather than jumps. -->
+             is closed, so the row slides rather than jumps.
+
+             Two things keep that from showing a sliced circle. `overflow-hidden`
+             because the button keeps its full 20px inside a column animating
+             from zero, so without it the circle is drawn outside its own column
+             — and `-ml-3` puts that overspill past the left edge of the
+             scroller, which clips (a scroller with overflow-y set clips the x
+             axis too). And the ring is INSET, because a normal Tailwind ring is
+             painted outside the border box, so it sits a pixel beyond a column
+             sized to the button exactly and is the first thing to be shaved.
+
+             The button then fades in on a delay rather than being revealed by
+             the widening column: a circle wiped in from the left looks like the
+             clipping this replaced. -->
         <div
           v-if="view === 'list'"
           :aria-hidden="!(selecting || selected)"
-          class="shrink-0 transition-all duration-200 ease-out"
+          class="shrink-0 overflow-hidden transition-all duration-200 ease-out"
           :class="selecting || selected
-            ? 'w-5 opacity-100'
-            : '-ml-3 w-0 opacity-0 lg:group-hover:ml-0 lg:group-hover:w-5 lg:group-hover:opacity-100'">
+            ? 'w-5'
+            : '-ml-3 w-0 lg:group-hover:ml-0 lg:group-hover:w-5'">
           <button
-            class="grid size-5 place-items-center rounded-full transition-all duration-200 ease-out"
+            class="grid size-5 place-items-center rounded-full outline-none transition-all duration-150
+                   ease-out focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             :class="[
-              selected ? 'scale-100 bg-primary text-primary-foreground' : 'bg-background text-transparent ring-1 ring-border hover:ring-primary',
-              selecting || selected ? 'scale-100' : 'scale-75',
+              selected
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-transparent ring-1 ring-inset ring-border hover:ring-primary',
+              selecting || selected
+                ? 'scale-100 opacity-100'
+                : 'scale-75 opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:group-hover:delay-100',
             ]"
             :tabindex="selecting || selected ? 0 : -1"
             :aria-label="selected ? 'Deselect' : 'Select'"

@@ -2,30 +2,37 @@
 import { FolderLock, Folder, Check, ChevronRight } from 'lucide-vue-next';
 import type { VaultFolder } from '~/services/vault';
 import type { VaultRow } from '~/composables/useVaultLibrary';
+import { middleTruncate } from '~/utils/vaultDisplay';
 
-// Destination picker for "Move to…". The whole tree is shown at once rather than
-// one level at a time: choosing where something goes is a comparison, and a
-// drill-down picker hides the alternatives being compared.
-const props = defineProps<{
+// Destination picker for "Move to…" and "Copy to…". The whole tree is shown at
+// once rather than one level at a time: choosing where something goes is a
+// comparison, and a drill-down picker hides the alternatives being compared.
+//
+// One dialog serves both verbs because picking a destination is the same act
+// either way; only the words and one rule change (see `disabled`).
+const props = withDefaults(defineProps<{
   open: boolean;
   rows: VaultRow[];
   folders: VaultFolder[];
   rootLabel: string;
-}>();
+  mode?: 'move' | 'copy';
+}>(), { mode: 'move' });
 const emit = defineEmits<{ 'update:open': [boolean]; move: [folderId: string] }>();
 
-const title = computed(() => (props.rows.length === 1
-  ? `Move “${props.rows[0].name}”`
-  : `Move ${props.rows.length} items`));
+const verb = computed(() => (props.mode === 'copy' ? 'Copy' : 'Move'));
 
-/** Where the moved items are now — offered but marked, never a silent no-op. */
+const title = computed(() => (props.rows.length === 1
+  ? `${verb.value} “${middleTruncate(props.rows[0].name)}”`
+  : `${verb.value} ${props.rows.length} items`));
+
+/** Where the items are now — offered but marked, never a silent no-op. */
 const currentParent = computed(() => {
   if (props.rows.length !== 1) return null;
   const r = props.rows[0];
   return r.kind === 'folder' ? (r.folder?.parent || '') : (r.doc?.folder || '');
 });
 
-// A folder cannot move inside itself or its own descendants.
+// A folder cannot move — or be copied — inside itself or its own descendants.
 const blocked = computed(() => {
   const set = new Set<string>();
   const collect = (id: string) => {
@@ -54,7 +61,10 @@ const picked = ref<string | null>(null);
 watch(() => props.open, (o) => { if (o) picked.value = null; });
 
 function disabled(id: string) {
-  return blocked.value.has(id) || id === currentParent.value;
+  // Copying into the folder the items already live in is the ordinary way to
+  // duplicate something, so only a MOVE treats the current parent as a no-op.
+  if (props.mode !== 'copy' && id === currentParent.value) return true;
+  return blocked.value.has(id);
 }
 </script>
 
@@ -63,14 +73,16 @@ function disabled(id: string) {
     <DialogContent class="flex max-h-[80dvh] flex-col gap-3 sm:max-w-md">
       <DialogHeader class="shrink-0">
         <DialogTitle class="truncate">{{ title }}</DialogTitle>
-        <DialogDescription>Choose where it should go.</DialogDescription>
+        <DialogDescription>
+          {{ mode === 'copy' ? 'Choose where the copy should go.' : 'Choose where it should go.' }}
+        </DialogDescription>
       </DialogHeader>
 
       <div class="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
         <button
           class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
           :class="picked === '' ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''"
-          :disabled="currentParent === ''"
+          :disabled="disabled('')"
           @click="picked = ''">
           <FolderLock class="size-4 shrink-0 text-sky-500" />
           <span class="truncate font-medium">{{ rootLabel }}</span>
@@ -96,7 +108,7 @@ function disabled(id: string) {
       <DialogFooter class="shrink-0">
         <Button variant="outline" @click="emit('update:open', false)">Cancel</Button>
         <Button :disabled="picked === null" class="gap-1.5" @click="emit('move', picked!)">
-          Move here
+          {{ verb }} here
           <ChevronRight class="size-4" />
         </Button>
       </DialogFooter>
