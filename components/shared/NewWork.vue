@@ -7,19 +7,26 @@ import { FilePlus2, Scale, Briefcase, ChevronRight } from 'lucide-vue-next';
 import { usePermissions } from '~/composables/usePermissions';
 
 const router = useRouter();
-const route = useRoute();
 const { hasPermission } = usePermissions();
 
 const open = ref(false);
+const createMatterOpen = ref(false);
 
 // Litigation creation is permission-gated (mirrors the Matters index); the create
 // page enforces it too, but we reflect it here so the option reads as unavailable.
 const canCreateMatter = computed(() => hasPermission('canCreateMatters'));
 
+// Opens the compact create dialog in place. It used to navigate to the full-page
+// flow at /main/matters/create, which threw away the page the user was on to ask
+// four questions — and made "New work" the one entry point that behaved
+// differently from the two it forks into: the engagement branch below already
+// opens a dialog, and the Matters index already mounts this same component.
+// The dialog routes to the new matter itself once one is created, so there is no
+// `next` to carry.
 function startLitigation() {
   if (!canCreateMatter.value) return;
   open.value = false;
-  router.push(`/main/matters/create?next=${encodeURIComponent(route.fullPath)}`);
+  createMatterOpen.value = true;
 }
 
 function startEngagement() {
@@ -91,4 +98,8 @@ function startEngagement() {
       </div>
     </DialogContent>
   </Dialog>
+
+  <!-- The same compact flow the Matters index uses. Mounted here rather than
+       navigated to, so starting work never costs the user their place. -->
+  <SharedMattersCreateMatterDialog v-model:open="createMatterOpen" />
 </template>

@@ -1307,25 +1307,29 @@ function dismissProposal() {
 }
 
 /** Hand off an AI-extracted matter draft to the manual create-matter form.
- *  Stashes the draft + extracted fields in sessionStorage so the page can
- *  hydrate its store on mount, then closes the chat and navigates over. */
+ *
+ *  This used to stash the draft under `practocore.matterDraft` and navigate to
+ *  /main/matters/create "so the page can hydrate its store on mount". Nothing
+ *  ever read that key — a repo-wide search finds this one write and no read — so
+ *  the hand-off already dropped everything the assistant had extracted and left
+ *  the user on an empty form, having also lost the chat.
+ *
+ *  Now it opens the compact create dialog over the chat and passes the
+ *  procedure, so the picker step is skipped and the draft's most expensive
+ *  decision survives. The extracted party/field values still do not carry
+ *  across — the dialog has no prop for them — but nothing is lost that was
+ *  previously arriving. */
 function handoffMatterDraft() {
   const preview = pendingProposal.value?.preview;
   if (preview?.kind !== 'create_matter') return;
-  try {
-    sessionStorage.setItem('practocore.matterDraft', JSON.stringify({
-      template: preview.template,
-      matter: preview.matter,
-      fields: preview.fields,
-    }));
-  } catch {
-    // sessionStorage can be unavailable (private browsing edge cases); navigate
-    // anyway — the user keeps a manual entry point.
-  }
+  handoffTemplate.value = preview.template ?? null;
   pendingProposal.value = null;
-  open.value = false;
-  navigateTo('/main/matters/create');
+  createMatterOpen.value = true;
 }
+
+// The compact create dialog, opened over the chat by handoffMatterDraft.
+const createMatterOpen = ref(false);
+const handoffTemplate = ref<any>(null);
 
 const proposalLoading = ref(false);
 
@@ -2298,6 +2302,10 @@ function formatToolName(tool: string): string {
                        class="min-h-0 flex-1" @close="previewOpen = false"/>
     </SheetContent>
   </Sheet>
+
+  <!-- Manual create flow, handed the procedure the assistant proposed. Opened
+       over the chat rather than navigated to, so the conversation survives. -->
+  <SharedMattersCreateMatterDialog v-model:open="createMatterOpen" :template="handoffTemplate" />
 </template>
 
 <style scoped>

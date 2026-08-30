@@ -18,6 +18,10 @@ const activeId = ref('');
 const loadingId = ref('');
 const savedCount = ref(0);
 const mobileHistoryOpen = ref(false);
+// "Start a matter" opens the compact create dialog rather than navigating to the
+// full-page flow: the Studio is where a procedure was just built, and sending
+// the user away from it to start a matter loses the build they are looking at.
+const createMatterOpen = ref(false);
 
 const suggestions = [
   'Build a procedure for how we run a judicial review application.',
@@ -171,7 +175,7 @@ function fmtWhen(s: string): string {
       <Button
         v-if="savedCount > 0"
         size="sm" variant="outline" class="gap-1.5 shrink-0"
-        @click="navigateTo('/main/matters/create')"
+        @click="createMatterOpen = true"
       >
         <CheckCircle2 class="size-4 text-emerald-500" />
         Start a matter
@@ -319,4 +323,7 @@ function fmtWhen(s: string): string {
       </SheetContent>
     </Sheet>
   </div>
+
+  <!-- Compact create flow, mounted here so starting a matter never leaves the Studio. -->
+  <SharedMattersCreateMatterDialog v-model:open="createMatterOpen" />
 </template>
