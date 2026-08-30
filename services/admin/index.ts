@@ -1,5 +1,19 @@
 import { pb as pocketbase, SERVER_URL } from '~/lib/pocketbase';
 
+async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const response = await fetch(`${SERVER_URL}${path}`, {
+        ...options,
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${pocketbase.authStore.token}`,
+            ...options.headers,
+        },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
+    return body as T;
+}
+
 export async function getOrganisation(id : string) {
     return pocketbase.collection('Organisations').getOne(id);
 }
@@ -21,12 +35,8 @@ export function subscribeToDirectInvites(callBack : Function) {
 }
 
 export async function sendDirectInvite(email: string, organisationId: string, role: string = 'member', name?: string, organisationRole?: string) {
-    return fetch(`${SERVER_URL}/api/invitations/send`, {
+    return api('/api/invitations/send', {
         method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
         body: JSON.stringify({
             email,
             organisationId,
@@ -34,7 +44,7 @@ export async function sendDirectInvite(email: string, organisationId: string, ro
             name,
             organisationRole
         })
-    }).then(res => res.json());
+    });
 }
 
 export async function verifyInviteToken(token: string) {
@@ -66,33 +76,21 @@ export async function rejectInvite(token: string) {
 }
 
 export async function resendInvite(inviteId: string) {
-    return fetch(`${SERVER_URL}/api/invitations/resend/${inviteId}`, {
+    return api(`/api/invitations/resend/${inviteId}`, {
         method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+    });
 }
 
 export async function revokeInvite(inviteId: string) {
-    return fetch(`${SERVER_URL}/api/invitations/revoke/${inviteId}`, {
+    return api(`/api/invitations/revoke/${inviteId}`, {
         method: 'DELETE',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+    });
 }
 
 export async function getOrganisationInvites(organisationId: string) {
-    return fetch(`${SERVER_URL}/api/invitations/organisation/${organisationId}`, {
+    return api(`/api/invitations/organisation/${organisationId}`, {
         method: 'GET',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+    });
 }
 
 export async function checkIfUserIsAdmin() {
@@ -107,35 +105,23 @@ export async function checkIfUserIsAdmin() {
 
 // Member Management
 export async function updateMemberRole(userId: string, organisationId: string, role: string) {
-    return fetch(`${SERVER_URL}/api/members/update-role`, {
+    return api('/api/members/update-role', {
         method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
         body: JSON.stringify({ userId, organisationId, role })
-    }).then(res => res.json());
+    });
 }
 
 export async function removeMember(userId: string, organisationId: string) {
-    return fetch(`${SERVER_URL}/api/members/remove`, {
+    return api('/api/members/remove', {
         method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
         body: JSON.stringify({ userId, organisationId })
-    }).then(res => res.json());
+    });
 }
 
 export async function getMemberDetails(userId: string) {
-    return fetch(`${SERVER_URL}/api/members/member/${userId}/details`, {
+    return api(`/api/members/member/${userId}/details`, {
         method: 'GET',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+    });
 }
 
 export async function transferOwnership(newOwnerId: string, organisationId: string) {
@@ -161,23 +147,23 @@ export async function bulkUpdateMembers(userIds: string[], organisationId: strin
 }
 
 export async function getOrganisationMembers(organisationId: string) {
-    return fetch(`${SERVER_URL}/api/members/organisation/${organisationId}`, {
+    return api(`/api/members/organisation/${organisationId}`, {
         method: 'GET',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+    });
 }
 
 export async function getUserOrganisationMembers() {
-    return fetch(`${SERVER_URL}/api/members/organisation`, {
+    return api('/api/members/organisation', {
         method: 'GET',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+    });
+}
+
+export function updateProfessionalRole(userId: string, organisationId: string, organisationRole: string) {
+    return api('/api/members/update-professional-role', { method: 'POST', body: JSON.stringify({ userId, organisationId, organisationRole }) });
+}
+
+export function updateMemberPermissionsForOrganisation(userId: string, organisationId: string, permissions: string[]) {
+    return api('/api/members/update-permissions', { method: 'POST', body: JSON.stringify({ userId, organisationId, permissions }) });
 }
 
 export function updateUserPermissions(permissionsId : string, permissions: Object) {

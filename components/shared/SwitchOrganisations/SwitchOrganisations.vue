@@ -72,7 +72,8 @@
 <script setup lang="ts">
 import { Loader2, Plus, Building2 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { getOrganisations, getSignedInUser, updateUser } from '~/services/auth';
+import { getOrganisations, getSignedInUser } from '~/services/auth';
+import { switchOrganisation } from '~/services/organisations';
 import { beginLocalSwitch } from '~/composables/useWorkspace';
 import { DialogClose } from '@/components/ui/dialog';
 
@@ -115,7 +116,7 @@ const switchOrganisation = async () => {
 
   switching.value = true;
   try {
-    // Tell the drift watcher this tab is the one moving the pointer. `updateUser`
+    // Tell the drift watcher this tab is the one moving the pointer. The server
     // calls `refreshUserData`, so our own write lands back on the auth record and
     // is otherwise indistinguishable from another tab switching under us — which
     // would have this tab announce "you switched somewhere else" about the switch
@@ -123,7 +124,7 @@ const switchOrganisation = async () => {
     beginLocalSwitch();
 
     // Pass null (the actual value) when switching to personal account
-    await updateUser({ organisation: selectedOrg.value === 'null' ? null : selectedOrg.value });
+    await switchOrganisation(selectedOrg.value === 'null' ? null : selectedOrg.value);
     toast.success('Organisation changed successfully!');
     open.value = false;
     window.location.reload();

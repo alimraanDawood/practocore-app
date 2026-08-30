@@ -225,7 +225,7 @@ watch(() => props.lawyerId, () => {
           <div v-if="activeTab === 'permissions'" class="flex flex-col">
             <div class="flex flex-col p-3 gap-3">
               <h3 class="text-sm font-semibold">User Permissions</h3>
-              <SharedLawyersLawyerDetailsLawyerPermissions :permission-id="lawyerDetails.permissions.id" />
+              <SharedLawyersLawyerDetailsLawyerPermissions :lawyer-id="lawyerDetails.user.id" :permissions="lawyerDetails.permissions.permissions ?? []" />
             </div>
           </div>
         </div>

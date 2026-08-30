@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import {getUserPermissions, updateUserPermissions} from "~/services/admin";
+import {updateMemberPermissionsForOrganisation} from "~/services/admin";
+import {getSignedInUser} from "~/services/auth";
 
-const props = defineProps(['permissionId']);
+const props = defineProps<{ lawyerId: string, permissions: string[] }>();
 const updating = ref(false);
 
-const permissions = ref<null | any>(null);
-
+const permissions = ref<string[]>([...props.permissions]);
 const loading = ref(false);
+const organisationId = getSignedInUser()?.organisation;
 
-onMounted(async () => {
-  loading.value = true;
-  permissions.value = await getUserPermissions(props.permissionId);
-  loading.value = false;
-})
+watch(() => props.permissions, value => { permissions.value = [...value]; });
 
 const togglePermission = async (permission: string, value : boolean) => {
   try {
     updating.value = true;
 
-    const status = await updateUserPermissions(props.permissionId, value ? { "permissions": [...permissions?.value?.permissions, permission] } : { "permissions": permissions?.value?.permissions?.filter(p => p != permission) } )
-    permissions.value = status;
+    if (!organisationId) throw new Error('No active organisation selected');
+    const next = value ? [...permissions.value, permission] : permissions.value.filter(p => p !== permission);
+    const status = await updateMemberPermissionsForOrganisation(props.lawyerId, organisationId, next);
+    permissions.value = status.permissions;
     console.log(`Permission ${permission} as ${value}`);
   } catch (e) {
     console.error(e);
@@ -80,7 +79,7 @@ const Permissions = [
           </TableCell>
 
           <TableCell>
-            <Switch :model-value="permissions?.permissions?.includes(permission?.value)" @update:model-value="v => togglePermission(permission?.value, v)" />
+            <Switch :model-value="permissions.includes(permission?.value)" @update:model-value="v => togglePermission(permission?.value, v)" />
           </TableCell>
         </TableRow>
       </TableBody>

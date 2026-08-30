@@ -12,7 +12,8 @@ import {
   Calendar,
   FileSpreadsheet,
 } from 'lucide-vue-next';
-import { getDirectInvites, subscribeToDirectInvites, resendInvite, revokeInvite } from '~/services/admin/index.js';
+import { getOrganisationInvites, resendInvite, revokeInvite } from '~/services/admin/index.js';
+import { getSignedInUser } from '~/services/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'vue-sonner';
 import dayjs from 'dayjs';
@@ -36,16 +37,15 @@ const loading = ref(false);
 
 onMounted(async () => {
   await loadInvites();
-  subscribeToDirectInvites(loadInvites);
 });
 
 const loadInvites = async () => {
   loading.value = true;
   try {
-    invites.value = await getDirectInvites(1, 50, {
-      sort: '-created',
-      expand: 'invitedBy,organisation',
-    });
+    const organisationId = getSignedInUser()?.organisation;
+    if (!organisationId) throw new Error('No active organisation selected');
+    const response = await getOrganisationInvites(organisationId);
+    invites.value = { items: response.invites ?? [] };
   } catch (error) {
     console.error('Failed to load invites:', error);
     toast.error('Failed to load invitations');
@@ -281,4 +281,3 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
     </div>
   </div>
 </template>
-

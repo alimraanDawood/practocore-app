@@ -15,6 +15,16 @@ async function unwrap(res: Response, fallback: string) {
   return data
 }
 
+/** Switch only after the backend verifies the account still belongs to the firm. */
+export async function switchOrganisation(organisationId: string | null): Promise<void> {
+  const res = await fetch(`${SERVER_URL}/api/organisations/switch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pocketbase.authStore.token}` },
+    body: JSON.stringify({ organisationId }),
+  })
+  await unwrap(res, 'We could not switch workspaces. Please try again.')
+}
+
 /** Exchange an 8-character invite code for the token the accept call needs. */
 export async function resolveInviteCode(code: string): Promise<string> {
   const res = await fetch(`${SERVER_URL}/api/invitations/get-link`, {

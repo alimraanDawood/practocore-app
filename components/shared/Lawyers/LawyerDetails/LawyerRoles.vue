@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Shield, Crown, UserMinus, User as UserIcon } from "lucide-vue-next";
-import { updateUser, updateMemberRole, removeMember } from "~/services/admin";
+import { updateProfessionalRole, updateMemberRole, removeMember } from "~/services/admin";
 import { toast } from "vue-sonner";
 import { getSignedInUser } from "~/services/auth";
 
@@ -51,7 +51,8 @@ const handleOrganisationRoleChange = async (newRole: string) => {
 
   updating.value = true;
   try {
-    const result = updateUser(userId, { organisationRole: newRole });
+    if (!organisationId) return;
+    const result = updateProfessionalRole(userId, organisationId, newRole);
 
     toast.promise(result, {
       loading: 'Updating organisation role...',

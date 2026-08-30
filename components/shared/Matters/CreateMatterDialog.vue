@@ -503,7 +503,12 @@ async function submit() {
     dashboardStore.fetchStatistics(true).catch(() => {});
 
     open.value = false;
-    if (result?.matter?.id) await router.push(`/main/matters/${result.matter.id}`);
+    // The matter page is /main/matters/matter/<id>; there is no
+    // /main/matters/<id> route, so the short form landed the user on the 404
+    // page immediately after "Matter created." See stores/createMatter.ts
+    // (openCreatedMatter) and utils/notificationRoute.ts, which both build it
+    // the long way.
+    if (result?.matter?.id) await router.push(`/main/matters/matter/${result.matter.id}`);
   } catch (e: any) {
     // The raw body still reaches the console for debugging; the dialog gets prose.
     console.error('[create-matter]', e);

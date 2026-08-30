@@ -9,7 +9,8 @@
 </template>
 
 <script setup lang="ts">
-import { getOrganisations, getSignedInUser, updateUser } from '~/services/auth';
+import { getOrganisations, getSignedInUser } from '~/services/auth';
+import { switchOrganisation } from '~/services/organisations';
 import { toast } from 'vue-sonner';
 import { beginLocalSwitch } from '~/composables/useWorkspace';
 
@@ -56,7 +57,7 @@ onMounted(async () => {
         // as another tab moving the workspace under it.
         beginLocalSwitch();
         // Pass actual null when switching to personal (no-org) account
-        await updateUser({ organisation: targetOrg === 'null' ? null : targetOrg });
+        await switchOrganisation(targetOrg === 'null' ? null : targetOrg);
         await redirect();
         return;
       } else {

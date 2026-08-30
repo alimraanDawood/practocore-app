@@ -139,8 +139,8 @@
 import { CheckCircle2, Loader2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { DialogClose } from '@/components/ui/dialog'
-import { createOrganisation, type CreateOrganisationResult } from '~/services/organisations'
-import { getSignedInUser, updateUser } from '~/services/auth'
+import { createOrganisation, switchOrganisation, type CreateOrganisationResult } from '~/services/organisations'
+import { getSignedInUser } from '~/services/auth'
 import { clearAccountAccessCache } from '~/composables/useAccountAccess'
 import { beginLocalSwitch } from '~/composables/useWorkspace'
 
@@ -238,7 +238,7 @@ const switchToCreated = async () => {
     // See the note in SwitchOrganisations: this tab's own pointer write must not
     // be mistaken for drift.
     beginLocalSwitch()
-    await updateUser({ organisation: created.value.organisation.id })
+    await switchOrganisation(created.value.organisation.id)
     clearAccountAccessCache()
     window.location.reload()
   } catch (e) {

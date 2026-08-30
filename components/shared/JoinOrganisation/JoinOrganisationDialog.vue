@@ -70,8 +70,7 @@
 import { CheckCircle2, Loader2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { DialogClose } from '@/components/ui/dialog'
-import { joinOrganisation } from '~/services/organisations'
-import { updateUser } from '~/services/auth'
+import { joinOrganisation, switchOrganisation } from '~/services/organisations'
 import { clearAccountAccessCache } from '~/composables/useAccountAccess'
 
 const open = ref(false)
@@ -125,7 +124,7 @@ const switchToJoined = async () => {
   if (!joined.value || switching.value) return
   switching.value = true
   try {
-    await updateUser({ organisation: joined.value.id })
+    await switchOrganisation(joined.value.id)
     clearAccountAccessCache()
     // Full reload so permissions, plan and account access re-init under the new
     // workspace rather than running on cached state from the old one.
