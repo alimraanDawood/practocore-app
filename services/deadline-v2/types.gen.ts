@@ -11,6 +11,7 @@ export type FieldType = "text" | "number" | "bool" | "select" | "date";
 export type DeadlineKind = "offset" | "fixed" | "recurring";
 export type DependencyKind = "ref" | "switch" | "earliestOf" | "latestOf";
 export type TogglerAction = "activate" | "deactivate";
+export type ArtefactKind = "filed" | "receipt" | "service" | "record" | "other";
 
 export interface DslValue {
   Type: number;
@@ -133,6 +134,8 @@ export interface TriggerSpec {
   id: string;
   label: string;
   prompt?: string;
+  seedsField?: string;
+  forRole?: string;
 }
 
 export interface TemplateField {
@@ -166,6 +169,7 @@ export interface TemplateMilestone {
   label: string;
   prompts?: EventPrompts;
   togglers?: Toggler[];
+  expectedArtefacts?: ExpectedArtefact[];
 }
 
 export interface SwitchBranch {
@@ -209,10 +213,24 @@ export interface ReminderSpec {
   title?: string;
   body?: string;
   bodyHTML?: string;
+  authority?: Authority;
 }
 
 export interface OnMiss {
   togglers?: Toggler[];
+}
+
+export interface Authority {
+  instrument?: string;
+  provision?: string;
+  caseRef?: string;
+  note?: string;
+}
+
+export interface ExpectedArtefact {
+  kind: ArtefactKind;
+  label: string;
+  optional?: boolean;
 }
 
 export interface TemplateDeadline {
@@ -221,6 +239,7 @@ export interface TemplateDeadline {
   kind: DeadlineKind;
   partyScope?: string;
   dynamic: boolean;
+  role?: string;
   activeWhen?: string;
   dependency?: DependencySpec;
   offset?: OffsetSpec;
@@ -234,6 +253,8 @@ export interface TemplateDeadline {
   onMiss?: OnMiss;
   prompts?: DeadlinePrompts;
   disableFulfill?: boolean;
+  expectedArtefacts?: ExpectedArtefact[];
+  authority?: Authority;
 }
 
 export interface PartyRole {
@@ -248,6 +269,7 @@ export interface TemplateIR {
   name: string;
   jurisdiction: string;
   trigger: TriggerSpec;
+  triggers?: TriggerSpec[];
   fields?: TemplateField[];
   events?: TemplateMilestone[];
   deadlines?: TemplateDeadline[];

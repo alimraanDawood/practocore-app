@@ -272,8 +272,128 @@ export async function updateDeadline(deadlineId: string, options: Object) {
 
 
 
-export async function fulfillDeadline(deadline: Deadline, date: string) {
-    console.log(deadline);
+/**
+ * The kinds of proof a completed step can carry. Mirrors the server's
+ * `evidenceKinds` (internal/deadlinev2/evidence.go) — an unknown value is
+ * refused there rather than silently stored.
+ *
+ * Note there is no "service" slot beyond this list: whether service is its own
+ * step, a milestone, or part of another step is decided by the procedure
+ * template, not here.
+ */
+export const EVIDENCE_KINDS = ['filed', 'receipt', 'service', 'record', 'other'] as const;
+export type EvidenceKind = typeof EVIDENCE_KINDS[number];
+
+export const EVIDENCE_KIND_LABELS: Record<EvidenceKind, string> = {
+    filed: 'Filed document',
+    receipt: 'Registry receipt',
+    service: 'Proof of service',
+    record: 'Record / bundle',
+    other: 'Other',
+};
+
+/**
+ * One artefact of proof. One row per artefact, not one per completion: a step
+ * can produce a filed memorandum AND a registry receipt.
+ *
+ * `document` is an AiVaultDocuments id — a reference to the vault row, never a
+ * second copy of the file. The server refuses a document belonging to another
+ * matter.
+ */
+export interface DeadlineEvidenceInput {
+    kind: EvidenceKind;
+    /** AiVaultDocuments id, scoped to this matter. */
+    document?: string;
+    /** Court receipt / registration number. */
+    reference?: string;
+    note?: string;
+    /** Users id — who CHECKED, as distinct from who clicked complete. */
+    verifiedBy?: string;
+    /** YYYY-MM-DD. */
+    verifiedAt?: string;
+}
+
+/**
+ * Drops artefacts the server would refuse anyway: a row with no document, no
+ * reference and no note is not proof of anything, and sending it would fail the
+ * whole completion.
+ */
+export function usableEvidence(rows: DeadlineEvidenceInput[]): DeadlineEvidenceInput[] {
+    return (rows || []).filter(r => (r.document || '').trim() || (r.reference || '').trim() || (r.note || '').trim());
+}
+
+/**
+ * What the matter's PROCEDURE says a step should produce. Declared on the
+ * template, not on the deadline row: the row is instance state that gets
+ * recalculated, while what a step is supposed to yield belongs to the procedure.
+ * An empty list means the template declares nothing — most predate the field —
+ * not that the step produces nothing.
+ */
+export interface ExpectedArtefact {
+    kind: EvidenceKind;
+    label: string;
+    /** A correctly-run step may legitimately lack this one, so its absence is not a gap. */
+    optional?: boolean;
+}
+
+export async function getExpectedArtefacts(deadlineId: string, isEvent = false): Promise<ExpectedArtefact[]> {
+    if (!deadlineId) return [];
+    const url = `${SERVER_URL}/api/practocore/deadlines/${deadlineId}/expected-artefacts${isEvent ? '?type=events' : ''}`;
+    const res = await fetch(url, { headers: { 'Authorization': pocketbase.authStore.token } });
+    if (!res.ok) return [];
+    const body = await res.json().catch(() => ({}));
+    return body?.expected || [];
+}
+
+/** One recorded artefact of proof, as it comes back from the collection. */
+export interface DeadlineEvidenceRecord extends RecordModel {
+    deMatter: string;
+    seq: number;
+    target: string;
+    deadline: string;
+    event: string;
+    matter: string;
+    kind: EvidenceKind;
+    document: string;
+    reference: string;
+    verifiedBy: string;
+    verifiedAt: string;
+    note: string;
+    /**
+     * The event this proves was later superseded by a correction. The row is
+     * kept, never deleted — what the file recorded before the correction is part
+     * of the file — so it reads as history rather than as current proof.
+     */
+    superseded: boolean;
+    expand?: { document?: any; verifiedBy?: any };
+}
+
+/**
+ * All proof recorded on one matter, keyed by the deadline or event row it hangs
+ * off. The collection is read-only to clients (it is written only inside the
+ * transaction that appends the event it proves), so this is a plain read.
+ */
+export async function listDeadlineEvidence(matterIds: string | string[]): Promise<Record<string, DeadlineEvidenceRecord[]>> {
+    // Interlocutory applications are child matters with their own ids, so a
+    // timeline showing a matter and its applications has to ask for several.
+    const ids = (Array.isArray(matterIds) ? matterIds : [matterIds]).filter(Boolean);
+    if (!ids.length) return {};
+    const rows = await pocketbase.collection('DeadlineEvidence').getFullList<DeadlineEvidenceRecord>({
+        filter: ids.map(id => `matter = "${id}"`).join(' || '),
+        expand: 'document,verifiedBy',
+        sort: 'created',
+    });
+    const byRow: Record<string, DeadlineEvidenceRecord[]> = {};
+    for (const row of rows) {
+        const key = row.deadline || row.event;
+        if (!key) continue;
+        (byRow[key] ||= []).push(row);
+    }
+    return byRow;
+}
+
+export async function fulfillDeadline(deadline: Deadline, date: string, evidence: DeadlineEvidenceInput[] = []) {
+    const usable = usableEvidence(evidence);
     return await fetch(`${SERVER_URL}/api/practocore/deadlines/apply-action/${deadline.id}/deadlines`, {
         method: 'POST',
         body: JSON.stringify({
@@ -282,6 +402,10 @@ export async function fulfillDeadline(deadline: Deadline, date: string) {
                 meta: {
                     targetId: deadline?.t_id,
                     fulfilledDate: date,
+                    // Omitted entirely when empty: the server refuses evidence on
+                    // actions that do not discharge a step, and an empty array is
+                    // not a claim that anything was captured.
+                    ...(usable.length ? { evidence: usable } : {}),
                 }
             }
         }),
@@ -289,7 +413,28 @@ export async function fulfillDeadline(deadline: Deadline, date: string) {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json'
         }
-    }).then((e) => e.json())
+    }).then(readActionResponse)
+}
+
+/**
+ * Reads an apply-action response, THROWING the server's own message on a
+ * refusal.
+ *
+ * The handlers answer a rejected action with 400 + `{"error": "..."}`, which a
+ * bare `.then(e => e.json())` resolves happily — so the caller reported success
+ * for an action the server declined. That matters most for evidence: the
+ * refusals exist precisely so a completion cannot look better proven than it
+ * is, and swallowing them would undo the point.
+ *
+ * The sibling mutators here (fulfillEvent, adjournDeadline, overrideDeadline)
+ * still swallow theirs.
+ */
+async function readActionResponse(res: Response) {
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.error) {
+        throw new Error(body?.error || body?.message || `Request failed (${res.status})`);
+    }
+    return body;
 }
 
 export async function fulfillEvent(event: any, date: string) {

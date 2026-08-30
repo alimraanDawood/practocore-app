@@ -298,6 +298,10 @@
                   </Button>
                 </SharedDeadlineCompleteDeadline>
               </div>
+
+              <!-- Done, proven — or done, unevidenced. Both are states worth
+                   reading off the row. -->
+              <SharedDeadlineEvidence :rows="evidenceFor(deadline.id)" />
             </template>
 
             <!-- Pending deadline (Deadlines collection) -->
@@ -362,6 +366,12 @@
                   </Button>
                 </SharedEventsCompleteEvent>
               </div>
+
+              <!-- A milestone is evidenced exactly like a deadline: both hang
+                   off a sequence number in the same log. -->
+              <SharedDeadlineEvidence
+                v-if="deadline.status === 'fulfilled'"
+                :rows="evidenceFor(deadline.id)" />
             </template>
 
             <!-- Adjournment history -->
@@ -490,7 +500,7 @@ import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue"
 import OverrideDeadline from "../../Deadline/OverrideDeadline/OverrideDeadline.vue";
 import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
 import { pb } from "~/lib/pocketbase";
-import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline, renameDeadline } from "~/services/matters";
+import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline, renameDeadline, listDeadlineEvidence } from "~/services/matters";
 import { toast } from "vue-sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -594,6 +604,44 @@ const filterTabs = computed(() => [
   { value: "all", label: "All", count: allDeadlines.value.length },
   { value: "done", label: "Done", count: doneCount.value },
 ]);
+
+// ── P2: proof recorded against a completed step ───────────────────────────────
+// Read separately from the matter expand rather than joined onto it: evidence
+// hangs off a sequence number in the engine's event log, not off the mutable
+// deadline row, so it is not the matter's to carry. The row id is only the
+// handle the UI hangs it on.
+// This block is plain JS (no lang="ts"), so no type annotations here.
+const evidenceByRow = ref({});
+
+const evidenceFor = (rowId) => evidenceByRow.value[rowId] || [];
+
+// Applications are child matters with their own ids, so ask for all of them.
+const evidenceMatterIds = computed(() => {
+  const ids = [props?.matter?.id, ...(props?.matter?.expand?.applications || []).map((a) => a.id)];
+  return [...new Set(ids.filter(Boolean))];
+});
+
+const loadEvidence = async () => {
+  try {
+    evidenceByRow.value = await listDeadlineEvidence(evidenceMatterIds.value);
+  } catch (e) {
+    // A read failure must not blank the timeline; the row simply shows no chip.
+    console.error(e);
+  }
+};
+
+// Declared AFTER loadEvidence: an immediate watcher runs its callback during
+// setup, so a function it calls must already be initialised.
+watch(
+  () => [
+    evidenceMatterIds.value.join(","),
+    // Refetch when anything completes or a date moves, which is when proof can
+    // have been recorded or superseded.
+    allDeadlines.value.map((d) => `${d.id}:${d.status}:${d.date}`).join("|"),
+  ].join("~"),
+  loadEvidence,
+  { immediate: true },
+);
 
 // ── Unassigned deadlines (supervisor concern) ─────────────────────────────────
 // ── L6: whose obligation is this? ─────────────────────────────────────────────
