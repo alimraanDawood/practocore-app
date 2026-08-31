@@ -183,12 +183,14 @@ pub fn run() {
             builder = builder.plugin(tauri_plugin_hot_update::init(hot_update));
         }
 
-        builder = builder
-            // The updater verifies every downloaded artifact against the public
-            // key embedded by the signed release configuration. It is kept out
-            // of mobile builds; Android/iOS use their platform update channels.
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_process::init());
+        // The updater requires a signed release configuration (public key and
+        // HTTPS endpoint). Development uses the base Tauri config on purpose,
+        // so do not initialize a plugin whose configuration is absent there.
+        // Signed release builds receive it from tauri.conf.release.json.
+        if !cfg!(debug_assertions) {
+            builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        }
+        builder = builder.plugin(tauri_plugin_process::init());
     }
 
     builder = builder
