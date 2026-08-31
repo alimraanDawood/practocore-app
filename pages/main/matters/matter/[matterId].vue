@@ -210,8 +210,14 @@
                  matter view scrolled sideways. Scroll the bar inside its own
                  box: max-w-full to cap it, w-max on the list so it still sizes
                  to its content, shrink-0 so the triggers keep their width
-                 instead of being squeezed by flex-1. -->
-            <div class="max-w-full overflow-x-auto no-scrollbar">
+                 instead of being squeezed by flex-1.
+
+                 The box itself is shrink-0 too: `Tabs` is a flex COLUMN with
+                 `h-full`, and the panel below it asks for the full height, so the
+                 bar was the flex item that gave way — and because `overflow-x:auto`
+                 makes the other axis a scroll box as well, it clipped the triggers
+                 in half rather than overflowing. -->
+            <div class="shrink-0 max-w-full overflow-x-auto no-scrollbar">
               <TabsList class="w-max">
                 <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="timeline">Timeline</TabsTrigger>
                 <TabsTrigger class="shrink-0 text-sm ibm-plex-serif font-medium" value="milestones">Milestones</TabsTrigger>

@@ -52,17 +52,11 @@
         Attach ECCMIS case
     </Button>
 
-    <!-- Picker dialog -->
-    <Dialog v-model:open="open">
-        <DialogContent class="sm:max-w-xl">
-            <DialogHeader>
-                <DialogTitle>Attach an ECCMIS case</DialogTitle>
-                <DialogDescription>
-                    Link this matter to a case in your ECCMIS portfolio. Court updates
-                    will sync into this matter automatically — nothing is sent to ECCMIS.
-                </DialogDescription>
-            </DialogHeader>
-
+    <!-- Picker body, defined once. A phone gets a drawer and a laptop a dialog —
+         the same branch AdhocDeadlineDialog takes — because a 40-case list in a
+         centred modal on a 640px-tall phone is unusable, while a sheet that
+         rises from the bottom is thumb-reachable and dismissed by a swipe. -->
+    <DefineTemplate>
             <div v-if="loading" class="flex items-center justify-center py-12">
                 <LoaderIcon class="size-5 animate-spin text-muted-foreground" />
             </div>
@@ -75,12 +69,23 @@
                     <AlertCircle class="size-4 shrink-0 mt-0.5" />
                     <span>{{ loadError }}</span>
                 </div>
-                <Button variant="outline" size="sm" as-child>
-                    <NuxtLink :to="settingsPath('eccmis')">Open ECCMIS settings</NuxtLink>
-                </Button>
+                <!-- Two ways out, because the failures are two kinds: ECCMIS
+                     being slow or down, where the only useful action is to ask
+                     again; and a sign-in that has lapsed, which is fixed right
+                     here rather than on another page — the dialog and the
+                     half-chosen case survive. -->
+                <div v-if="!signingIn" class="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" :disabled="loading" @click="loadPortfolio">
+                        Try again
+                    </Button>
+                    <Button variant="ghost" size="sm" @click="signingIn = true">
+                        Sign in to ECCMIS
+                    </Button>
+                </div>
+                <InlineConnect v-else class="border-t pt-3" @connected="onConnected" />
             </div>
 
-            <template v-else>
+            <div v-else class="flex h-full min-h-0 min-w-0 flex-col gap-4">
                 <!-- Court filter. A portfolio spans several courts and the case
                      number is the only thing distinguishing them, so narrowing
                      by court is the fastest way to a handful of candidates. -->
@@ -100,9 +105,9 @@
                     </button>
                 </div>
 
-                <Command class="rounded-lg border">
+                <Command class="min-h-0 w-full min-w-0 flex-1 rounded-lg border">
                     <CommandInput placeholder="Search case number, party, court or year…" />
-                    <CommandList class="max-h-[22rem]">
+                    <CommandList class="min-h-0 max-h-none flex-1">
                         <CommandEmpty>No matching cases in your portfolio.</CommandEmpty>
 
                         <CommandGroup v-if="availableCases.length" heading="Available to link">
@@ -111,7 +116,7 @@
                                 :key="c.caseInstanceId"
                                 :value="searchIndex(c)"
                                 :disabled="busy"
-                                class="flex flex-col items-start gap-1 py-2.5"
+                                class="flex w-full min-w-0 flex-col items-start gap-1 py-2.5"
                                 @select="() => attach(c)"
                             >
                                 <div class="flex w-full items-start justify-between gap-3">
@@ -146,7 +151,7 @@
                                 :key="c.caseInstanceId"
                                 :value="searchIndex(c)"
                                 disabled
-                                class="flex flex-col items-start gap-0.5 py-2 opacity-60"
+                                class="flex w-full min-w-0 flex-col items-start gap-0.5 py-2 opacity-60"
                             >
                                 <div class="flex w-full items-center justify-between gap-3">
                                     <span class="font-mono text-sm">{{ c.caseNumber }}</span>
@@ -162,11 +167,52 @@
                     </CommandList>
                 </Command>
 
-                <p class="text-xs text-muted-foreground">
+                <p class="shrink-0 text-xs text-muted-foreground">
                     {{ availableCases.length }} of {{ cases.length }} case{{ cases.length === 1 ? '' : 's' }}
                     available to link.
                 </p>
-            </template>
+            </div>
+    </DefineTemplate>
+
+    <Drawer v-if="$viewport.isLessThan('tablet')" v-model:open="open" :close-threshold="0.95">
+        <!-- The drawer is already height-capped and column-laid-out by vaul, so
+             it needs only the min-height floor that lets the list scroll rather
+             than the whole sheet grow. -->
+        <DrawerContent>
+            <DrawerHeader class="text-left">
+                <DrawerTitle>Attach an ECCMIS case</DrawerTitle>
+                <DrawerDescription>
+                    Link this matter to a case in your ECCMIS portfolio. Court updates
+                    will sync into this matter automatically — nothing is sent to ECCMIS.
+                </DrawerDescription>
+            </DrawerHeader>
+            <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+                <ReuseTemplate />
+            </div>
+        </DrawerContent>
+    </Drawer>
+
+    <Dialog v-else v-model:open="open">
+        <!-- Capped to the viewport and laid out header-then-body: a full
+             portfolio is court chips + a long list + a footer line, which on a
+             laptop is taller than the screen, and the base DialogContent is
+             centred with no height limit — so it overflowed off the top and
+             bottom at once. The list is the part that gives.
+             `grid-cols-[minmax(0,1fr)]` is not decorative: a grid item's
+             automatic minimum size is its MIN-CONTENT, so the single implicit
+             column was sized by the longest case number and party name and the
+             whole body pushed out past the dialog's own max-width, taking the
+             header with it. The explicit 0-floor column lets it shrink. -->
+        <DialogContent
+            class="sm:max-w-xl max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
+            <DialogHeader>
+                <DialogTitle>Attach an ECCMIS case</DialogTitle>
+                <DialogDescription>
+                    Link this matter to a case in your ECCMIS portfolio. Court updates
+                    will sync into this matter automatically — nothing is sent to ECCMIS.
+                </DialogDescription>
+            </DialogHeader>
+            <ReuseTemplate />
         </DialogContent>
     </Dialog>
 
@@ -174,16 +220,77 @@
          on demand — it reads ECCMIS live. -->
     <SharedMattersEccmisRecord v-if="isLinked" :matter="matter" v-model:open="recordOpen" />
 
-    <!-- Unlink confirmation -->
-    <AlertDialog v-model:open="confirmOpen">
+    <!-- Unlink confirmation. Same body in both shells; a phone gets the sheet.
+         Note this stays an AlertDialog on the desktop side rather than becoming
+         a plain Dialog: it is a destructive confirm, and the escape-to-cancel
+         and focus trapping that come with the alert role are the point. -->
+    <DefineUnlink>
+      <!-- The wrong-case recovery. Offered only when there is something to
+           remove, and never pre-ticked: unlinking a correctly attached case
+           is the common reason to be here, and those dates are real. -->
+      <div v-if="hearingCount > 0" class="flex items-start gap-3 rounded-md border p-3">
+        <Checkbox
+            id="eccmis-remove-hearings"
+            class="mt-0.5"
+            :model-value="removeHearings"
+            :disabled="busy"
+            @update:model-value="(v) => (removeHearings = v === true)"
+        />
+        <Label for="eccmis-remove-hearings" class="flex cursor-pointer flex-col gap-0.5 font-normal">
+          <span class="text-sm font-medium">
+            Also remove the {{ hearingCount }}
+            {{ hearingCount === 1 ? 'hearing' : 'hearings' }} this case imported
+          </span>
+          <span class="text-xs text-muted-foreground">
+            For a case attached to the wrong matter. Your own dates and the
+            matter's procedure deadlines are not touched.
+          </span>
+        </Label>
+      </div>
+      <p v-else-if="hearingCount === 0" class="text-sm text-muted-foreground">
+        Hearings already imported are kept.
+      </p>
+    </DefineUnlink>
+
+    <Drawer v-if="$viewport.isLessThan('tablet')" v-model:open="confirmOpen" :close-threshold="0.95">
+      <DrawerContent>
+        <DrawerHeader class="text-left">
+          <DrawerTitle>Unlink from ECCMIS?</DrawerTitle>
+          <DrawerDescription>
+            This matter will stop receiving court updates from ECCMIS.
+            You can re-attach the case at any time.
+          </DrawerDescription>
+        </DrawerHeader>
+
+        <div class="overflow-y-auto px-4">
+          <ReuseUnlink />
+        </div>
+
+        <DrawerFooter>
+          <Button
+              class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              :disabled="busy"
+              @click="detach"
+          >
+            {{ removeHearings ? 'Unlink and remove' : 'Unlink' }}
+          </Button>
+          <Button variant="outline" :disabled="busy" @click="confirmOpen = false">Cancel</Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+
+    <AlertDialog v-else v-model:open="confirmOpen">
         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>Unlink from ECCMIS?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    This matter will stop receiving court updates from ECCMIS. Hearings
-                    already imported are kept. You can re-attach the case at any time.
+                    This matter will stop receiving court updates from ECCMIS.
+                    You can re-attach the case at any time.
                 </AlertDialogDescription>
             </AlertDialogHeader>
+
+            <ReuseUnlink />
+
             <AlertDialogFooter>
                 <AlertDialogCancel :disabled="busy">Cancel</AlertDialogCancel>
                 <AlertDialogAction
@@ -191,7 +298,7 @@
                     :disabled="busy"
                     @click="detach"
                 >
-                    Unlink
+                    {{ removeHearings ? 'Unlink and remove' : 'Unlink' }}
                 </AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
@@ -203,15 +310,19 @@ import { useVModel } from '@vueuse/core';
 import dayjs from 'dayjs';
 import { toast } from 'vue-sonner';
 import { Link2, Unlink, LoaderIcon, AlertCircle, Landmark } from 'lucide-vue-next';
+import InlineConnect from './InlineConnect.vue';
 import {
     fetchEccmisPortfolio,
     attachEccmisCase,
     detachEccmisCase,
+    countEccmisHearings,
     type PortfolioCase,
 } from '~/services/eccmis';
 
-// ECCMIS settings are a tab on desktop, a standalone page on mobile.
-const { settingsPath } = useSettingsLink();
+// One body, two shells (drawer on a phone, dialog on a laptop) — the repo's
+// existing responsive-modal pattern, see AdhocDeadlineDialog.
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
+const [DefineUnlink, ReuseUnlink] = createReusableTemplate();
 
 const props = defineProps<{
     matter: any;
@@ -225,10 +336,17 @@ const emits = defineEmits<{ updated: []; 'update:open': [value: boolean] }>();
 // Controlled when the parent binds `v-model:open`, otherwise internal (passive).
 const open = useVModel(props, 'open', emits, { passive: true, defaultValue: false });
 const confirmOpen = ref(false);
+// Whether this unlink is also the wrong-case recovery, and how many rows that
+// would remove. `-1` = not counted yet, so the dialog says nothing about hearings
+// until it knows; a count that arrives late must not flash a wrong number.
+const removeHearings = ref(false);
+const hearingCount = ref(-1);
 const recordOpen = ref(false);
 const loading = ref(false);
 const busy = ref(false);
 const loadError = ref('');
+// Whether the inline sign-in form has taken over the error card.
+const signingIn = ref(false);
 const cases = ref<PortfolioCase[]>([]);
 
 const isLinked = computed(() => Number(props.matter?.eccmisCaseInstanceId) > 0);
@@ -299,6 +417,13 @@ function searchIndex(c: PortfolioCase) {
 // reka-ui dismissable layers don't race over the body pointer-events lock
 // (see the nested-modal note in CLAUDE.md).
 function scheduleConfirm() {
+    // Ask fresh every time — a sync between two openings changes the answer, and
+    // the checkbox states a number the user is about to act on.
+    removeHearings.value = false;
+    hearingCount.value = -1;
+    countEccmisHearings(props.matter.id)
+        .then((n) => { hearingCount.value = n; })
+        .catch(() => { hearingCount.value = 0; });
     setTimeout(() => {
         confirmOpen.value = true;
     }, 50);
@@ -311,14 +436,23 @@ function scheduleRecord() {
     }, 50);
 }
 
+async function onConnected() {
+    signingIn.value = false;
+    toast.success('Connected to ECCMIS');
+    await loadPortfolio();
+}
+
 async function loadPortfolio() {
     loadError.value = '';
+    signingIn.value = false;
     cases.value = [];
     loading.value = true;
     try {
         cases.value = await fetchEccmisPortfolio();
     } catch (e: any) {
         loadError.value = e?.message || 'Could not load your ECCMIS portfolio.';
+        // eslint-disable-next-line no-console -- the raw failure, for support.
+        console.error('[ECCMIS] portfolio load failed', e);
     } finally {
         loading.value = false;
     }
@@ -359,8 +493,12 @@ async function attach(c: PortfolioCase) {
 async function detach() {
     busy.value = true;
     try {
-        await detachEccmisCase(props.matter.id);
-        toast.success('Unlinked from ECCMIS');
+        const removed = await detachEccmisCase(props.matter.id, removeHearings.value);
+        toast.success('Unlinked from ECCMIS', {
+            description: removed
+                ? `${removed} imported ${removed === 1 ? 'hearing' : 'hearings'} removed.`
+                : undefined,
+        });
         confirmOpen.value = false;
         emits('updated');
     } catch (e: any) {

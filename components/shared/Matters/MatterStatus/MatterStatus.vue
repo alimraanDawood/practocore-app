@@ -6,22 +6,16 @@
     {{ label }}
   </Badge>
 
-  <Dialog v-else-if="canManage" v-model:open="open">
-    <DialogTrigger as-child>
-      <Button variant="outline" size="sm" class="gap-2">
-        <component :is="statusIcon" class="size-4" aria-hidden="true" />
-        {{ label }}
-      </Button>
-    </DialogTrigger>
+  <template v-else-if="canManage">
+    <Button variant="outline" size="sm" class="gap-2" @click="open = true">
+      <component :is="statusIcon" class="size-4" aria-hidden="true" />
+      {{ label }}
+    </Button>
 
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>Matter status</DialogTitle>
-        <DialogDescription>
-          {{ matter?.name }}
-        </DialogDescription>
-      </DialogHeader>
-
+    <!-- Closing a file is a decision made in a hurry, often on a phone between
+         court sessions. Same body either way; a phone gets the sheet it expects,
+         a laptop the centred dialog. Same branch as AdhocDeadlineDialog. -->
+    <DefineTemplate>
       <div class="flex flex-col gap-3 py-1">
         <RadioGroup :model-value="choice" @update:model-value="v => choice = v as MatterStatus">
           <div v-for="opt in options" :key="opt.value" class="flex items-start gap-2">
@@ -50,16 +44,50 @@
           closed are not restored — check the dates before relying on them.
         </p>
       </div>
+    </DefineTemplate>
 
-      <DialogFooter class="gap-2">
-        <Button variant="ghost" :disabled="saving" @click="open = false">Cancel</Button>
-        <Button :disabled="saving || choice === status" @click="save">
-          <LoaderIcon v-if="saving" class="size-4 animate-spin" />
-          {{ choice === 'active' ? 'Reopen matter' : choice === 'archived' ? 'Archive matter' : 'Close matter' }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+    <Drawer v-if="$viewport.isLessThan('tablet')" v-model:open="open" :close-threshold="0.95">
+      <DrawerContent>
+        <DrawerHeader class="text-left">
+          <DrawerTitle>Matter status</DrawerTitle>
+          <DrawerDescription>{{ matter?.name }}</DrawerDescription>
+        </DrawerHeader>
+
+        <div class="overflow-y-auto px-4">
+          <ReuseTemplate />
+        </div>
+
+        <DrawerFooter>
+          <Button :disabled="saving || choice === status" @click="save">
+            <LoaderIcon v-if="saving" class="size-4 animate-spin" />
+            {{ choice === 'active' ? 'Reopen matter' : choice === 'archived' ? 'Archive matter' : 'Close matter' }}
+          </Button>
+          <Button variant="outline" :disabled="saving" @click="open = false">Cancel</Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+
+    <Dialog v-else v-model:open="open">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Matter status</DialogTitle>
+          <DialogDescription>
+            {{ matter?.name }}
+          </DialogDescription>
+        </DialogHeader>
+
+        <ReuseTemplate />
+
+        <DialogFooter class="gap-2">
+          <Button variant="ghost" :disabled="saving" @click="open = false">Cancel</Button>
+          <Button :disabled="saving || choice === status" @click="save">
+            <LoaderIcon v-if="saving" class="size-4 animate-spin" />
+            {{ choice === 'active' ? 'Reopen matter' : choice === 'archived' ? 'Archive matter' : 'Close matter' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </template>
 </template>
 
 <script setup lang="ts">
@@ -79,6 +107,9 @@ const props = defineProps<{
 }>();
 const emits = defineEmits<{ updated: [] }>();
 
+// One body, two shells — the repo's responsive-modal pattern.
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate();
+
 const open = ref(false);
 const saving = ref(false);
 const reason = ref('');
@@ -86,8 +117,8 @@ const reason = ref('');
 const status = computed<MatterStatus>(() => matterStatusOf(props.matter));
 const label = computed(() => MATTER_STATUS_LABELS[status.value]);
 
-// The dialog's working copy, reset each time it opens so an abandoned edit never
-// carries into the next one.
+// The working copy, reset each time it opens so an abandoned edit never carries
+// into the next one.
 const choice = ref<MatterStatus>(status.value);
 watch(open, (isOpen) => {
   if (!isOpen) return;

@@ -5,10 +5,17 @@
 // deadlines that need the user soon, and recently-touched matters — passed in via
 // ChatSurface's #empty slot. Mode is left at '' so this is the normal assistant,
 // sharing history with the global sidebar.
-import { Loader2, CalendarClock, CircleAlert, Clock, Scale, ArrowRight, Sparkles } from 'lucide-vue-next';
+import {
+  Loader2, CalendarClock, CircleAlert, Clock, Scale, ArrowRight, Sparkles,
+  Copy, RotateCcw, ListChecks, MessageSquareText, CheckCheck,
+} from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
+import { toast } from 'vue-sonner';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 import { getSignedInUser } from '~/services/auth';
-import { getMatters, getAllDeadlines } from '~/services/matters';
+import { getMatters, getAllDeadlines, completeAdhocDeadline } from '~/services/matters';
+import { isAdhoc } from '~/services/deadlines/urgency';
 
 const firstName = computed(() => getSignedInUser()?.name?.split(' ').at(0) || 'there');
 
@@ -28,6 +35,11 @@ interface HomeDeadline {
   date?: string;
   status?: string;
   matter?: string;
+  /** The engine node a FULFILL action targets; absent on a firm's own ad-hoc rows. */
+  t_id?: string;
+  origin?: string;
+  input_prompt?: string;
+  disableFulfill?: boolean;
   expand?: { matter?: { id: string; name?: string } }
 }
 
@@ -62,7 +74,10 @@ async function loadHome() {
         filter: `${workspaceScope.value} && assignees ~ "${id}" && (status = "pending" || status = "overdue") && date != "" && date <= "${horizonStr}"`,
         sort: 'date',
         expand: 'matter',
-        fields: 'id,name,date,status,matter,expand.matter.id,expand.matter.name',
+        // `t_id` (the engine node the FULFILL action targets), `origin`, `input_prompt`
+        // and `disableFulfill` are here for the row's "Mark done…" menu item, which
+        // opens the same completion dialog the matter timeline uses.
+        fields: 'id,name,date,status,matter,t_id,origin,input_prompt,disableFulfill,expand.matter.id,expand.matter.name',
       }),
       getMatters(1, 5, {
         filter: `owner = "${id}" || members ~ "${id}" || supervisors ~ "${id}"`,
@@ -146,6 +161,151 @@ function openMatter(id: string) {
   navigateTo(`/main/matters/matter/${id}`);
 }
 
+// ── Completing a deadline from here ─────────────────────────────────────────
+// The one write this card offers. It is the verb a "needs you" list owes the
+// user, and it is never a one-click write on an engine row: the menu item opens
+// the SAME dialog the matter timeline opens, because completion records a date
+// and can carry evidence. Only a firm's own ad-hoc row completes outright — it
+// is not an engine node, so there is no date to record and nothing to cascade,
+// exactly as the timeline treats it.
+const completeFor = ref<HomeDeadline | null>(null);
+const adhocBusy = ref<string | null>(null);
+
+// A menu and a dialog are separate overlay layers; opening the second while the
+// first is still closing makes them race for the body scroll lock (CLAUDE.md).
+const defer = (fn: () => void) => setTimeout(fn, 0);
+
+// The same gate the timeline carries, said out loud in the label instead of
+// greying an item with no explanation.
+const planActive = usePlanActive();
+const { isOffline: netOffline } = useNetwork();
+const completeBlocked = computed(() => {
+  if (netOffline.value) return 'offline';
+  if (!planActive.value?.active) return 'subscription expired';
+  return '';
+});
+
+async function completeAdhoc(d: HomeDeadline) {
+  adhocBusy.value = d.id;
+  try {
+    const res = await completeAdhocDeadline(d.id);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success('Deadline marked done');
+    await loadHome();
+  } catch (err: any) {
+    toast.error(err?.message || 'Could not update deadline');
+  } finally {
+    adhocBusy.value = null;
+  }
+}
+
+// ── Right-click menus ───────────────────────────────────────────────────────
+// ONE menu per list, not one per row: a menu per row makes each its own
+// dismissable layer, so right-clicking a second row leaves the first standing.
+// The list clears the aim in the capture phase, each row sets it in the target
+// phase, and reka re-anchors the single menu at the new point. Touch has no
+// context menu — reka's trigger arms a long-press of its own, and a tap already
+// opens the row.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+const ctxDeadline = ref<HomeDeadline | null>(null);
+const ctxMatter = ref<HomeMatter | null>(null);
+
+/** ChatSurface's `ask` (seeds the composer) / `send` (fires immediately), passed
+ *  down from the slot because the actions are described here in script. */
+type AskFn = (text: string) => void;
+
+function copyText(text: string, what: string) {
+  navigator.clipboard.writeText(text);
+  toast.success(`${what} copied to clipboard`);
+}
+
+/** What the deadline row under the pointer can do — the row's own actions, in a menu. */
+function deadlineActions(d: HomeDeadline, ask: AskFn): MenuAction[] {
+  const matterName = d.expand?.matter?.name || 'this matter';
+  const name = d.name || 'Deadline';
+  const blocked = completeBlocked.value;
+  const suffix = blocked ? ` — ${blocked}` : '';
+  const out: MenuAction[] = [
+    {
+      id: 'open', label: 'Open matter', icon: ArrowRight,
+      disabled: !matterIdOf(d), run: () => openDeadline(d),
+    },
+  ];
+
+  // Ad-hoc rows complete outright; engine rows go through the dialog, which is
+  // where the fulfilled date (and any evidence) is actually chosen.
+  if (isAdhoc(d)) {
+    out.push({
+      id: 'done', label: `Mark done${suffix}`, icon: CheckCheck, divider: true,
+      disabled: !!blocked || adhocBusy.value === d.id, run: () => completeAdhoc(d),
+    });
+  } else if (!d.disableFulfill) {
+    out.push({
+      id: 'done', label: `Mark done…${suffix}`, icon: CheckCheck, divider: true,
+      disabled: !!blocked, run: () => defer(() => { completeFor.value = d; }),
+    });
+  }
+
+  out.push({
+    id: 'ask', label: 'Ask PractoAI about this', icon: Sparkles, divider: true,
+    run: () => ask(`Tell me about the “${name}” deadline on ${matterName} and what I need to do.`),
+  });
+  out.push({
+    id: 'next', label: 'Ask what to do next', icon: MessageSquareText,
+    run: () => ask(`What are the next steps for “${name}” on ${matterName}, and by when?`),
+  });
+  out.push({
+    id: 'copy', label: 'Copy deadline name', icon: Copy, divider: true,
+    run: () => copyText(name, 'Deadline name'),
+  });
+  return out;
+}
+
+/** The menu on the deadlines card itself, rather than on any one row. */
+function deadlineSurfaceActions(send: AskFn): MenuAction[] {
+  return [
+    { id: 'calendar', label: 'Open the calendar', icon: CalendarClock, run: () => navigateTo('/main/calendar') },
+    { id: 'plate', label: 'Ask what’s on my plate', icon: ListChecks, run: () => send('What’s on my plate today?') },
+    { id: 'refresh', label: 'Refresh', icon: RotateCcw, divider: true, disabled: homeLoading.value, run: loadHome },
+  ];
+}
+
+/** What the matter row under the pointer can do. */
+function matterActions(m: HomeMatter, ask: AskFn): MenuAction[] {
+  const name = m.name || 'Matter';
+  const out: MenuAction[] = [
+    { id: 'open', label: 'Open matter', icon: ArrowRight, run: () => openMatter(m.id) },
+    {
+      id: 'ask', label: 'Ask PractoAI about this', icon: Sparkles, divider: true,
+      run: () => ask(`Summarise recent activity on the matter “${name}”.`),
+    },
+    {
+      id: 'outstanding', label: 'Ask what’s outstanding', icon: ListChecks,
+      run: () => ask(`What is outstanding on the matter “${name}”?`),
+    },
+    {
+      id: 'copy-name', label: 'Copy matter name', icon: Copy, divider: true,
+      run: () => copyText(name, 'Matter name'),
+    },
+  ];
+  if (m.caseNumber) {
+    out.push({
+      id: 'copy-case', label: 'Copy case number', icon: Copy,
+      run: () => copyText(m.caseNumber!, 'Case number'),
+    });
+  }
+  return out;
+}
+
+/** The menu on the recent-matters list itself. */
+const matterSurfaceActions = computed<MenuAction[]>(() => [
+  { id: 'all', label: 'View all matters', icon: Scale, run: () => navigateTo('/main/matters') },
+  { id: 'refresh', label: 'Refresh', icon: RotateCcw, divider: true, disabled: homeLoading.value, run: loadHome },
+]);
+
 onMounted(loadHome);
 </script>
 
@@ -169,6 +329,9 @@ onMounted(loadHome);
           Loading your day…
         </div>
         <div v-else-if="deadlineGroups.length" class="rounded overflow-hidden border lg:bg-background bg-muted">
+          <ContextMenu>
+          <ContextMenuTrigger as-child :disabled="coarsePointer">
+          <div @contextmenu.capture="ctxDeadline = null">
           <div class="flex items-center gap-2 border-b px-4 py-2.5">
             <CalendarClock class="size-4 text-muted-foreground"/>
             <span class="text-sm font-semibold">Needs you</span>
@@ -180,7 +343,8 @@ onMounted(loadHome);
             </p>
             <button v-for="d in group.items" :key="d.id"
                     class="group/dl flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-accent"
-                    @click="openDeadline(d)">
+                    @click="openDeadline(d)"
+                    @contextmenu="ctxDeadline = d">
               <CircleAlert v-if="group.key === 'overdue'" class="size-4 shrink-0 text-destructive"/>
               <Clock v-else class="size-4 shrink-0 text-muted-foreground"/>
               <div class="flex min-w-0 flex-1 flex-col">
@@ -196,6 +360,14 @@ onMounted(loadHome);
               </span>
             </button>
           </div>
+          </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent class="w-64">
+            <SharedActionMenuItems
+                :actions="ctxDeadline ? deadlineActions(ctxDeadline, ask) : deadlineSurfaceActions(send)"
+                variant="context"/>
+          </ContextMenuContent>
+          </ContextMenu>
         </div>
 
         <!-- Recent matters -->
@@ -206,10 +378,13 @@ onMounted(loadHome);
               <Button size="xs" variant="secondary">View All</Button>
             </NuxtLink>
           </div>
-          <div class="flex flex-col">
+          <ContextMenu>
+          <ContextMenuTrigger as-child :disabled="coarsePointer">
+          <div class="flex flex-col" @contextmenu.capture="ctxMatter = null">
             <button v-for="m in recentMatters" :key="m.id"
                     class="group/m flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50"
-                    @click="openMatter(m.id)">
+                    @click="openMatter(m.id)"
+                    @contextmenu="ctxMatter = m">
               <div class="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
                 <Scale class="size-3.5"/>
               </div>
@@ -227,6 +402,13 @@ onMounted(loadHome);
                   class="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover/m:translate-x-0.5"/>
             </button>
           </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent class="w-64">
+            <SharedActionMenuItems
+                :actions="ctxMatter ? matterActions(ctxMatter, ask) : matterSurfaceActions"
+                variant="context"/>
+          </ContextMenuContent>
+          </ContextMenu>
         </div>
 
         <!-- Smart prompts -->
@@ -237,6 +419,20 @@ onMounted(loadHome);
             {{ p }}
           </button>
         </div>
+
+        <!-- Completion, opened from the row menu rather than from a button of its
+             own. Mounted only while open and keyed by row, because it seeds its
+             form from the deadline it was opened on. The empty span is the
+             trigger slot it expects; nothing renders it. -->
+        <SharedDeadlineCompleteDeadline
+            v-if="completeFor"
+            :key="`complete-${completeFor.id}`"
+            :deadline="completeFor"
+            :open="true"
+            @update:open="(v: boolean) => { if (!v) completeFor = null; }"
+            @updated="loadHome">
+          <span class="hidden"/>
+        </SharedDeadlineCompleteDeadline>
       </div>
     </template>
   </ChatSurface>

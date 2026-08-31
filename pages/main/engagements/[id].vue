@@ -1,5 +1,10 @@
 <script lang="ts" setup>
-import { Briefcase, ArrowLeft, ChevronLeft, Loader, Check, Circle, CircleDot, CalendarClock, ListChecks, FolderLock, FileType2, Users, RefreshCw, Pause, Play, X, Bell, BellOff, FileCheck2, PlayCircle, Plus, CalendarPlus, Trash2 } from 'lucide-vue-next';
+import {
+  Briefcase, ArrowLeft, ChevronLeft, Loader, Check, Circle, CircleDot, CalendarClock,
+  ListChecks, FolderLock, FileType2, Users, RefreshCw, Pause, Play, X, Bell, BellOff,
+  FileCheck2, PlayCircle, Plus, CalendarPlus, Trash2, CheckCheck, RotateCcw, SkipForward,
+} from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
 import { toast } from 'vue-sonner';
 import {
   getEngagement, listMilestones, updateMilestoneStatus, updateEngagement,
@@ -8,7 +13,9 @@ import {
   subscribeEngagement, unsubscribeEngagement, subscribeMilestones, unsubscribeMilestones,
   subscribeCompliance, unsubscribeCompliance,
   type Engagement, type EngagementMilestone, type EngagementTemplate, type ComplianceObligation, type ComplianceStatus, type ComplianceFiling, type TemplateStage,
+  type MilestoneStatus,
 } from '~/services/engagements';
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 
 definePageMeta({ layout: 'default' });
 
@@ -151,19 +158,24 @@ provideDockContext(() => {
 });
 
 
-async function toggleMilestone(m: EngagementMilestone) {
+async function setMilestoneStatusTo(m: EngagementMilestone, status: MilestoneStatus) {
   busyMilestone.value = m.id;
-  const next = m.status === 'done' ? 'pending' : 'done';
   try {
-    const updated = await updateMilestoneStatus(m.id, next);
+    const updated = await updateMilestoneStatus(m.id, status);
     const idx = milestones.value.findIndex((x) => x.id === m.id);
     if (idx >= 0) milestones.value[idx] = updated;
     // The server recomputes stage progress synchronously on this change; refresh
     // the engagement so the stage pills advance live.
     engagement.value = await getEngagement(id.value);
+  } catch (e: any) {
+    toast.error(e?.message || 'Could not update milestone');
   } finally {
     busyMilestone.value = '';
   }
+}
+
+function toggleMilestone(m: EngagementMilestone) {
+  return setMilestoneStatusTo(m, m.status === 'done' ? 'pending' : 'done');
 }
 
 // Toggle a reminder on any dated milestone — the backend schedules/cancels the
@@ -352,6 +364,122 @@ async function saveTargetDate(clear = false) {
   }
 }
 
+// ── Right-click menus ───────────────────────────────────────────────
+// The same model the grids and the matter timeline use: everything a row can do
+// is described once as an action list (`MenuAction`) and rendered into the menu,
+// so a row's hover buttons and its menu cannot drift apart.
+//
+// ONE menu per LIST, never one per row — a menu per row makes each its own
+// dismissable layer, so right-clicking a second row leaves the first standing.
+// The list clears the aim in the CAPTURE phase, a row sets it in the target
+// phase, and reka re-anchors the single menu at the new point. Empty space in
+// the list therefore gets the list's own menu.
+//
+// Touch has no context menu: reka's trigger arms a long-press of its own, and a
+// finger already has every one of these actions as a visible button.
+const coarsePointer = useMediaQuery('(pointer: coarse)');
+const ctxMilestone = ref<EngagementMilestone | null>(null);
+const ctxObligation = ref<ComplianceObligation | null>(null);
+
+// A menu and a dialog are separate overlay layers; opening the second while the
+// first is still closing makes them race for the body scroll lock (CLAUDE.md).
+const defer = (fn: () => void) => setTimeout(fn, 0);
+
+/** What the milestone under the pointer can do — the row's buttons, in a menu. */
+function milestoneActions(m: EngagementMilestone): MenuAction[] {
+  const busy = busyMilestone.value === m.id;
+  const out: MenuAction[] = [];
+
+  out.push(m.status === 'done'
+    ? { id: 'reopen', label: 'Reopen', icon: RotateCcw, disabled: busy, run: () => setMilestoneStatusTo(m, 'pending') }
+    : { id: 'done', label: 'Mark done', icon: CheckCheck, disabled: busy, run: () => setMilestoneStatusTo(m, 'done') });
+
+  // Skipped keeps the milestone on the record; Delete is the one that removes it.
+  out.push(m.status === 'skipped'
+    ? { id: 'unskip', label: 'No longer skipped', icon: RotateCcw, disabled: busy, run: () => setMilestoneStatusTo(m, 'pending') }
+    : { id: 'skip', label: 'Mark skipped', icon: SkipForward, disabled: busy, run: () => setMilestoneStatusTo(m, 'skipped') });
+
+  if (m.status === 'pending') {
+    out.push({
+      id: 'schedule',
+      label: m.dueDate ? 'Edit due date & reminders…' : 'Set due date & reminders…',
+      icon: CalendarPlus, divider: true,
+      run: () => defer(() => openSchedule(m)),
+    });
+    if (m.dueDate) {
+      out.push({
+        id: 'remind',
+        label: m.remind ? 'Turn reminders off' : 'Remind me on the due date',
+        icon: m.remind ? BellOff : Bell,
+        disabled: busyReminder.value === m.id,
+        run: () => toggleReminder(m),
+      });
+    }
+  }
+
+  out.push({
+    id: 'delete', label: 'Remove milestone', icon: Trash2, danger: true, divider: true,
+    run: () => defer(() => confirmDeleteMilestone(m)),
+  });
+  return out;
+}
+
+/** The menu on the milestone list itself, rather than on any one milestone. */
+const milestoneSurfaceActions = computed<MenuAction[]>(() => [
+  { id: 'add', label: 'Add milestone…', icon: Plus, run: () => defer(() => openSchedule(null)) },
+  { id: 'refresh', label: 'Refresh', icon: RefreshCw, divider: true, run: refresh },
+]);
+
+/** What the obligation under the pointer can do. */
+function obligationActions(o: ComplianceObligation): MenuAction[] {
+  const busy = busyObligation.value === o.id;
+  const out: MenuAction[] = [];
+
+  if (o.status === 'active' && pendingByObligation.value[o.id]) {
+    out.push({
+      id: 'file', label: 'Record filing…', icon: FileCheck2, disabled: busy,
+      run: () => defer(() => openFileDialog(o)),
+    });
+  }
+  if (o.status === 'active') {
+    out.push({
+      id: 'pause', label: 'Pause this obligation', icon: Pause, disabled: busy,
+      divider: out.length > 0, run: () => setObligationStatus(o, 'paused'),
+    });
+  } else if (o.status === 'paused') {
+    out.push({
+      id: 'resume', label: 'Resume this obligation', icon: Play, disabled: busy,
+      run: () => setObligationStatus(o, 'active'),
+    });
+  }
+  if (o.status !== 'ended') {
+    out.push({
+      id: 'end', label: 'End this obligation', icon: X, danger: true, divider: true,
+      disabled: busy, run: () => setObligationStatus(o, 'ended'),
+    });
+  } else {
+    out.push({
+      id: 'restart', label: 'Start it again', icon: PlayCircle, disabled: busy,
+      run: () => setObligationStatus(o, 'active'),
+    });
+  }
+  return out;
+}
+
+/** The menu on the compliance list itself. */
+const obligationSurfaceActions = computed<MenuAction[]>(() => {
+  const out: MenuAction[] = [];
+  if (hasComplianceRules.value) {
+    out.push({
+      id: 'spawn',
+      label: compliance.value.length > 0 ? 'Refresh obligations' : 'Start compliance now',
+      icon: PlayCircle, disabled: spawning.value, run: spawnObligations,
+    });
+  }
+  out.push({ id: 'refresh', label: 'Refresh', icon: RefreshCw, divider: out.length > 0, run: refresh });
+  return out;
+});
+
 // Mirror the matter page's back affordance: return to where the user came from,
 // falling back to the engagements list.
 const goBackOrHome = () => {
@@ -514,7 +642,13 @@ const goBackOrHome = () => {
                 </div>
               </div>
 
-              <div>
+              <!-- One right-click menu for the whole milestone list: the row under
+                   the pointer sets the aim in the target phase, the list clears it
+                   here in the capture phase, so the space around the rows opens the
+                   list's own menu instead. -->
+              <ContextMenu>
+              <ContextMenuTrigger as-child :disabled="coarsePointer">
+              <div @contextmenu.capture="ctxMilestone = null">
                 <div class="flex items-center justify-between gap-2 mb-3">
                   <h2 class="text-sm font-medium text-muted-foreground">Milestones</h2>
                   <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="openSchedule(null)">
@@ -525,7 +659,12 @@ const goBackOrHome = () => {
                   No milestones yet. <button class="text-primary hover:underline" @click="openSchedule(null)">Add one</button> with a due date and reminders.
                 </div>
                 <div v-else class="flex flex-col gap-2">
-                  <Card v-for="m in milestones" :key="m.id" class="p-3 flex flex-row items-center gap-3">
+                  <Card
+                    v-for="m in milestones"
+                    :key="m.id"
+                    class="p-3 flex flex-row items-center gap-3"
+                    @contextmenu="ctxMilestone = m"
+                  >
                     <Checkbox
                       :model-value="m.status === 'done'"
                       :disabled="busyMilestone === m.id"
@@ -579,6 +718,13 @@ const goBackOrHome = () => {
                   </Card>
                 </div>
               </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent class="w-64">
+                <SharedActionMenuItems
+                  :actions="ctxMilestone ? milestoneActions(ctxMilestone) : milestoneSurfaceActions"
+                  variant="context" />
+              </ContextMenuContent>
+              </ContextMenu>
 
               <SharedEngagementsEngagementFields
                 :engagement="engagement"
@@ -587,7 +733,9 @@ const goBackOrHome = () => {
               />
 
               <!-- Compliance tail — recurring obligations + the per-occurrence register -->
-              <div v-if="compliance.length > 0 || hasComplianceRules">
+              <ContextMenu v-if="compliance.length > 0 || hasComplianceRules">
+              <ContextMenuTrigger as-child :disabled="coarsePointer">
+              <div @contextmenu.capture="ctxObligation = null">
                 <div class="flex items-center justify-between gap-2 mb-3">
                   <div class="flex items-center gap-2">
                     <RefreshCw class="size-4 text-muted-foreground" />
@@ -617,6 +765,7 @@ const goBackOrHome = () => {
                     :key="o.id"
                     class="p-3 flex flex-row items-center gap-3"
                     :class="{ 'opacity-60': o.status !== 'active' }"
+                    @contextmenu="ctxObligation = o"
                   >
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">
@@ -670,6 +819,13 @@ const goBackOrHome = () => {
                   </Card>
                 </div>
               </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent class="w-64">
+                <SharedActionMenuItems
+                  :actions="ctxObligation ? obligationActions(ctxObligation) : obligationSurfaceActions"
+                  variant="context" />
+              </ContextMenuContent>
+              </ContextMenu>
             </div>
           </TabsContent>
 

@@ -518,8 +518,11 @@
     <span class="hidden" />
   </SharedEventsCompleteEvent>
 
-  <!-- Loading skeleton -->
-  <div v-else class="flex flex-col gap-4 animate-pulse">
+  <!-- Loading skeleton. Tested on `matter` rather than written as the loaded
+       state's `v-else`: the date dialogs above are siblings, so an `v-else` binds
+       to whichever one happens to be last and the skeleton renders UNDER a
+       timeline that has already loaded. -->
+  <div v-if="matter === null" class="flex flex-col gap-4 animate-pulse">
     <div class="flex flex-row gap-1">
       <div v-for="i in 3" :key="i" class="h-8 w-20 bg-muted rounded-lg"></div>
     </div>

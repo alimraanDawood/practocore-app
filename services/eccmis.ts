@@ -106,18 +106,65 @@ const PAYMENTS_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/payments`;
 const DOCUMENT_ENDPOINT = `${SERVER_URL}/api/practocore/eccmis/document`;
 
 /**
- * Throws an Error carrying the server's `error` string (or a status fallback)
- * so callers can surface it in a toast.
+ * The server's own words for a failure, or '' if it sent none.
+ *
+ * Two response shapes reach here and both have to be read. The ECCMIS routes
+ * answer through `apis.NewBadRequestError`, which PocketBase serialises as
+ * `{ status, message, data }`; the hand-rolled endpoints elsewhere answer
+ * `{ error }`. Reading only `error` — as this did — threw away every message the
+ * ECCMIS routes send, which is why a missing connection, a case linked to another
+ * matter and a wrong-workspace attach all rendered as the same status code.
+ *
+ * PocketBase puts per-field validation detail in `data` and leaves the top-level
+ * message generic, so fall through to those rather than say "Something went wrong".
+ */
+function serverMessage(body: any): string {
+    const top = [body?.message, body?.error].find((v) => typeof v === 'string' && v.trim());
+    const fields = body?.data && typeof body.data === 'object'
+        ? Object.values(body.data)
+            .map((d: any) => (typeof d?.message === 'string' ? d.message : ''))
+            .filter(Boolean)
+        : [];
+    if (fields.length) return sentence(fields.join(' '));
+    return top ? sentence(top) : '';
+}
+
+/** Go errors are lowercase and unpunctuated by convention; UI text is neither. */
+function sentence(text: string): string {
+    const t = text.trim();
+    if (!t) return '';
+    const capped = t[0].toUpperCase() + t.slice(1);
+    return /[.!?]$/.test(capped) ? capped : `${capped}.`;
+}
+
+/**
+ * What to say when the server said nothing usable — a gateway timeout, a proxy
+ * error, a dropped connection. Named by what the user should do about it, never
+ * by the status code alone, and never "import failed": most of these endpoints
+ * are not imports.
+ */
+function statusMessage(status: number): string {
+    if (status === 401) return 'Your session has expired. Sign in again.';
+    if (status === 403) return 'You do not have access to this case.';
+    if (status === 404) return 'That case is no longer in ECCMIS.';
+    if (status === 429) return 'Too many requests to ECCMIS. Try again in a minute.';
+    if (status >= 500) return 'ECCMIS is not responding right now. Try again shortly.';
+    return 'ECCMIS could not complete that request. Try again.';
+}
+
+/**
+ * Throws an Error carrying the server's own message where there is one, so
+ * callers can surface it in a toast or an inline error.
  */
 async function parseOrThrow<T>(res: Response): Promise<T> {
     let body: any = null;
     try {
         body = await res.json();
     } catch {
-        // fall through to status-based error below
+        // No JSON at all (a proxy page, an empty 504) — fall through to status.
     }
     if (!res.ok) {
-        throw new Error(body?.error || `ECCMIS import failed (${res.status}).`);
+        throw new Error(serverMessage(body) || statusMessage(res.status));
     }
     return body as T;
 }
@@ -324,17 +371,41 @@ export async function attachEccmisCase(matterId: string, caseInstanceId: number)
     return parseOrThrow<AttachResult>(res);
 }
 
-/** Remove the ECCMIS link from a matter (keeps already-imported hearings). */
-export async function detachEccmisCase(matterId: string): Promise<void> {
+/**
+ * Remove the ECCMIS link from a matter.
+ *
+ * `removeHearings` also deletes the hearings the integration imported — the way
+ * back from a case attached to the WRONG matter, where keeping another case's
+ * diary is the whole problem. It is opt-in because the ordinary unlink (stop the
+ * sync on a correctly-attached case) must keep dates the lawyer relies on.
+ * Returns how many hearings were actually removed.
+ */
+export async function detachEccmisCase(matterId: string, removeHearings = false): Promise<number> {
     const res = await fetch(DETACH_ENDPOINT, {
         method: 'POST',
-        body: JSON.stringify({ matterId }),
+        body: JSON.stringify({ matterId, removeHearings }),
         headers: {
             'Authorization': pocketbase.authStore.token,
             'Content-Type': 'application/json',
         },
     });
-    await parseOrThrow<{ detached: boolean }>(res);
+    const out = await parseOrThrow<{ detached: boolean; hearingsRemoved?: number }>(res);
+    return out?.hearingsRemoved ?? 0;
+}
+
+/**
+ * How many rows on this matter came from the court — what the unlink dialog
+ * offers to remove. Read straight from the collection: `origin = 'court'` is the
+ * same provenance the server deletes on, so the number offered and the number
+ * removed cannot disagree.
+ */
+export async function countEccmisHearings(matterId: string): Promise<number> {
+    const page = await pocketbase.collection('Deadlines').getList(1, 1, {
+        filter: `matter = "${matterId}" && origin = "court"`,
+        fields: 'id',
+        skipTotal: false,
+    });
+    return page.totalItems;
 }
 
 
