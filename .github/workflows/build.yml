@@ -102,6 +102,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify release packaging
+        run: bun run release:verify
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -187,8 +190,8 @@ jobs:
           NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID: 286763366119-d5gbju720bdoahn01k1vuo69l5hqkan5.apps.googleusercontent.com
         run: bun run generate
 
-      # capacitor.config.ts has webDir: 'dist' (and its server.url block commented out,
-      # so this bundles the local assets rather than pointing at a dev server).
+      # capacitor.config.ts uses webDir: 'dist' unless a developer explicitly sets
+      # CAPACITOR_DEV_SERVER_URL. CI verifies that a release has no dev server.
       - name: Stage frontend into dist/
         run: |
           if [ -f .output/public/index.html ]; then
@@ -199,6 +202,9 @@ jobs:
             echo "::error::No static build output found (looked for .output/public/index.html and dist/index.html)"
             exit 1
           fi
+
+      - name: Verify release packaging
+        run: bun run release:verify
 
       - name: Capacitor sync
         run: bunx cap sync android

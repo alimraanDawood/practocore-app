@@ -12,6 +12,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "test": "bun test",
+    "release:verify": "bun scripts/release/verify-release.mjs",
+    "version:check": "bun scripts/release/check-version.mjs",
+    "version:sync": "bun scripts/release/set-version.mjs",
     "gen:deadline-types": "go -C ../practocore-backend/deadlineengine run ./cmd/gents > services/deadline-v2/types.gen.ts",
     "check:deadline-types": "bun run gen:deadline-types && git diff --exit-code services/deadline-v2/types.gen.ts"
   },
