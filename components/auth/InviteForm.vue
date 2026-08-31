@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Mail, User as UserIcon, Shield, Send, CheckCircle, Clock, Crown } from 'lucide-vue-next';
-import { sendDirectInvite } from '~/services/admin/index.js';
+import { sendDirectInvite, apiErrorMessage } from '~/services/admin/index.js';
 import { toast } from 'vue-sonner';
 import { getSignedInUser } from '~/services/auth';
 
@@ -89,7 +89,7 @@ const handleSendInvite = async () => {
   sending.value = true;
 
   try {
-    const result = await sendDirectInvite(
+    const result: any = await sendDirectInvite(
       formData.value.email,
       user.organisation,
       formData.value.role,
@@ -97,38 +97,37 @@ const handleSendInvite = async () => {
       formData.value.organisationRole
     );
 
-    if (result.message) {
-      toast.success(result.message);
+    // Reaching here means the server accepted it — `api()` throws otherwise.
+    toast.success(result?.message || 'Invitation sent');
 
-      // Add to recent invites
-      recentInvites.value.unshift({
-        email: formData.value.email,
-        name: formData.value.name,
-        role: formData.value.role,
-        timestamp: new Date()
-      });
+    // Add to recent invites
+    recentInvites.value.unshift({
+      email: formData.value.email,
+      name: formData.value.name,
+      role: formData.value.role,
+      timestamp: new Date()
+    });
 
-      // Keep only last 5 invites
-      if (recentInvites.value.length > 5) {
-        recentInvites.value = recentInvites.value.slice(0, 5);
-      }
-
-      // Reset form
-      formData.value = {
-        email: '',
-        name: '',
-        role: 'member',
-        organisationRole: 'associate'
-      };
-
-      // Emit event to parent
-      emit('invited');
-    } else {
-      toast.error(result.error || 'Failed to send invitation');
+    // Keep only last 5 invites
+    if (recentInvites.value.length > 5) {
+      recentInvites.value = recentInvites.value.slice(0, 5);
     }
+
+    // Reset form
+    formData.value = {
+      email: '',
+      name: '',
+      role: 'member',
+      organisationRole: 'associate'
+    };
+
+    // Emit event to parent
+    emit('invited');
   } catch (error) {
+    // The server's own sentence — a seat limit, an address already on the team,
+    // an expired subscription. The generic retry message hid all three.
     console.error('Failed to send invite:', error);
-    toast.error('Failed to send invitation. Please try again.');
+    toast.error(apiErrorMessage(error, 'Failed to send invitation. Please try again.'));
   } finally {
     sending.value = false;
   }

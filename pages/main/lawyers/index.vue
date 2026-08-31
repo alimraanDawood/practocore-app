@@ -101,11 +101,47 @@
       </Tabs>
     </div>
 
-    <div v-if="currentTab === 'lawyers'" class="flex flex-col xs:grid xs:grid-cols-2 md:grid-cols-3 gap-3 p-3 h-full overflow-y-scroll items-stretch content-start">
-      <SharedLawyersMemberCard :lawyer="lawyer" v-for="lawyer in filteredMembers" :key="lawyer.id" />
-    </div>
+    <template v-if="currentTab === 'lawyers'">
+      <div v-if="loading" class="flex flex-col xs:grid xs:grid-cols-2 md:grid-cols-3 gap-3 p-3">
+        <div v-for="i in 6" :key="i" class="flex flex-col gap-3 p-3 border rounded-lg bg-muted animate-pulse">
+          <div class="flex flex-row gap-2 items-center">
+            <div class="size-10 rounded-lg bg-muted-foreground/15 shrink-0"></div>
+            <div class="flex flex-col gap-2 flex-1">
+              <div class="h-4 w-2/3 rounded bg-muted-foreground/15"></div>
+              <div class="h-3 w-1/3 rounded bg-muted-foreground/15"></div>
+            </div>
+          </div>
+          <div class="h-3 w-1/2 rounded bg-muted-foreground/15"></div>
+          <div class="h-4 w-3/4 rounded bg-muted-foreground/15"></div>
+        </div>
+      </div>
+
+      <div v-else-if="loadError" class="flex flex-col items-center justify-center gap-3 p-3 py-12 m-3 border rounded-lg bg-muted/30">
+        <h3 class="text-lg font-semibold">Could not load the team</h3>
+        <p class="text-sm text-muted-foreground text-center">{{ loadError }}</p>
+        <Button variant="outline" @click="loadMembers">Try again</Button>
+      </div>
+
+      <div v-else-if="!filteredMembers.length" class="flex flex-col items-center justify-center gap-3 p-3 py-12 m-3 border rounded-lg bg-muted/30">
+        <h3 class="text-lg font-semibold">
+          {{ members.items?.length ? 'No lawyers match those filters' : 'No lawyers yet' }}
+        </h3>
+        <p class="text-sm text-muted-foreground text-center">
+          {{ members.items?.length
+            ? 'Try a different search or clear the role filter.'
+            : 'Invite your colleagues and they will appear here once they accept.' }}
+        </p>
+        <InviteUser v-if="!members.items?.length" @invited="onInvited">
+          <Button><Plus class="size-4 mr-2" /> Add Lawyer</Button>
+        </InviteUser>
+      </div>
+
+      <div v-else class="flex flex-col xs:grid xs:grid-cols-2 md:grid-cols-3 gap-3 p-3 h-full overflow-y-scroll items-stretch content-start">
+        <SharedLawyersMemberCard :lawyer="lawyer" v-for="lawyer in filteredMembers" :key="lawyer.id" />
+      </div>
+    </template>
     <LawyersPageInvitations
-      v-else
+      v-if="currentTab === 'invitations'"
       ref="invitationsRef"
       :search-query="searchQuery"
       :status-filter="statusFilter"
@@ -116,8 +152,7 @@
 
 <script setup>
 import { Plus, Search, Download, ListFilterIcon } from "lucide-vue-next";
-import {getUserOrganisationMembers} from "~/services/admin/index.ts";
-import {getSignedInUser} from "~/services/auth/index.ts";
+import {getUserOrganisationMembers, apiErrorMessage} from "~/services/admin/index.ts";
 import InviteUser from "~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue";
 import ImportLawyers from "~/components/PageComponents/Organisation/Users/ImportLawyers/ImportLawyers.vue";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -151,9 +186,32 @@ watch(currentTab, () => {
   statusFilter.value = 'all';
 });
 
+// Shared with LawyerRoles.vue, which patches a member in place after a role
+// change or a removal so the grid does not have to round-trip for a change it
+// already knows the outcome of.
 const members = useState('lawyersPageMembers', () => ({ items: [], totalItems: 0, page: 1, totalPages: 1 }));
-const data = await getUserOrganisationMembers(getSignedInUser()?.organisation);
-members.value = data;
+
+// The endpoint reads the active organisation off the auth record, so it takes no
+// argument. This used to be a top-level `await` with no error handling: a failed
+// request took the whole route down, and nothing ever refetched — after an invite
+// or an import the grid stayed stale until a hard reload.
+const loading = ref(true);
+const loadError = ref('');
+
+async function loadMembers() {
+  loading.value = true;
+  try {
+    loadError.value = '';
+    members.value = await getUserOrganisationMembers();
+  } catch (error) {
+    console.error('Failed to load members:', error);
+    loadError.value = apiErrorMessage(error, 'Failed to load the team directory');
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadMembers);
 
 const filteredMembers = computed(() => {
   let items = members.value.items ?? [];
@@ -177,7 +235,11 @@ const resultCount = computed(() => {
   return filteredMembers.value.length;
 });
 
+// An invite or a bulk import can land someone in the directory straight away
+// (an existing PractoCore account joins on acceptance, which may already have
+// happened by the time this fires), so refresh both tabs' data, not just the
+// invitation list that reloads itself.
 function onInvited() {
-  // The invitations component self-reloads; nothing extra needed here.
+  loadMembers();
 }
 </script>

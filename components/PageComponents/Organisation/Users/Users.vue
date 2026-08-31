@@ -14,7 +14,7 @@ import {
   Ellipsis,
   UserPlus
 } from 'lucide-vue-next';
-import {getOrganisationUsers, bulkUpdateMembers, updateMemberRole, removeMember} from "~/services/admin";
+import {getOrganisationUsers, bulkUpdateMembers, updateMemberRole, removeMember, BULK_MEMBER_ACTIONS_ENABLED} from "~/services/admin";
 import InviteUser from "~/components/PageComponents/Organisation/Users/InviteUser/InviteUser.vue";
 import MemberDetailsSheet from "~/components/PageComponents/Organisation/Users/MemberDetails/MemberDetailsSheet.vue";
 import {Avatar, AvatarFallback, AvatarImage} from '@/components/ui/avatar';
@@ -228,8 +228,10 @@ const confirmRemoveUser = async () => {
       </InviteUser>
     </div>
 
-    <!-- Bulk Actions Bar -->
-    <div v-if="selectedUsers.length > 0" class="flex flex-col lg:flex-row lg:items-center gap-2 p-3 border rounded-lg bg-muted/50">
+    <!-- Bulk Actions Bar. Gated: POST /api/members/bulk-update answers 400
+         ("temporarily unavailable") until the handler is implemented, so every
+         button here fails. Flip BULK_MEMBER_ACTIONS_ENABLED with the handler. -->
+    <div v-if="BULK_MEMBER_ACTIONS_ENABLED && selectedUsers.length > 0" class="flex flex-col lg:flex-row lg:items-center gap-2 p-3 border rounded-lg bg-muted/50">
       <span class="text-sm font-medium">{{ selectedUsers.length }} selected</span>
       <div class="flex w-full lg:w-fit flex-col lg:flex-row gap-2 lg:ml-auto">
         <Button

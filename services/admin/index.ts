@@ -14,6 +14,15 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     return body as T;
 }
 
+/** The server's own message for a failed call, or `fallback` for anything that
+ *  is not an Error (a network drop, a thrown string). Pair it with `api()`:
+ *  that wrapper throws `new Error(body.message)`, and this is what puts that
+ *  sentence in front of the person who needs it. */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+    const message = error instanceof Error ? error.message.trim() : '';
+    return message || fallback;
+}
+
 export async function getOrganisation(id : string) {
     return pocketbase.collection('Organisations').getOne(id);
 }
@@ -47,33 +56,10 @@ export async function sendDirectInvite(email: string, organisationId: string, ro
     });
 }
 
-export async function verifyInviteToken(token: string) {
-    return fetch(`${SERVER_URL}/api/invitations/verify/${token}`, {
-        method: 'GET',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-        },
-    }).then(res => res.json());
-}
-
-export async function acceptInvite(token: string) {
-    return fetch(`${SERVER_URL}/api/invitations/accept/${token}`, {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
-}
-
-export async function rejectInvite(token: string) {
-    return fetch(`${SERVER_URL}/api/invitations/reject/${token}`, {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-        },
-    }).then(res => res.json());
-}
+// Invite verification, acceptance and rejection live in ~/services/auth, which is
+// what every caller imports. The copies that used to sit here shared neither the
+// error handling nor the auth-store refresh, so a second implementation could only
+// drift.
 
 export async function resendInvite(inviteId: string) {
     return api(`/api/invitations/resend/${inviteId}`, {
@@ -93,14 +79,12 @@ export async function getOrganisationInvites(organisationId: string) {
     });
 }
 
-export async function checkIfUserIsAdmin() {
-    return fetch(`${SERVER_URL}/api/practocore/auth/check-organisation-admin`, {
-        method: "GET",
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
-    }).then(res => res.json());
+// Throws on a non-2xx reply. It used to swallow one and hand back
+// `{ isAdmin: undefined }`, which reads as false — so a transient failure here
+// silently hid the Lawyers nav item from a real admin with no way to tell that
+// anything had gone wrong. Callers decide what a failure means.
+export async function checkIfUserIsAdmin(): Promise<{ isAdmin: boolean }> {
+    return api('/api/practocore/auth/check-organisation-admin', { method: 'GET' });
 }
 
 // Member Management
@@ -124,27 +108,28 @@ export async function getMemberDetails(userId: string) {
     });
 }
 
+// Both of these currently answer 400 — the server handlers are stubs until
+// ownership is modelled explicitly (internal/membership/members.go). They throw
+// that message rather than returning it as if it were a result, and their UI is
+// gated on OWNERSHIP_TRANSFER_ENABLED / BULK_MEMBER_ACTIONS_ENABLED below.
 export async function transferOwnership(newOwnerId: string, organisationId: string) {
-    return fetch(`${SERVER_URL}/api/members/transfer-ownership`, {
+    return api('/api/members/transfer-ownership', {
         method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
         body: JSON.stringify({ newOwnerId, organisationId })
-    }).then(res => res.json());
+    });
 }
 
 export async function bulkUpdateMembers(userIds: string[], organisationId: string, action: string) {
-    return fetch(`${SERVER_URL}/api/members/bulk-update`, {
+    return api('/api/members/bulk-update', {
         method: 'POST',
-        headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Bearer ${pocketbase.authStore.token}`,
-        },
         body: JSON.stringify({ userIds, organisationId, action })
-    }).then(res => res.json());
+    });
 }
+
+// Server-side stubs. Flip these on in the same change that implements the
+// handlers; until then the controls they gate can only produce an error toast.
+export const BULK_MEMBER_ACTIONS_ENABLED = false;
+export const OWNERSHIP_TRANSFER_ENABLED = false;
 
 export async function getOrganisationMembers(organisationId: string) {
     return api(`/api/members/organisation/${organisationId}`, {
@@ -166,14 +151,15 @@ export function updateMemberPermissionsForOrganisation(userId: string, organisat
     return api('/api/members/update-permissions', { method: 'POST', body: JSON.stringify({ userId, organisationId, permissions }) });
 }
 
-export function updateUserPermissions(permissionsId : string, permissions: Object) {
-    return pocketbase.collection("OrganisationUserPermissions").update(permissionsId, permissions);
-}
-
-export function getUserPermissions(permissionsId : string) {
-    return pocketbase.collection("OrganisationUserPermissions").getOne(permissionsId);
-}
-
-export function updateUser(userId : string, options: object) {
-    return pocketbase.collection("Users").update(userId, options);
-}
+// Removed: updateUserPermissions / getUserPermissions / updateUser.
+//
+// The first wrote OrganisationUserPermissions straight from the browser, which
+// only worked because that collection's updateRule had been loosened to a public
+// write — the hole migration 1787500000 closes. Permission and title changes go
+// through POST /api/members/update-permissions and /update-professional-role,
+// which verify caller-is-admin and target-is-member in one transaction.
+//
+// updateUser here let an admin PATCH any column on a colleague's Users record,
+// including the active-workspace pointer. Self-service profile edits use
+// updateUser() in ~/services/auth; administrative changes belong behind a
+// server command that names the fields it is willing to change.

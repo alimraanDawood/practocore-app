@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { getMemberDetails, updateUserPermissions } from '~/services/admin'
+import { getMemberDetails } from '~/services/admin'
 import dayjs from "dayjs";
 import {getSignedInUser} from "~/services/auth";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -162,7 +162,7 @@ watch(() => props.lawyerId, () => {
               <div class="grid grid-cols-2 gap-2">
                 <div class="p-3 rounded-lg border bg-card">
                   <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.totalMatters || 0 }}</div>
-                  <div class="text-xs text-muted-foreground">Active Matters</div>
+                  <div class="text-xs text-muted-foreground">Matters</div>
                 </div>
                 <div class="p-3 rounded-lg border bg-card">
                   <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.totalDeadlines || 0 }}</div>

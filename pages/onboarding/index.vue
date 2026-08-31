@@ -685,8 +685,13 @@ onMounted(async () => {
 
     console.log(user?.value);
     if (user?.value?.organisation) {
-      const result = await checkIfUserIsAdmin();
-      isOrganizationAdmin.value = result?.isAdmin ?? false;
+      try {
+        const result = await checkIfUserIsAdmin();
+        isOrganizationAdmin.value = result?.isAdmin ?? false;
+      } catch (error) {
+        console.warn('Could not determine admin status; assuming member.', error);
+        isOrganizationAdmin.value = false;
+      }
     }
 
 

@@ -30,7 +30,17 @@ export const useAuthStore = defineStore('auth', {
                 handleWorkspaceDrift();
             });
             this._subscribed = true;
-            this.isAdmin = (await checkIfUserIsAdmin()).isAdmin;
+            // Isolated: this call throws on a non-2xx reply now, and the
+            // organisations below are needed for the workspace switcher whether
+            // or not the admin probe succeeded. Failing closed (not an admin) is
+            // the safe default, but it is worth a warning — a silent false here
+            // is what hides the Lawyers nav from a real admin.
+            try {
+                this.isAdmin = (await checkIfUserIsAdmin()).isAdmin;
+            } catch (error) {
+                console.warn('Could not determine admin status; assuming member.', error);
+                this.isAdmin = false;
+            }
             this.organisations = await getOrganisations();
 
             if(this.pb?.organisation) {

@@ -16,7 +16,7 @@ import {
   MapPin,
   MoreVertical
 } from 'lucide-vue-next';
-import { getMemberDetails, updateMemberRole, removeMember, transferOwnership } from '~/services/admin/index.js';
+import { getMemberDetails, updateMemberRole, removeMember, transferOwnership, OWNERSHIP_TRANSFER_ENABLED } from '~/services/admin/index.js';
 import { toast } from 'vue-sonner';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -313,9 +313,11 @@ const getRoleInfo = (role: string) => {
 
           <!-- Action Buttons -->
           <div class="flex flex-col gap-2">
-            <!-- Transfer Ownership -->
+            <!-- Transfer Ownership. Gated: the server has no owner to transfer
+                 yet — /api/members/transfer-ownership answers 400 — and the old
+                 hook only ever added a second admin without demoting anyone. -->
             <Button
-              v-if="memberDetails?.user?.role !== 'admin'"
+              v-if="OWNERSHIP_TRANSFER_ENABLED && memberDetails?.user?.role !== 'admin'"
               @click="showTransferDialog = true"
               variant="outline"
               class="w-full"

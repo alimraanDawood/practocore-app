@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Shield, Crown, UserMinus, User as UserIcon } from "lucide-vue-next";
-import { updateProfessionalRole, updateMemberRole, removeMember } from "~/services/admin";
+import { updateProfessionalRole, updateMemberRole, removeMember, apiErrorMessage } from "~/services/admin";
 import { toast } from "vue-sonner";
 import { getSignedInUser } from "~/services/auth";
 
@@ -61,13 +61,14 @@ const handleOrganisationRoleChange = async (newRole: string) => {
         patchMemberInList(userId, { organisationRole: newRole });
         return 'Organisation role updated!';
       },
-      error: 'Failed to update organisation role'
+      error: (e: unknown) => apiErrorMessage(e, 'Failed to update organisation role')
     });
 
     await result;
   } catch (e) {
+    // toast.promise has already shown the message; this only stops the
+    // rejection from escaping as an unhandled one.
     console.error(e);
-    toast.error("Failed to update organisation role");
   } finally {
     updating.value = false;
   }
@@ -80,17 +81,13 @@ const handleSystemRoleChange = async (newRole: string) => {
 
   updating.value = true;
   try {
-    const result = await updateMemberRole(userId, organisationId, newRole);
-    if (result.message) {
-      toast.success(result.message);
-      emits('updatedLawyer', { role: newRole });
-      patchMemberInList(userId, { role: newRole });
-    } else {
-      toast.error(result.error || 'Failed to update role');
-    }
+    const result: any = await updateMemberRole(userId, organisationId, newRole);
+    toast.success(result?.message || 'Role updated');
+    emits('updatedLawyer', { role: newRole });
+    patchMemberInList(userId, { role: newRole });
   } catch (e) {
     console.error(e);
-    toast.error("Failed to update role");
+    toast.error(apiErrorMessage(e, 'Failed to update role'));
   } finally {
     updating.value = false;
   }
@@ -103,17 +100,13 @@ const handleMakeAdmin = async () => {
 
   updating.value = true;
   try {
-    const result = await updateMemberRole(userId, organisationId, 'admin');
-    if (result.message) {
-      toast.success(result.message);
-      emits('updatedLawyer', { role: 'admin' });
-      patchMemberInList(userId, { role: 'admin' });
-    } else {
-      toast.error(result.error || 'Failed to make admin');
-    }
+    const result: any = await updateMemberRole(userId, organisationId, 'admin');
+    toast.success(result?.message || 'Member is now an admin');
+    emits('updatedLawyer', { role: 'admin' });
+    patchMemberInList(userId, { role: 'admin' });
   } catch (e) {
     console.error(e);
-    toast.error("Failed to make admin");
+    toast.error(apiErrorMessage(e, 'Failed to make admin'));
   } finally {
     updating.value = false;
   }
@@ -126,23 +119,21 @@ const handleRemoveMember = async () => {
 
   updating.value = true;
   try {
-    const result = await removeMember(userId, organisationId);
-    if (result.message) {
-      toast.success(result.message);
-      emits('updatedLawyer', { removed: true });
-      if (membersState.value?.items) {
-        membersState.value = {
-          ...membersState.value,
-          items: membersState.value.items.filter((m: any) => m.id !== userId),
-          totalItems: (membersState.value.totalItems || 1) - 1
-        };
-      }
-    } else {
-      toast.error(result.error || 'Failed to remove member');
+    const result: any = await removeMember(userId, organisationId);
+    toast.success(result?.message || 'Member removed');
+    emits('updatedLawyer', { removed: true });
+    if (membersState.value?.items) {
+      membersState.value = {
+        ...membersState.value,
+        items: membersState.value.items.filter((m: any) => m.id !== userId),
+        totalItems: (membersState.value.totalItems || 1) - 1
+      };
     }
   } catch (e) {
+    // "An organisation must retain an admin" arrives here, and the admin needs
+    // to read it — otherwise the only signal is that nothing happened.
     console.error(e);
-    toast.error("Failed to remove member");
+    toast.error(apiErrorMessage(e, 'Failed to remove member'));
   } finally {
     updating.value = false;
     showRemoveDialog.value = false;

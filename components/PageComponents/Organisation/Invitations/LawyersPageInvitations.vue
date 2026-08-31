@@ -12,7 +12,7 @@ import {
   Calendar,
   FileSpreadsheet,
 } from 'lucide-vue-next';
-import { getOrganisationInvites, resendInvite, revokeInvite } from '~/services/admin/index.js';
+import { getOrganisationInvites, resendInvite, revokeInvite, apiErrorMessage } from '~/services/admin/index.js';
 import { getSignedInUser } from '~/services/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'vue-sonner';
@@ -34,6 +34,7 @@ const emit = defineEmits<{
 
 const invites = ref<any>(null);
 const loading = ref(false);
+const loadError = ref('');
 
 onMounted(async () => {
   await loadInvites();
@@ -44,11 +45,13 @@ const loadInvites = async () => {
   try {
     const organisationId = getSignedInUser()?.organisation;
     if (!organisationId) throw new Error('No active organisation selected');
+    loadError.value = '';
     const response = await getOrganisationInvites(organisationId);
     invites.value = { items: response.invites ?? [] };
   } catch (error) {
     console.error('Failed to load invites:', error);
-    toast.error('Failed to load invitations');
+    loadError.value = apiErrorMessage(error, 'Failed to load invitations');
+    toast.error(loadError.value);
   } finally {
     loading.value = false;
   }
@@ -112,33 +115,28 @@ const inviteStats = computed(() => {
   };
 });
 
+// `api()` throws on any non-2xx, so reaching the next line means the server
+// accepted it. Checking for a `message` field to decide success was how a
+// rejection could still read as one.
 const handleResend = async (inviteId: string) => {
   try {
-    const result = await resendInvite(inviteId);
-    if (result.message) {
-      toast.success(result.message);
-      await loadInvites();
-    } else {
-      toast.error('Failed to resend invitation');
-    }
+    const result: any = await resendInvite(inviteId);
+    toast.success(result?.message || 'Invitation resent');
+    await loadInvites();
   } catch (error) {
     console.error('Failed to resend invite:', error);
-    toast.error('Failed to resend invitation');
+    toast.error(apiErrorMessage(error, 'Failed to resend invitation'));
   }
 };
 
 const handleRevoke = async (inviteId: string) => {
   try {
-    const result = await revokeInvite(inviteId);
-    if (result.message) {
-      toast.success(result.message);
-      await loadInvites();
-    } else {
-      toast.error('Failed to revoke invitation');
-    }
+    const result: any = await revokeInvite(inviteId);
+    toast.success(result?.message || 'Invitation revoked');
+    await loadInvites();
   } catch (error) {
     console.error('Failed to revoke invite:', error);
-    toast.error('Failed to revoke invitation');
+    toast.error(apiErrorMessage(error, 'Failed to revoke invitation'));
   }
 };
 
@@ -149,7 +147,7 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
 <template>
   <div class="flex flex-col gap-4 p-3 h-full overflow-y-scroll">
     <!-- Stats Cards -->
-    <div class="hidden lg:grid-cols-3 gap-2">
+    <div class="hidden lg:grid lg:grid-cols-3 gap-2">
       <div class="flex flex-col p-4 border rounded bg-muted">
         <div class="flex flex-row items-center justify-between">
           <span class="text-sm text-muted-foreground">Pending</span>
@@ -191,6 +189,17 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
       </div>
     </div>
 
+    <!-- Load failure -->
+    <div
+      v-else-if="loadError"
+      class="flex flex-col items-center justify-center py-12 p-3 border rounded-lg bg-muted/30"
+    >
+      <XCircle class="size-12 text-muted-foreground mb-3 opacity-50" />
+      <h3 class="text-lg font-semibold mb-1">Could not load invitations</h3>
+      <p class="text-sm text-muted-foreground mb-4">{{ loadError }}</p>
+      <Button variant="outline" @click="loadInvites">Try again</Button>
+    </div>
+
     <!-- Empty State -->
     <div
       v-else-if="filteredInvites.length === 0"
@@ -210,7 +219,7 @@ defineExpose({ count: computed(() => filteredInvites.value.length) });
           </Button>
         </InviteUser>
   
-          <ImportLawyers @imported="onInvited" class="w-full">
+          <ImportLawyers @imported="emit('invited'); loadInvites()" class="w-full">
               <Button class="xs:w-fit w-full" variant="secondary">
                 <FileSpreadsheet class="size-4 mr-2" />
                 Import With Excel
