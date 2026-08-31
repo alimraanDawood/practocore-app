@@ -24,6 +24,9 @@
     }
   },
   "plugins": {
+    "hot-update": {
+      "enabled": false
+    },
     "deep-link": {
       "desktop": {
         "schemes": ["practocore"]

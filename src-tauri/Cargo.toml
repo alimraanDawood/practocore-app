@@ -46,6 +46,10 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-updater = "2.11.0"
 tauri-plugin-process = "2.3.1"
+# Phase 4 proof of concept only. Pin the reviewed source revision rather than
+# floating a pre-1.0 crate; keep the plugin disabled in signed release config
+# until platform/security gates have explicit approval.
+tauri-plugin-hot-update = { git = "https://github.com/yanqianglu/tauri-plugin-hot-update", rev = "84f6ba5f18535b78bae33454f6007d35dcdf4ab1" }
 # Desktop only: "Launch on startup" toggle in notification settings. Writes a
 # LaunchAgent (macOS), registry Run key (Windows), or ~/.config/autostart entry
 # (Linux). Mobile has no equivalent, hence the desktop-only target.

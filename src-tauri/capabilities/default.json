@@ -12,6 +12,7 @@
     "notification:default",
     "updater:default",
     "process:default",
+    "hot-update:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",

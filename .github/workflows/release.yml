@@ -183,6 +183,9 @@ jobs:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: node scripts/release/create-tauri-updater-config.mjs
 
+      - name: Verify frontend OTA remains dark-shipped
+        run: node scripts/release/check-tauri-hot-update-config.mjs
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

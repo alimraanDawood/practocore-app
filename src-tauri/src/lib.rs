@@ -138,6 +138,13 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // This must wrap assets before Tauri consumes the Context, otherwise the
+    // embedded bundle cannot be the permanent fallback. The release config is
+    // dark-shipped with `enabled: false`; registering it now lets us validate
+    // native integration without permitting frontend OTA traffic.
+    let mut context = tauri::generate_context!();
+    #[cfg(desktop)]
+    let hot_update = tauri_plugin_hot_update::install(&mut context);
     let mut builder = tauri::Builder::default();
 
     // Single-instance MUST be the first plugin registered, and is desktop-only.
@@ -148,6 +155,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder
+            .plugin(tauri_plugin_hot_update::init(hot_update))
             .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}))
             // The updater verifies every downloaded artifact against the public
             // key embedded by the signed release configuration. It is kept out
@@ -228,6 +236,6 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
