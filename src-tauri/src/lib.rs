@@ -166,6 +166,15 @@ pub fn run() {
     // empty body here is deliberate — we don't need to do anything extra.
     #[cfg(desktop)]
     {
+        // On Linux, the single-instance plugin acquires a desktop-bus name
+        // during setup. Development rebuilds can inherit a stale name after a
+        // previous dev shell exits, which makes the new process exit cleanly
+        // before it can create a window. Release builds retain the guard so a
+        // second process still forwards deep links to the running application.
+        if !cfg!(debug_assertions) {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}));
+        }
+
         // The pre-1.0 frontend OTA plugin is not loaded in ordinary builds.
         // It mutates Tauri's asset provider before startup, so isolate it to
         // explicitly approved POC builds while the platform test matrix runs.
@@ -175,7 +184,6 @@ pub fn run() {
         }
 
         builder = builder
-            .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}))
             // The updater verifies every downloaded artifact against the public
             // key embedded by the signed release configuration. It is kept out
             // of mobile builds; Android/iOS use their platform update channels.
@@ -257,5 +265,5 @@ pub fn run() {
             }
         })
         .run(context)
-        .expect("error while running tauri application");
+        .expect("error while running Tauri application");
 }
