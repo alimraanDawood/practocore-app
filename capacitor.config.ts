@@ -35,6 +35,16 @@ const config: CapacitorConfig = {
       style: 'DEFAULT',
       insetsHandling: 'css',
     },
+    // Download signed OTA bundles in the background, but never activate them
+    // mid-session. services/capacitor-updates queues a completed bundle only
+    // for the next cold launch after the user has left the app.
+    CapacitorUpdater: {
+      autoUpdate: 'onlyDownload',
+      appReadyTimeout: 20_000,
+      responseTimeout: 30,
+      periodCheckDelay: 21_600,
+      resetWhenUpdate: true,
+    },
   },
 };
 

@@ -6,7 +6,13 @@
     </div>
 
     <div v-if="!desktop" class="rounded-lg border p-4 text-sm text-muted-foreground">
-      Updates for this platform are delivered through its app store or distribution channel.
+      <template v-if="mobile">
+        <p class="font-medium text-foreground">{{ mobileHeading }}</p>
+        <p v-if="capacitorState.version" class="mt-1">Bundle {{ capacitorState.version }}</p>
+        <p v-if="capacitorState.error" class="mt-2 text-destructive">{{ capacitorState.error }}</p>
+        <p v-else class="mt-2">Downloaded updates activate only after you fully close and reopen the app.</p>
+      </template>
+      <template v-else>Updates for this platform are delivered through its app store or distribution channel.</template>
     </div>
 
     <div v-else class="rounded-lg border p-4 space-y-4">
@@ -50,9 +56,12 @@ import {
   downloadDesktopUpdate,
   restartToApplyDesktopUpdate,
 } from '~/services/desktop-updates';
+import { capacitorUpdateState as capacitorState } from '~/services/capacitor-updates';
+import { Capacitor } from '@capacitor/core';
 import { isDesktop } from '~/utils/isDesktop';
 
 const desktop = isDesktop();
+const mobile = Capacitor.isNativePlatform() && !desktop;
 const heading = computed(() => {
   switch (state.status) {
     case 'checking': return 'Checking for updates…';
@@ -61,6 +70,14 @@ const heading = computed(() => {
     case 'ready': return 'Update ready to install';
     case 'error': return 'Update check failed';
     default: return 'Your application is up to date';
+  }
+});
+const mobileHeading = computed(() => {
+  switch (capacitorState.status) {
+    case 'downloading': return 'Downloading an update';
+    case 'ready-next-launch': return 'Update ready for your next launch';
+    case 'failed': return 'Update was not applied';
+    default: return 'Mobile updates are checked automatically';
   }
 });
 </script>

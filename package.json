@@ -34,6 +34,7 @@
     "@capacitor/splash-screen": "^8.0.0",
     "@capacitor/status-bar": "^8.0.2",
     "@capgo/capacitor-social-login": "^8.3.5",
+    "@capgo/capacitor-updater": "^8.51.15",
     "@dagrejs/dagre": "^1.1.8",
     "@iconify-json/lucide": "^1.2.88",
     "@joint/core": "^4.2.3",
@@ -111,6 +112,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.1",
+    "@capgo/cli": "^8.45.1",
     "@hypernym/nuxt-gsap": "^2.4.3",
     "@pinia/nuxt": "^0.11.3",
     "@tauri-apps/cli": "^2.10.0",
