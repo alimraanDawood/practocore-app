@@ -1,6 +1,7 @@
 import { reactive } from 'vue';
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater';
 import { isDesktop } from '~/utils/isDesktop';
+import { checkUpdateControl } from '~/services/update-control';
 
 export type DesktopUpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
 
@@ -29,6 +30,19 @@ export async function checkForDesktopUpdate(): Promise<void> {
     desktopUpdateState.status = 'checking';
     desktopUpdateState.error = null;
     try {
+      const policy = await checkUpdateControl();
+      // A configured control plane withholds native artifact checks unless it
+      // explicitly allows a native update. No configured plane preserves the
+      // official updater's existing independent fallback behavior.
+      if (policy?.decision === 'backend_update_required' || policy?.decision === 'incompatible') {
+        desktopUpdateState.status = 'error';
+        desktopUpdateState.error = policy.message || 'This application is not compatible with the selected update channel.';
+        return;
+      }
+      if (policy && !['prompt_native_update', 'require_native_update'].includes(policy.decision)) {
+        desktopUpdateState.status = 'idle';
+        return;
+      }
       const { check } = await import('@tauri-apps/plugin-updater');
       const update = await check();
       desktopUpdateState.lastCheckedAt = new Date();

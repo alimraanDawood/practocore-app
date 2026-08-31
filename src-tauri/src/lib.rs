@@ -47,6 +47,24 @@ fn allow_microphone(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 #[cfg(desktop)]
 mod notifications;
 
+/// Update routing is compiled into the native shell. A downloaded web bundle
+/// can read this value to make a check, but cannot redirect it to another host.
+#[cfg(desktop)]
+#[derive(serde::Serialize)]
+struct UpdateControlConfig {
+    url: String,
+    channel: String,
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn update_control_config() -> UpdateControlConfig {
+    UpdateControlConfig {
+        url: option_env!("PRACTOCORE_UPDATE_CONTROL_URL").unwrap_or_default().to_string(),
+        channel: option_env!("PRACTOCORE_UPDATE_CHANNEL").unwrap_or("production").to_string(),
+    }
+}
+
 /// Tracks whether a *real* quit was requested (the tray "Quit" item), so the
 /// window-close handler can tell it apart from the user clicking the window's
 /// close button. Without this flag every close — including the deliberate quit —
@@ -179,6 +197,7 @@ pub fn run() {
             .manage(TrayState::default())
             .manage(notifications::NotifierState::default())
             .invoke_handler(tauri::generate_handler![
+                update_control_config,
                 notifications::start_notification_listener,
                 notifications::stop_notification_listener,
             ])

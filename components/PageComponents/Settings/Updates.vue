@@ -30,6 +30,17 @@
       <p v-if="state.notes" class="whitespace-pre-line text-sm text-muted-foreground">{{ state.notes }}</p>
       <p v-if="state.error" class="text-sm text-destructive">{{ state.error }}</p>
 
+      <div v-if="control.configured" class="rounded-md bg-muted/50 p-3 text-sm">
+        <p class="font-medium">Release policy</p>
+        <p v-if="control.checking" class="mt-1 text-muted-foreground">Checking the configured channel…</p>
+        <template v-else-if="control.decision">
+          <p class="mt-1 text-muted-foreground">{{ policyMessage }}</p>
+          <p v-if="control.version" class="mt-1 text-xs text-muted-foreground">Policy version {{ control.version }}</p>
+        </template>
+        <p v-else class="mt-1 text-muted-foreground">No policy decision has been received yet.</p>
+        <p v-if="control.error" class="mt-1 text-destructive">{{ control.error }}</p>
+      </div>
+
       <div v-if="state.status === 'downloading'" class="space-y-2">
         <Progress :model-value="state.progress ?? undefined" />
         <p class="text-sm text-muted-foreground">Downloading and verifying{{ state.progress === null ? '…' : ` (${state.progress}%)` }}</p>
@@ -59,6 +70,7 @@ import {
 import { capacitorUpdateState as capacitorState } from '~/services/capacitor-updates';
 import { Capacitor } from '@capacitor/core';
 import { isDesktop } from '~/utils/isDesktop';
+import { updateControlState as control } from '~/services/update-control';
 
 const desktop = isDesktop();
 const mobile = Capacitor.isNativePlatform() && !desktop;
@@ -78,6 +90,19 @@ const mobileHeading = computed(() => {
     case 'ready-next-launch': return 'Update ready for your next launch';
     case 'failed': return 'Update was not applied';
     default: return 'Mobile updates are checked automatically';
+  }
+});
+const policyMessage = computed(() => {
+  switch (control.decision) {
+    case 'none': return 'This channel has no update for this installation.';
+    case 'prompt_native_update': return 'A native update is approved for this installation.';
+    case 'require_native_update': return 'A native update is required before you continue.';
+    case 'silent_web_update': return 'A web update is approved; it activates safely on a future launch.';
+    case 'prompt_restart': return 'A web update is ready to activate on restart.';
+    case 'backend_update_required': return 'Your firm backend must be updated before this release can be used.';
+    case 'incompatible': return 'This installation does not meet the release compatibility requirements.';
+    case 'rollback': return 'This channel has rolled back to the approved release.';
+    default: return 'No policy decision has been received yet.';
   }
 });
 </script>

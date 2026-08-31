@@ -32,3 +32,23 @@ Before production promotion, install the previous signed build on a clean test m
 6. Offline checks, interrupted download, full-disk staging, and a failed restart preserve a usable installed version.
 
 Package-manager Linux installations (deb/rpm) remain managed by their package manager; the updater target is the direct AppImage distribution.
+# Local control-service integration test
+
+Run the standalone service first, create the example release, and assign it to
+the `beta` channel as documented in its README. Then launch a desktop dev shell
+with the policy endpoint compiled into it:
+
+```sh
+PRACTOCORE_UPDATE_CONTROL_URL=http://127.0.0.1:8080 \
+PRACTOCORE_UPDATE_CHANNEL=beta \
+bunx tauri dev
+```
+
+Open **Settings → Application updates** and choose **Check now**. The release
+policy box should show the `prompt_native_update` decision from the local
+service. This is a policy-flow test: the official Tauri updater will only offer
+an actual download once the configured signed updater endpoint has a newer
+release artifact.
+
+Do not ship an `http://` endpoint. Release builds accept an HTTPS production
+endpoint only, compiled by the Rust build script into the native shell.
