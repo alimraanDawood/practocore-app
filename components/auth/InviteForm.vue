@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Mail, User as UserIcon, Shield, Send, CheckCircle, Clock, Crown } from 'lucide-vue-next';
-import { sendDirectInvite, apiErrorMessage } from '~/services/admin/index.js';
+import { sendDirectInvite, getOrganisationRoles, apiErrorMessage } from '~/services/admin/index.js';
 import { toast } from 'vue-sonner';
 import { getSignedInUser } from '~/services/auth';
 
@@ -24,55 +24,75 @@ const isValidEmail = computed(() => {
   return emailRegex.test(formData.value.email);
 });
 
+// Authority, not "role". The rebuild's whole premise is that "role" meant two
+// different things on this surface — who administers the workspace, and what
+// somebody does as a lawyer — and every screen now names them apart. Owner is
+// absent deliberately: ownership moves by transfer, it is not granted.
 const roleOptions = [
   {
     value: 'member',
     label: 'Member',
     icon: UserIcon,
-    description: 'Can view and manage matters they are assigned to'
+    description: 'Access comes from their title. Set it below.'
   },
   {
     value: 'admin',
     label: 'Admin',
     icon: Crown,
-    description: 'Full access including user management and settings'
+    // Says the thing that actually matters and used not to be said anywhere:
+    // an admin holds every permission whatever title they are given, so the
+    // picker below stops deciding their access.
+    description: 'Administers the firm — billing, membership and settings — and holds every permission regardless of the title below.'
   }
 ];
 
-const organisationRoleOptions = [
-  {
-    value: 'partner',
-    label: 'Partner',
-    description: 'Senior leadership and equity partner'
-  },
-  {
-    value: 'senior_associate',
-    label: 'Senior Associate',
-    description: 'Experienced attorney with advanced responsibilities'
-  },
-  {
-    value: 'associate',
-    label: 'Associate',
-    description: 'Licensed attorney working on matters'
-  },
-  {
-    value: 'paralegal',
-    label: 'Paralegal',
-    description: 'Legal support professional'
-  },
-  {
-    value: 'intern',
-    label: 'Intern',
-    description: 'Law student or trainee'
-  }
+// The firm's own titles, not a hardcoded five.
+//
+// A title now CARRIES a permission bundle, and a firm may rename one or change
+// what it permits. Describing a Paralegal here as a "Legal support professional"
+// while the firm has redefined what a paralegal may do is how somebody gets
+// invited into access nobody meant to give them.
+//
+// The seeded five stay as the fallback, so a failed lookup leaves the picker
+// populated rather than empty — an invitation still has to be sendable.
+const FALLBACK_ORGANISATION_ROLES = [
+  { value: 'partner', label: 'Partner', description: 'Senior leadership and equity partner' },
+  { value: 'senior_associate', label: 'Senior Associate', description: 'Experienced attorney with advanced responsibilities' },
+  { value: 'associate', label: 'Associate', description: 'Licensed attorney working on matters' },
+  { value: 'paralegal', label: 'Paralegal', description: 'Legal support professional' },
+  { value: 'intern', label: 'Intern', description: 'Law student or trainee' }
 ];
+
+const organisationRoleOptions = ref(FALLBACK_ORGANISATION_ROLES);
+
+onMounted(async () => {
+  const organisationId = user?.organisation;
+  if (!organisationId) return;
+  try {
+    const response: any = await getOrganisationRoles(organisationId);
+    const roles = response?.roles ?? [];
+    if (!roles.length) return;
+    organisationRoleOptions.value = roles.map((r: any) => ({
+      value: r.key,
+      label: r.label,
+      description: r.description,
+    }));
+    // A firm that renamed or removed the seeded default would otherwise open this
+    // form on a title it no longer has.
+    if (!organisationRoleOptions.value.some(o => o.value === formData.value.organisationRole)) {
+      formData.value.organisationRole = organisationRoleOptions.value[0].value;
+    }
+  } catch (e) {
+    console.error('Failed to load organisation roles:', e);
+  }
+});
 
 const selectedRoleInfo = computed(() => {
   return roleOptions.find(option => option.value === formData.value.role);
 });
 
 const selectedOrganisationRoleInfo = computed(() => {
-  return organisationRoleOptions.find(option => option.value === formData.value.organisationRole);
+  return organisationRoleOptions.value.find(option => option.value === formData.value.organisationRole);
 });
 
 const handleSendInvite = async () => {
@@ -206,9 +226,40 @@ const formatTimeAgo = (timestamp: Date) => {
         </p>
       </div>
 
-      <!-- Role Selection -->
+      <!-- Title first: it carries the permission bundle, and "invite Sarah as a
+           paralegal" is the sentence an admin is actually forming. Matches the
+           directory's column order, Title then Authority. -->
+      <div class="flex flex-col gap-1.5 w-full">
+        <Label for="organisationRole">Title <span class="text-destructive">*</span></Label>
+        <Select class="w-full" v-model="formData.organisationRole">
+          <SelectTrigger id="organisationRole" class="w-full">
+            {{ selectedOrganisationRoleInfo?.label || 'Select a title' }}
+          </SelectTrigger>
+          <SelectContent class="w-full">
+            <SelectItem
+              v-for="option in organisationRoleOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              <div class="flex flex-col gap-0.5">
+                <span class="font-medium">{{ option.label }}</span>
+                <span class="text-xs text-muted-foreground">{{ option.description }}</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <div v-if="selectedOrganisationRoleInfo" class="flex flex-row items-start gap-2 p-2 bg-muted/50 rounded-md">
+          <Shield class="size-4 mt-0.5 text-muted-foreground" />
+          <p class="text-xs text-muted-foreground">
+            {{ selectedOrganisationRoleInfo.description }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Authority: who administers the workspace. Second, because it is the
+           exception — most invitations are a title and nothing more. -->
       <div class="flex flex-col gap-1.5">
-        <Label for="role">Role <span class="text-destructive">*</span></Label>
+        <Label for="role">Authority <span class="text-destructive">*</span></Label>
         <Select v-model="formData.role" class="w-full">
           <SelectTrigger id="role" class="w-full">
             <SelectValue />
@@ -230,34 +281,6 @@ const formatTimeAgo = (timestamp: Date) => {
           <component :is="selectedRoleInfo.icon" class="size-4 mt-0.5 text-muted-foreground" />
           <p class="text-xs text-muted-foreground">
             {{ selectedRoleInfo.description }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Organisation Role Selection -->
-      <div class="flex flex-col gap-1.5 w-full">
-        <Label for="organisationRole">Organisation Role <span class="text-destructive">*</span></Label>
-        <Select class="w-full" v-model="formData.organisationRole">
-          <SelectTrigger id="organisationRole" class="w-full">
-            {{ formData.organisationRole ? organisationRoleOptions.find(option => option.value === formData.organisationRole)?.label : 'Select organisation role' }}
-          </SelectTrigger>
-          <SelectContent class="w-full">
-            <SelectItem
-              v-for="option in organisationRoleOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              <div class="flex flex-col gap-0.5">
-                <span class="font-medium">{{ option.label }}</span>
-                <span class="text-xs text-muted-foreground">{{ option.description }}</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <div v-if="selectedOrganisationRoleInfo" class="flex flex-row items-start gap-2 p-2 bg-muted/50 rounded-md">
-          <Shield class="size-4 mt-0.5 text-muted-foreground" />
-          <p class="text-xs text-muted-foreground">
-            {{ selectedOrganisationRoleInfo.description }}
           </p>
         </div>
       </div>

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner';
+import { Copy, Download } from 'lucide-vue-next';
+import { downloadTemplate } from './template';
 import {
   Upload,
   CheckCircle2,
@@ -9,8 +12,6 @@ import {
   ArrowLeft,
   Loader2,
   Info,
-  ExternalLink,
-  FileSpreadsheet,
 } from 'lucide-vue-next';
 
 interface ParsedRow {
@@ -39,6 +40,10 @@ const props = defineProps<{
   errorCount: number;
   roleLabels: Record<string, string>;
   orgRoleLabels: Record<string, string>;
+  /** What each title allows, shown on the template's Titles sheet so whoever
+   *  fills it in can see what they are handing out. */
+  roleDescriptions?: Record<string, string>;
+  organisationName?: string;
   isDragging: boolean;
   fileInput: HTMLInputElement | null;
 }>();
@@ -60,13 +65,31 @@ function triggerFilePick() {
   localFileInput.value?.click();
 }
 
-// The /copy suffix prompts each user to save their own private copy to
-// their own Google Drive — no firm can view or edit another firm's data.
-const GOOGLE_SHEET_TEMPLATE_URL =
-  'https://docs.google.com/spreadsheets/d/1j4JRkPvbiXXX0kp6prB6Dc7LR2HtlYjT1rc7njBwhiM/copy';
+// The template is generated here, from THIS firm's titles, rather than being a
+// copy of one shared Google Sheet.
+//
+// A static document cannot know a firm's titles: a firm that renamed a title
+// would not find its own vocabulary in the one file the product handed it. It
+// also required a Google account, put colleague names and addresses into
+// somebody's Drive, and rested on a single doc staying alive and shared.
+function downloadTheTemplate() {
+  const roles = Object.entries(props.orgRoleLabels).map(([key, label]) => ({
+    key,
+    label,
+    description: props.roleDescriptions?.[key],
+  }));
+  downloadTemplate(roles, props.organisationName);
+  toast.success('Template downloaded with your firm\'s titles');
+}
 
-function openTemplate() {
-  window.open(GOOGLE_SHEET_TEMPLATE_URL, '_blank', 'noopener,noreferrer');
+// The firm's titles as a person would type them, and as the template's dropdown
+// should list them. The importer matches either the label or the underlying key,
+// so the label is the one to hand out.
+const titleList = computed(() => Object.values(props.orgRoleLabels).join(' · '));
+
+async function copyTitles() {
+  await navigator.clipboard.writeText(Object.values(props.orgRoleLabels).join('\n'));
+  toast.success("Copied your firm's titles — paste them into the sheet's dropdown");
 }
 </script>
 
@@ -82,18 +105,17 @@ function openTemplate() {
           <span class="font-semibold text-sm">How it works</span>
         </div>
         <ol class="flex flex-col gap-2 pl-1 text-sm text-muted-foreground list-decimal list-inside">
-          <li>Open the Google Sheets template and click <strong class="text-foreground">Make a copy</strong> — it saves privately to your own Google Drive.</li>
-          <li>Fill in each lawyer's details, one row per person. Use the built-in dropdowns for Role and Organisation Role.</li>
-          <li>When done, go to <strong class="text-foreground">File → Download → Microsoft Excel (.xlsx)</strong> or <em>CSV</em>.</li>
-          <li>Upload the downloaded file below and review before sending invitations.</li>
+          <li>Download the template — it comes with <strong class="text-foreground">your firm's own titles</strong> already in it.</li>
+          <li>Fill in one row per person. <strong class="text-foreground">Authority</strong> is who administers the firm; <strong class="text-foreground">Title</strong> is what they may do.</li>
+          <li>Delete the two example rows, and save as <strong class="text-foreground">.xlsx</strong> or <em>CSV</em>.</li>
+          <li>Upload it below. Nothing is sent until you review the rows.</li>
         </ol>
       </div>
 
-      <!-- Open template button -->
-      <Button class="w-full" @click="openTemplate">
-        <FileSpreadsheet class="size-4 mr-2" />
-        Open Template in Google Sheets
-        <ExternalLink class="size-3.5 ml-2 opacity-70" />
+      <!-- Download template -->
+      <Button class="w-full" @click="downloadTheTemplate">
+        <Download class="size-4 mr-2" />
+        Download the template
       </Button>
 
       <!-- Privacy note -->
@@ -122,13 +144,34 @@ function openTemplate() {
                 <td class="px-3 py-2 text-muted-foreground">Valid email (required)</td>
               </tr>
               <tr>
-                <td class="px-3 py-2 font-medium">Role</td>
-                <td class="px-3 py-2 font-mono text-xs text-muted-foreground">member · admin</td>
+                <td class="px-3 py-2 font-medium">Authority</td>
+                <td class="px-3 py-2 text-xs text-muted-foreground">
+                  <span class="font-mono">Member · Admin</span><br/>
+                  <!-- The fact most likely to cause an accidental over-grant, and
+                       the one the old copy never stated anywhere. -->
+                  An admin holds every permission regardless of their title.
+                  Blank means Member.
+                </td>
               </tr>
               <tr>
-                <td class="px-3 py-2 font-medium">Organisation Role</td>
-                <td class="px-3 py-2 font-mono text-xs text-muted-foreground leading-relaxed">
-                  partner · senior_associate<br/>associate · paralegal · intern
+                <td class="px-3 py-2 font-medium">Title</td>
+                <td class="px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                  <!-- YOUR firm's titles, which it may have renamed, not a fixed
+                       five. The shared template's dropdown cannot know them, so
+                       they are copyable straight into that sheet's data
+                       validation. Leave the cell blank and the row takes the
+                       firm's default. -->
+                  <div class="flex flex-row items-start gap-2">
+                    <span class="font-mono">{{ titleList }}</span>
+                    <Button variant="ghost" size="icon-sm" class="shrink-0" title="Copy for your sheet" @click="copyTitles">
+                      <Copy class="size-3" />
+                    </Button>
+                  </div>
+                  <span class="block mt-1">
+                    A title decides what they may do. Leave it blank and they get
+                    the firm's default. The template's dropdown reads these from
+                    its own Titles sheet, so you can edit them there too.
+                  </span>
                 </td>
               </tr>
             </tbody>
@@ -205,8 +248,8 @@ function openTemplate() {
                 <th class="text-left px-3 py-2 font-medium text-muted-foreground w-8">#</th>
                 <th class="text-left px-3 py-2 font-medium text-muted-foreground">Name</th>
                 <th class="text-left px-3 py-2 font-medium text-muted-foreground">Email</th>
-                <th class="text-left px-3 py-2 font-medium text-muted-foreground">Role</th>
-                <th class="text-left px-3 py-2 font-medium text-muted-foreground">Org Role</th>
+                <th class="text-left px-3 py-2 font-medium text-muted-foreground">Authority</th>
+                <th class="text-left px-3 py-2 font-medium text-muted-foreground">Title</th>
                 <th class="w-8 px-2"></th>
               </tr>
             </thead>
@@ -227,10 +270,9 @@ function openTemplate() {
                   </Badge>
                 </td>
                 <td class="px-3 py-2">
-                  <Badge v-if="row.organisationRole" variant="outline" class="text-xs">
+                  <Badge variant="outline" class="text-xs">
                     {{ orgRoleLabels[row.organisationRole] ?? row.organisationRole }}
                   </Badge>
-                  <span v-else class="text-muted-foreground text-xs">—</span>
                 </td>
                 <td class="px-2 py-2">
                   <Button
