@@ -37,7 +37,7 @@ or an approved web bundle:
 
 **Self-hosted Capacitor OTA** packages and uploads a ZIP to the production host,
 then creates the release and advances an approved non-production channel through
-the service's private Docker network. It rejects any change since `base_ref`
+the service's local loopback admin request over SSH. It rejects any change since `base_ref`
 that touches a native shell, Capacitor config, native lockfile, or native
 dependency manifest.
 
@@ -47,10 +47,10 @@ Add these repository secrets before running it:
   `UPDATE_DEPLOY_SSH_PRIVATE_KEY`: restricted SSH deployment account.
 - `UPDATE_DEPLOY_KNOWN_HOSTS`: verified SSH host key entry; do not use an
   unverified `ssh-keyscan` result in CI.
-- `UPDATE_ARTIFACT_DIR`: host path served by Nginx Proxy Manager at `/bundles`
-  (for example `/opt/practocore-update-service/artifacts/bundles`).
-- `UPDATE_DOCKER_NETWORK`: the Docker network shared by NPM and
-  `practocore-update-service`.
+- `UPDATE_ARTIFACT_DIR`: the update service's local bundle directory (for
+  example `/opt/practocore-update-service/bundles`). The service exposes its
+  direct ZIP files at `/bundles`; Nginx Proxy Manager simply proxies the domain
+  to the service on port `2057`.
 - `UPDATE_SERVICE_ADMIN_TOKEN`: the same secret configured on the server.
 
 Protect the `internal` and `beta` GitHub environments. The workflow deliberately

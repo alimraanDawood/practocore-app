@@ -111,14 +111,13 @@ jobs:
         env:
           HOST: ${{ secrets.UPDATE_DEPLOY_HOST }}
           USER: ${{ secrets.UPDATE_DEPLOY_USER }}
-          NETWORK: ${{ secrets.UPDATE_DOCKER_NETWORK }}
           ADMIN_TOKEN: ${{ secrets.UPDATE_SERVICE_ADMIN_TOKEN }}
           CHANNEL: ${{ inputs.channel }}
           BUNDLE: ${{ inputs.bundle }}
           SHA256: ${{ steps.package.outputs.sha256 }}
         run: |
           set -euo pipefail
-          test -n "$NETWORK" && test -n "$ADMIN_TOKEN" || { echo '::error::UPDATE_DOCKER_NETWORK and UPDATE_SERVICE_ADMIN_TOKEN are required'; exit 1; }
+          test -n "$ADMIN_TOKEN" || { echo '::error::UPDATE_SERVICE_ADMIN_TOKEN is required'; exit 1; }
           RELEASE_ID="mobile-web-${BUNDLE}-${GITHUB_RUN_ID}"
           ARTIFACT_URL="https://updates.practocore.com/bundles/practocore-web-${BUNDLE}.zip"
           RELEASE="$(jq -cn --arg id "$RELEASE_ID" --arg version "$BUNDLE" --arg url "$ARTIFACT_URL" --arg sha "$SHA256" '{id:$id,appId:"com.practocore.app",target:"web",version:$version,decision:"silent_web_update",provider:"self-hosted",providerConfig:{bundleUrl:$url},archiveSha256:$sha,minNativeVersion:"0.2.2",notes:"Automated self-hosted OTA release."}')"
@@ -130,6 +129,6 @@ jobs:
           scp /tmp/release.b64 /tmp/channel.b64 /tmp/update-service-admin-token "$USER@$HOST:/tmp/"
           ssh "$USER@$HOST" "set -eu; \
             TOKEN=\$(cat /tmp/update-service-admin-token); \
-            base64 -d /tmp/release.b64 | docker run --rm --network '$NETWORK' -i curlimages/curl:8.12.1 -fsS -X POST http://practocore-update-service:2057/admin/releases -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' --data-binary @-; \
-            base64 -d /tmp/channel.b64 | docker run --rm --network '$NETWORK' -i curlimages/curl:8.12.1 -fsS -X PUT http://practocore-update-service:2057/admin/channels/$CHANNEL -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' --data-binary @-; \
+            base64 -d /tmp/release.b64 | curl -fsS -X POST http://127.0.0.1:2057/admin/releases -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' --data-binary @-; \
+            base64 -d /tmp/channel.b64 | curl -fsS -X PUT http://127.0.0.1:2057/admin/channels/$CHANNEL -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' --data-binary @-; \
             rm -f /tmp/release.b64 /tmp/channel.b64 /tmp/update-service-admin-token"
