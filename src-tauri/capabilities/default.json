@@ -10,6 +10,8 @@
     "opener:default",
     "deep-link:default",
     "notification:default",
+    "updater:default",
+    "process:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",

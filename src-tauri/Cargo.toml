@@ -44,6 +44,8 @@ tauri-plugin-deep-link = "2"
 # live process directly and don't use this.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-updater = "2.11.0"
+tauri-plugin-process = "2.3.1"
 # Desktop only: "Launch on startup" toggle in notification settings. Writes a
 # LaunchAgent (macOS), registry Run key (Windows), or ~/.config/autostart entry
 # (Linux). Mobile has no equivalent, hence the desktop-only target.

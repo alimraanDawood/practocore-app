@@ -31,6 +31,7 @@
           <PageComponentsSettingsProfile v-if="activeTab === 'profile'"/>
           <PageComponentsSettingsNotifications v-if="activeTab === 'notifications'"/>
           <PageComponentsSettingsAIProviders v-if="activeTab === 'ai'"/>
+          <PageComponentsSettingsUpdates v-if="activeTab === 'updates'" />
           <div v-if="activeTab === 'billing' && canSeeBilling" class="flex flex-col w-full gap-6">
             <div class="flex flex-col">
               <h2 class="text-2xl font-semibold ibm-plex-serif">Billing</h2>
@@ -135,6 +136,14 @@
                 </div>
                 <ChevronRight class="size-5 text-muted-foreground"/>
               </Button>
+              <Button variant="ghost" class="justify-between items-center"
+                      @click="navigateTo('/main/settings?tab=updates')">
+                <div class="flex flex-row justify-center items-center gap-2">
+                  <Download />
+                  Application updates
+                </div>
+                <ChevronRight class="size-5 text-muted-foreground"/>
+              </Button>
             </div>
           </div>
 
@@ -200,7 +209,7 @@ import {
   Globe,
   Users,
   UserPlus,
-  Moon, Sparkles, WifiOff
+  Moon, Sparkles, WifiOff, Download
 } from "lucide-vue-next"
 import {getSignedInUser, signOut} from "~/services/auth"
 
@@ -213,7 +222,7 @@ const router = useRouter()
 
 // Tab selection is URL-backed (`?tab=`) so links can land on a specific panel
 // (e.g. the AI can send a user straight to Billing). Unknown/missing → profile.
-const VALID_TABS = ['profile', 'notifications', 'ai', 'billing', 'eccmis', 'documentation', 'support']
+const VALID_TABS = ['profile', 'notifications', 'ai', 'billing', 'updates', 'eccmis', 'documentation', 'support']
 const activeTab = computed({
   get() {
     const t = route.query.tab
@@ -248,6 +257,7 @@ const visibleTabs = computed(() => [
   { key: 'notifications', label: 'Notifications', show: true },
   { key: 'ai', label: 'AI Provider', show: true },
   { key: 'billing', label: 'Billing', show: canSeeBilling.value },
+  { key: 'updates', label: 'Updates', show: true },
   { key: 'eccmis', label: 'ECCMIS Sync', show: true, startsGroup: true },
   { key: 'documentation', label: 'Documentation', show: true },
   { key: 'support', label: 'Support', show: true },

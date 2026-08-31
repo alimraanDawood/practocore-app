@@ -147,7 +147,13 @@ pub fn run() {
     // empty body here is deliberate — we don't need to do anything extra.
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}));
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}))
+            // The updater verifies every downloaded artifact against the public
+            // key embedded by the signed release configuration. It is kept out
+            // of mobile builds; Android/iOS use their platform update channels.
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
     }
 
     builder = builder

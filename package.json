@@ -50,6 +50,8 @@
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-notification": "~2.3.3",
     "@tauri-apps/plugin-opener": "~2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "@tiptap/extension-text-align": "^3.19.0",
     "@tiptap/extension-underline": "^3.19.0",
     "@vee-validate/zod": "^4.15.1",

@@ -170,15 +170,30 @@ jobs:
       - name: Verify release packaging
         run: bun run release:verify
 
+      - name: Require desktop updater signing configuration
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          test -n "$TAURI_UPDATER_PUBLIC_KEY" || { echo "::error::TAURI_UPDATER_PUBLIC_KEY is required"; exit 1; }
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "::error::TAURI_SIGNING_PRIVATE_KEY is required"; exit 1; }
+
+      - name: Configure signed desktop updater
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: node scripts/release/create-tauri-updater-config.mjs
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           # Still no tagName here: tauri-action's own publishing would name the
           # assets after the app version (PractoCore_0.1.0_amd64.deb), which
           # breaks the stable /releases/latest/download/ URLs the site depends
           # on. We rename and upload ourselves in the next step.
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config src-tauri/tauri.conf.release.json
 
       # Collapse the version-stamped bundle names into stable ones. Tauri writes
       # to target/release/bundle when --target is absent and
@@ -203,6 +218,25 @@ jobs:
             fi
           }
 
+          take_updater() {
+            local pattern="$1" out="$2" platform="$3" found sig
+            found="$(find src-tauri/target -path '*/release/bundle/*' -name "$pattern" -type f ! -name '*.sig' \
+              -print 2>/dev/null | head -n 1 || true)"
+            if [ -z "$found" ]; then
+              echo "::error::No updater artifact matching $pattern was produced."
+              exit 1
+            fi
+            sig="${found}.sig"
+            if [ ! -s "$sig" ]; then
+              echo "::error::Missing updater signature for $found"
+              exit 1
+            fi
+            cp "$found" "release-assets/$out"
+            cp "$sig" "release-assets/$out.sig"
+            node scripts/release/create-tauri-updater-metadata.mjs \
+              "$platform" "$out" "release-assets/$out.sig" "${{ needs.create-release.outputs.tag }}"
+          }
+
           echo "Collected:"
           case "${{ matrix.label }}" in
             # Spelled out rather than interpolated from matrix.label: these
@@ -210,18 +244,22 @@ jobs:
             # matrix label should not silently rename a published asset.
             macos-arm64)
               take dmg "PractoCore-macos-arm64.dmg"
+              take_updater '*.app.tar.gz' "PractoCore-macos-arm64-update.app.tar.gz" 'darwin-aarch64'
               ;;
             macos-x64)
               take dmg "PractoCore-macos-x64.dmg"
+              take_updater '*.app.tar.gz' "PractoCore-macos-x64-update.app.tar.gz" 'darwin-x86_64'
               ;;
             linux-x64)
               take AppImage "PractoCore-linux-x86_64.AppImage"
               take deb      "PractoCore-linux-x86_64.deb"
               take rpm      "PractoCore-linux-x86_64.rpm"
+              take_updater '*.AppImage' "PractoCore-linux-x86_64-update.AppImage" 'linux-x86_64'
               ;;
             windows-x64)
               take msi "PractoCore-windows-x64.msi"
               take exe "PractoCore-windows-x64-setup.exe"
+              take_updater '*.exe' "PractoCore-windows-x64-update.exe" 'windows-x86_64'
               ;;
           esac
 
@@ -235,6 +273,37 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ needs.create-release.outputs.tag }}" release-assets/* --clobber
+
+      - name: Upload updater metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: practocore-updater-${{ matrix.label }}
+          path: updater-metadata/*.json
+          if-no-files-found: error
+
+  updater-manifest:
+    name: publish signed updater manifest
+    needs: [create-release, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+
+      - name: Download updater metadata
+        uses: actions/download-artifact@v4
+        with:
+          pattern: practocore-updater-*
+          path: updater-metadata
+          merge-multiple: true
+
+      - name: Create latest.json
+        run: node scripts/release/create-tauri-updater-manifest.mjs "${{ needs.create-release.outputs.version }}"
+
+      - name: Upload latest.json to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.create-release.outputs.tag }}" latest.json --clobber
 
   # ── Capacitor Android ─────────────────────────────────────────────────────
   android:
@@ -346,7 +415,7 @@ jobs:
   # flips for all platforms at once.
   publish-release:
     name: publish
-    needs: [create-release, desktop, android]
+    needs: [create-release, desktop, android, updater-manifest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
