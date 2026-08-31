@@ -1,0 +1,135 @@
+name: Self-hosted Capacitor OTA
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle:
+        description: 'Unique semantic web bundle version (for example 0.2.3)'
+        required: true
+        type: string
+      channel:
+        description: 'Approved non-production channel'
+        required: true
+        type: choice
+        options: [internal, beta]
+      base_ref:
+        description: 'Last native baseline tag/commit to compare (for example v0.2.2)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-capacitor-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: package and publish ${{ inputs.bundle }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Validate input and OTA-only change set
+        env:
+          BUNDLE: ${{ inputs.bundle }}
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$BUNDLE" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]] || { echo '::error::bundle must be semantic version'; exit 1; }
+          git rev-parse --verify "$BASE_REF^{commit}" >/dev/null
+          CHANGED="$(git diff --name-only "$BASE_REF"...HEAD)"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -E '^(android/|ios/|src-tauri/|capacitor\.config\.ts$|package\.json$|bun\.lock$|Cargo\.toml$|Cargo\.lock$|src-tauri/Cargo\.(toml|lock)$)'; then
+            echo '::error::Native-affecting change detected. Ship a native baseline before an OTA bundle.'
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build and validate web bundle
+        run: |
+          set -euo pipefail
+          bun run generate
+          if [ -f .output/public/index.html ]; then
+            rm -rf dist && cp -R .output/public dist
+          fi
+          bun run release:verify
+
+      - name: Package immutable ZIP
+        id: package
+        env:
+          BUNDLE: ${{ inputs.bundle }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          (cd dist && zip -X -r "../release-assets/practocore-web-${BUNDLE}.zip" .)
+          SHA256="$(sha256sum "release-assets/practocore-web-${BUNDLE}.zip" | awk '{print $1}')"
+          printf '%s  practocore-web-%s.zip\n' "$SHA256" "$BUNDLE" > release-assets/SHA256SUMS
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH host
+        env:
+          SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.UPDATE_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY" || { echo '::error::UPDATE_DEPLOY_SSH_PRIVATE_KEY is required'; exit 1; }
+          test -n "$KNOWN_HOSTS" || { echo '::error::UPDATE_DEPLOY_KNOWN_HOSTS is required'; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Upload immutable artifact
+        env:
+          HOST: ${{ secrets.UPDATE_DEPLOY_HOST }}
+          USER: ${{ secrets.UPDATE_DEPLOY_USER }}
+          ARTIFACT_DIR: ${{ secrets.UPDATE_ARTIFACT_DIR }}
+          BUNDLE: ${{ inputs.bundle }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$ARTIFACT_DIR" || { echo '::error::update deployment secrets are incomplete'; exit 1; }
+          TARGET="$ARTIFACT_DIR/practocore-web-${BUNDLE}.zip"
+          ssh "$USER@$HOST" "mkdir -p '$ARTIFACT_DIR'; test ! -e '$TARGET'"
+          scp "release-assets/practocore-web-${BUNDLE}.zip" "$USER@$HOST:$TARGET"
+
+      - name: Create release and promote channel privately
+        env:
+          HOST: ${{ secrets.UPDATE_DEPLOY_HOST }}
+          USER: ${{ secrets.UPDATE_DEPLOY_USER }}
+          NETWORK: ${{ secrets.UPDATE_DOCKER_NETWORK }}
+          ADMIN_TOKEN: ${{ secrets.UPDATE_SERVICE_ADMIN_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          BUNDLE: ${{ inputs.bundle }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "$NETWORK" && test -n "$ADMIN_TOKEN" || { echo '::error::UPDATE_DOCKER_NETWORK and UPDATE_SERVICE_ADMIN_TOKEN are required'; exit 1; }
+          RELEASE_ID="mobile-web-${BUNDLE}-${GITHUB_RUN_ID}"
+          ARTIFACT_URL="https://updates.practocore.com/bundles/practocore-web-${BUNDLE}.zip"
+          RELEASE="$(jq -cn --arg id "$RELEASE_ID" --arg version "$BUNDLE" --arg url "$ARTIFACT_URL" --arg sha "$SHA256" '{id:$id,appId:"com.practocore.app",target:"web",version:$version,decision:"silent_web_update",provider:"self-hosted",providerConfig:{bundleUrl:$url},archiveSha256:$sha,minNativeVersion:"0.2.2",notes:"Automated self-hosted OTA release."}')"
+          CHANNEL_BODY="$(jq -cn --arg id "$RELEASE_ID" '{releaseId:$id,rolloutPercent:100,paused:false}')"
+          printf '%s' "$RELEASE" | base64 -w0 > /tmp/release.b64
+          printf '%s' "$CHANNEL_BODY" | base64 -w0 > /tmp/channel.b64
+          printf '%s' "$ADMIN_TOKEN" > /tmp/update-service-admin-token
+          chmod 600 /tmp/update-service-admin-token
+          scp /tmp/release.b64 /tmp/channel.b64 /tmp/update-service-admin-token "$USER@$HOST:/tmp/"
+          ssh "$USER@$HOST" "set -eu; \
+            TOKEN=\$(cat /tmp/update-service-admin-token); \
+            base64 -d /tmp/release.b64 | docker run --rm --network '$NETWORK' -i curlimages/curl:8.12.1 -fsS -X POST http://practocore-update-service:2057/admin/releases -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' --data-binary @-; \
+            base64 -d /tmp/channel.b64 | docker run --rm --network '$NETWORK' -i curlimages/curl:8.12.1 -fsS -X PUT http://practocore-update-service:2057/admin/channels/$CHANNEL -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' --data-binary @-; \
+            rm -f /tmp/release.b64 /tmp/channel.b64 /tmp/update-service-admin-token"

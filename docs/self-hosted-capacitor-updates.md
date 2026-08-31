@@ -33,6 +33,30 @@ or an approved web bundle:
 4. Test full close/relaunch, offline boot, corrupt archive, readiness timeout,
    and rollback before promotion.
 
+## GitHub Actions automation
+
+**Self-hosted Capacitor OTA** packages and uploads a ZIP to the production host,
+then creates the release and advances an approved non-production channel through
+the service's private Docker network. It rejects any change since `base_ref`
+that touches a native shell, Capacitor config, native lockfile, or native
+dependency manifest.
+
+Add these repository secrets before running it:
+
+- `UPDATE_DEPLOY_HOST`, `UPDATE_DEPLOY_USER`, and
+  `UPDATE_DEPLOY_SSH_PRIVATE_KEY`: restricted SSH deployment account.
+- `UPDATE_DEPLOY_KNOWN_HOSTS`: verified SSH host key entry; do not use an
+  unverified `ssh-keyscan` result in CI.
+- `UPDATE_ARTIFACT_DIR`: host path served by Nginx Proxy Manager at `/bundles`
+  (for example `/opt/practocore-update-service/artifacts/bundles`).
+- `UPDATE_DOCKER_NETWORK`: the Docker network shared by NPM and
+  `practocore-update-service`.
+- `UPDATE_SERVICE_ADMIN_TOKEN`: the same secret configured on the server.
+
+Protect the `internal` and `beta` GitHub environments. The workflow deliberately
+does not offer `production`: enable that only after native ZIP signature or
+encryption verification is pinned and tested.
+
 ## Security gate
 
 Do not enable production self-hosted OTA until the packaging pipeline encrypts
