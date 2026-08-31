@@ -29,26 +29,23 @@
               @click="activeTab = 'profile'"
           >Organisation Profile</Button>
 
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'users' ? 'default' : 'ghost'"
-              @click="activeTab = 'users'"
-          >Members</Button>
-
-          <Button
-              size="sm"
-              class="lg:w-full flex flex-row justify-start"
-              :variant="activeTab === 'invitations' ? 'default' : 'ghost'"
-              @click="activeTab = 'invitations'"
-          >Invitations</Button>
+          <!-- Members and Invitations used to be tabs here, rendering a SECOND
+               member table and a second invitation list beside the ones on
+               /main/lawyers. Two surfaces over the same data drifted: this one
+               still offered a "Moderator" role the backend has never persisted,
+               and wrote roles through a path that predates the resolver. The
+               firm's people live in one place now; this page keeps the firm's
+               own details. -->
+          <NuxtLink to="/main/lawyers" class="lg:w-full">
+            <Button size="sm" variant="ghost" class="lg:w-full flex flex-row justify-start">
+              Members &amp; invitations
+            </Button>
+          </NuxtLink>
         </div>
 
         <!-- Tab Content -->
         <div class="flex flex-col w-full h-full overflow-y-scroll">
-          <PageComponentsOrganisationProfile v-if="activeTab === 'profile'" />
-          <PageComponentsOrganisationUsers v-if="activeTab === 'users'" />
-          <PageComponentsOrganisationInvitations v-if="activeTab === 'invitations'" />
+          <PageComponentsOrganisationProfile />
         </div>
       </div>
     </div>
@@ -65,5 +62,12 @@ definePageMeta({
   layout: 'default'
 })
 
-const activeTab = ref(query?.tab || 'profile');
+// The old ?tab=users / ?tab=invitations deep links still exist in the wild — the
+// global search offers both. Send them where those surfaces actually live now
+// rather than rendering a page whose tabs no longer exist.
+if (query?.tab === 'users' || query?.tab === 'invitations') {
+  await navigateTo('/main/lawyers');
+}
+
+const activeTab = ref('profile');
 </script>

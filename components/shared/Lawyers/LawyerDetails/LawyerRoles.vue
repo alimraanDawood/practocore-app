@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Shield, Crown, UserMinus, User as UserIcon } from "lucide-vue-next";
-import { updateProfessionalRole, updateMemberRole, removeMember, apiErrorMessage } from "~/services/admin";
+import {
+  updateProfessionalRole, updateMemberRole, removeMember, getOrganisationRoles,
+  transferOwnership, OWNERSHIP_TRANSFER_ENABLED, apiErrorMessage,
+} from "~/services/admin";
 import { toast } from "vue-sonner";
 import { getSignedInUser } from "~/services/auth";
 
@@ -9,25 +12,63 @@ const emits = defineEmits(['updatedLawyer']);
 
 const updating = ref(false);
 const showRemoveDialog = ref(false);
+const showTransferDialog = ref(false);
 
 const currentUser = getSignedInUser();
 const organisationId = currentUser?.organisation;
 const isCurrentUser = computed(() => props.lawyerDetails?.user?.id === currentUser?.id);
 
-// Shared reactive state with the lawyers page grid
-const membersState = useState<any>('lawyersPageMembers', () => ({ items: [], totalItems: 0, page: 1, totalPages: 1 }));
-const patchMemberInList = (userId: string, changes: Record<string, any>) => {
-  if (membersState.value?.items) {
-    membersState.value = {
-      ...membersState.value,
-      items: membersState.value.items.map((m: any) =>
-        m.id === userId ? { ...m, ...changes } : m
-      )
-    };
+// Ownership moves; it does not multiply. Only the current owner sees the option,
+// and only on somebody else — the server enforces both, but offering a control
+// that can only 403 is worse than not offering it.
+const { authority } = usePermissions();
+const targetIsOwner = computed(() => props.lawyerDetails?.user?.authority === 'owner');
+const canTransferOwnership = computed(() =>
+    OWNERSHIP_TRANSFER_ENABLED && authority.value === 'owner' && !isCurrentUser.value && !targetIsOwner.value);
+
+const handleTransferOwnership = async () => {
+  const userId = props.lawyerDetails?.user?.id;
+  if (!userId || !organisationId) return;
+  updating.value = true;
+  try {
+    const result: any = await transferOwnership(userId, organisationId);
+    toast.success(result?.message || 'Ownership transferred');
+    emits('updatedLawyer', { authority: 'owner' });
+    refreshDirectory();
+    // The caller is no longer the owner. Their own permissions changed, so the
+    // cached answer every gated control reads has to be refetched.
+    await usePermissions().fetchPermissions();
+  } catch (e) {
+    console.error(e);
+    toast.error(apiErrorMessage(e, 'Could not transfer ownership'));
+  } finally {
+    updating.value = false;
+    showTransferDialog.value = false;
   }
 };
 
-const organisationRoleOptions = [
+// The directory refetches rather than being patched in place.
+//
+// This used to reach into a `lawyersPageMembers` state object and edit the row
+// directly, which worked while the grid showed only what the client already knew.
+// The table now shows RESOLVED values — effective permissions, whether they
+// deviate from the role, the authority tier — and only the server can compute
+// those. Patching a row here would guess at them and then disagree with the next
+// reload.
+const refreshSignal = useState<number>('lawyersDirectoryRefresh', () => 0);
+const refreshDirectory = () => { refreshSignal.value++; };
+
+// The firm's own roles, not a hardcoded five.
+//
+// These labels and descriptions used to live here as literals. A firm can now
+// rename a title and change what it permits, so a hardcoded list would show one
+// name in this dropdown and another everywhere else — and, worse, would describe
+// a Paralegal as a "Legal support professional" while the firm had redefined what
+// a paralegal may actually do.
+//
+// The seeded five are the fallback for a firm whose roles could not be loaded, so
+// the picker is never empty.
+const FALLBACK_ROLES = [
   { value: 'partner', label: 'Partner', description: 'Senior leadership and equity partner' },
   { value: 'senior_associate', label: 'Senior Associate', description: 'Experienced attorney with advanced responsibilities' },
   { value: 'associate', label: 'Associate', description: 'Licensed attorney working on matters' },
@@ -35,13 +76,34 @@ const organisationRoleOptions = [
   { value: 'intern', label: 'Intern', description: 'Law student or trainee' }
 ];
 
+const organisationRoleOptions = ref(FALLBACK_ROLES);
+
+onMounted(async () => {
+  if (!organisationId) return;
+  try {
+    const response: any = await getOrganisationRoles(organisationId);
+    const roles = response?.roles ?? [];
+    if (roles.length) {
+      organisationRoleOptions.value = roles.map((r: any) => ({
+        value: r.key,
+        label: r.label,
+        description: r.description,
+      }));
+    }
+  } catch (e) {
+    // Keep the fallback. A failed role list must not leave an admin unable to
+    // change somebody's title.
+    console.error('Failed to load roles:', e);
+  }
+});
+
 const systemRoleOptions = [
   { value: 'member', label: 'Member', icon: UserIcon },
   { value: 'admin', label: 'Admin', icon: Crown }
 ];
 
 const selectedOrganisationRoleInfo = computed(() => {
-  return organisationRoleOptions.find(option => option.value === props?.lawyerDetails?.user?.organisationRole);
+  return organisationRoleOptions.value.find(option => option.value === props?.lawyerDetails?.user?.organisationRole);
 });
 
 // Update the organisation role (e.g. partner, associate)
@@ -58,7 +120,7 @@ const handleOrganisationRoleChange = async (newRole: string) => {
       loading: 'Updating organisation role...',
       success: () => {
         emits('updatedLawyer', { organisationRole: newRole });
-        patchMemberInList(userId, { organisationRole: newRole });
+        refreshDirectory();
         return 'Organisation role updated!';
       },
       error: (e: unknown) => apiErrorMessage(e, 'Failed to update organisation role')
@@ -84,29 +146,10 @@ const handleSystemRoleChange = async (newRole: string) => {
     const result: any = await updateMemberRole(userId, organisationId, newRole);
     toast.success(result?.message || 'Role updated');
     emits('updatedLawyer', { role: newRole });
-    patchMemberInList(userId, { role: newRole });
+    refreshDirectory();
   } catch (e) {
     console.error(e);
     toast.error(apiErrorMessage(e, 'Failed to update role'));
-  } finally {
-    updating.value = false;
-  }
-};
-
-// Make admin
-const handleMakeAdmin = async () => {
-  const userId = props.lawyerDetails?.user?.id;
-  if (!userId || !organisationId) return;
-
-  updating.value = true;
-  try {
-    const result: any = await updateMemberRole(userId, organisationId, 'admin');
-    toast.success(result?.message || 'Member is now an admin');
-    emits('updatedLawyer', { role: 'admin' });
-    patchMemberInList(userId, { role: 'admin' });
-  } catch (e) {
-    console.error(e);
-    toast.error(apiErrorMessage(e, 'Failed to make admin'));
   } finally {
     updating.value = false;
   }
@@ -122,13 +165,7 @@ const handleRemoveMember = async () => {
     const result: any = await removeMember(userId, organisationId);
     toast.success(result?.message || 'Member removed');
     emits('updatedLawyer', { removed: true });
-    if (membersState.value?.items) {
-      membersState.value = {
-        ...membersState.value,
-        items: membersState.value.items.filter((m: any) => m.id !== userId),
-        totalItems: (membersState.value.totalItems || 1) - 1
-      };
-    }
+    refreshDirectory();
   } catch (e) {
     // "An organisation must retain an admin" arrives here, and the admin needs
     // to read it — otherwise the only signal is that nothing happened.
@@ -143,9 +180,9 @@ const handleRemoveMember = async () => {
 
 <template>
 <div class="flex flex-col gap-4">
-  <!-- Organisation Role -->
+  <!-- Title: the professional role, which now carries the permission bundle. -->
   <div class="flex flex-col gap-1.5 w-full">
-    <Label for="organisationRole">Organisation Role <span class="text-destructive">*</span></Label>
+    <Label for="organisationRole">Title <span class="text-destructive">*</span></Label>
     <Select
       class="w-full"
       :model-value="lawyerDetails?.user?.organisationRole"
@@ -153,7 +190,7 @@ const handleRemoveMember = async () => {
       @update:model-value="(v) => v && handleOrganisationRoleChange(v as string)"
     >
       <SelectTrigger id="organisationRole" class="w-full">
-        {{ lawyerDetails?.user?.organisationRole ? organisationRoleOptions.find(o => o.value === lawyerDetails?.user?.organisationRole)?.label : 'Select organisation role' }}
+        {{ selectedOrganisationRoleInfo?.label || 'Select organisation role' }}
       </SelectTrigger>
       <SelectContent class="w-full">
         <SelectItem v-for="option in organisationRoleOptions" :key="option.value" :value="option.value">
@@ -170,12 +207,12 @@ const handleRemoveMember = async () => {
     </div>
   </div>
 
-  <!-- System Role -->
+  <!-- Authority: who administers the workspace. -->
   <div class="flex flex-col gap-1.5 w-full">
-    <Label for="systemRole">System Role</Label>
+    <Label for="systemRole">Authority</Label>
     <Select
       :model-value="lawyerDetails?.user?.role"
-      :disabled="updating || isCurrentUser"
+      :disabled="updating || isCurrentUser || targetIsOwner"
       @update:model-value="(v) => v && handleSystemRoleChange(v as string)"
     >
       <SelectTrigger id="systemRole" class="w-full">
@@ -191,23 +228,29 @@ const handleRemoveMember = async () => {
       </SelectContent>
     </Select>
     <p v-if="isCurrentUser" class="text-xs text-muted-foreground">You cannot change your own role</p>
+    <p v-else-if="targetIsOwner" class="text-xs text-muted-foreground">
+      The owner's authority cannot be changed here. Ownership has to be transferred first.
+    </p>
   </div>
 
   <!-- Actions -->
+  <!-- The "Make Admin" button that used to sit here did exactly what the System
+       Role select above does, and the two disagreed: the select refused to act on
+       yourself, the button did not. One control, one answer. -->
   <div class="flex flex-col gap-2">
     <Button
-      v-if="lawyerDetails?.user?.role !== 'admin'"
+      v-if="canTransferOwnership"
       variant="outline"
       class="w-full"
-      :disabled="updating || isCurrentUser"
-      @click="handleMakeAdmin"
+      :disabled="updating"
+      @click="showTransferDialog = true"
     >
       <Crown class="size-4 mr-2" />
-      Make Admin
+      Make owner of this firm
     </Button>
 
     <Button
-      v-if="!isCurrentUser"
+      v-if="!isCurrentUser && !targetIsOwner"
       variant="destructive"
       class="w-full"
       :disabled="updating"
@@ -218,6 +261,27 @@ const handleRemoveMember = async () => {
     </Button>
   </div>
 </div>
+
+<!-- Ownership transfer. Named plainly, because it is the one membership change
+     the person making it cannot undo on their own afterwards. -->
+<AlertDialog v-model:open="showTransferDialog">
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Make {{ lawyerDetails?.user?.name }} the owner?</AlertDialogTitle>
+      <AlertDialogDescription>
+        They take over the firm: billing, membership and firm settings. You stay on
+        as an admin, and you will not be able to take ownership back yourself —
+        only they can transfer it again.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel :disabled="updating">Cancel</AlertDialogCancel>
+      <AlertDialogAction :disabled="updating" @click="handleTransferOwnership">
+        {{ updating ? 'Transferring…' : 'Transfer ownership' }}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 
 <!-- Remove Confirmation Dialog -->
 <AlertDialog v-model:open="showRemoveDialog">

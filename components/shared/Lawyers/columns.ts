@@ -1,135 +1,161 @@
 import type { ColumnDef } from '@tanstack/vue-table'
-import {getOrganisationRoleString, type Member} from './members'
+import type { DirectoryRow } from './members'
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue'
 import { h } from 'vue'
-import { ArrowUpDown } from 'lucide-vue-next'
-import { Button } from '@/components/ui/button'
 import MemberAvatar from '~/components/shared/Lawyers/MemberAvatar.vue'
 import MemberRoleBadge from '~/components/shared/Lawyers/MemberRoleBadge.vue'
-import MemberVerifiedBadge from '~/components/shared/Lawyers/MemberVerifiedBadge.vue'
+import MemberAuthorityBadge from '~/components/shared/Lawyers/MemberAuthorityBadge.vue'
+import MemberStatusBadge from '~/components/shared/Lawyers/MemberStatusBadge.vue'
 import MemberActions from '~/components/shared/Lawyers/MemberActions.vue'
 
-export const columns: ColumnDef<Member>[] = [
-    // ── Member (avatar + name + email) ─────────────────────────────────────────
-    {
-        id: 'member',
-        accessorKey: 'name',
-        header: ({ column }) =>
-            h(
-                Button,
-                {
-                    variant: 'ghost',
-                    class: 'px-0 hover:bg-transparent font-medium',
-                    onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
-                },
-                () => ['Member', h(ArrowUpDown, { class: 'ml-2 h-4 w-4' })],
-            ),
-        cell: ({ row }) =>
-            h(MemberAvatar, {
-                name: row.original.name,
-                email: row.original.email,
-                avatar: row.original.avatar,
-                lawyerId: row.original.id,
-            }),
-        filterFn: (row, _columnId, filterValue: string) => {
-            if (!filterValue) return true
-            const q = filterValue.toLowerCase()
-            return (
-                row.original.name?.toLowerCase().includes(q) ||
-                row.original.email?.toLowerCase().includes(q)
-            )
+/** Columns for the firm directory.
+ *
+ *  Member · Title · Authority · Status · Matters · Next deadline · actions.
+ *
+ *  Title and Authority are two columns because they answer two different
+ *  questions — what this person does as a lawyer, and what they may do to the
+ *  workspace — and collapsing them is what made "role" mean two things
+ *  everywhere else in this surface.
+ *
+ *  Sorting, filtering and paging are the SERVER's. The table renders the page it
+ *  is given; it does not re-sort or re-filter it, because a client that did
+ *  would disagree with the pagination it is drawing.
+ */
+export function directoryColumns(options: {
+    /** The same action list the right-click menu renders. Built by the page so
+     *  the two menus cannot drift apart. */
+    actionsFor: (row: DirectoryRow) => MenuAction[]
+}): ColumnDef<DirectoryRow>[] {
+    const dateOnly = (value?: string) =>
+        value
+            ? new Date(value).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })
+            : ''
+
+    return [
+        {
+            id: 'member',
+            accessorKey: 'name',
+            header: 'Member',
+            enableSorting: false,
+            cell: ({ row }) =>
+                row.original.kind === 'invitation'
+                    // An invitation has no profile to open and often no name yet —
+                    // only the address it was sent to. Rendering the avatar
+                    // component would offer a sheet that 404s.
+                    ? h('div', { class: 'flex flex-col p-2 min-w-0' }, [
+                        h('span', { class: 'text-sm font-medium leading-none truncate' },
+                            row.original.name || row.original.email),
+                        h('span', { class: 'text-xs text-muted-foreground mt-0.5 truncate' },
+                            row.original.name ? row.original.email : 'Invitation not yet accepted'),
+                    ])
+                    : h(MemberAvatar, {
+                        name: row.original.name,
+                        email: row.original.email,
+                        avatar: row.original.avatar,
+                        lawyerId: row.original.id,
+                    }),
         },
-    },
 
-    // ── Email ───────────────────────────────────────────────────────────────────
-    {
-        accessorKey: 'email',
-        header: 'Email',
-        cell: ({ row }) =>
-            h('a', {
-                href: `mailto:${row.original.email}`,
-                class: 'text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline transition-colors',
-            }, row.original.email),
-        enableSorting: false,
-    },
-
-    // ── Role ────────────────────────────────────────────────────────────────────
-    {
-        accessorKey: 'role',
-        header: 'Role',
-        cell: ({ row }) =>
-            h(MemberRoleBadge, { role: getOrganisationRoleString(row.original.organisationRole) }),
-        filterFn: (row, _columnId, filterValue: string[]) => {
-            if (!filterValue.length) return true
-            return filterValue.includes(row.original.organisationRole)
+        {
+            id: 'title',
+            accessorKey: 'organisationRole',
+            header: 'Title',
+            enableSorting: false,
+            cell: ({ row }) =>
+                h('div', { class: 'flex flex-row items-center gap-1.5' }, [
+                    h(MemberRoleBadge, {
+                        role: row.original.organisationRole,
+                        label: row.original.roleLabel,
+                    }),
+                    // "Modified" is the answer to "what did we change for this
+                    // person" — the whole reason overrides are stored apart from
+                    // the role's bundle.
+                    row.original.overridden?.length
+                        ? h('span', {
+                            class: 'text-[10px] uppercase tracking-wide text-muted-foreground',
+                            title: `Access differs from ${row.original.roleLabel || row.original.organisationRole}`,
+                        }, 'Modified')
+                        : null,
+                ]),
         },
-    },
 
-    {
-        accessorKey: 'activeMatters',
-        header: 'Active Matters',
-        cell: ({ row }) =>
-            h('span', {}, row.original?.activeMatters?.length || 0),
-        // filterFn: (row, _columnId, filterValue: string[]) => {
-        //     if (!filterValue.length) return true
-        //     return filterValue.includes(row.original.organisationRole)
-        // },
-    },
-
-    {
-        accessorKey: 'nextDeadline',
-        header: 'Next Deadline',
-        cell: ({ row }) =>
-            h('div', { class: 'flex flex-col' }, [
-                h('span', { class: 'ibm-plex-serif font-semibold truncate' }, row.original?.nextDeadline?.name ||  'No deadlines'),
-                h('span', { class: 'text-sm text-muted-foreground' }, row.original?.nextDeadline?.date ? new Date(row.original.nextDeadline.date).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
-            ])
-        // filterFn: (row, _columnId, filterValue: string[]) => {
-        //     if (!filterValue.length) return true
-        //     return filterValue.includes(row.original.organisationRole)
-        // },
-    },
-
-
-    // ── Verified ────────────────────────────────────────────────────────────────
-    {
-        accessorKey: 'verified',
-        header: 'Status',
-        cell: ({ row }) =>
-            h(MemberVerifiedBadge, { verified: row.original.verified }),
-        filterFn: (row, _columnId, filterValue: string) => {
-            if (filterValue === '') return true
-            return row.original.verified === (filterValue === 'true')
+        {
+            id: 'authority',
+            accessorKey: 'authority',
+            header: 'Authority',
+            enableSorting: false,
+            cell: ({ row }) => h(MemberAuthorityBadge, { authority: row.original.authority }),
         },
-    },
 
-    // ── Joined date ─────────────────────────────────────────────────────────────
-    {
-        accessorKey: 'created',
-        header: ({ column }) =>
-            h(
-                Button,
-                {
-                    variant: 'ghost',
-                    class: 'px-0 hover:bg-transparent font-medium',
-                    onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
-                },
-                () => ['Joined', h(ArrowUpDown, { class: 'ml-2 h-4 w-4' })],
-            ),
-        cell: ({ row }) => {
-            const date = new Date(row.original.created)
-            return h('span', { class: 'text-sm text-muted-foreground' },
-                date.toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }),
-            )
+        {
+            id: 'status',
+            accessorKey: 'status',
+            header: 'Status',
+            enableSorting: false,
+            cell: ({ row }) =>
+                h(MemberStatusBadge, {
+                    status: row.original.status,
+                    verified: row.original.verified,
+                    kind: row.original.kind,
+                }),
         },
-        enableColumnFilter: false,
-    },
 
-    // ── Row actions ─────────────────────────────────────────────────────────────
-    {
-        id: 'actions',
-        enableHiding: false,
-        enableSorting: false,
-        cell: ({ row }) =>
-            h(MemberActions, { member: row.original }),
-    },
-]
+        {
+            id: 'workload',
+            header: 'Active work',
+            enableSorting: false,
+            // Matters and engagements, counted apart rather than summed: a firm
+            // does both kinds of work, and which kind somebody is carrying is the
+            // point of looking. Null rather than 0 for an invitation and for a
+            // deployment without the collection — a zero would read as "assigned
+            // to nothing", which is a different statement from "not applicable".
+            cell: ({ row }) => {
+                const parts = []
+                if (typeof row.original.matters === 'number') {
+                    parts.push(h('span', { class: 'text-sm tabular-nums' },
+                        `${row.original.matters} ${row.original.matters === 1 ? 'matter' : 'matters'}`))
+                }
+                if (typeof row.original.engagements === 'number' && row.original.engagements > 0) {
+                    parts.push(h('span', { class: 'text-xs text-muted-foreground tabular-nums' },
+                        `${row.original.engagements} ${row.original.engagements === 1 ? 'engagement' : 'engagements'}`))
+                }
+                if (!parts.length) {
+                    return h('span', { class: 'text-sm text-muted-foreground' }, '—')
+                }
+                return h('div', { class: 'flex flex-col leading-tight' }, parts)
+            },
+        },
+
+        {
+            id: 'nextDeadline',
+            header: 'Next deadline',
+            enableSorting: false,
+            cell: ({ row }) => {
+                if (row.original.kind === 'invitation') {
+                    const expires = row.original.invitation?.expiresAt
+                    return h('span', { class: 'text-sm text-muted-foreground' },
+                        expires ? `Invite expires ${dateOnly(expires)}` : '—')
+                }
+                const deadline = row.original.nextDeadline
+                if (!deadline) {
+                    return h('span', { class: 'text-sm text-muted-foreground' }, 'No deadlines')
+                }
+                return h('div', { class: 'flex flex-col' }, [
+                    h('span', { class: 'ibm-plex-serif font-semibold truncate' }, deadline.name),
+                    h('span', { class: 'text-sm text-muted-foreground' }, dateOnly(deadline.date)),
+                ])
+            },
+        },
+
+        {
+            id: 'actions',
+            enableHiding: false,
+            enableSorting: false,
+            cell: ({ row }) =>
+                h(MemberActions, {
+                    member: row.original,
+                    actionsFor: options.actionsFor,
+                }),
+        },
+    ]
+}

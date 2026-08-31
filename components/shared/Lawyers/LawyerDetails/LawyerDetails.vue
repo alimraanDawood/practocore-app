@@ -28,7 +28,14 @@ const name = computed(() => lawyerDetails.value?.user?.name || '')
 const email = computed(() => lawyerDetails.value?.user?.email || '')
 const avatar = computed(() => lawyerDetails.value?.user?.avatar || '')
 
-const activeTab = ref<'overview' | 'matters' | 'permissions'>('overview')
+// Access → Work → History.
+//
+// The sheet used to open on "Overview" — a name and an email the row already
+// showed — and buried the title, the authority and the permission switches two
+// clicks away under "Permissions". An admin opens this sheet to answer "what may
+// this person do", so that is what it opens on. Work is the evidence; History is
+// who decided it.
+const activeTab = ref<'access' | 'work' | 'history'>('access')
 
 
 
@@ -99,7 +106,14 @@ watch(() => props.lawyerId, () => {
         </div>
       </div>
 
-      <div v-else-if="lawyerDetails" class="flex flex-col">
+      <!-- flex-1 min-h-0, not a bare flex column.
+           The sheet could not be scrolled: SheetContent is a flex column with a
+           height, but this wrapper defaulted to `min-height: auto`, so it grew to
+           fit its content instead of filling the sheet — and the `flex-1` scroll
+           area below then had no bounded height to scroll within. Same shape of
+           bug as the invite dialog: `min-h-0` is what lets a flex item shrink
+           below its content so an overflow container inside it can do its job. -->
+      <div v-else-if="lawyerDetails" class="flex flex-col flex-1 min-h-0">
         <div class="flex flex-row gap-2 items-center p-3">
           <Avatar class="size-12">
             <AvatarImage v-if="avatar" :src="avatar" :alt="name" />
@@ -117,81 +131,87 @@ watch(() => props.lawyerId, () => {
           <div class="p-1 w-full flex gap-1 flex-row bg-muted border rounded-lg">
             <Button
                 size="sm"
-                :variant="activeTab === 'overview' ? 'default' : 'ghost'"
-                @click="activeTab = 'overview'"
+                :variant="activeTab === 'access' ? 'default' : 'ghost'"
+                @click="activeTab = 'access'"
             >
-              Overview
+              Access
             </Button>
             <Button
                 size="sm"
-                :variant="activeTab === 'matters' ? 'default' : 'ghost'"
-                @click="activeTab = 'matters'"
+                :variant="activeTab === 'work' ? 'default' : 'ghost'"
+                @click="activeTab = 'work'"
             >
-              Matters
+              Work
             </Button>
             <Button
                 size="sm"
-                :variant="activeTab === 'permissions' ? 'default' : 'ghost'"
-                @click="activeTab = 'permissions'"
+                :variant="activeTab === 'history' ? 'default' : 'ghost'"
+                @click="activeTab = 'history'"
             >
-              Permissions
+              History
             </Button>
           </div>
         </div>
 
         <!-- Tab Content -->
-        <div class="flex-1 overflow-y-auto">
-          <!-- Overview Tab -->
-          <div v-if="activeTab === 'overview'" class=" divide-y">
-            <div class="space-y-2 p-3">
-              <h3 class="text-sm font-semibold">Member Information</h3>
-              <div class="space-y-1 text-sm">
-                <div class="flex justify-between">
-                  <span class="text-muted-foreground">Name:</span>
-                  <span class="font-medium">{{ name }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-muted-foreground">Email:</span>
-                  <span class="font-medium">{{ email }}</span>
-                </div>
-              </div>
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <!-- Access -->
+          <div v-if="activeTab === 'access'" class="divide-y">
+            <div class="flex flex-col gap-3 p-3">
+              <h3 class="text-sm font-semibold">Title and authority</h3>
+              <LawyerRoles :lawyer-details="lawyerDetails" @updated-lawyer="handleLawyerUpdated" />
             </div>
 
+            <div class="flex flex-col p-3 gap-3">
+              <div class="flex flex-row items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold">Permissions</h3>
+                <span
+                    v-if="lawyerDetails?.user?.overridden?.length"
+                    class="text-[10px] uppercase tracking-wide text-muted-foreground"
+                >Modified</span>
+              </div>
+              <SharedLawyersLawyerDetailsLawyerPermissions
+                  :lawyer-id="lawyerDetails.user.id"
+                  :permissions="lawyerDetails.permissions.permissions ?? []"
+                  :role-label="lawyerDetails?.user?.roleLabel"
+                  :overridden="lawyerDetails?.user?.overridden"
+              />
+            </div>
+          </div>
+
+          <!-- Work -->
+          <div v-if="activeTab === 'work'" class="flex flex-col divide-y">
             <div class="p-3 gap-2 flex flex-col">
-              <h3 class="text-sm font-semibold">Quick Stats</h3>
+              <h3 class="text-sm font-semibold">Current workload</h3>
+              <!-- "Active" is said out loud on the two counts it applies to.
+                   A tile reading "3 Matters" over a lawyer who has closed thirty
+                   is not wrong so much as unanswerable — you cannot tell which
+                   question it answered. -->
               <div class="grid grid-cols-2 gap-2">
                 <div class="p-3 rounded-lg border bg-card">
                   <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.totalMatters || 0 }}</div>
-                  <div class="text-xs text-muted-foreground">Matters</div>
+                  <div class="text-xs text-muted-foreground">Active matters</div>
+                </div>
+                <div class="p-3 rounded-lg border bg-card">
+                  <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.totalEngagements || 0 }}</div>
+                  <div class="text-xs text-muted-foreground">Active engagements</div>
                 </div>
                 <div class="p-3 rounded-lg border bg-card">
                   <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.totalDeadlines || 0 }}</div>
-                  <div class="text-xs text-muted-foreground">Total Deadlines</div>
-                </div>
-                <div class="p-3 rounded-lg border bg-card">
-                  <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.completedDeadlines || 0 }}</div>
-                  <div class="text-xs text-muted-foreground">Completed</div>
+                  <div class="text-xs text-muted-foreground">Deadlines</div>
                 </div>
                 <div class="p-3 rounded-lg border bg-card">
                   <div class="text-2xl font-bold">{{ lawyerDetails?.statistics?.overdueDeadlines || 0 }}</div>
                   <div class="text-xs text-muted-foreground">Overdue</div>
                 </div>
               </div>
+              <p class="text-xs text-muted-foreground">
+                {{ lawyerDetails?.statistics?.completedDeadlines || 0 }} deadlines completed.
+              </p>
             </div>
 
-            <div class="flex flex-col gap-3 p-3">
-              <h3 class="text-sm font-semibold">Roles</h3>
-
-              <div class="flex flex-col gap-1">
-                <LawyerRoles :lawyer-details="lawyerDetails" @updated-lawyer="handleLawyerUpdated" />
-              </div>
-            </div>
-          </div>
-
-          <!-- Matters Tab -->
-          <div v-if="activeTab === 'matters'" class="flex flex-col divide-y">
             <div class="flex flex-col gap-2 p-3">
-              <h3 class="text-sm font-semibold">Assigned Matters</h3>
+              <h3 class="text-sm font-semibold">Assigned matters</h3>
               <div class="flex flex-col gap-1" v-if="lawyerDetails?.recentMatters?.length > 0">
                 <div class="flex flex-col p-3 gap-3 border bg-muted rounded-lg" v-for="matter in lawyerDetails?.recentMatters || []">
                   <span class="font-semibold ibm-plex-serif">{{ matter?.name }}</span>
@@ -216,16 +236,37 @@ watch(() => props.lawyerId, () => {
                 </div>
               </div>
               <div v-else class="text-sm text-muted-foreground text-center py-8">
-                No matters assigned yet
+                No active matters
+              </div>
+            </div>
+
+            <!-- Engagements: the other half of a firm's work, which this sheet
+                 did not show at all. A transactional lawyer with a full desk read
+                 as having nothing on. -->
+            <div class="flex flex-col gap-2 p-3">
+              <h3 class="text-sm font-semibold">Assigned engagements</h3>
+              <div class="flex flex-col gap-1" v-if="lawyerDetails?.recentEngagements?.length">
+                <NuxtLink
+                    v-for="engagement in lawyerDetails.recentEngagements"
+                    :key="engagement.id"
+                    :to="`/main/engagements/${engagement.id}`"
+                    class="flex flex-col p-3 gap-1 border bg-muted rounded-lg hover:bg-muted/70"
+                >
+                  <span class="font-semibold ibm-plex-serif">{{ engagement.name }}</span>
+                  <span class="text-xs text-muted-foreground capitalize">{{ engagement.status || 'active' }}</span>
+                </NuxtLink>
+              </div>
+              <div v-else class="text-sm text-muted-foreground text-center py-8">
+                No active engagements
               </div>
             </div>
           </div>
 
-          <!-- Activity Tab -->
-          <div v-if="activeTab === 'permissions'" class="flex flex-col">
+          <!-- History -->
+          <div v-if="activeTab === 'history'" class="flex flex-col">
             <div class="flex flex-col p-3 gap-3">
-              <h3 class="text-sm font-semibold">User Permissions</h3>
-              <SharedLawyersLawyerDetailsLawyerPermissions :lawyer-id="lawyerDetails.user.id" :permissions="lawyerDetails.permissions.permissions ?? []" />
+              <h3 class="text-sm font-semibold">Membership history</h3>
+              <SharedLawyersLawyerDetailsLawyerHistory :lawyer-id="lawyerDetails.user.id" />
             </div>
           </div>
         </div>

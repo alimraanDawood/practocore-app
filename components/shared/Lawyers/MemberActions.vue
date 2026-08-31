@@ -1,63 +1,45 @@
 <script setup lang="ts">
-import { MoreHorizontal, Pencil, Trash2, ShieldCheck, ExternalLink } from 'lucide-vue-next'
+import { MoreHorizontal } from 'lucide-vue-next'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import type { Member } from '~/types/member'
+import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue'
+import type { DirectoryRow } from './members'
 
-const props = defineProps<{ member: Member }>()
-
-const emit = defineEmits<{
-  (e: 'edit', member: Member): void
-  (e: 'delete', member: Member): void
-  (e: 'changeRole', member: Member): void
+// The row's ⋯ button. Presentational only: it renders the action list the page
+// builds, which is the same list the right-click menu renders. An action can
+// therefore never exist in one menu and be missing from the other.
+//
+// This component used to define its own items as `emit`s that nothing listened
+// to — "Edit member", "Change role", "Remove member" all looked complete and did
+// nothing.
+const props = defineProps<{
+  member: DirectoryRow
+  actionsFor: (row: DirectoryRow) => MenuAction[]
 }>()
 
-// Copy email to clipboard
-const copyEmail = async () => {
-  await navigator.clipboard.writeText(props.member.email)
-}
+const actions = computed(() => props.actionsFor(props.member))
 </script>
 
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" size="icon" class="h-8 w-8 opacity-0 group-hover/row:opacity-100 transition-opacity">
+      <Button variant="ghost" size="icon" class="h-8 w-8">
         <MoreHorizontal class="h-4 w-4" />
         <span class="sr-only">Open menu</span>
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" class="w-48">
-      <DropdownMenuLabel class="text-xs text-muted-foreground font-normal">
-        {{ member.name }}
+    <DropdownMenuContent align="end" class="w-56">
+      <DropdownMenuLabel class="text-xs text-muted-foreground font-normal truncate">
+        {{ member.name || member.email }}
       </DropdownMenuLabel>
       <DropdownMenuSeparator />
-      <DropdownMenuItem @click="copyEmail" class="cursor-pointer">
-        <ExternalLink class="mr-2 h-4 w-4" />
-        Copy email
-      </DropdownMenuItem>
-      <DropdownMenuItem @click="$emit('edit', member)" class="cursor-pointer">
-        <Pencil class="mr-2 h-4 w-4" />
-        Edit member
-      </DropdownMenuItem>
-      <DropdownMenuItem @click="$emit('changeRole', member)" class="cursor-pointer">
-        <ShieldCheck class="mr-2 h-4 w-4" />
-        Change role
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem
-          @click="$emit('delete', member)"
-          class="cursor-pointer text-destructive focus:text-destructive"
-      >
-        <Trash2 class="mr-2 h-4 w-4" />
-        Remove member
-      </DropdownMenuItem>
+      <SharedActionMenuItems :actions="actions" variant="dropdown" />
     </DropdownMenuContent>
   </DropdownMenu>
 </template>

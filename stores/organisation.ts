@@ -160,7 +160,9 @@ export const useOrganisationStore = defineStore('organisation', {
       return {
         total: state.membersCache?.totalItems || 0,
         admins: members.filter(m => m.role === 'admin').length,
-        moderators: members.filter(m => m.role === 'moderator').length,
+        // No `moderators` count. The backend has never persisted that role, so
+        // it was a tile that could only ever read 0 — and its presence is what
+        // kept a Moderator option alive in two member surfaces.
         members: members.filter(m => m.role === 'member').length
       }
     },

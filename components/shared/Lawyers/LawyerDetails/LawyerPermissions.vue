@@ -1,29 +1,51 @@
 <script setup lang="ts">
-import {updateMemberPermissionsForOrganisation} from "~/services/admin";
+import {updateMemberPermissionsForOrganisation, apiErrorMessage} from "~/services/admin";
 import {getSignedInUser} from "~/services/auth";
+import {toast} from "vue-sonner";
 
-const props = defineProps<{ lawyerId: string, permissions: string[] }>();
-const updating = ref(false);
+const props = defineProps<{ lawyerId: string, permissions: string[], roleLabel?: string, overridden?: string[] }>();
 
 const permissions = ref<string[]>([...props.permissions]);
-const loading = ref(false);
+// `updating` was declared and never bound to anything, and a `loading` ref was
+// declared, never set, and used to gate the entire template — so the table
+// rendered only because the value it guarded stayed false by accident. Now the
+// switches disable while a change is in flight, which is what stops an admin
+// flipping three of them into three racing requests over the same row.
+const updating = ref(false);
 const organisationId = getSignedInUser()?.organisation;
+
+// The directory shows resolved access; a change here has to reach it.
+const refreshSignal = useState<number>('lawyersDirectoryRefresh', () => 0);
 
 watch(() => props.permissions, value => { permissions.value = [...value]; });
 
-const togglePermission = async (permission: string, value : boolean) => {
+const togglePermission = async (permission: string, value: boolean) => {
+  if (updating.value) return;
+  const previous = [...permissions.value];
+  updating.value = true;
   try {
-    updating.value = true;
-
     if (!organisationId) throw new Error('No active organisation selected');
-    const next = value ? [...permissions.value, permission] : permissions.value.filter(p => p !== permission);
-    const status = await updateMemberPermissionsForOrganisation(props.lawyerId, organisationId, next);
-    permissions.value = status.permissions;
-    console.log(`Permission ${permission} as ${value}`);
+    const next = value
+        ? [...permissions.value, permission]
+        : permissions.value.filter(p => p !== permission);
+    const status: any = await updateMemberPermissionsForOrganisation(props.lawyerId, organisationId, next);
+    // The SERVER's answer, not the requested set. They differ for an owner or an
+    // admin, who hold everything whatever these switches say — echoing the
+    // request back would show them as restricted while every collection rule
+    // treated them as unrestricted.
+    permissions.value = status?.permissions ?? next;
+    refreshSignal.value++;
+    toast.success('Permissions updated');
   } catch (e) {
+    // A failure used to be a console.error and nothing else: the switch stayed
+    // where the admin left it, so the screen showed a permission that had not
+    // been granted.
     console.error(e);
+    permissions.value = previous;
+    toast.error(apiErrorMessage(e, 'Could not update permissions'));
+  } finally {
+    updating.value = false;
   }
-  updating.value = false;
 }
 
 const Permissions = [
@@ -56,7 +78,12 @@ const Permissions = [
 </script>
 
 <template>
-  <div class="flex flex-col" v-if="!loading">
+  <div class="flex flex-col gap-2">
+    <p v-if="roleLabel" class="text-xs text-muted-foreground">
+      These switches are the difference from what a
+      <span class="font-medium">{{ roleLabel }}</span> holds at this firm. Anything
+      you change here stays with this person when the role itself is edited.
+    </p>
     <Table class="border">
       <TableHeader>
         <TableRow class="divide-x bg-muted/70 text-muted-foreground">
@@ -79,7 +106,11 @@ const Permissions = [
           </TableCell>
 
           <TableCell>
-            <Switch :model-value="permissions.includes(permission?.value)" @update:model-value="v => togglePermission(permission?.value, v)" />
+            <Switch
+                :model-value="permissions.includes(permission?.value)"
+                :disabled="updating"
+                @update:model-value="v => togglePermission(permission?.value, v)"
+            />
           </TableCell>
         </TableRow>
       </TableBody>

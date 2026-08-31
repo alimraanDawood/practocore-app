@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="TData, TValue">
-import type { ColumnDef, SortingState, ColumnFiltersState, VisibilityState } from '@tanstack/vue-table'
+import type { ColumnDef, SortingState, ColumnFiltersState, VisibilityState, RowSelectionState } from '@tanstack/vue-table'
 import {
   FlexRender,
   getCoreRowModel,
@@ -9,6 +9,7 @@ import {
   useVueTable,
 } from '@tanstack/vue-table'
 import { valueUpdater } from '@/lib/utils'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -26,20 +27,36 @@ const props = defineProps<{
   // Server-side pagination props
   page?: number
   pageSize?: number
-  // Filtering
-  searchQuery?: string
-  roleFilters?: string[]
+  /** Enables the selection column. Off by default so a table that has nothing to
+   *  do with a selection does not grow a column of dead checkboxes. */
+  selectable?: boolean
+  /** Rows that cannot be selected — the caller themselves, the owner — keyed by
+   *  row id. A selection that silently drops them server-side would report a
+   *  bulk failure the admin could have been spared. */
+  isSelectable?: (row: TData) => boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'update:page', page: number): void
   (e: 'update:pageSize', size: number): void
+  (e: 'update:selected', ids: string[]): void
+  /** Fired in the TARGET phase, so a capture-phase handler on the container
+   *  above has already cleared the aim. See the page: there is ONE context menu
+   *  for the whole table, not one per row. */
+  (e: 'row-contextmenu', row: TData): void
 }>()
 
 // ── Table state ──────────────────────────────────────────────────────────────
+//
+// Sorting and filtering are the SERVER's; this table renders the page it is
+// given. The client-side filter sync that used to live here fought the server's
+// pagination — it hid rows out of a page whose count and page numbers had already
+// been computed elsewhere, so a filtered view showed "10 results" over four
+// visible rows.
 const sorting = ref<SortingState>([])
 const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
+const rowSelection = ref<RowSelectionState>({})
 
 const table = useVueTable({
   get data() { return props.data },
@@ -54,6 +71,7 @@ const table = useVueTable({
     get sorting() { return sorting.value },
     get columnFilters() { return columnFilters.value },
     get columnVisibility() { return columnVisibility.value },
+    get rowSelection() { return rowSelection.value },
     get pagination() {
       return {
         pageIndex: (props.page ?? 1) - 1,
@@ -64,6 +82,12 @@ const table = useVueTable({
   onSortingChange: (updater) => valueUpdater(updater, sorting),
   onColumnFiltersChange: (updater) => valueUpdater(updater, columnFilters),
   onColumnVisibilityChange: (updater) => valueUpdater(updater, columnVisibility),
+  onRowSelectionChange: (updater) => valueUpdater(updater, rowSelection),
+  enableRowSelection: (row) => (props.isSelectable ? props.isSelectable(row.original) : true),
+  // The row id is the record id, not the index. Without this a selection follows
+  // POSITION across a page change and would act on whoever happens to be third
+  // on the next page.
+  getRowId: (row: any) => String(row?.id ?? ''),
   onPaginationChange: (updater) => {
     const old = { pageIndex: (props.page ?? 1) - 1, pageSize: props.pageSize ?? 10 }
     const next = typeof updater === 'function' ? updater(old) : updater
@@ -72,14 +96,16 @@ const table = useVueTable({
   },
 })
 
-// expose table to parent (for toolbar filters etc.)
-defineExpose({ table })
+watch(rowSelection, (value) => {
+  emit('update:selected', Object.keys(value).filter((id) => value[id]))
+}, { deep: true })
 
-// Sync external filter props into table state
-watchEffect(() => {
-  table.getColumn('member')?.setFilterValue(props.searchQuery ?? '')
-  table.getColumn('role')?.setFilterValue(props.roleFilters ?? [])
-})
+function clearSelection() {
+  rowSelection.value = {}
+}
+
+// expose table to parent (for toolbar filters etc.)
+defineExpose({ table, clearSelection })
 </script>
 
 <template>
@@ -91,6 +117,13 @@ watchEffect(() => {
             :key="headerGroup.id"
             class="hover:bg-transparent"
         >
+          <TableHead v-if="selectable" class="w-10">
+            <Checkbox
+                :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')"
+                aria-label="Select all"
+                @update:model-value="(v) => table.toggleAllPageRowsSelected(!!v)"
+            />
+          </TableHead>
           <TableHead
               v-for="header in headerGroup.headers"
               :key="header.id"
@@ -109,6 +142,7 @@ watchEffect(() => {
         <!-- Loading skeleton rows -->
         <template v-if="loading">
           <TableRow v-for="i in pageSize ?? 10" :key="`skeleton-${i}`">
+            <TableCell v-if="selectable" class="py-3" />
             <TableCell
                 v-for="col in columns"
                 :key="String(col)"
@@ -126,7 +160,16 @@ watchEffect(() => {
               :key="row.id"
               :data-state="row.getIsSelected() && 'selected'"
               class="group/row"
+              @contextmenu="emit('row-contextmenu', row.original)"
           >
+            <TableCell v-if="selectable" class="py-3">
+              <Checkbox
+                  :model-value="row.getIsSelected()"
+                  :disabled="!row.getCanSelect()"
+                  aria-label="Select row"
+                  @update:model-value="(v) => row.toggleSelected(!!v)"
+              />
+            </TableCell>
             <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id" class="py-3">
               <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
             </TableCell>
@@ -136,7 +179,7 @@ watchEffect(() => {
         <!-- Empty state -->
         <template v-else>
           <TableRow class="hover:bg-transparent">
-            <TableCell :colspan="columns.length" class="h-40 text-center">
+            <TableCell :colspan="columns.length + (selectable ? 1 : 0)" class="h-40 text-center">
               <div class="flex flex-col items-center gap-2 text-muted-foreground">
                 <span class="text-2xl">👥</span>
                 <p class="text-sm font-medium">No members found</p>
