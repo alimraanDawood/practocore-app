@@ -26,6 +26,11 @@ The current release workflow always produces `{ "enabled": false }` until an
 architecture decision changes it. Do not enable production channels from a
 workflow input.
 
+The native plugin is additionally excluded from ordinary builds. A POC build
+requires `PRACTOCORE_ENABLE_HOT_UPDATE_POC=true` at compile time as well as an
+enabled, signed hot-update configuration. This prevents a pre-1.0 asset-provider
+plugin from affecting routine development or release builds.
+
 ## Required gates before enabling
 
 - Clean-machine Windows, macOS arm64/x64, and Linux tests: no update, staged

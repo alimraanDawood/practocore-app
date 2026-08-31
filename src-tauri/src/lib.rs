@@ -156,13 +156,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // This must wrap assets before Tauri consumes the Context, otherwise the
-    // embedded bundle cannot be the permanent fallback. The release config is
-    // dark-shipped with `enabled: false`; registering it now lets us validate
-    // native integration without permitting frontend OTA traffic.
     let mut context = tauri::generate_context!();
-    #[cfg(desktop)]
-    let hot_update = tauri_plugin_hot_update::install(&mut context);
     let mut builder = tauri::Builder::default();
 
     // Single-instance MUST be the first plugin registered, and is desktop-only.
@@ -172,8 +166,15 @@ pub fn run() {
     // empty body here is deliberate — we don't need to do anything extra.
     #[cfg(desktop)]
     {
+        // The pre-1.0 frontend OTA plugin is not loaded in ordinary builds.
+        // It mutates Tauri's asset provider before startup, so isolate it to
+        // explicitly approved POC builds while the platform test matrix runs.
+        if option_env!("PRACTOCORE_ENABLE_HOT_UPDATE_POC") == Some("true") {
+            let hot_update = tauri_plugin_hot_update::install(&mut context);
+            builder = builder.plugin(tauri_plugin_hot_update::init(hot_update));
+        }
+
         builder = builder
-            .plugin(tauri_plugin_hot_update::init(hot_update))
             .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}))
             // The updater verifies every downloaded artifact against the public
             // key embedded by the signed release configuration. It is kept out
