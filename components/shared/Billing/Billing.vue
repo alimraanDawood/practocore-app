@@ -134,6 +134,73 @@
         </div>
       </div>
 
+      <!-- Invoices Section
+
+           The endpoint behind this has existed since the ledger shipped and was
+           wired to nothing, so a customer could not see a bill anywhere in the
+           product: the only route to one was an emailed checkout link that
+           expired in thirty days, after which there was no record to file, hand
+           to an accountant, or produce for URA. -->
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-1">
+          <h2 class="font-semibold text-lg">Invoices</h2>
+          <p class="text-sm text-muted-foreground">Your bills and receipts. Open one to print or save it as a PDF.</p>
+        </div>
+
+        <div v-if="loadingInvoices" class="flex items-center justify-center p-8 border rounded-lg">
+          <Loader2 class="size-6 animate-spin text-muted-foreground" />
+        </div>
+
+        <div v-else-if="invoices.length > 0" class="border rounded-lg overflow-hidden">
+          <div class="divide-y">
+            <div
+                v-for="invoice in invoices"
+                :key="invoice.id"
+                class="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+            >
+              <div class="flex flex-col min-w-0 flex-1">
+                <span class="font-medium font-mono text-sm">{{ invoice.number }}</span>
+                <span class="text-xs text-muted-foreground">
+                  {{ invoice.issuedAt ? dayjs(invoice.issuedAt).format('D MMM YYYY') : '—' }}
+                  <template v-if="invoice.lines?.length"> · {{ invoice.lines[0].description }}</template>
+                </span>
+              </div>
+
+              <div class="flex flex-col items-end">
+                <span class="font-medium text-sm">{{ invoice.total }}</span>
+                <Badge :variant="invoiceBadge(invoice.status)" class="mt-0.5">{{ invoiceLabel(invoice.status) }}</Badge>
+              </div>
+
+              <div class="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                    v-if="invoice.payable"
+                    size="sm"
+                    :disabled="workingInvoiceId === invoice.id"
+                    @click="payInvoice(invoice)"
+                >
+                  <Loader2 v-if="workingInvoiceId === invoice.id" class="size-3.5 animate-spin" />
+                  Pay
+                </Button>
+                <Button
+                    v-if="invoice.viewUrl"
+                    size="sm"
+                    variant="outline"
+                    @click="openInvoice(invoice)"
+                >
+                  <FileText class="size-3.5" />
+                  View
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="flex flex-col border border-dashed rounded-lg p-8 items-center justify-center gap-2 text-center">
+          <FileText class="size-10 text-muted-foreground" />
+          <p class="text-sm text-muted-foreground">No invoices yet</p>
+        </div>
+      </div>
+
       <!-- Subscription History Section -->
       <div class="flex flex-col gap-3">
         <div class="flex flex-col gap-1">
@@ -375,6 +442,9 @@ import {
   openCheckout,
   waitForPayment,
   checkoutTokenFromURL,
+  listInvoices,
+  checkoutLinkFor,
+  type Invoice,
 } from "~/services/billing";
 
 const props = defineProps(['asModal']);
@@ -490,6 +560,99 @@ async function resumePayment(subscription: any) {
     toast.error(e?.message ?? 'Could not open the payment page. Try again.');
   } finally {
     workingId.value = null;
+  }
+}
+
+// --- invoices ------------------------------------------------------------
+
+const invoices = ref<Invoice[]>([]);
+const loadingInvoices = ref(true);
+const workingInvoiceId = ref<string | null>(null);
+
+/**
+ * loadInvoices fetches the holder's bills.
+ *
+ * Failures are swallowed to a console warning rather than a toast: the invoice
+ * list is secondary to everything else on this page, and a customer trying to
+ * see why their subscription lapsed should not be met with an error about a
+ * table they did not ask for.
+ */
+async function loadInvoices() {
+  loadingInvoices.value = true;
+  try {
+    invoices.value = await listInvoices();
+  } catch (e) {
+    console.warn('[billing] could not load invoices', e);
+    invoices.value = [];
+  } finally {
+    loadingInvoices.value = false;
+  }
+}
+loadInvoices();
+
+/**
+ * openInvoice opens the printable document.
+ *
+ * Through openCheckout, which is the app's external-browser hand-off: the page
+ * is served by the API host, and inside a Capacitor WebView an ordinary link
+ * would either navigate the app shell away or do nothing at all.
+ */
+async function openInvoice(invoice: Invoice) {
+  if (!invoice.viewUrl) return;
+  await openCheckout(invoice.viewUrl);
+}
+
+/**
+ * payInvoice settles a bill from the list.
+ *
+ * This is what ends the "the emailed link expired, now what" dead end. The
+ * server re-mints a link for the same invoice under the same idempotency key,
+ * so this can be tapped repeatedly without ever raising a second bill.
+ */
+async function payInvoice(invoice: Invoice) {
+  workingInvoiceId.value = invoice.id;
+  try {
+    const { url } = await checkoutLinkFor(invoice.id);
+    await openCheckout(url);
+
+    const token = checkoutTokenFromURL(url);
+    // Not awaited: settlement lands minutes later as a provider callback.
+    if (token) watchForInvoiceSettlement(token);
+  } catch (e: any) {
+    toast.error(e?.message ?? 'Could not open the payment page. Try again.');
+  } finally {
+    workingInvoiceId.value = null;
+  }
+}
+
+async function watchForInvoiceSettlement(token: string) {
+  const paid = await waitForPayment(token);
+  if (!paid) return;
+  toast.success('Payment received.');
+  await Promise.all([loadInvoices(), billingStore.reloadSubscriptionData()]);
+}
+
+/** invoiceLabel writes a ledger status the way a customer would say it. */
+function invoiceLabel(status: string): string {
+  switch (status) {
+    case 'paid': return 'Paid';
+    case 'open': return 'Unpaid';
+    case 'partial': return 'Part paid';
+    case 'void': return 'Cancelled';
+    case 'uncollectible': return 'Written off';
+    case 'draft': return 'Draft';
+    default: return status;
+  }
+}
+
+function invoiceBadge(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'paid': return 'default';
+    case 'open':
+    case 'partial': return 'secondary';
+    case 'void':
+    case 'uncollectible': return 'outline';
+    default: return 'outline';
   }
 }
 

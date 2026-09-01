@@ -72,6 +72,15 @@ export interface Invoice {
   issuedAt: string;
   paidAt: string;
   lines: InvoiceLine[] | null;
+  /**
+   * Link to the printable invoice — the copy the customer keeps, prints, or
+   * forwards to an accountant. Read-only and non-expiring, unlike a checkout
+   * link: a receipt that dies after thirty days is not a receipt.
+   */
+  viewUrl?: string;
+  /** Whether anything is still owed on it. Decided by the server so the button
+   *  and the entitlement decision cannot disagree. */
+  payable?: boolean;
 }
 
 /** CreditPurchase is a raised invoice awaiting payment — NOT a granted balance. */
