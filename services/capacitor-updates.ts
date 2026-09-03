@@ -1,6 +1,7 @@
 import { reactive } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { updateNotifications } from '~/services/update-notifications';
 
 export type CapacitorUpdateStatus = 'idle' | 'downloading' | 'ready-next-launch' | 'failed';
 
@@ -32,6 +33,7 @@ export async function initializeCapacitorUpdates(): Promise<void> {
   await CapacitorUpdater.addListener('download', ({ percent, bundle }) => {
     capacitorUpdateState.status = 'downloading';
     capacitorUpdateState.version = bundle.version;
+    void updateNotifications.progress(Math.round(percent));
     if (percent >= 100) capacitorUpdateState.status = 'idle';
   });
 
@@ -44,6 +46,9 @@ export async function initializeCapacitorUpdates(): Promise<void> {
       capacitorUpdateState.status = 'ready-next-launch';
       capacitorUpdateState.version = bundle.version;
       capacitorUpdateState.error = null;
+      // The one state a user has to act on, and the one they cannot discover
+      // without opening Settings.
+      void updateNotifications.ready(bundle.version);
     } catch (error) {
       capacitorUpdateState.status = 'failed';
       capacitorUpdateState.error = error instanceof Error ? error.message : 'Unable to stage the downloaded update.';
@@ -51,6 +56,7 @@ export async function initializeCapacitorUpdates(): Promise<void> {
   });
 
   await CapacitorUpdater.addListener('downloadFailed', ({ version }) => {
+    void updateNotifications.clear();
     capacitorUpdateState.status = 'failed';
     capacitorUpdateState.version = version;
     capacitorUpdateState.error = 'The update download did not finish. The current version remains active.';
@@ -92,6 +98,7 @@ export async function checkForCapacitorUpdate(): Promise<void> {
   if (!isCapacitorMobile() || capacitorUpdateState.checking) return;
   capacitorUpdateState.checking = true;
   capacitorUpdateState.error = null;
+  void updateNotifications.checking();
   try {
     const latest = await CapacitorUpdater.getLatest();
     capacitorUpdateState.lastCheckedAt = new Date();
@@ -104,5 +111,8 @@ export async function checkForCapacitorUpdate(): Promise<void> {
     capacitorUpdateState.error = error instanceof Error ? error.message : 'Could not check for updates.';
   } finally {
     capacitorUpdateState.checking = false;
+    // If a download started, its own progress notification replaces this one;
+    // otherwise the indeterminate "checking" entry must not linger.
+    if (capacitorUpdateState.status !== 'downloading') void updateNotifications.clear();
   }
 }

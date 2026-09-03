@@ -54,6 +54,10 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+. The push-notifications plugin merges this in too; declaring
+         it here keeps the update notifications' requirement visible in our own
+         manifest rather than depending on a library's merge. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Required alongside RECORD_AUDIO: Capacitor's BridgeWebChromeClient requests
          both for a WebView AUDIO_CAPTURE request and denies unless BOTH are granted,
