@@ -137,7 +137,7 @@
                 <ChevronRight class="size-5 text-muted-foreground"/>
               </Button>
               <Button variant="ghost" class="justify-between items-center"
-                      @click="navigateTo('/main/settings?tab=updates')">
+                      @click="navigateTo('/main/settings/updates')">
                 <div class="flex flex-row justify-center items-center gap-2">
                   <Download />
                   Application updates
