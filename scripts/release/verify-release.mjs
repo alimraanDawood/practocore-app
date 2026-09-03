@@ -22,6 +22,20 @@ if (config.server?.url) problems.push(`production config must not contain server
 if (config.server?.cleartext) problems.push('production config must not enable clear-text transport');
 if (!existsSync(path.join(root, 'dist', 'index.html'))) problems.push('dist/index.html is missing');
 
+// The app is ssr:false, so runtimeConfig.public is inlined into every generated
+// HTML file at `nuxt generate` time. A loopback backend URL therefore ships
+// baked into the artifact and the release talks to the user's own machine.
+// v0.2.3 was published this way: a dev toggle committed into lib/pocketbase.ts
+// silently removed the production fallback, and nothing checked the output.
+const generatedHtml = ['index.html', '200.html', '404.html']
+  .map((name) => path.join(root, 'dist', name))
+  .filter((file) => existsSync(file));
+const loopback = /(?:127\.0\.0\.1|localhost|0\.0\.0\.0)(?::\d+)?/;
+for (const file of generatedHtml) {
+  const match = readFileSync(file, 'utf8').match(loopback);
+  if (match) problems.push(`dist/${path.basename(file)} contains a loopback URL (${match[0]}); set NUXT_PUBLIC_POCKETBASE_URL for the build`);
+}
+
 const androidManifest = readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
 const iosInfoPlist = readFileSync(path.join(root, 'ios/App/App/Info.plist'), 'utf8');
 if (/usesCleartextTraffic\s*=\s*["']true["']/i.test(androidManifest)) {

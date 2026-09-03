@@ -352,6 +352,7 @@ jobs:
       # not passed here compiles to '' and the feature is dead in the APK.
       - name: Build frontend
         env:
+          NUXT_PUBLIC_POCKETBASE_URL: https://api.practocore.com
           NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID: 286763366119-3t8ae6qc45smec3up32c1r9hlhi2uot9.apps.googleusercontent.com
           NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID: 286763366119-d5gbju720bdoahn01k1vuo69l5hqkan5.apps.googleusercontent.com
         run: bun run generate

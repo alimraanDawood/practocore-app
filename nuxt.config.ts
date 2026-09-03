@@ -151,7 +151,7 @@ export default defineNuxtConfig({
     runtimeConfig: {
         public: {
             // Override at deploy time by setting NUXT_PUBLIC_POCKETBASE_URL
-            pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'http://127.0.0.1:8090',
+            pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'https://api.practocore.com',
             // PostHog product analytics. Leave the key empty to disable entirely
             // (e.g. local dev). EU ingestion only — never point posthogHost at US.
             // Default host is the first-party reverse proxy (portal.practocore.com),
