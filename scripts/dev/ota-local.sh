@@ -80,16 +80,27 @@ publish)
 
   # requiredCapabilities MUST stay empty: the Capacitor adapter builds its check
   # without capabilities, so any requirement here returns `blocked` on device.
-  curl -sS -X POST "$BASE/admin/releases" \
-    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-    -d "{\"id\":\"local-$VERSION\",\"appId\":\"com.practocore.app\",\"target\":\"web\",
+  # Fail loudly. A duplicate release id is rejected ("release already exists"),
+  # and the plugin compares bundle versions by string inequality — so reusing a
+  # version name is a no-op that would otherwise look like a successful publish.
+  api() {
+    local method="$1" path="$2" body="$3" out code
+    out=$(curl -sS -o /tmp/ota-local-response -w '%{http_code}' -X "$method" "$BASE$path" \
+      -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$body") || {
+      die "cannot reach the update service at $BASE — is '$0 serve' running?"
+    }
+    code="$out"
+    if [ "$code" -ge 300 ]; then
+      die "$method $path returned $code: $(cat /tmp/ota-local-response)"
+    fi
+  }
+
+  api POST /admin/releases "{\"id\":\"local-$VERSION\",\"appId\":\"com.practocore.app\",\"target\":\"web\",
          \"version\":\"$VERSION\",\"decision\":\"silent_web_update\",\"provider\":\"self-hosted\",
          \"providerConfig\":{\"bundleUrl\":\"$BASE/bundles/$VERSION.zip\"},
          \"minNativeVersion\":\"$NATIVE\",\"requiredCapabilities\":[],
-         \"archiveSha256\":\"$SHA\",\"archiveSize\":$SIZE,\"notes\":\"local test bundle\"}" >/dev/null
-  curl -sS -X PUT "$BASE/admin/channels/production" \
-    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"production\",\"releaseId\":\"local-$VERSION\",\"rolloutPercent\":100,\"paused\":false}" >/dev/null
+         \"archiveSha256\":\"$SHA\",\"archiveSize\":$SIZE,\"notes\":\"local test bundle\"}"
+  api PUT /admin/channels/production "{\"name\":\"production\",\"releaseId\":\"local-$VERSION\",\"rolloutPercent\":100,\"paused\":false}"
 
   echo "published $VERSION  ($(numfmt --to=iec "$SIZE"), sha256 ${SHA:0:12}…)"
   echo
