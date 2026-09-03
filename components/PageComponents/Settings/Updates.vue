@@ -2,15 +2,51 @@
   <section class="max-w-2xl space-y-5">
     <div>
       <h2 class="text-2xl font-semibold ibm-plex-serif">Application updates</h2>
-      <p class="text-sm text-muted-foreground">Keep the desktop application current without interrupting your work.</p>
+      <p class="text-sm text-muted-foreground">{{ intro }}</p>
     </div>
+
+    <!-- What is installed, on every platform. Quote these two lines in a support
+         conversation and there is no ambiguity about what someone is running. -->
+    <dl class="rounded-lg border divide-y text-sm">
+      <div class="flex items-center justify-between gap-4 p-3">
+        <dt class="text-muted-foreground">Application version</dt>
+        <dd class="font-medium tabular-nums">{{ installedVersion }}</dd>
+      </div>
+      <div v-if="mobile" class="flex items-center justify-between gap-4 p-3">
+        <dt class="text-muted-foreground">Content bundle</dt>
+        <dd class="font-medium tabular-nums">{{ bundleLabel }}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-4 p-3">
+        <dt class="text-muted-foreground">Platform</dt>
+        <dd class="font-medium capitalize">{{ platformLabel }}</dd>
+      </div>
+    </dl>
 
     <div v-if="!desktop" class="rounded-lg border p-4 text-sm text-muted-foreground">
       <template v-if="mobile">
-        <p class="font-medium text-foreground">{{ mobileHeading }}</p>
-        <p v-if="capacitorState.version" class="mt-1">Bundle {{ capacitorState.version }}</p>
-        <p v-if="capacitorState.error" class="mt-2 text-destructive">{{ capacitorState.error }}</p>
-        <p v-else class="mt-2">Downloaded updates activate only after you fully close and reopen the app.</p>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="font-medium text-foreground">{{ mobileHeading }}</p>
+            <p v-if="capacitorState.lastCheckedAt" class="mt-1 text-xs">
+              Last checked {{ capacitorState.lastCheckedAt.toLocaleString() }}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" :disabled="capacitorState.checking" @click="checkForCapacitorUpdate">
+            {{ capacitorState.checking ? 'Checking…' : 'Check now' }}
+          </Button>
+        </div>
+
+        <!-- The one state a user has to act on: the bundle is downloaded and
+             waiting, and only a full close-and-reopen will apply it. -->
+        <div v-if="capacitorState.status === 'ready-next-launch'" class="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
+          <p class="font-medium text-foreground">Update ready</p>
+          <p class="mt-1">Fully close the app and open it again to apply {{ capacitorState.version }}. Leaving it in the background is not enough.</p>
+        </div>
+        <p v-else-if="capacitorState.status === 'downloading'" class="mt-2">
+          Downloading {{ capacitorState.version }} in the background. You can keep working.
+        </p>
+        <p v-else-if="capacitorState.error" class="mt-2 text-destructive">{{ capacitorState.error }}</p>
+        <p v-else class="mt-2">Updates download in the background and apply the next time you open the app.</p>
       </template>
       <template v-else>Updates for this platform are delivered through its app store or distribution channel.</template>
     </div>
@@ -60,20 +96,44 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import {
   checkForDesktopUpdate,
   desktopUpdateState as state,
   downloadDesktopUpdate,
   restartToApplyDesktopUpdate,
 } from '~/services/desktop-updates';
-import { capacitorUpdateState as capacitorState } from '~/services/capacitor-updates';
+import {
+  capacitorUpdateState as capacitorState,
+  checkForCapacitorUpdate,
+  refreshCapacitorVersions,
+} from '~/services/capacitor-updates';
 import { Capacitor } from '@capacitor/core';
 import { isDesktop } from '~/utils/isDesktop';
 import { updateControlState as control } from '~/services/update-control';
 
 const desktop = isDesktop();
 const mobile = Capacitor.isNativePlatform() && !desktop;
+const buildVersion = useRuntimeConfig().public.appVersion as string;
+// The native shell is the authority on mobile; elsewhere the bundle's own build
+// version is all there is. `installedVersion` is deliberately never the version
+// being *offered* — conflating the two is what makes update UIs confusing.
+const installedVersion = computed(() => capacitorState.nativeVersion || buildVersion || 'unknown');
+const bundleLabel = computed(() =>
+  !capacitorState.bundleVersion || capacitorState.bundleVersion === 'builtin'
+    ? 'Shipped with the app'
+    : capacitorState.bundleVersion,
+);
+const platformLabel = computed(() => (desktop ? 'Desktop' : Capacitor.getPlatform()));
+const intro = computed(() =>
+  desktop
+    ? 'Keep the desktop application current without interrupting your work.'
+    : 'See what you are running and when it last checked for an update.',
+);
+
+onMounted(() => {
+  void refreshCapacitorVersions();
+});
 const heading = computed(() => {
   switch (state.status) {
     case 'checking': return 'Checking for updates…';

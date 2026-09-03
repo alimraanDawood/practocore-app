@@ -8,6 +8,13 @@ export const capacitorUpdateState = reactive({
   status: 'idle' as CapacitorUpdateStatus,
   version: null as string | null,
   error: null as string | null,
+  // What is actually running right now, as opposed to `version`, which is the
+  // bundle being downloaded or staged. A user asking "what version am I on?"
+  // means these two.
+  nativeVersion: null as string | null,
+  bundleVersion: null as string | null,
+  checking: false,
+  lastCheckedAt: null as Date | null,
 });
 
 function isCapacitorMobile(): boolean {
@@ -56,4 +63,46 @@ export async function initializeCapacitorUpdates(): Promise<void> {
   });
 
   await CapacitorUpdater.notifyAppReady();
+  await refreshCapacitorVersions();
+}
+
+/**
+ * Read what is installed: the native shell version and the web bundle the app
+ * booted from. `bundle.version` is "builtin" when running the APK's own assets
+ * rather than a downloaded bundle.
+ */
+export async function refreshCapacitorVersions(): Promise<void> {
+  if (!isCapacitorMobile()) return;
+  try {
+    const current = await CapacitorUpdater.current();
+    capacitorUpdateState.nativeVersion = current.native;
+    capacitorUpdateState.bundleVersion = current.bundle?.version ?? null;
+  } catch (error) {
+    // Reporting the running version must never break the settings page.
+    console.warn('[capgo] could not read the current bundle', error);
+  }
+}
+
+/**
+ * A manual check, so a user is not left waiting on the plugin's periodic timer
+ * to find out whether anything is available. Downloading still happens in the
+ * background and still activates only on a cold start.
+ */
+export async function checkForCapacitorUpdate(): Promise<void> {
+  if (!isCapacitorMobile() || capacitorUpdateState.checking) return;
+  capacitorUpdateState.checking = true;
+  capacitorUpdateState.error = null;
+  try {
+    const latest = await CapacitorUpdater.getLatest();
+    capacitorUpdateState.lastCheckedAt = new Date();
+    // getLatest reports what the server offers; the download listeners above
+    // own the progress and staging state from here.
+    if (latest?.version && latest.version !== capacitorUpdateState.bundleVersion) {
+      capacitorUpdateState.version = latest.version;
+    }
+  } catch (error) {
+    capacitorUpdateState.error = error instanceof Error ? error.message : 'Could not check for updates.';
+  } finally {
+    capacitorUpdateState.checking = false;
+  }
 }

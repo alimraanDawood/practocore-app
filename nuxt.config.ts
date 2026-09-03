@@ -10,6 +10,9 @@ import tailwindcss from '@tailwindcss/vite'
 // Word-on-the-web). Opt in with `DEV_HTTPS=1 npm run dev`; reuses the trusted
 // office-addin-dev-certs (run `npx office-addin-dev-certs install` once). Plain
 // `npm run dev` is unaffected.
+// The version this bundle is built from, read once at config load.
+const appVersion = JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version
+
 const certDir = resolve(homedir(), '.office-addin-dev-certs')
 const certPath = resolve(certDir, 'localhost.crt')
 const keyPath = resolve(certDir, 'localhost.key')
@@ -150,6 +153,12 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
+            // The version this bundle was built from. Read straight out of
+            // package.json so it cannot drift from the release the CI version
+            // check enforces, and inlined at generate time like everything else
+            // in runtimeConfig.public. Surfaced in Settings so a user (or a
+            // support conversation) can state exactly what they are running.
+            appVersion,
             // Override at deploy time by setting NUXT_PUBLIC_POCKETBASE_URL
             pocketbaseUrl: process.env.NUXT_PUBLIC_POCKETBASE_URL || process.env.POCKETBASE_URL || 'https://api.practocore.com',
             // PostHog product analytics. Leave the key empty to disable entirely
