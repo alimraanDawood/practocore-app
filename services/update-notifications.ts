@@ -11,8 +11,10 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 interface UpdateNotificationsPlugin {
   checking(): Promise<void>;
   progress(options: { percent: number }): Promise<void>;
+  settled(options: { text: string }): Promise<void>;
   ready(options: { version: string }): Promise<void>;
   clear(): Promise<{ cleared: boolean }>;
+  applied(): Promise<void>;
 }
 
 const plugin = registerPlugin<UpdateNotificationsPlugin>('UpdateNotifications');
@@ -38,6 +40,8 @@ async function attempt(action: () => Promise<unknown>): Promise<void> {
 export const updateNotifications = {
   checking: () => attempt(() => plugin.checking()),
   progress: (percent: number) => attempt(() => plugin.progress({ percent })),
+  settled: (text: string) => attempt(() => plugin.settled({ text })),
   ready: (version: string) => attempt(() => plugin.ready({ version })),
   clear: () => attempt(() => plugin.clear()),
+  applied: () => attempt(() => plugin.applied()),
 };

@@ -37,10 +37,11 @@
         </div>
 
         <!-- The one state a user has to act on: the bundle is downloaded and
-             waiting, and only a full close-and-reopen will apply it. -->
+             waiting. Reopening applies it, because startup does so explicitly
+             — the plugin on its own would wait for the next backgrounding. -->
         <div v-if="capacitorState.status === 'ready-next-launch'" class="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
           <p class="font-medium text-foreground">Update ready</p>
-          <p class="mt-1">Fully close the app and open it again to apply {{ capacitorState.version }}. Leaving it in the background is not enough.</p>
+          <p class="mt-1">Close the app and open it again to apply {{ capacitorState.version }}.</p>
         </div>
         <p v-else-if="capacitorState.status === 'downloading'" class="mt-2">
           Downloading {{ capacitorState.version }} in the background. You can keep working.

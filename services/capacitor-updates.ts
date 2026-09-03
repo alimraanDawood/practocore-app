@@ -69,7 +69,34 @@ export async function initializeCapacitorUpdates(): Promise<void> {
   });
 
   await CapacitorUpdater.notifyAppReady();
+  await applyStagedBundle();
   await refreshCapacitorVersions();
+}
+
+/**
+ * Apply a bundle that was downloaded in an earlier session.
+ *
+ * The plugin only installs a queued bundle from `appMovedToBackground`, so a
+ * close-and-reopen — the thing every message here tells the user to do — clears
+ * the kill delay but leaves them on the old bundle until they happen to
+ * background the app again. Applying it here makes the instruction true, and a
+ * cold start is the one moment a reload costs the user nothing.
+ *
+ * If the new bundle fails to call notifyAppReady the plugin rolls it back on
+ * its own, so a broken bundle cannot strand anyone here.
+ */
+async function applyStagedBundle(): Promise<void> {
+  try {
+    const queued = await CapacitorUpdater.getNextBundle();
+    // Either nothing is queued, so a notice promising a restart is stale, or
+    // one is and is about to be applied. Withdraw it either way.
+    void updateNotifications.applied();
+    if (!queued) return;
+    // reload() applies the queued bundle and clears it, so this cannot loop.
+    await CapacitorUpdater.reload();
+  } catch (error) {
+    console.warn('[capgo] could not apply the staged bundle', error);
+  }
 }
 
 /**
@@ -102,17 +129,23 @@ export async function checkForCapacitorUpdate(): Promise<void> {
   try {
     const latest = await CapacitorUpdater.getLatest();
     capacitorUpdateState.lastCheckedAt = new Date();
-    // getLatest reports what the server offers; the download listeners above
-    // own the progress and staging state from here.
-    if (latest?.version && latest.version !== capacitorUpdateState.bundleVersion) {
+    // getLatest only reports; it never fetches. Without this the button
+    // resolved, changed a label, and left the update on the server forever —
+    // only the plugin's own launch check ever downloaded anything.
+    if (latest?.url && latest.version && latest.version !== capacitorUpdateState.bundleVersion) {
       capacitorUpdateState.version = latest.version;
+      // The download listeners above own progress and staging from here.
+      await CapacitorUpdater.download({ url: latest.url, version: latest.version });
+    } else {
+      void updateNotifications.settled('PractoCore is up to date.');
     }
   } catch (error) {
     capacitorUpdateState.error = error instanceof Error ? error.message : 'Could not check for updates.';
+    void updateNotifications.settled('Could not check for updates.');
   } finally {
     capacitorUpdateState.checking = false;
-    // If a download started, its own progress notification replaces this one;
-    // otherwise the indeterminate "checking" entry must not linger.
-    if (capacitorUpdateState.status !== 'downloading') void updateNotifications.clear();
+    // The spinner needs no explicit clearing: a download replaces it with its
+    // own progress notification, and every other path has already replaced it
+    // with an outcome that dismisses itself.
   }
 }
