@@ -171,6 +171,9 @@ jobs:
         run: bun run release:verify
 
       - name: Require desktop updater signing configuration
+        # Windows runners default to PowerShell, where `test -n "$VAR"` is not a
+        # command and the secrets would read as empty regardless of their value.
+        shell: bash
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
