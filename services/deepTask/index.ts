@@ -2,27 +2,27 @@ import { pb, SERVER_URL } from '~/lib/pocketbase';
 import { track } from '~/utils/analytics';
 import type { AiCitation } from '~/services/ai';
 
-// ── Deep research-and-compile service ─────────────────────────────────────────
-// Surfaces the async deep-task pipeline (practocore-backend/ai/deeptask): a long,
-// multi-phase agent that sweeps memories/vaults and authors a document
-// section-by-section — beyond the synchronous chat loop's round/output ceilings.
+// ── Deep research service ─────────────────────────────────────────────────────
+// Surfaces the async deep-task pipeline (practocore-backend/ai/deeptask): the
+// request is decomposed into typed sub-questions, one bounded researcher runs per
+// question in parallel recording findings bound to their sources, the findings are
+// reconciled, and the report is projected from them.
 //
 // The task is a persisted background job, so the UI POLLS GET /deep-task/{id}
 // while it runs (mirroring services/workflows watchRun — these endpoints aren't
 // SDK collections with realtime). The flow has one human gate: the task parks at
-// `outline_review`, the user approves (optionally editing the outline), and the
-// pipeline resumes to authoring.
+// `plan_review`, the user edits/approves the research questions, and the run
+// proceeds to gather. The .docx is an export off the finished report.
 
 const BASE = `${SERVER_URL}/api/practocore/ai`;
 
 export type DeepTaskPhase =
   | 'pending'
   | 'planning'
+  | 'plan_review'
   | 'gathering'
-  | 'outlining'
-  | 'outline_review'
-  | 'authoring'
-  | 'assembling'
+  | 'reconciling'
+  | 'synthesising'
   | 'paused'
   | 'cancelled'
   | 'done'
@@ -31,28 +31,65 @@ export type DeepTaskPhase =
 /** Cooperative control signal the user can set on a running task. */
 export type DeepTaskControl = '' | 'run' | 'pause' | 'cancel';
 
-/** Requested output-size band: caps the outline + per-section budget so "short" stays short. */
+/** Requested output-size band: governs the report's budget so "short" stays short. */
 export type DeepResearchLength = 'brief' | 'standard' | 'comprehensive';
-
-/** Pipeline output mode: research (default) produces a cited report; document runs the
- * full outline → author → assemble pipeline to produce a .docx. */
-export type DeepResearchMode = 'research' | 'document';
 
 export interface DeepTaskStep {
   label: string;
   detail?: string;
 }
 
-export interface OutlineSection {
-  heading: string;
-  brief: string;
-  numbered?: boolean;
+/** What kind of research answers a question — it decides which tools the lane gets. */
+export type ResearchIntent =
+  | 'statute' | 'case_law' | 'treatment' | 'firm_fact' | 'procedure'
+  | 'argument' | 'compare' | 'catalogue' | 'summary';
+
+/** A lane's position in the run. `thin` is distinct from `done`: the lane recorded
+ * nothing and did not even report an absence, so reconcile re-dispatched it once. */
+export type LaneStatus = 'pending' | 'running' | 'done' | 'thin' | 'failed';
+
+/** One research lane: a self-contained question, the tools its intent selects, and
+ * how far it got. The set is the run's plan — what it decided to investigate. */
+export interface SubQuestion {
+  id: string;
+  title?: string;
+  question: string;
+  intent: ResearchIntent;
+  /** Exact model selected by the member for this research agent. */
+  model?: string;
+  hints?: string[];
+  status: LaneStatus;
+  attempt: number;
+  rounds: number;
+  findings: number;
+  error?: string;
 }
 
-export interface Outline {
-  title: string;
-  kind: string;
-  sections: OutlineSection[];
+/** Immutable, safe-to-display activity. It describes actions and evidence, never
+ * hidden chain-of-thought. agentId is empty for run-level phase events. */
+export interface ResearchEvent {
+  id: string;
+  taskId: string;
+  agentId?: string;
+  kind: 'phase' | 'activity' | 'tool' | 'source_read' | 'finding' | 'agent_started' | 'agent_finished' | 'report_revision' | 'amendment' | string;
+  label: string;
+  detail?: string;
+  tool?: string;
+  status?: string;
+  payload?: Record<string, any>;
+  created: string;
+}
+
+export interface ResearchRevision {
+  id: string;
+  taskId: string;
+  number: number;
+  parentId?: string;
+  instruction: string;
+  summary?: string;
+  report: string;
+  model?: string;
+  created: string;
 }
 
 export interface DeepTaskScope {
@@ -96,6 +133,26 @@ export interface ResearchFinding {
   authority_weight?: number;
 }
 
+/**
+ * An absence finding: the lane searched properly and the corpus had nothing. It is a
+ * real research output, not a failure, and the backend marks it by putting "absence"
+ * first in `tags` with the queries it ran after it. The rule lives here so the panel
+ * and the card cannot drift from the backend's encoding.
+ */
+export function isAbsenceFinding(f: ResearchFinding): boolean {
+  return f.tags?.[0] === 'absence';
+}
+
+/** The searches a lane ran before reporting a gap — the proof of work behind it. */
+export function absenceQueries(f: ResearchFinding): string[] {
+  return isAbsenceFinding(f) ? (f.tags ?? []).slice(1) : [];
+}
+
+/** Topic tags, excluding the absence marker and the queries that follow it. */
+export function findingTags(f: ResearchFinding): string[] {
+  return isAbsenceFinding(f) ? [] : (f.tags ?? []);
+}
+
 /** Pinpoints where a finding's evidence lives in the corpus. */
 export interface SourceSpan {
   source_type: 'statute' | 'case_law' | 'memory' | 'vault_doc';
@@ -112,31 +169,28 @@ export interface DeepTask {
   label: string;
   progress: number;
   conversation: string;
-  /** GeneratedDocuments id once compiled, else "". */
+  /** GeneratedDocuments id once the report has been exported to .docx, else "". */
   document: string;
   error: string;
   /** Cooperative control signal in flight ('pause'/'cancel' while parking). */
   control: DeepTaskControl;
-  /** Launched from a conversational plan (planning/outlining were pre-baked). */
+  /** Launched from a conversational plan (its questions were pre-baked). */
   seeded: boolean;
-  /** Whether the task parks at outline_review before authoring. */
+  /** Whether the task parks at plan_review before gathering. */
   review: boolean;
   steps: DeepTaskStep[];
-  outline: Outline | null;
+  /** The research lanes: what the run investigates, and where each one got to. */
+  subquestions: SubQuestion[];
   scope: DeepTaskScope | null;
   attachments: DeepAttachmentRef[];
   /** The de-duped sources the gather sweep consulted (empty until gathering finishes). */
   sources: AiCitation[];
-  /** The research findings brief the gather wrote (capped for transport). */
-  findings: string;
-  /** Number of structured findings extracted (full list via getTaskFindings). */
+  /** Number of recorded findings (full list via getTaskFindings). */
   findingsCount?: number;
-  /** The compiled document rendered to markdown for the in-app report-first view. */
+  /** The report, projected from the finding clusters. */
   report: string;
-  /** Resolved output-size band governing the outline cap + section budget. */
+  /** Resolved output-size band governing the report's budget. */
   length: DeepResearchLength | '';
-  /** Pipeline output mode: research (cited report) or document (full .docx). */
-  mode: DeepResearchMode | '';
   created: string;
   updated: string;
 }
@@ -149,21 +203,26 @@ export interface DeepTask {
 export interface ResearchPlan {
   objective: string;
   title?: string;
-  kind?: string;
-  mode?: DeepResearchMode;
   scope?: {
     matter_ids?: string[];
     vault_ids?: string[];
     memory_scopes?: string[];
   };
-  outline: OutlineSection[];
+  questions: PlannedQuestion[];
   open_questions?: string[];
+}
+
+/** One planned research question, as the plan card and the run's lanes express it. */
+export interface PlannedQuestion {
+  question: string;
+  intent: ResearchIntent;
+  hints?: string[];
 }
 
 // Phases where the worker is actively progressing the task (keep polling). A task
 // with a control signal in flight (pausing/cancelling) is still live until it parks.
 const LIVE_PHASES: DeepTaskPhase[] = [
-  'pending', 'planning', 'gathering', 'outlining', 'authoring', 'assembling',
+  'pending', 'planning', 'gathering', 'reconciling', 'synthesising',
 ];
 
 export function isLivePhase(p: DeepTaskPhase): boolean {
@@ -175,11 +234,10 @@ export function phaseLabel(p: DeepTaskPhase): string {
   switch (p) {
     case 'pending': return 'Queued';
     case 'planning': return 'Planning';
+    case 'plan_review': return 'Awaiting your approval';
     case 'gathering': return 'Researching';
-    case 'outlining': return 'Outlining';
-    case 'outline_review': return 'Awaiting your approval';
-    case 'authoring': return 'Writing';
-    case 'assembling': return 'Assembling';
+    case 'reconciling': return 'Checking the research';
+    case 'synthesising': return 'Writing the report';
     case 'paused': return 'Paused';
     case 'cancelled': return 'Cancelled';
     case 'done': return 'Done';
@@ -198,11 +256,11 @@ function authHeaders(json = false): Record<string, string> {
  * Start a deep-research task; returns the created (pending) task.
  *
  * Two launch modes:
- *  - bare: pass an `instruction` (the legacy one-shot launch). Parks at
- *    outline_review by default.
- *  - seeded (Feature A): pass a conversational `plan`. The backend skips the silent
- *    planning/outlining phases and starts at the gather sweep, and by default skips
- *    the outline gate (pass `review: true` to keep an optional review pause).
+ *  - bare: pass an `instruction`. The backend plans the research questions and parks
+ *    at plan_review by default so the user sees them before the expensive part runs.
+ *  - seeded (Feature A): pass a conversational `plan`. Its questions become the run's
+ *    lanes directly, so the planning call is skipped and so, by default, is the gate
+ *    (pass `review: true` to keep a review pause anyway).
  */
 export async function createDeepTask(input: {
   instruction?: string;
@@ -213,8 +271,6 @@ export async function createDeepTask(input: {
   review?: boolean;
   /** Output-size band. Omit to let the backend auto-detect from the instruction. */
   length?: DeepResearchLength;
-  /** Pipeline output mode. Omit for research (default); set 'document' for full .docx. */
-  mode?: DeepResearchMode;
 }): Promise<DeepTask> {
   const res = await fetch(`${BASE}/deep-task`, {
     method: 'POST',
@@ -227,7 +283,6 @@ export async function createDeepTask(input: {
       ...(input.plan ? { plan: input.plan } : {}),
       ...(input.review !== undefined ? { review: input.review } : {}),
       ...(input.length ? { length: input.length } : {}),
-      ...(input.mode ? { mode: input.mode } : {}),
     }),
   });
   if (res.status === 403) throw new Error('Deep research is not enabled for your account.');
@@ -251,7 +306,7 @@ export async function cancelDeepTask(id: string): Promise<DeepTask> {
   return controlDeepTask(id, 'cancel');
 }
 
-/** Continue a paused task; resumes from saved research/outline (no re-gather). */
+/** Continue a paused task; resumes from the saved findings (no re-gather). */
 export async function continueDeepTask(id: string): Promise<DeepTask> {
   return controlDeepTask(id, 'continue');
 }
@@ -286,25 +341,42 @@ export async function listDeepTasks(conversationId?: string): Promise<DeepTask[]
 }
 
 /**
- * Approve the outline and resume to authoring. Pass an edited outline to override
- * what the research phase produced; omit to approve as-is.
+ * Approve the research questions and release the run into the gather. Pass edited
+ * questions to override what the planner produced; omit to approve as-is. This is the
+ * gate that matters: it decides what the run goes and reads, before it is paid for.
  */
-export async function approveOutline(id: string, outline?: Outline): Promise<DeepTask> {
+export async function approveResearchPlan(id: string, questions?: PlannedQuestion[]): Promise<DeepTask> {
   const res = await fetch(`${BASE}/deep-task/${id}/approve`, {
     method: 'POST',
     headers: authHeaders(true),
-    body: JSON.stringify(outline ? { outline } : {}),
+    body: JSON.stringify(questions?.length ? { questions } : {}),
   });
-  if (!res.ok) throw new Error(`Could not approve the outline (${res.status})`);
+  if (!res.ok) throw new Error(`Could not approve the research questions (${res.status})`);
   return await res.json() as DeepTask;
 }
 
 /**
- * Retry a failed task, resuming from the furthest cheap checkpoint. If the gather
- * already produced findings, the backend reuses them and re-runs only the cheap
- * outline step (re-parking at outline_review for approval) — so this does NOT
- * re-run the expensive research sweep or re-author without re-approval. Only valid
- * when the task is in the `error` phase.
+ * Export a finished report to .docx, returning the GeneratedDocuments id. The report
+ * the user read is what is rendered, so an export can never disagree with it.
+ * Idempotent: a task already exported returns its existing document.
+ */
+export async function exportDeepTask(id: string): Promise<string> {
+  const res = await fetch(`${BASE}/deep-task/${id}/export`, {
+    method: 'POST',
+    headers: authHeaders(true),
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`Could not export the report (${res.status})`);
+  const j = await res.json() as { document?: string };
+  track('deep_research_exported', { task: id });
+  return j.document ?? '';
+}
+
+/**
+ * Retry a failed task, resuming from the furthest cheap checkpoint. Findings already
+ * recorded are kept, so a task that failed at the report re-writes it from the
+ * evidence it has rather than re-running the research lanes. Only valid when the task
+ * is in the `error` phase.
  */
 export async function retryDeepTask(id: string): Promise<DeepTask> {
   const res = await fetch(`${BASE}/deep-task/${id}/retry`, {
@@ -327,10 +399,63 @@ export async function getTaskFindings(taskId: string): Promise<ResearchFinding[]
   return j.findings ?? [];
 }
 
+export async function getTaskEvents(taskId: string, agentId?: string): Promise<ResearchEvent[]> {
+  const query = agentId ? `?agent=${encodeURIComponent(agentId)}` : '';
+  const res = await fetch(`${BASE}/deep-task/${taskId}/events${query}`, { headers: authHeaders() });
+  if (!res.ok) return [];
+  const j = await res.json() as { events?: ResearchEvent[] };
+  return j.events ?? [];
+}
+
+/** Subscribe to the immutable event collection for true live agent activity. The
+ * custom GET endpoint remains the history/backfill path after reconnect. */
+export async function subscribeTaskEvents(taskId: string, onEvent: (event: ResearchEvent) => void): Promise<() => void> {
+  return await pb.collection('AiResearchEvents').subscribe('*', (message) => {
+    if (message.action !== 'create') return;
+    const record = message.record as any;
+    onEvent({
+      id: record.id,
+      taskId: record.task_id,
+      agentId: record.agent_id || undefined,
+      kind: record.kind,
+      label: record.label,
+      detail: record.detail || undefined,
+      tool: record.tool || undefined,
+      status: record.status || undefined,
+      payload: record.payload || undefined,
+      created: record.created,
+    });
+  }, { filter: pb.filter('task_id = {:taskId}', { taskId }) });
+}
+
+export async function getTaskRevisions(taskId: string): Promise<ResearchRevision[]> {
+  const res = await fetch(`${BASE}/deep-task/${taskId}/revisions`, { headers: authHeaders() });
+  if (!res.ok) return [];
+  const j = await res.json() as { revisions?: ResearchRevision[] };
+  return j.revisions ?? [];
+}
+
+/** Add a focused specialist to a completed run. Existing evidence/report history is
+ * retained and the returned task immediately moves back into gathering. */
+export async function amendDeepTask(id: string, input: {
+  instruction: string;
+  intent: ResearchIntent;
+  title?: string;
+}): Promise<DeepTask> {
+  const res = await fetch(`${BASE}/deep-task/${id}/amend`, {
+    method: 'POST',
+    headers: authHeaders(true),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Could not add the research amendment (${res.status})`);
+  track('deep_research_amended', { task: id, intent: input.intent });
+  return await res.json() as DeepTask;
+}
+
 /**
  * Poll a task while it is live, invoking onUpdate with each snapshot. Returns a
  * stop() fn. Stops itself once the task reaches a terminal/parked phase
- * (done/error/outline_review). Mirrors services/workflows watchRun.
+ * (done/error/plan_review/paused). Mirrors services/workflows watchRun.
  */
 export function watchDeepTask(
   id: string,

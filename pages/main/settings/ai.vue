@@ -5,7 +5,7 @@
         <Button variant="outline" size="icon-sm" @click="goBack">
           <ArrowLeft class="size-5" />
         </Button>
-        <span class="text-lg font-semibold">AI Provider</span>
+        <span class="text-lg font-semibold">AI Models</span>
 
         <SharedDarkModeSwitch class="ml-auto" />
       </div>

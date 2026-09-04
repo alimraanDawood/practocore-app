@@ -23,7 +23,7 @@
               class="lg:w-full flex flex-row justify-start"
               :variant="activeTab === 'ai' ? 'secondary' : 'ghost'"
               @click="activeTab = 'ai'"
-          >AI Providers</Button>
+          >AI Models</Button>
         </div>
 
         <!-- Tab Content -->

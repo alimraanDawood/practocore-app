@@ -1,9 +1,12 @@
 <script setup lang="ts">
-// Standalone Deep Research surface: launch a task, watch its live progress, review
-// the outline, and download the compiled document. The pipeline is a background
-// job (practocore-backend/ai/deeptask), so everything here polls — there is no SDK
-// realtime. The same launcher + card can be embedded in the chat home later.
-import {Loader2, History, ArrowLeft} from 'lucide-vue-next';
+// Standalone Deep Research surface: launch a run, watch its questions being researched
+// in parallel, approve the plan when it parks, and read the report with the findings it
+// was built from. The pipeline is a background job (practocore-backend/ai/deeptask), so
+// everything here polls — there is no SDK realtime.
+//
+// This page is the LIST view: recent runs plus whichever one is selected. The card
+// itself is shared with the conversational Research surface.
+import { Loader2, History } from 'lucide-vue-next';
 import { listDeepTasks, phaseLabel, isLivePhase, type DeepTask } from '~/services/deepTask';
 
 const activeId = ref<string>('');
@@ -28,6 +31,12 @@ function onStarted(id: string) {
 
 function select(t: DeepTask) {
   activeId.value = t.id;
+}
+
+// A run parked at plan_review is waiting on the user, not on the worker — surface that
+// in the list so a run that needs a decision is not mistaken for one still working.
+function needsYou(t: DeepTask): boolean {
+  return t.phase === 'plan_review' || t.phase === 'paused';
 }
 </script>
 
@@ -62,8 +71,16 @@ function select(t: DeepTask) {
             :class="{ 'bg-muted/40': t.id === activeId }"
             @click="select(t)"
           >
-            <span class="text-sm truncate">{{ t.instruction }}</span>
-            <Badge variant="secondary" class="shrink-0 flex items-center gap-1">
+            <div class="min-w-0">
+              <p class="text-sm truncate">{{ t.instruction }}</p>
+              <p v-if="t.findingsCount" class="text-xs text-muted-foreground">
+                {{ t.findingsCount }} finding{{ t.findingsCount === 1 ? '' : 's' }}
+              </p>
+            </div>
+            <Badge
+              :variant="needsYou(t) ? 'default' : t.phase === 'error' ? 'destructive' : 'secondary'"
+              class="shrink-0 flex items-center gap-1"
+            >
               <Loader2 v-if="isLivePhase(t.phase)" class="size-3 animate-spin" />
               {{ phaseLabel(t.phase) }}
             </Badge>

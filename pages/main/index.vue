@@ -310,7 +310,7 @@ onMounted(loadHome);
 </script>
 
 <template>
-  <ChatSurface class="h-full">
+  <ChatSurface class="h-full" workspace-preview>
     <!-- Empty-state "home" dashboard. `ask` seeds the composer; `send` fires immediately. -->
     <template #empty="{ ask, send }">
       <div class="flex w-full flex-col gap-6">

@@ -18,12 +18,13 @@ export interface DockContext {
   sublabel?: string;
   // Optional lucide icon component for the header + FAB affordance.
   icon?: Component;
-  // Structured context pre-selected into the composer (matter/deadline/user), folded
-  // into the sent AiContext so the backend receives matterIds/deadlineIds/userIds.
-  chips?: ContextItem[];
+  // The conversation's scope, pre-selected into the composer's scope bar and folded
+  // into the sent AiContext so the backend receives the matching id list. One item:
+  // the page IS one thing.
+  scope?: ContextItem | null;
   // Free-text context header attached to EVERY turn (via ChatSurface.contextProvider) —
-  // used for context the structured chips can't carry (vault/engagement/calendar
-  // identity, current view, etc.). Keep it short; it rides on the cached-prefix budget.
+  // used for context a scope can't carry (the calendar, which view is open, a filter).
+  // Keep it short; it rides on the cached-prefix budget.
   contextText?: string;
   // Optional prompt auto-sent when the dock first opens on this context.
   seed?: string;

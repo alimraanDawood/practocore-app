@@ -3,7 +3,7 @@ import { Zap, Check, X, Loader2 } from 'lucide-vue-next';
 import type {
   AiResponse,
   ReassignPreview, BulkReassignPreview, NotificationPreview,
-  AdjournPreview, DateChangePreview, FulfillPreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
+  AdjournPreview, DateChangePreview, FulfillPreview, EvidencePreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
   EventEditPreview, EventStatusPreview,
   GenerateDocumentPreview, ProposeSkillPreview, ManageSkillPreview, ProposeEngagementTemplatePreview,
   ForgetMemoryPreview,
@@ -15,6 +15,7 @@ import ProposalNotification from './proposals/ProposalNotification.vue';
 import ProposalAdjourn from './proposals/ProposalAdjourn.vue';
 import ProposalDateChange from './proposals/ProposalDateChange.vue';
 import ProposalFulfill from './proposals/ProposalFulfill.vue';
+import ProposalAttachEvidence from './proposals/ProposalAttachEvidence.vue';
 import ProposalMatterEdit from './proposals/ProposalMatterEdit.vue';
 import ProposalCreateMatter from './proposals/ProposalCreateMatter.vue';
 import ProposalReminder from './proposals/ProposalReminder.vue';
@@ -33,7 +34,10 @@ const props = withDefaults(defineProps<{
   loading?: boolean;
 }>(), { variant: 'panel', loading: false });
 
-const emit = defineEmits<{ approve: []; dismiss: []; editManually: [] }>();
+// patchInput carries an edit the card made to the tool's input — today only the
+// fulfil card's document picker. The confirm leg executes the input the client
+// sends, so the host merges this into the pending proposal before approving.
+const emit = defineEmits<{ approve: []; dismiss: []; editManually: []; patchInput: [Record<string, any>] }>();
 
 const t = computed(() => proposalTheme(props.variant));
 const glass = computed(() => props.variant === 'glass');
@@ -68,7 +72,12 @@ const iconWrap = computed(() => glass.value
       <ProposalNotification v-else-if="kind === 'notification'" :preview="(proposal.preview as NotificationPreview)" :variant="variant" />
       <ProposalAdjourn v-else-if="kind === 'adjourn'" :preview="(proposal.preview as AdjournPreview)" :variant="variant" />
       <ProposalDateChange v-else-if="kind === 'date_change'" :preview="(proposal.preview as DateChangePreview)" :variant="variant" />
-      <ProposalFulfill v-else-if="kind === 'fulfill'" :preview="(proposal.preview as FulfillPreview)" :variant="variant" />
+      <ProposalFulfill v-else-if="kind === 'fulfill'" :preview="(proposal.preview as FulfillPreview)" :variant="variant"
+                       :document-id="(proposal.input?.document_id as string) ?? ''"
+                       @update:document-id="(id: string) => emit('patchInput', { document_id: id })" />
+      <ProposalAttachEvidence v-else-if="kind === 'evidence'" :preview="(proposal.preview as EvidencePreview)" :variant="variant"
+                              :document-id="(proposal.input?.document_id as string) ?? ''"
+                              @update:document-id="(id: string) => emit('patchInput', { document_id: id })" />
       <ProposalMatterEdit v-else-if="kind === 'matter_edit'" :preview="(proposal.preview as MatterEditPreview)" :variant="variant" />
       <ProposalReminder v-else-if="kind === 'reminder'" :preview="(proposal.preview as ReminderPreview)" :variant="variant" />
       <ProposalEventEdit v-else-if="kind === 'event_edit'" :preview="(proposal.preview as EventEditPreview)" :variant="variant" />

@@ -209,12 +209,23 @@ const samples: Sample[] = [
   {
     id: 'fulfill',
     label: 'Mark a deadline fulfilled',
-    note: 'Green tick path.',
+    note: 'Green tick path, with the vault document picker — proof is chosen on the card, not guessed by the model.',
     proposal: {
       type: 'proposal',
       tool: 'fulfill_deadline',
       toolUseId: 'tu_fulfill',
-      preview: { kind: 'fulfill', deadline, fulfilledDate: iso(-1) },
+      preview: { kind: 'fulfill', deadline, fulfilledDate: iso(-1), supportsEvidence: true },
+    },
+  },
+  {
+    id: 'fulfill_adhoc',
+    label: 'Mark a firm-added deadline fulfilled',
+    note: 'No engine event to key evidence to, so the card says why instead of offering a picker.',
+    proposal: {
+      type: 'proposal',
+      tool: 'fulfill_deadline',
+      toolUseId: 'tu_fulfill_adhoc',
+      preview: { kind: 'fulfill', deadline, fulfilledDate: iso(-1), supportsEvidence: false },
     },
   },
   {

@@ -152,7 +152,7 @@ provideDockContext(() => {
     icon: Briefcase,
     // Attach as a structured chip (→ engagementIds) so it shows in the composer AND the
     // backend pins it into context; the text header adds the live current-stage detail.
-    chips: [{ type: 'engagement', id: eng.id, label: eng.name || 'Engagement', sublabel: template.value?.name }],
+    scope: { type: 'engagement', id: eng.id, label: eng.name || 'Engagement', sublabel: template.value?.name },
     contextText: bits.join(' '),
   };
 });

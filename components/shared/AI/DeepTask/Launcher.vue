@@ -7,6 +7,7 @@ import { toast } from 'vue-sonner';
 import {
   createDeepTask, type DeepTaskScope, type DeepAttachment, type DeepResearchLength,
 } from '~/services/deepTask';
+import { extractDocxAttachment } from '~/services/ai';
 import { getMatters } from '~/services/matters';
 import { listVaults } from '~/services/vault';
 
@@ -30,7 +31,7 @@ const emit = defineEmits<{ (e: 'started', taskId: string): void }>();
 const instruction = ref('');
 const starting = ref(false);
 
-// Output-size band — caps the outline + per-section budget so "short" stays short and
+// Output-size band — governs the report's budget so "short" stays short and
 // the run doesn't balloon into an unwanted treatise (and exhaust credits). Default
 // standard. Each option carries its rough expectation for the estimate line.
 const LENGTHS: { value: DeepResearchLength; label: string; hint: string }[] = [
@@ -87,16 +88,29 @@ function isTextFile(file: File): boolean {
   const t = file.type;
   return t.startsWith('text/') || t === 'application/json' || t === 'application/markdown';
 }
+// Word. The model has no .docx content block, so these are unzipped to text by the
+// backend (POST /ai/attachments/extract) and attached as text document blocks. The
+// legacy binary .doc is NOT accepted — the extractor cannot read it.
+const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+function isWordFile(file: File): boolean {
+  return file.name.toLowerCase().endsWith('.docx') || file.type === WORD_MIME;
+}
+
+// Files currently being extracted, by name — shown as "Reading…" chips so a slow
+// upload doesn't look like the picker did nothing.
+const extracting = ref<string[]>([]);
+
 function isAcceptedFile(file: File): boolean {
   return file.type === 'application/pdf'
     || ACCEPTED_IMAGE_TYPES.includes(file.type)
+    || isWordFile(file)
     || isTextFile(file);
 }
 
 async function addFiles(files: File[] | FileList) {
   for (const file of Array.from(files)) {
     if (!isAcceptedFile(file)) {
-      toast('Unsupported file', { description: `${file.name} — PDFs, images, and text/Markdown only.` });
+      toast('Unsupported file', { description: `${file.name} — PDFs, Word (.docx), images, and text/Markdown only.` });
       continue;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -109,7 +123,18 @@ async function addFiles(files: File[] | FileList) {
     }
     const id = crypto.randomUUID();
     try {
-      if (isTextFile(file)) {
+      if (isWordFile(file)) {
+        // Unzipped server-side; what rides to the model is the extracted text, so
+        // the chip carries text/plain under the .docx name.
+        extracting.value.push(file.name);
+        try {
+          const doc = await extractDocxAttachment(file);
+          attachments.value.push({ id, name: file.name, mime: 'text/plain', size: file.size, kind: 'text', text: doc.text });
+        } finally {
+          const i = extracting.value.indexOf(file.name);
+          if (i >= 0) extracting.value.splice(i, 1);
+        }
+      } else if (isTextFile(file)) {
         const text = await file.text();
         attachments.value.push({ id, name: file.name, mime: file.type || 'text/markdown', size: file.size, kind: 'text', text });
       } else {
@@ -219,7 +244,7 @@ const canStart = computed(() => !starting.value && instruction.value.trim().leng
 // single biggest determinant of cost/time — so the estimate tracks the real output size.
 const estimate = computed(() => {
   const hint = LENGTHS.find(o => o.value === length.value)?.hint ?? '~5–10 min · 3–6 pages';
-  return `Runs in the background — about ${hint}, using Deep-tier credits. You'll review the findings and outline before it writes.`;
+  return `Runs in the background — about ${hint}, using Deep-tier credits. You'll review the research questions before it starts.`;
 });
 
 async function start() {
@@ -261,7 +286,7 @@ function onKeydown(e: KeyboardEvent) {
     </div>
     <p class="text-sm text-muted-foreground">
       Hand off a big task — researching across your memories, vaults and matters (and any files you attach) and
-      compiling a document. It runs in the background; you'll review the outline before it writes.
+      compiling a report. It runs in the background; you'll review the research questions before it starts.
     </p>
 
     <!-- Composer — uses the same InputGroup primitives as the chat composer
@@ -269,7 +294,7 @@ function onKeydown(e: KeyboardEvent) {
          Add Context in the block-start addon, attach + launch in the block-end. -->
     <div class="space-y-2" :class="starting ? 'opacity-60 pointer-events-none' : ''">
       <!-- Pinned context + attachment chips -->
-      <div v-if="pinned.length || attachments.length" class="flex flex-wrap gap-1.5">
+      <div v-if="pinned.length || attachments.length || extracting.length" class="flex flex-wrap gap-1.5">
         <Badge
           v-for="item in pinned"
           :key="'ctx-' + item.id"
@@ -281,6 +306,17 @@ function onKeydown(e: KeyboardEvent) {
           <button class="rounded-sm p-0.5 hover:bg-foreground/10" @click="unpin(item.id)">
             <X class="size-3" />
           </button>
+        </Badge>
+
+        <Badge
+          v-for="name in extracting"
+          :key="'reading-' + name"
+          variant="outline"
+          class="gap-1 pl-1.5 pr-1 text-muted-foreground"
+        >
+          <FileText class="size-3 shrink-0" />
+          <span class="max-w-[12rem] truncate">{{ name }}</span>
+          <span>Reading…</span>
         </Badge>
 
         <Badge
@@ -423,7 +459,7 @@ function onKeydown(e: KeyboardEvent) {
       ref="fileInput"
       type="file"
       multiple
-      accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/*,.md,.markdown,.txt,.csv,.json,.log,.rtf"
+      accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/*,.md,.markdown,.txt,.csv,.json,.log,.rtf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       class="hidden"
       @change="onFilesChosen"
     >

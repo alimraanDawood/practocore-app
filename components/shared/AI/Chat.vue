@@ -20,7 +20,7 @@ import type { VoiceEntry } from '~/composables/useSpeech';
 import { getSignedInUser } from '~/services/auth';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
-  listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
+  listConversationAttachments, promoteConversationAttachments, vaultIngestProgress, extractDocxAttachment,
   listConversations, getConversation, deleteConversation, saveConversationTree,
   buildCopyText,
   type AiMessage, type AiContentBlock,
@@ -426,9 +426,22 @@ function isTextFile(file: File): boolean {
   return t.startsWith('text/') || t === 'application/json' || t === 'application/markdown';
 }
 
+// Word. The model has no .docx content block, so these are unzipped to text by the
+// backend (POST /ai/attachments/extract) and attached as text document blocks. The
+// legacy binary .doc is NOT accepted — the extractor cannot read it.
+const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+function isWordFile(file: File): boolean {
+  return file.name.toLowerCase().endsWith('.docx') || file.type === WORD_MIME;
+}
+
+// Files currently being extracted, by name — shown as "Reading…" chips so a slow
+// upload doesn't look like the picker did nothing.
+const extracting = ref<string[]>([]);
+
 function isAcceptedFile(file: File): boolean {
   return file.type === 'application/pdf'
     || (ACCEPTED_IMAGE_TYPES as string[]).includes(file.type)
+    || isWordFile(file)
     || isTextFile(file);
 }
 
@@ -436,7 +449,7 @@ async function addFiles(files: File[] | FileList) {
   const list = Array.from(files);
   for (const file of list) {
     if (!isAcceptedFile(file)) {
-      toast('Unsupported file', { description: `${file.name} (${file.type || 'unknown type'}) — PDFs, images, and text/Markdown only.` });
+      toast('Unsupported file', { description: `${file.name} (${file.type || 'unknown type'}) — PDFs, Word (.docx), images, and text/Markdown only.` });
       continue;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -449,7 +462,18 @@ async function addFiles(files: File[] | FileList) {
     }
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      if (isTextFile(file)) {
+      if (isWordFile(file)) {
+        // Unzipped server-side; what rides to the model (and what is persisted) is
+        // the extracted text, so the chip carries text/plain under the .docx name.
+        extracting.value.push(file.name);
+        try {
+          const doc = await extractDocxAttachment(file);
+          attachments.value.push({ id, name: file.name, mime: 'text/plain', size: file.size, kind: 'text', text: doc.text });
+        } finally {
+          const i = extracting.value.indexOf(file.name);
+          if (i >= 0) extracting.value.splice(i, 1);
+        }
+      } else if (isTextFile(file)) {
         const text = await file.text();
         attachments.value.push({ id, name: file.name, mime: file.type || 'text/markdown', size: file.size, kind: 'text', text });
       } else {
@@ -508,12 +532,13 @@ watch(aiUsage, (u) => {
   creditDegraded.value = u.state === 'degraded';
 });
 
-// Speed/cost tier the user picks for chat. 'auto' lets the backend choose; 'fast'
-// forces the cheapest model (much lower credit burn — DeepSeek where configured);
-// 'deep' forces the premium model. Persisted so the choice sticks across sessions.
-const TIERS = ['auto', 'fast', 'deep'] as const;
+// Speed/cost tier the user picks for chat. 'fast' is the default: it forces the
+// cheapest model (much lower credit burn — DeepSeek where configured); 'auto' lets
+// the backend choose; 'deep' forces the premium model. Persisted so the choice
+// sticks across sessions.
+const TIERS = ['fast', 'auto', 'deep'] as const;
 type ChatTier = typeof TIERS[number];
-const chatTier = ref<ChatTier>('auto');
+const chatTier = ref<ChatTier>('fast');
 if (import.meta.client) {
   const saved = localStorage.getItem('ai.chat.tier');
   if (saved === 'auto' || saved === 'fast' || saved === 'deep') chatTier.value = saved;
@@ -525,19 +550,20 @@ function cycleTier() {
 const tierLabel = computed(() => chatTier.value === 'fast' ? 'Fast' : chatTier.value === 'deep' ? 'Deep' : 'Auto');
 const tierIcon = computed(() => chatTier.value === 'fast' ? Zap : chatTier.value === 'deep' ? Sparkles : Gauge);
 const tierTitle = computed(() =>
-  `Model speed: ${tierLabel.value}. Click to switch — Auto picks for you, Fast is cheapest (lowest credit cost), Deep is most capable.`,
+  `Model speed: ${tierLabel.value}. Click to switch — Fast is the default and cheapest (lowest credit cost), Auto picks for you, Deep is most capable.`,
 );
 
 // Per-message badge explaining which tier actually served a reply, so the cost is
-// legible. Only shown for the non-default tiers (fast/deep).
+// legible. Only shown for the non-default tiers (auto/deep) — Fast is the default
+// and badging every reply would be noise.
 function msgTierLabel(m: ChatMessage): string {
   const t = (m as DisplayAiMessage).tier;
-  if (t === 'fast') return 'Fast model · lower credit cost';
+  if (t === 'auto') return 'Auto model · standard credit cost';
   if (t === 'deep') return 'Deep model · higher credit cost';
   return '';
 }
 function msgTierIcon(m: ChatMessage) {
-  return (m as DisplayAiMessage).tier === 'deep' ? Sparkles : Zap;
+  return (m as DisplayAiMessage).tier === 'deep' ? Sparkles : Gauge;
 }
 
 const composerPlaceholder = computed(() => {
@@ -1333,6 +1359,18 @@ const handoffTemplate = ref<any>(null);
 
 const proposalLoading = ref(false);
 
+// A card can edit the input it is approving (the fulfil card's document picker).
+// The confirm leg executes the input the CLIENT sends, so merging it into the
+// pending proposal here is the whole mechanism — nothing to persist, and the
+// tool re-validates whatever arrives.
+function patchProposalInput(patch: Record<string, any>) {
+  if (!pendingProposal.value) return;
+  pendingProposal.value = {
+    ...pendingProposal.value,
+    input: { ...(pendingProposal.value.input ?? {}), ...patch },
+  };
+}
+
 async function approveProposal() {
   if (!pendingProposal.value || proposalLoading.value) return;
   // Approving applies matter changes (fulfill/adjourn/edit) — block when the
@@ -1525,6 +1563,7 @@ function formatToolName(tool: string): string {
               @approve="approveProposal"
               @dismiss="dismissProposal"
               @edit-manually="handoffMatterDraft"
+              @patch-input="patchProposalInput"
             />
           </Transition>
 
@@ -1953,6 +1992,7 @@ function formatToolName(tool: string): string {
                 @approve="approveProposal"
                 @dismiss="dismissProposal"
                 @edit-manually="handoffMatterDraft"
+              @patch-input="patchProposalInput"
               />
             </div>
 
@@ -2036,7 +2076,15 @@ function formatToolName(tool: string): string {
             </div>
 
             <!-- Pending attachments — chips shown above the input until the next send -->
-            <div v-if="attachments.length > 0" class="flex flex-wrap gap-1.5">
+            <div v-if="attachments.length > 0 || extracting.length > 0" class="flex flex-wrap gap-1.5">
+              <div
+                v-for="name in extracting" :key="`reading-${name}`"
+                class="flex items-center gap-1.5 rounded-md border bg-background pr-1 pl-1 py-1 text-xs text-muted-foreground"
+              >
+                <FileText class="size-4 shrink-0" />
+                <span class="max-w-[140px] truncate font-medium">{{ name }}</span>
+                <span>Reading…</span>
+              </div>
               <div
                 v-for="att in attachments" :key="att.id"
                 class="flex items-center gap-1.5 rounded-md border bg-background pr-1 pl-1 py-1 text-xs"
@@ -2067,7 +2115,7 @@ function formatToolName(tool: string): string {
               ref="fileInput"
               type="file"
               multiple
-              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log"
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               class="hidden"
               @change="onFilesChosen"
             />

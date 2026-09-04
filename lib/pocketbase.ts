@@ -30,7 +30,9 @@ function resolveServerUrl(): string {
     // NUXT_PUBLIC_POCKETBASE_URL) in .env — both are preferred over this, so a
     // dev backend never needs this line edited. Editing it here is how a
     // loopback URL reached a published release once already.
-    return 'https://api.practocore.com';
+    // return 'https://api.practocore.com';
+    return 'http://127.0.0.1:8090';
+
 }
 
 // Shared PocketBase instance used across the entire app

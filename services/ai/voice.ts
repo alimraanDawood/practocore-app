@@ -31,7 +31,8 @@ export interface VoiceContext {
   deadlineIds?: string[];
   userIds?: string[];
   engagementIds?: string[];
-  /** Ambient free text for what ids can't name — a vault, the calendar. */
+  vaultIds?: string[];
+  /** Ambient free text for what ids can't name — the calendar, the current view. */
   pageContext?: string;
 }
 

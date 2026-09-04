@@ -90,26 +90,97 @@ export interface Entitlements {
   aiProviders?: AIProviderState;
 }
 
-/** Provider ids, mirroring providerClaude / providerDeepSeek in ai/pricing.go. */
-export type AIProvider = 'claude' | 'deepseek';
+/**
+ * Vendor ids, mirroring ai/catalogue.go. A vendor is the COMPANY that processes
+ * the tokens — the unit a firm permits or refuses. It is deliberately not the
+ * gateway we route through: permitting a router would tell a partner nothing about
+ * where privileged client material actually lands.
+ *
+ * Typed loosely because the catalogue is server-owned: a deployment that adds a
+ * vendor must not need an app release before it can be shown.
+ */
+export type AIProvider = string;
+
+/** One selectable model within a vendor. */
+export interface AIModel {
+  id: string;
+  label: string;
+  note: string;
+  context: number;
+  vision: boolean;
+  /** Task slots this model may be assigned to. */
+  tasks: string[];
+  /** Indicative USD per 1M tokens. Not a bill — the meter uses reported cost. */
+  usdIn: number;
+  usdOut: number;
+}
+
+/** A vendor and the models this deployment can reach from it. */
+export interface AIVendor {
+  id: AIProvider;
+  name: string;
+  company: string;
+  country: string;
+  note: string;
+  models: AIModel[];
+}
 
 /**
- * The three layers that decide which provider serves a member's work (see
- * ai/router.go providerChoice):
- *   available - what this DEPLOYMENT can reach; nothing to choose if length < 2
+ * One assignable kind of work (ai/tasks.go), carrying everything the settings
+ * screen needs to render it: which models may be chosen, what the firm and the
+ * member have each set, and which one actually wins.
+ */
+export interface AITaskState {
+  id: string;
+  label: string;
+  note: string;
+  /** Catalogue model id used when nothing is assigned. Always a Claude model. */
+  default: string;
+  /** Model ids assignable to this task for this firm. */
+  options: string[];
+  /** What the firm assigned, if anything. */
+  firm?: string;
+  /** What this member assigned, if anything. */
+  member?: string;
+  /** What will actually serve this task right now. */
+  resolved: string;
+  /** 'member', 'firm', or '' when it fell through to the default. */
+  by: '' | 'member' | 'firm';
+  /**
+   * False while no code path consults this slot yet. Reported so the UI can say
+   * so plainly: an assignment that is silently ignored is worse than no setting.
+   */
+  wired?: boolean;
+}
+
+/**
+ * The layers that decide which model serves a member's work (see ai/router.go
+ * providerChoice and ai/tasks.go resolveTask):
+ *   available - VENDORS this DEPLOYMENT can reach; nothing to choose if length < 2
  *   allowed   - what the FIRM permits (a confidentiality decision, admin-set)
- *   preferred - what this MEMBER picked; '' means follow the firm default
+ *   preferred - the member's coarse vendor pick; '' means follow the firm default
+ *   catalogue - the reachable vendors with their models
+ *   tasks     - per-task assignment, the "advanced mode" layer
  */
 export interface AIProviderState {
   available: AIProvider[];
   allowed: AIProvider[];
   preferred: AIProvider | '';
+  catalogue?: AIVendor[];
+  tasks?: AITaskState[];
+  /**
+   * Whether this caller may change the FIRM's permitted vendors — true for an org
+   * admin, and for a solo practitioner (their own firm). Server-computed: admin
+   * status is a permission question, not something to re-derive in the browser.
+   */
+  canManage?: boolean;
 }
 
-/** Display metadata for each provider. Vendor and jurisdiction are named because a
- *  firm needs to know where its privileged material is processed — stated once,
- *  here, as fact. The UI does not repeat it or add a verdict on top. */
-export const AI_PROVIDER_INFO: Record<AIProvider, { name: string; vendor: string; note: string }> = {
+/** Fallback display metadata, used only for a vendor the server did not describe
+ *  (an older backend that predates the catalogue). The live catalogue is
+ *  authoritative: jurisdiction is stated as fact, once, by the server, and the UI
+ *  does not repeat it or add a verdict on top. */
+export const AI_PROVIDER_INFO: Record<string, { name: string; vendor: string; note: string }> = {
   claude: {
     name: 'Claude',
     vendor: 'Anthropic',
@@ -867,4 +938,20 @@ export function setOrgAllowedProviders(providers: AIProvider[]): Promise<AIProvi
 /** Set the signed-in member's own preference. '' follows the firm default. */
 export function setMyProvider(provider: AIProvider | ''): Promise<AIProviderState> {
   return providerFetch('/api/practocore/ai/providers/me', { provider });
+}
+
+/**
+ * Set the FIRM's per-task model assignments (advanced mode). Admin-only
+ * server-side; writes feature_overrides.ai_task_models on the Organisations record.
+ *
+ * The map REPLACES what is stored rather than merging into it, so clearing a slot
+ * is expressed by omitting it and sending {} returns the firm to the defaults.
+ */
+export function setOrgTaskModels(tasks: Record<string, string>): Promise<AIProviderState> {
+  return providerFetch('/api/practocore/ai/tasks/org', { tasks });
+}
+
+/** Set the signed-in member's own per-task assignments, within what the firm allows. */
+export function setMyTaskModels(tasks: Record<string, string>): Promise<AIProviderState> {
+  return providerFetch('/api/practocore/ai/tasks/me', { tasks });
 }

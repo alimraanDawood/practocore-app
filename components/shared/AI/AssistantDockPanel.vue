@@ -52,7 +52,7 @@ function provideContext(): string {
       class="min-h-0 flex-1"
       mode="dock"
       :context-key="context.key"
-      :initial-context="context.chips"
+      :initial-context="context.scope ?? null"
       :page-context-provider="provideContext"
       :seed="context.seed"
       auto-resume-latest

@@ -1,41 +1,79 @@
 <script lang="ts" setup>
 import {
   Loader2, CheckCircle2, XCircle, FileText, Download, Sparkles, Pencil, Plus, Trash2, RotateCw,
-  Pause, Play, Square, CircleSlash, BookOpen,
+  Pause, Play, Square, CircleSlash, BookOpen, ChevronDown, ChevronRight,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import {
-  type DeepTask, type Outline, type OutlineSection,
-  getDeepTask, watchDeepTask, approveOutline, retryDeepTask, isLivePhase, phaseLabel,
-  pauseDeepTask, cancelDeepTask, continueDeepTask,
+  type DeepTask, type PlannedQuestion, type SubQuestion, type ResearchIntent,
+  getDeepTask, watchDeepTask, approveResearchPlan, retryDeepTask, exportDeepTask,
+  isLivePhase, phaseLabel, pauseDeepTask, cancelDeepTask, continueDeepTask,
 } from '~/services/deepTask';
 import { downloadDocument, type GeneratedDocument } from '~/services/documents';
 import type { AiCitation } from '~/services/ai';
 import { getDocument, vaultFileUrl, type VaultDocument } from '~/services/vault';
 import { pb } from '~/lib/pocketbase';
 
-// Live card for one deep-research task: a polling progress timeline, the
-// outline-review gate (approve / edit-then-approve), and the compiled result. The
-// task is a background job, so we POLL via watchDeepTask while it is live and stop
-// once it parks at outline_review or finishes.
+// Live card for one deep-research task: the plan-review gate (edit/approve the
+// research questions), per-lane progress while the questions are researched in
+// parallel, and the finished report. The task is a background job, so we POLL via
+// watchDeepTask while it is live and stop once it parks at plan_review or finishes.
 const props = defineProps<{ taskId: string }>();
 
 const task = ref<DeepTask | null>(null);
 const loading = ref(true);
 let stop: (() => void) | undefined;
 
-// Editable copy of the outline while reviewing.
+// Editable copy of the research questions while reviewing.
 const editing = ref(false);
-const draft = ref<Outline | null>(null);
+const draft = ref<PlannedQuestion[] | null>(null);
 const approving = ref(false);
 const downloading = ref(false);
+const exporting = ref(false);
 const retrying = ref(false);
+const stepsOpen = ref(false);
 
-// True when the gather sweep already produced findings, so a retry resumes from
-// the saved research (skips the expensive re-gather) rather than starting over.
-// The error only ever happens at/after the outline step in that case, so the
-// progress watermark having passed gathering is a reliable signal.
-const canResume = computed(() => (task.value?.progress ?? 0) >= 55);
+// True when findings are already recorded, so a retry re-writes the report from the
+// evidence rather than re-running the research lanes.
+const canResume = computed(() => (task.value?.findingsCount ?? 0) > 0);
+
+const INTENT_LABELS: Record<ResearchIntent, string> = {
+  statute: 'Statute',
+  case_law: 'Case law',
+  treatment: 'Treatment',
+  firm_fact: 'Firm files',
+  procedure: 'Procedure',
+  argument: 'Argument',
+  compare: 'Comparison',
+  catalogue: 'Catalogue',
+  summary: 'Summary',
+};
+
+// The lanes, and what each one has to show for itself. `thin` is deliberately visible:
+// a question the corpus could not answer is a research result the reader should see,
+// not something to hide behind a spinner.
+const lanes = computed<SubQuestion[]>(() => task.value?.subquestions ?? []);
+const lanesDone = computed(() => lanes.value.filter((l) => l.status === 'done').length);
+
+function laneTone(l: SubQuestion): string {
+  switch (l.status) {
+    case 'done': return 'text-foreground';
+    case 'running': return 'text-foreground';
+    case 'thin': return 'text-amber-600';
+    case 'failed': return 'text-destructive';
+    default: return 'text-muted-foreground';
+  }
+}
+
+function laneNote(l: SubQuestion): string {
+  switch (l.status) {
+    case 'running': return 'researching…';
+    case 'done': return `${l.findings} finding${l.findings === 1 ? '' : 's'}`;
+    case 'thin': return l.attempt > 1 ? 'nothing found after a second attempt' : 'nothing found yet';
+    case 'failed': return l.error || 'failed';
+    default: return 'queued';
+  }
+}
 
 function bind(id: string) {
   stop?.();
@@ -58,14 +96,14 @@ onMounted(() => bind(props.taskId));
 watch(() => props.taskId, (id) => bind(id));
 onBeforeUnmount(() => stop?.());
 
-// When the task reaches outline_review, seed the editable draft.
+// When the task parks at plan_review, seed the editable draft.
 watch(() => task.value?.phase, (phase) => {
-  if (phase === 'outline_review' && task.value?.outline && !draft.value) {
-    draft.value = structuredClone(toRaw(task.value.outline));
+  if (phase === 'plan_review' && lanes.value.length && !draft.value) {
+    draft.value = lanes.value.map((l) => ({ question: l.question, intent: l.intent, hints: l.hints }));
   }
 });
 
-const isReview = computed(() => task.value?.phase === 'outline_review');
+const isReview = computed(() => task.value?.phase === 'plan_review');
 const isDone = computed(() => task.value?.phase === 'done');
 const isError = computed(() => task.value?.phase === 'error');
 const isPaused = computed(() => task.value?.phase === 'paused');
@@ -119,40 +157,38 @@ async function continueTask() {
   }
 }
 
-function addSection() {
-  draft.value?.sections.push({ heading: '', brief: '', numbered: false });
+function addQuestion() {
+  draft.value?.push({ question: '', intent: 'case_law' });
 }
-function removeSection(i: number) {
-  draft.value?.sections.splice(i, 1);
+function removeQuestion(i: number) {
+  draft.value?.splice(i, 1);
 }
 
 async function approve(withEdits: boolean) {
   if (!task.value) return;
   approving.value = true;
   try {
-    const outline = withEdits ? sanitizeOutline(draft.value) : undefined;
-    if (withEdits && (!outline || outline.sections.length === 0)) {
-      toast.error('Add a title and at least one section.');
+    const questions = withEdits ? sanitizeQuestions(draft.value) : undefined;
+    if (withEdits && !questions?.length) {
+      toast.error('Keep at least one research question.');
       return;
     }
-    const next = await approveOutline(task.value.id, outline ?? undefined);
+    const next = await approveResearchPlan(task.value.id, questions);
     task.value = next;
     editing.value = false;
-    // Resume polling now that it's authoring again.
+    // Resume polling now that it's researching again.
     bind(task.value.id);
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Could not approve the outline');
+    toast.error(e instanceof Error ? e.message : 'Could not approve the research questions');
   } finally {
     approving.value = false;
   }
 }
 
-function sanitizeOutline(o: Outline | null): Outline | null {
-  if (!o) return null;
-  const sections = o.sections
-    .map((s): OutlineSection => ({ heading: s.heading.trim(), brief: s.brief.trim(), numbered: !!s.numbered }))
-    .filter((s) => s.heading);
-  return { title: o.title.trim(), kind: o.kind || 'memo', sections };
+function sanitizeQuestions(qs: PlannedQuestion[] | null): PlannedQuestion[] {
+  return (qs ?? [])
+    .map((q): PlannedQuestion => ({ question: q.question.trim(), intent: q.intent, hints: q.hints }))
+    .filter((q) => q.question);
 }
 
 async function retry() {
@@ -174,25 +210,32 @@ async function retry() {
   }
 }
 
-async function download() {
-  if (!task.value?.document) return;
-  downloading.value = true;
+// The .docx is produced FROM the finished report, on request. Export then download in
+// one gesture: the user asked for a file, not for a two-step ceremony.
+async function exportAndDownload() {
+  if (!task.value) return;
+  const already = !!task.value.document;
+  already ? (downloading.value = true) : (exporting.value = true);
   try {
-    const doc = await pb.collection('GeneratedDocuments').getOne<GeneratedDocument>(task.value.document);
+    const docId = task.value.document || await exportDeepTask(task.value.id);
+    if (!docId) throw new Error('The report could not be exported');
+    task.value = { ...task.value, document: docId };
+    const doc = await pb.collection('GeneratedDocuments').getOne<GeneratedDocument>(docId);
     await downloadDocument(doc);
-  } catch {
-    toast.error('Could not download the document');
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Could not export the report');
   } finally {
     downloading.value = false;
+    exporting.value = false;
   }
 }
 
-// ── Research findings + sources ───────────────────────────────────────────────
-// The gather sweep's output, surfaced the moment it finishes (was previously kept
-// internal). `sources` reuses the same SourcesFooter/CitationPopover the chat answer
-// uses; `findings` is the brief, shown in a collapsible block.
+// ── Sources ───────────────────────────────────────────────────────────────────
+// The de-duped sources the lanes actually read, reusing the same SourcesFooter /
+// CitationPopover the chat answer uses. The findings themselves live in the evidence
+// panel; the projected brief on the task row is not shown here, because it is a
+// rendering of the same rows and showing both is the same evidence twice.
 const sources = computed<AiCitation[]>(() => task.value?.sources ?? []);
-const findingsOpen = ref(false);
 
 const active = ref<{ citation: AiCitation; index: number; anchor: DOMRect } | null>(null);
 const indexById = computed(() => {
@@ -343,7 +386,7 @@ async function openSource(c: AiCitation) {
           <div class="flex items-center justify-between gap-3 mt-3">
             <p class="text-xs text-muted-foreground">
               {{ canResume
-                ? 'Your research is saved — continuing won’t re-run the costly search.'
+                ? 'Your findings are saved — continuing won’t re-run the research.'
                 : 'Continuing restarts the research from the beginning.' }}
             </p>
             <Button size="sm" variant="outline" :disabled="retrying" class="gap-1 shrink-0" @click="retry">
@@ -354,113 +397,147 @@ async function openSource(c: AiCitation) {
           </div>
         </div>
 
-        <!-- Step timeline -->
-        <ul v-if="task.steps.length" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-          <li v-for="(s, i) in task.steps" :key="i" class="flex items-start gap-2 text-sm">
-            <CheckCircle2 class="size-3.5 mt-0.5 text-muted-foreground/60 shrink-0" />
-            <span>
-              <span class="text-foreground">{{ s.label }}</span>
-              <span v-if="s.detail" class="text-muted-foreground"> — {{ s.detail }}</span>
-            </span>
-          </li>
-        </ul>
+        <!-- Step timeline. It is the live view while the run is in motion; once the
+             run has finished it is a record of how the answer was reached, so it folds
+             away and lets the evidence and the report lead. -->
+        <template v-if="task.steps.length">
+          <button
+            v-if="!isLive"
+            type="button"
+            class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            @click="stepsOpen = !stepsOpen"
+          >
+            <component :is="stepsOpen ? ChevronDown : ChevronRight" class="size-3.5" />
+            How this was researched ({{ task.steps.length }} steps)
+          </button>
+          <ul v-if="isLive || stepsOpen" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            <li v-for="(s, i) in task.steps" :key="i" class="flex items-start gap-2 text-sm">
+              <CheckCircle2 class="size-3.5 mt-0.5 text-muted-foreground/60 shrink-0" />
+              <span>
+                <span class="text-foreground">{{ s.label }}</span>
+                <span v-if="s.detail" class="text-muted-foreground"> — {{ s.detail }}</span>
+              </span>
+            </li>
+          </ul>
+        </template>
 
-        <!-- Research findings + sources (surfaced once the gather sweep produces them).
-             Once the report is done it carries its own clickable sources footer, so we
-             drop the standalone list here to avoid showing every source twice. -->
-        <div v-if="task.findings || (sources.length && !isDone)" class="rounded-md border p-3 space-y-2">
-          <div class="flex items-center gap-1.5 text-sm font-medium">
-            <BookOpen class="size-4 text-muted-foreground" /> Research
+        <!-- Lanes: what the run is investigating, and where each question got to. One
+             phase label on a poll tick told the user nothing while nine questions were
+             moving in parallel. -->
+        <div v-if="lanes.length && !isReview" class="rounded-md border p-3 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-sm font-medium">Research questions</p>
+            <span class="text-xs text-muted-foreground">{{ lanesDone }} of {{ lanes.length }} answered</span>
           </div>
-          <template v-if="task.findings">
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-              @click="findingsOpen = !findingsOpen"
-            >
-              <span>Findings brief</span>
-              <span class="opacity-60">{{ findingsOpen ? '▾' : '▸' }}</span>
-            </button>
-            <p
-              v-if="findingsOpen"
-              class="whitespace-pre-wrap text-sm text-muted-foreground max-h-64 overflow-y-auto pr-1"
-            >{{ task.findings }}</p>
-          </template>
-          <SharedAICitationsSourcesFooter
-            v-if="sources.length && !isDone"
-            :citations="sources"
-            @select="openFor"
-          />
+          <ul class="space-y-1.5">
+            <li v-for="l in lanes" :key="l.id" class="flex items-start gap-2 text-sm">
+              <Loader2 v-if="l.status === 'running'" class="size-3.5 mt-0.5 shrink-0 animate-spin text-muted-foreground" />
+              <CheckCircle2 v-else-if="l.status === 'done'" class="size-3.5 mt-0.5 shrink-0 text-muted-foreground/60" />
+              <XCircle v-else-if="l.status === 'failed'" class="size-3.5 mt-0.5 shrink-0 text-destructive/70" />
+              <CircleSlash v-else-if="l.status === 'thin'" class="size-3.5 mt-0.5 shrink-0 text-amber-600/70" />
+              <Square v-else class="size-3.5 mt-0.5 shrink-0 text-muted-foreground/40" />
+              <span class="min-w-0">
+                <span :class="laneTone(l)">{{ l.question }}</span>
+                <span class="text-muted-foreground text-xs">
+                  — {{ INTENT_LABELS[l.intent] }} · {{ laneNote(l) }}
+                </span>
+              </span>
+            </li>
+          </ul>
         </div>
 
-        <!-- Structured findings (evidence layer) -->
+        <!-- Evidence, above the report it produced. The findings are what was actually
+             verified; the report under them is the readable projection of exactly these
+             rows, so this is the layer a lawyer checks. Open by default once the run
+             finishes. -->
         <SharedAIDeepTaskFindingsPanel
           v-if="(task.findingsCount ?? 0) > 0"
           :task-id="task.id"
           :count="task.findingsCount ?? 0"
+          :lanes="lanes"
+          :start-open="isDone"
         />
 
-        <!-- Outline review gate -->
-        <div v-if="isReview && task.outline" class="rounded-md border p-3 space-y-3">
+        <!-- Sources while the run is still working. Once the report is done it carries
+             its own clickable sources footer, so this would show every source twice. -->
+        <div v-if="sources.length && !isDone" class="rounded-md border p-3 space-y-2">
+          <div class="flex items-center gap-1.5 text-sm font-medium">
+            <BookOpen class="size-4 text-muted-foreground" /> Sources read so far
+          </div>
+          <SharedAICitationsSourcesFooter :citations="sources" @select="openFor" />
+        </div>
+
+        <!-- Plan review gate: the questions, before any of them are paid for. -->
+        <div v-if="isReview && lanes.length" class="rounded-md border p-3 space-y-3">
           <div class="flex items-center justify-between">
-            <p class="text-sm font-medium">Review the outline</p>
+            <p class="text-sm font-medium">Review the research questions</p>
             <Button size="sm" variant="ghost" class="gap-1" @click="editing = !editing">
               <Pencil class="size-3.5" /> {{ editing ? 'Cancel edit' : 'Edit' }}
             </Button>
           </div>
+          <p class="text-xs text-muted-foreground">
+            Each question is researched on its own, in parallel, with the tools its type selects.
+          </p>
 
           <!-- Read-only view -->
-          <template v-if="!editing">
-            <p class="text-sm font-semibold">{{ task.outline.title }}</p>
-            <ol class="list-decimal pl-5 space-y-1 text-sm">
-              <li v-for="(s, i) in task.outline.sections" :key="i">
-                <span class="font-medium">{{ s.heading }}</span>
-                <span v-if="s.brief" class="text-muted-foreground"> — {{ s.brief }}</span>
-              </li>
-            </ol>
-          </template>
+          <ol v-if="!editing" class="list-decimal pl-5 space-y-1 text-sm">
+            <li v-for="l in lanes" :key="l.id">
+              {{ l.question }}
+              <span class="text-muted-foreground"> — {{ INTENT_LABELS[l.intent] }}</span>
+            </li>
+          </ol>
 
           <!-- Edit view -->
           <template v-else-if="draft">
-            <Input v-model="draft.title" placeholder="Document title" class="font-medium" />
-            <div v-for="(s, i) in draft.sections" :key="i" class="rounded border p-2 space-y-1.5">
-              <div class="flex items-center gap-2">
-                <Input v-model="s.heading" placeholder="Section heading" class="h-8" />
-                <Button size="icon" variant="ghost" class="size-8 shrink-0" @click="removeSection(i)">
+            <div v-for="(q, i) in draft" :key="i" class="rounded border p-2 space-y-1.5">
+              <div class="flex items-start gap-2">
+                <textarea
+                  v-model="q.question"
+                  rows="2"
+                  class="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="A single question, answerable on its own"
+                />
+                <Button size="icon" variant="ghost" class="size-8 shrink-0" @click="removeQuestion(i)">
                   <Trash2 class="size-3.5" />
                 </Button>
               </div>
-              <Input v-model="s.brief" placeholder="What this section should cover" class="h-8 text-sm" />
+              <select
+                v-model="q.intent"
+                class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option v-for="(label, value) in INTENT_LABELS" :key="value" :value="value">{{ label }}</option>
+              </select>
             </div>
-            <Button size="sm" variant="outline" class="gap-1" @click="addSection">
-              <Plus class="size-3.5" /> Add section
+            <Button size="sm" variant="outline" class="gap-1" @click="addQuestion">
+              <Plus class="size-3.5" /> Add question
             </Button>
           </template>
 
           <div class="flex justify-end gap-2 pt-1">
-            <Button
-              :disabled="approving"
-              size="sm"
-              @click="approve(editing)"
-            >
+            <Button :disabled="approving" size="sm" @click="approve(editing)">
               <Loader2 v-if="approving" class="size-3.5 animate-spin mr-1" />
-              {{ editing ? 'Save & write document' : 'Approve & write document' }}
+              {{ editing ? 'Save & start researching' : 'Approve & start researching' }}
             </Button>
           </div>
         </div>
 
-        <!-- Result: the compiled report shown inline as a real document (report-first).
-             Rendered through CitedAnswer so the inline [[cite:cN]] markers become
-             clickable, verifiable citation chips (with the sources footer, case-law
-             reader and vault preview) — the .docx is an export when available. -->
+        <!-- Result: the report, rendered through CitedAnswer so the inline [[cite:cN]]
+             markers become clickable, verifiable citation chips (with the sources
+             footer, case-law reader and vault preview). The .docx is an export off
+             this text, produced on request. -->
         <div v-if="isDone" class="rounded-md border">
           <div class="sticky top-0 z-10 flex items-center justify-between gap-3 p-3 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
             <div class="flex items-center gap-2 min-w-0">
               <FileText class="size-5 text-primary shrink-0" />
-              <span class="text-sm font-medium truncate">{{ task.outline?.title || 'Research report' }}</span>
+              <span class="text-sm font-medium truncate">Research report</span>
             </div>
-            <Button v-if="task.document" size="sm" variant="outline" :disabled="downloading" class="gap-1 shrink-0" @click="download">
-              <Loader2 v-if="downloading" class="size-3.5 animate-spin" />
+            <Button
+              v-if="task.report"
+              size="sm" variant="outline" class="gap-1 shrink-0"
+              :disabled="downloading || exporting"
+              @click="exportAndDownload"
+            >
+              <Loader2 v-if="downloading || exporting" class="size-3.5 animate-spin" />
               <Download v-else class="size-3.5" />
               Export (.docx)
             </Button>

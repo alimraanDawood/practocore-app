@@ -94,7 +94,7 @@
                 <Button variant="ghost" class="justify-between items-center w-full">
                   <div class="flex flex-row justify-center items-center gap-2">
                     <Sparkles/>
-                    AI Provider
+                    AI Models
                   </div>
                   <ChevronRight class="size-5 text-muted-foreground"/>
                 </Button>
@@ -255,7 +255,7 @@ const canSeeBilling = computed(() => {
 const visibleTabs = computed(() => [
   { key: 'profile', label: 'Profile', show: true },
   { key: 'notifications', label: 'Notifications', show: true },
-  { key: 'ai', label: 'AI Provider', show: true },
+  { key: 'ai', label: 'AI Models', show: true },
   { key: 'billing', label: 'Billing', show: canSeeBilling.value },
   { key: 'updates', label: 'Updates', show: true },
   { key: 'eccmis', label: 'ECCMIS Sync', show: true, startsGroup: true },

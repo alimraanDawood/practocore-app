@@ -203,6 +203,38 @@ export async function promoteConversationAttachments(conversationId: string): Pr
   }
 }
 
+export interface ExtractedDocument {
+  /** Original filename, e.g. "Sale Agreement.docx". */
+  name: string;
+  /** Always text/plain — the extraction, not the Word file. */
+  mime: string;
+  text: string;
+  chars: number;
+}
+
+/**
+ * Extract the text of a Word (.docx) attachment server-side. The model has no
+ * .docx content block, so the composer sends the extraction as a text document
+ * block instead of the file. Nothing is stored by this call — the text is
+ * persisted with the turn that sends it, like any other text attachment.
+ * Throws with the server's message so the caller can toast it.
+ */
+export async function extractDocxAttachment(file: File): Promise<ExtractedDocument> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/attachments/extract`, {
+    method: 'POST',
+    headers: { 'Authorization': pb.authStore.token },
+    body: form,
+  });
+  if (!res.ok) {
+    let msg = `Could not read this document (${res.status})`;
+    try { const j = await res.json() as { message?: string }; if (j?.message) msg = j.message; } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return await res.json() as ExtractedDocument;
+}
+
 export interface VaultIngestProgress {
   /** AI-readable documents in the vault whose distillation has finished (or failed). */
   done: number;
@@ -292,7 +324,7 @@ export function buildCopyText(content: string, citations?: AiCitation[]): string
   const cites = citations ?? [];
   const indexById = new Map(cites.map((c, i) => [c.citeId, i + 1]));
   const text = content
-    .replace(/\[\[cite:([\w-]+)\]\]/g, (_, id: string) => {
+    .replace(/\[\[cite:\s*([\w-]+)[^\]\r\n]*\]\]/g, (_, id: string) => {
       const n = indexById.get(id);
       return n ? `[${n}]` : '';
     })
@@ -311,14 +343,16 @@ export interface AiContext {
   deadlineIds?: string[];
   userIds?: string[];
   engagementIds?: string[];
+  /** Pinned custom vaults (AiVaults). Also NARROWS vault-scoped recall to them. */
+  vaultIds?: string[];
 }
 
-// A single structured context reference the user (or the floating dock) attaches to a
-// chat — a matter, deadline, user or engagement. Selected chips are folded into
-// AiContext at send time (see ChatSurface.buildContext) so the backend receives
-// matterIds/deadlineIds/userIds/engagementIds. Shared here so the assistant dock can
-// pre-seed the current page's context.
-export type ContextType = 'matter' | 'deadline' | 'user' | 'engagement';
+// The one thing a conversation is ABOUT — a matter, engagement, vault, deadline or
+// colleague. The composer holds exactly one (the scope chip above the input); it is
+// folded into AiContext at send time (see ChatSurface.buildContext) so the backend
+// receives matterIds/deadlineIds/userIds/engagementIds/vaultIds. Shared here so the
+// assistant dock can pre-seed the current page's scope.
+export type ContextType = 'matter' | 'deadline' | 'user' | 'engagement' | 'vault';
 export interface ContextItem {
   type: ContextType;
   id: string;
@@ -453,6 +487,24 @@ export interface FulfillPreview {
   // Reopening a deadline ticked off in error. Same tool, inverted sense — the
   // card must not say "mark as fulfilled" over it.
   undo?: boolean;
+  /** Filename of the vault document being attached as the filed proof, if any. */
+  document?: string;
+  /** Registry receipt / reference number recorded with the completion, if any. */
+  reference?: string;
+  /** Whether proof can be attached at all: false on a firm-added deadline, which
+   *  has no engine event for evidence to key to. Gates the card's picker. */
+  supportsEvidence?: boolean;
+}
+/** attach_evidence: proof recorded against a completion that already happened. */
+export interface EvidencePreview {
+  kind: 'evidence';
+  deadline?: DeadlineRef;
+  /** Artefact kind: filed | receipt | service | record | other. */
+  artefact?: string;
+  /** Filename of the vault document being attached, if any. */
+  document?: string;
+  reference?: string;
+  note?: string;
 }
 // override_deadline / set_deadline_date / reset_deadline. One card: they differ
 // in meaning, not in what there is to show.
@@ -735,6 +787,7 @@ export type ProposalPreview =
   | AdjournPreview
   | DateChangePreview
   | FulfillPreview
+  | EvidencePreview
   | MatterEditPreview
   | CreateMatterPreview
   | ReminderPreview
@@ -874,7 +927,7 @@ export function sendAiMessageStream(
      *  server-side as a volatile preamble — seen by the model each turn but never
      *  persisted or shown in the transcript. Empty off the dock. */
     pageContext?: string;
-    /** Speed/cost tier: 'auto' (default), 'fast' (cheapest model) or 'deep'
+    /** Speed/cost tier: 'fast' (default, cheapest model), 'auto' or 'deep'
      *  (premium model for hard synthesis). Forwarded to the backend router. */
     tier?: 'auto' | 'fast' | 'deep';
     /** Live builder-canvas definition, sent in workflow_studio mode so the model
@@ -887,6 +940,10 @@ export function sendAiMessageStream(
     editTemplateId?: string;
     /** Abort signal for the Stop button — aborting resolves to { type:'aborted' }. */
     signal?: AbortSignal;
+    /** Skills the user invoked by name from the composer's "/" menu. The backend
+     *  injects their instructions verbatim and skips its own semantic guess for
+     *  the turn, so a named skill is followed rather than competed with. */
+    skillNames?: string[];
     /** Client-generated id for THIS turn, so it can be stopped explicitly.
      *  Generation on the server no longer dies when the connection does (closing
      *  the tab used to abort the answer and lose the whole exchange), so aborting
@@ -910,6 +967,7 @@ export function sendAiMessageStream(
       deadlineIds: context?.deadlineIds,
       userIds: context?.userIds,
       engagementIds: context?.engagementIds,
+      vaultIds: context?.vaultIds,
       conversationId: conversationId ?? '',
       voiceMode: false,
       attachmentsMeta: opts.attachmentsMeta ?? [],
@@ -921,10 +979,11 @@ export function sendAiMessageStream(
       pageContext: opts.pageContext ?? '',
       // Client surface, e.g. "word" — gates client-fulfilled tools (independent of mode).
       surface: opts.surface ?? '',
-      // Speed/cost tier ('auto' default) — picks the serving model on the backend.
-      tier: opts.tier ?? 'auto',
+      // Speed/cost tier ('fast' default) — picks the serving model on the backend.
+      tier: opts.tier ?? 'fast',
       workflowContext: opts.workflowContext ?? null,
       editTemplateId: opts.editTemplateId ?? '',
+      skillNames: opts.skillNames ?? [],
       turnId: opts.turnId ?? '',
     },
     opts.onStep,
@@ -992,12 +1051,13 @@ export function sendAiMessageVoiceStream(
       deadlineIds: context?.deadlineIds,
       userIds: context?.userIds,
       engagementIds: context?.engagementIds,
+      vaultIds: context?.vaultIds,
       conversationId: conversationId ?? '',
       voiceMode: true,
       mode: opts.mode ?? '',
       contextKey: opts.contextKey ?? '',
       pageContext: opts.pageContext ?? '',
-      tier: opts.tier ?? 'auto',
+      tier: opts.tier ?? 'fast',
       ephemeral: opts.ephemeral ?? false,
       turnId: opts.turnId ?? '',
     },
@@ -1093,6 +1153,7 @@ export function confirmAiProposal(
     deadlineIds: context?.deadlineIds,
     userIds: context?.userIds,
     engagementIds: context?.engagementIds,
+    vaultIds: context?.vaultIds,
     conversationId: conversationId ?? '',
     conversationMessages: conversationMessages ?? [],
     voiceMode: voiceMode ?? false,

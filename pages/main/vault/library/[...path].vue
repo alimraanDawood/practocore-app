@@ -118,6 +118,11 @@ provideDockContext(() => ({
   label: rootLabel.value,
   sublabel: 'Vault library',
   icon: FolderLock,
+  // A custom vault is a scope the assistant can be pinned to by id; the org/matter/
+  // user libraries are not their own objects, so those keep the prose header alone.
+  scope: scope.value === 'vault' && scopeId.value
+      ? { type: 'vault', id: scopeId.value, label: rootLabel.value, sublabel: 'Vault' }
+      : null,
   contextText: `The user is viewing the vault library "${rootLabel.value}" in PractoCore. When they ask about documents, files or facts, search this library first.`,
 }));
 </script>

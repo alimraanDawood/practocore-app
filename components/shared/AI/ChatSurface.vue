@@ -2,8 +2,8 @@
 import {
   Sparkles, Plus, MessageSquareText, History, Search, Globe,
   Loader2, Check, X, ChevronRight, ChevronDown, ChevronLeft, Pencil, Square, RotateCcw, ArrowUpIcon, Trash2,
-  Briefcase, FileText, FileType2, BookOpen, AtSign, Paperclip, Building2, Clock, User,
-  Library, Zap, Gauge, Files, Eye, Download,
+  Briefcase, FileText, FileType2, BookOpen, Paperclip, Building2, Clock, User, FolderOpen,
+  Library, Zap, Gauge, Files, Eye, Download, PanelRightOpen,
   Mic, Copy,
   type LucideIcon,
 } from 'lucide-vue-next';
@@ -11,11 +11,10 @@ import {toast} from 'vue-sonner';
 import ProposalCard from '~/components/shared/AI/ProposalCard.vue';
 import VoiceMode from '~/components/shared/AI/VoiceMode.vue';
 import type {VoiceContext} from '~/services/ai/voice';
-import {initials} from '~/components/shared/AI/proposals/theme';
 import {
   sendAiMessageStream, confirmAiProposal, improvePrompt,
   getConversation, deleteConversation, renameConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
-  listConversationAttachments, promoteConversationAttachments, vaultIngestProgress,
+  listConversationAttachments, promoteConversationAttachments, vaultIngestProgress, extractDocxAttachment,
   newTurnId, stopAiTurn, buildCopyText,
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
@@ -27,13 +26,42 @@ import { useMediaQuery, useClipboard } from '@vueuse/core';
 import type { MenuAction } from '~/components/shared/ActionMenu/Items.vue';
 import MessageAttachments, { type AttachmentView } from '~/components/shared/AI/MessageAttachments.vue';
 import DocumentPreview, { type PreviewDoc } from '~/components/shared/Vault/DocumentPreview.vue';
-import {getMatters, getAllDeadlines} from '~/services/matters';
-import {getOrganisationUsers} from '~/services/admin';
-import {listEngagements} from '~/services/engagements';
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '~/components/ui/resizable';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '~/components/ui/command';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '~/components/ui/empty';
+import {listSkills, type SkillSummary} from '~/services/skills';
+import ScopePicker from '~/components/shared/AI/ScopePicker.vue';
+import {scopeIcons} from '~/components/shared/AI/scope';
 import {
   listConversationDocuments, subscribeConversationDocuments, documentFileUrl,
   downloadDocument, documentKindLabel, type GeneratedDocument,
 } from '~/services/documents';
+import {
+  docTypeLabel,
+  listRecentDocuments,
+  vaultFileUrl,
+  type VaultDocument,
+} from '~/services/vault';
 
 // ChatSurface is the single, reusable PractoAI chat — the whole conversational engine
 // (streaming steps, proposals, attachments, citations, voice, history) lifted out of
@@ -76,9 +104,10 @@ const props = withDefaults(defineProps<{
   // Per-page dock partition key (e.g. "matter:<id>"). Sent each turn and used to
   // list/resume only this context's threads. Empty = no per-page partitioning.
   contextKey?: string;
-  // Structured context chips to pre-select on mount (the dock passes the current
-  // page's matter/deadline). Folded into the sent AiContext like manual selections.
-  initialContext?: ContextItem[];
+  // The conversation's scope on mount — the one matter/engagement/vault/deadline/
+  // colleague this chat is about (the dock passes the current page's). Folded into
+  // the sent AiContext exactly like a scope the user picks themselves.
+  initialContext?: ContextItem | null;
   // When true (and not a shared/URL-driven mode), auto-load the most recent thread
   // for this surface/context on mount, so the dock "resumes where you left off".
   autoResumeLatest?: boolean;
@@ -94,6 +123,9 @@ const props = withDefaults(defineProps<{
   // Click handler for "jump to passage" (doc:) links the assistant emits in the Word
   // surface — receives the verbatim snippet so the host can scroll the document to it.
   onLocate?: (text: string) => void;
+  // Full-page assistants can render previews as a resizable, tabbed workspace.
+  // Compact and embedded surfaces keep the modal preview.
+  workspacePreview?: boolean;
 }>(), { mode: '', surface: '', seed: '', label: 'Assistant' });
 
 const emit = defineEmits<{
@@ -115,11 +147,12 @@ const isShared = computed(() => isMain.value || isResearch.value);
 // ── Composer ────────────────────────────────────────────────────────────────
 const draft = ref('');
 
-// Speed/cost tier the user picks for chat (mirrors Chat.vue): 'auto' lets the
-// backend choose, 'fast' is cheapest, 'deep' is most capable. Persisted locally.
+// Speed/cost tier the user picks for chat (mirrors Chat.vue): 'fast' is the
+// default and cheapest, 'auto' lets the backend choose, 'deep' is most capable.
+// Persisted locally.
 type ChatTier = 'auto' | 'fast' | 'deep';
-const TIERS: ChatTier[] = ['auto', 'fast', 'deep'];
-const chatTier = ref<ChatTier>('auto');
+const TIERS: ChatTier[] = ['fast', 'auto', 'deep'];
+const chatTier = ref<ChatTier>('fast');
 onMounted(() => {
   const saved = localStorage.getItem('ai.chat.tier');
   if (saved === 'auto' || saved === 'fast' || saved === 'deep') chatTier.value = saved;
@@ -185,31 +218,156 @@ const isDesktop = useMediaQuery('(min-width: 1024px)');
 // Touch gets no context menu anywhere in the app: reka's trigger arms a long-press
 // of its own, and dismissing it can strand the body pointer-events lock.
 const coarsePointer = useMediaQuery('(pointer: coarse)');
-const previewTarget = ref<AttachmentView | null>(null);
-const previewGenDoc = ref<GeneratedDocument | null>(null);
+type PreviewTab = {
+  key: string;
+  doc: PreviewDoc;
+  initialPage?: number;
+  revision?: number;
+  generated?: GeneratedDocument;
+  vaultDocument?: VaultDocument;
+  factsDocId?: string;
+  attachmentUrl?: string;
+  ownedObjectUrl?: string;
+};
+
+const previewTabs = ref<PreviewTab[]>([]);
+const activePreviewKey = ref('');
+const workspacePanelOpen = ref(true);
+const workspaceFileInput = ref<HTMLInputElement | null>(null);
+const workspaceAddOpen = ref(false);
+const workspaceAddView = ref<'options' | 'vault'>('options');
+const workspaceVaultDocs = ref<VaultDocument[]>([]);
+const workspaceVaultLoading = ref(false);
+const workspaceVaultLoaded = ref(false);
+const useWorkspacePreview = computed(() => !!props.workspacePreview && isDesktop.value);
+const activePreviewTab = computed(() =>
+  previewTabs.value.find(tab => tab.key === activePreviewKey.value) ?? null);
 const previewOpen = computed({
-  get: () => !!previewTarget.value || !!previewGenDoc.value,
-  set: (v) => { if (!v) { previewTarget.value = null; previewGenDoc.value = null; } },
+  get: () => !useWorkspacePreview.value && !!activePreviewTab.value,
+  set: (v) => { if (!v) closeAllPreviews(); },
 });
-const previewDoc = computed<PreviewDoc | null>(() => {
-  if (previewGenDoc.value) {
-    const d = previewGenDoc.value;
-    return { id: d.id, filename: d.filename, file: d.file, mime: '' };
+const previewDoc = computed<PreviewDoc | null>(() => activePreviewTab.value?.doc ?? null);
+
+function addPreviewTab(tab: PreviewTab) {
+  const existing = previewTabs.value.findIndex(item => item.key === tab.key);
+  if (existing >= 0) {
+    previewTabs.value[existing] = {
+      ...tab,
+      revision: (previewTabs.value[existing]?.revision ?? 0) + 1,
+    };
+  } else {
+    previewTabs.value.push({ ...tab, revision: 0 });
   }
-  if (previewTarget.value) {
-    const a = previewTarget.value;
-    return { id: a.id, filename: a.name, file: a.name, mime: a.mime };
+  activePreviewKey.value = tab.key;
+  workspacePanelOpen.value = true;
+}
+
+function openPreview(att: AttachmentView) {
+  addPreviewTab({
+    key: `attachment:${att.id}`,
+    doc: { id: att.id, filename: att.name, file: att.name, mime: att.mime },
+    attachmentUrl: att.url,
+  });
+}
+
+function openGenDocPreview(doc: GeneratedDocument) {
+  addPreviewTab({
+    key: `document:${doc.id}`,
+    doc: { id: doc.id, filename: doc.filename, file: doc.file, mime: '' },
+    generated: doc,
+  });
+}
+
+function openVaultDocPreview(doc: VaultDocument, initialPage?: number) {
+  addPreviewTab({
+    key: `vault:${doc.id}`,
+    doc: {
+      id: doc.id,
+      filename: doc.filename,
+      file: doc.file,
+      mime: doc.mime,
+      ocr: doc.ocr,
+    },
+    vaultDocument: doc,
+    factsDocId: doc.id,
+    initialPage,
+  });
+  workspaceAddOpen.value = false;
+  workspaceAddView.value = 'options';
+}
+
+function closePreviewTab(key: string) {
+  const index = previewTabs.value.findIndex(tab => tab.key === key);
+  if (index < 0) return;
+  const [closed] = previewTabs.value.splice(index, 1);
+  if (closed?.ownedObjectUrl) URL.revokeObjectURL(closed.ownedObjectUrl);
+  if (activePreviewKey.value !== key) return;
+  activePreviewKey.value = previewTabs.value[Math.min(index, previewTabs.value.length - 1)]?.key ?? '';
+}
+
+function closeAllPreviews() {
+  previewTabs.value.forEach(tab => {
+    if (tab.ownedObjectUrl) URL.revokeObjectURL(tab.ownedObjectUrl);
+  });
+  previewTabs.value = [];
+  activePreviewKey.value = '';
+}
+
+function closeWorkspacePanel() {
+  workspacePanelOpen.value = false;
+  closeAllPreviews();
+}
+
+const resolveTabUrl = (tab: PreviewTab) => tab.generated
+  ? documentFileUrl(tab.generated)
+  : tab.vaultDocument
+    ? vaultFileUrl(tab.vaultDocument)
+  : Promise.resolve(tab.attachmentUrl ?? '');
+const resolvePreviewUrl = () => activePreviewTab.value
+  ? resolveTabUrl(activePreviewTab.value)
+  : Promise.resolve('');
+
+function openWorkspaceFilePicker() {
+  workspaceAddOpen.value = false;
+  workspaceAddView.value = 'options';
+  workspaceFileInput.value?.click();
+}
+
+function openWorkspaceAddMenu() {
+  workspaceAddView.value = 'options';
+  workspaceAddOpen.value = true;
+}
+
+async function openWorkspaceVaultPicker() {
+  workspaceAddView.value = 'vault';
+  if (workspaceVaultLoaded.value || workspaceVaultLoading.value) return;
+  workspaceVaultLoading.value = true;
+  try {
+    workspaceVaultDocs.value = await listRecentDocuments(50);
+    workspaceVaultLoaded.value = true;
+  } catch {
+    toast.error('Could not load Vault documents.');
+  } finally {
+    workspaceVaultLoading.value = false;
   }
-  return null;
-});
-function openPreview(att: AttachmentView) { previewGenDoc.value = null; previewTarget.value = att; }
-function openGenDocPreview(doc: GeneratedDocument) { previewTarget.value = null; previewGenDoc.value = doc; }
-// Thunk for DocumentPreview's resolveUrl — defined here because bare `Promise` isn't
-// in template scope. Attachments already carry a resolved URL (blob: live / token URL
-// on reload); generated docs need a fresh short-lived file token.
-const resolvePreviewUrl = () => previewGenDoc.value
-    ? documentFileUrl(previewGenDoc.value)
-    : Promise.resolve(previewTarget.value?.url ?? '');
+}
+
+function onWorkspaceFilesChosen(event: Event) {
+  const input = event.target as HTMLInputElement;
+  for (const file of Array.from(input.files ?? [])) {
+    const objectUrl = URL.createObjectURL(file);
+    const key = `local:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    addPreviewTab({
+      key,
+      doc: { id: key, filename: file.name, file: file.name, mime: file.type },
+      attachmentUrl: objectUrl,
+      ownedObjectUrl: objectUrl,
+    });
+  }
+  input.value = '';
+}
+
+onBeforeUnmount(closeAllPreviews);
 
 /** Strip the bracketed attachment placeholders so the bubble shows only the caption. */
 function stripAttachmentPlaceholders(text: string): string {
@@ -471,13 +629,19 @@ async function resolvePageContext(): Promise<string> {
   try { return (await props.pageContextProvider())?.trim() || ''; } catch { return ''; }
 }
 
+// One scope in, one id out. The wire format stays plural because the backend
+// resolves and access-checks lists (and deep research still passes several), but the
+// composer only ever sends the single thing the conversation is about.
 function buildContext(): AiContext | undefined {
-  if (selectedItems.value.length === 0) return undefined;
+  const s = scope.value;
+  if (!s) return undefined;
+  const ids = (t: ContextType) => (s.type === t ? [s.id] : undefined);
   return {
-    matterIds: selectedItems.value.filter(i => i.type === 'matter').map(i => i.id),
-    deadlineIds: selectedItems.value.filter(i => i.type === 'deadline').map(i => i.id),
-    userIds: selectedItems.value.filter(i => i.type === 'user').map(i => i.id),
-    engagementIds: selectedItems.value.filter(i => i.type === 'engagement').map(i => i.id),
+    matterIds: ids('matter'),
+    deadlineIds: ids('deadline'),
+    userIds: ids('user'),
+    engagementIds: ids('engagement'),
+    vaultIds: ids('vault'),
   };
 }
 
@@ -593,6 +757,10 @@ async function send(explicit?: string) {
 
   turnAbort = new AbortController();
   turnId = newTurnId();
+  // Read and clear together: the skills apply to THIS message only, and the chips
+  // must go the moment it is sent rather than when the answer lands.
+  const turnSkillNames = invokedSkills.value.map(sk => sk.name);
+  invokedSkills.value = [];
   const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => {
@@ -607,6 +775,7 @@ async function send(explicit?: string) {
     tier: chatTier.value,
     workflowContext: props.workflowContext,
     editTemplateId: props.editTemplateId,
+    skillNames: turnSkillNames,
     signal: turnAbort.signal,
     turnId,
   });
@@ -813,6 +982,9 @@ async function copyMessage(index: number, msg: DisplayAiMessage) {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  // The "/" menu owns the arrows and Enter while it is open, so picking a command
+  // never sends "/foo" as a message.
+  if (handleSlashKeydown(e)) return;
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     send();
@@ -839,13 +1011,13 @@ const {
 const voiceOpen = ref(false);
 
 // A spoken turn should know what a typed turn on this surface knows. Both sources
-// are reused verbatim — the selected context chips (which the dock pre-seeds with
-// the current matter/engagement) and the ambient page-context header (which covers
-// what chips can't name: a vault, the calendar).
+// are reused verbatim — the scope chip (which the dock pre-seeds with the current
+// matter/engagement/vault) and the ambient page-context header, which covers what a
+// scope cannot name: the calendar, the current view.
 //
 // Unlike a typed turn this is resolved ONCE, when the call connects. The provider
-// calls our backend directly for each spoken turn, so mid-call chip changes cannot
-// reach it; ending and restarting the call picks up the new context.
+// calls our backend directly for each spoken turn, so a mid-call scope change cannot
+// reach it; ending and restarting the call picks up the new scope.
 async function buildVoiceContext(): Promise<VoiceContext> {
   const ctx = buildContext();
   return {
@@ -853,6 +1025,7 @@ async function buildVoiceContext(): Promise<VoiceContext> {
     deadlineIds: ctx?.deadlineIds,
     userIds: ctx?.userIds,
     engagementIds: ctx?.engagementIds,
+    vaultIds: ctx?.vaultIds,
     pageContext: await resolvePageContext(),
   };
 }
@@ -975,6 +1148,18 @@ function dismissProposal() {
   pendingProposal.value = null;
 }
 
+// A card can edit the input it is approving (the fulfil card's document picker).
+// The confirm leg executes the input the CLIENT sends, so merging it into the
+// pending proposal here is the whole mechanism — nothing to persist, and the
+// tool re-validates whatever arrives.
+function patchProposalInput(patch: Record<string, any>) {
+  if (!pendingProposal.value) return;
+  pendingProposal.value = {
+    ...pendingProposal.value,
+    input: { ...(pendingProposal.value.input ?? {}), ...patch },
+  };
+}
+
 async function approveProposal() {
   if (!pendingProposal.value || proposalLoading.value) return;
   proposalLoading.value = true;
@@ -1078,6 +1263,18 @@ const ACCEPTED_IMAGE_TYPES: AiImageMediaType[] = ['image/jpeg', 'image/png', 'im
 // Text/Markdown/source files. Browsers report an unreliable (often empty) MIME for
 // .md, so we also match on extension. These are sent as text document blocks.
 const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt', '.text', '.csv', '.json', '.log', '.rtf'];
+// Word. The model has no .docx content block, so these are unzipped to text by the
+// backend (POST /ai/attachments/extract) and attached as text document blocks. The
+// legacy binary .doc is NOT accepted — the extractor cannot read it.
+const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function isWordFile(file: File): boolean {
+  return file.name.toLowerCase().endsWith('.docx') || file.type === WORD_MIME;
+}
+
+// Files currently being extracted, by name — shown as "Reading…" chips so a slow
+// upload doesn't look like the picker did nothing.
+const extracting = ref<string[]>([]);
 
 function isTextFile(file: File): boolean {
   const name = file.name.toLowerCase();
@@ -1110,13 +1307,14 @@ function fileToBase64(file: File): Promise<{ base64: string; dataUrl: string }> 
 function isAcceptedFile(file: File): boolean {
   return file.type === 'application/pdf'
       || (ACCEPTED_IMAGE_TYPES as string[]).includes(file.type)
+      || isWordFile(file)
       || isTextFile(file);
 }
 
 async function addFiles(files: File[] | FileList) {
   for (const file of Array.from(files)) {
     if (!isAcceptedFile(file)) {
-      toast('Unsupported file', {description: `${file.name} — PDFs, images, and text/Markdown only.`});
+      toast('Unsupported file', {description: `${file.name} — PDFs, Word (.docx), images, and text/Markdown only.`});
       continue;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -1129,7 +1327,25 @@ async function addFiles(files: File[] | FileList) {
     }
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      if (isTextFile(file)) {
+      if (isWordFile(file)) {
+        // Unzipped server-side; what rides to the model (and what is persisted) is
+        // the extracted text, so the chip carries text/plain under the .docx name.
+        extracting.value.push(file.name);
+        try {
+          const doc = await extractDocxAttachment(file);
+          attachments.value.push({
+            id,
+            name: file.name,
+            mime: 'text/plain',
+            size: file.size,
+            kind: 'text',
+            text: doc.text
+          });
+        } finally {
+          const i = extracting.value.indexOf(file.name);
+          if (i >= 0) extracting.value.splice(i, 1);
+        }
+      } else if (isTextFile(file)) {
         const text = await file.text();
         attachments.value.push({
           id,
@@ -1172,83 +1388,186 @@ function openFilePicker() {
   fileInput.value?.click();
 }
 
-// ── Context picker (matters / deadlines / lawyers) ──────────────────────────
-// ContextType / ContextItem are imported from ~/services/ai (shared with the dock).
-// Pre-seeded from props.initialContext so the floating dock can attach the current
-// page's matter/deadline the moment it opens.
-const selectedItems = ref<ContextItem[]>(props.initialContext ? [...props.initialContext] : []);
-const contextIcons: Record<ContextType, LucideIcon> = {matter: Building2, deadline: Clock, user: User, engagement: Briefcase};
+// ── Scope picker (what this conversation is about) ─────────────────────────
+// A conversation has ONE scope: a matter, an engagement, a vault, a deadline or a
+// colleague. It sits in the bar above the composer and rides out on every turn as
+// the matching id list (buildContext). The list itself lives in <ScopePicker>; this
+// surface only owns which scope is in force and which shell the picker opens in —
+// an anchored popover on a pointer device, a bottom drawer on a phone.
+const scope = ref<ContextItem | null>(props.initialContext ?? null);
+const scopePickerOpen = ref(false);
 
-const contextDrawerOpen = ref(false);
-const contextTab = ref<ContextType>('matter');
-const contextSearch = ref('');
-const mattersList = ref<{ id: string; name: string; caseNumber: string }[]>([]);
-const deadlinesList = ref<{ id: string; name: string; matterName: string }[]>([]);
-const usersList = ref<{ id: string; name: string; role: string; avatar?: string }[]>([]);
-const engagementsList = ref<{ id: string; name: string; sublabel: string }[]>([]);
-const contextLoading = ref(false);
+function pickScope(item: ContextItem | null) {
+  scope.value = item;
+  scopePickerOpen.value = false;
+}
 
-watch(contextDrawerOpen, async (isOpen) => {
-  if (!isOpen) {
-    contextSearch.value = '';
+// ── "/" command menu ────────────────────────────────────────────────────────
+// A "/" typed as the FIRST character turns the composer into a command line: the
+// firm's user-invocable skills, plus the composer actions that are otherwise only
+// reachable by hunting for a small icon. It exists because skills had no explicit
+// invocation at all — `user_invocable` was a column nobody could act on, so running
+// a firm's own procedure meant hoping the server-side pre-selector guessed it.
+//
+// The menu is derived from the draft, not toggled: it is open exactly while the
+// draft still looks like a command, and typing a space closes it.
+interface SlashCommand {
+  id: string;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+  run: () => void;
+}
+
+const skillCatalogue = ref<SkillSummary[]>([]);
+const skillsLoading = ref(false);
+// Skills invoked for the NEXT message. Deliberately per-turn, not per-thread: "/" is
+// an instruction for what the lawyer is about to ask, and a skill silently steering
+// every later turn is the surprising version of this feature. Cleared on send.
+const invokedSkills = ref<SkillSummary[]>([]);
+const slashDismissed = ref(false);
+
+const slashQuery = computed(() => {
+  const m = /^\/([\w-]*)$/.exec(draft.value);
+  return m ? m[1]!.toLowerCase() : null;
+});
+
+const slashCommands = computed<SlashCommand[]>(() => {
+  const all: SlashCommand[] = [
+    {
+      id: 'scope', label: 'Work in a matter', icon: FolderOpen,
+      hint: 'Choose the matter, engagement or vault this chat is about',
+      run: () => { clearSlash(); scopePickerOpen.value = true; },
+    },
+    {
+      id: 'attach', label: 'Attach a file', icon: Paperclip,
+      hint: 'Add a PDF, image or text file to this message',
+      run: () => { clearSlash(); openFilePicker(); },
+    },
+    {
+      id: 'fast', label: 'Fast', icon: Zap,
+      hint: 'Cheapest model — quick lookups and short answers',
+      run: () => { clearSlash(); chatTier.value = 'fast'; },
+    },
+    {
+      id: 'auto', label: 'Auto', icon: Gauge,
+      hint: 'Let PractoCore pick the model for each turn',
+      run: () => { clearSlash(); chatTier.value = 'auto'; },
+    },
+    {
+      id: 'deep', label: 'Deep', icon: Sparkles,
+      hint: 'Most capable model — drafting and hard analysis',
+      run: () => { clearSlash(); chatTier.value = 'deep'; },
+    },
+    {
+      id: 'documents', label: 'Documents', icon: Files,
+      hint: 'Everything the assistant has drafted in this chat',
+      run: () => { clearSlash(); documentsOpen.value = true; },
+    },
+    {
+      id: 'history', label: 'History', icon: History,
+      hint: 'Reopen an earlier conversation',
+      run: () => { clearSlash(); historyOpen.value = true; },
+    },
+    {
+      id: 'new', label: 'New chat', icon: Plus,
+      hint: 'Start a fresh conversation',
+      run: () => { clearSlash(); newChat(); },
+    },
+  ];
+  if (sttSupported.value) {
+    all.push({
+      id: 'dictate', label: 'Dictate', icon: Mic,
+      hint: 'Speak your prompt instead of typing it',
+      run: () => { clearSlash(); toggleDictation(); },
+    });
+  }
+  const q = slashQuery.value ?? '';
+  return q ? all.filter(c => c.id.startsWith(q) || c.label.toLowerCase().includes(q)) : all;
+});
+
+// Only ACTIVE, user-invocable skills — a draft or deprecated skill is not something
+// a lawyer should be able to run by name, and neither is one written to be reached
+// by the model alone.
+const slashSkills = computed(() => {
+  const q = slashQuery.value ?? '';
+  const chosen = new Set(invokedSkills.value.map(s => s.name));
+  return skillCatalogue.value.filter(s =>
+      s.user_invocable && s.status === 'active' && !chosen.has(s.name) &&
+      (!q || s.name.toLowerCase().includes(q) || s.title.toLowerCase().includes(q) ||
+          (s.purpose ?? '').toLowerCase().includes(q)));
+});
+
+const slashOpen = computed(() =>
+    slashQuery.value !== null && !slashDismissed.value && !loading.value && !dictating.value &&
+    (slashCommands.value.length > 0 || slashSkills.value.length > 0 || skillsLoading.value));
+
+// Commands first, then skills — one flat list so the highlight and Enter agree.
+const slashFlat = computed<(SlashCommand | SkillSummary)[]>(
+    () => [...slashCommands.value, ...slashSkills.value]);
+const slashCursor = ref(0);
+
+watch(slashQuery, async (q) => {
+  slashCursor.value = 0;
+  if (q === null) {
+    slashDismissed.value = false;
     return;
   }
-  if (mattersList.value.length > 0) return;
-  contextLoading.value = true;
+  if (skillCatalogue.value.length || skillsLoading.value) return;
+  skillsLoading.value = true;
   try {
-    const [mattersRes, deadlinesRes, usersRes, engagementsRes] = await Promise.all([
-      getMatters(1, 100, {sort: '-created'}),
-      getAllDeadlines({
-        sort: '-date',
-        filter: "status = 'pending'",
-        expand: 'matter',
-        fields: 'id,name,date,expand.matter.name'
-      }),
-      getOrganisationUsers(1, 100, {}),
-      // Non-litigation matters. Tolerate a disabled/empty Engagements feature by
-      // swallowing errors — the tab just shows nothing rather than breaking the drawer.
-      listEngagements(1, 100, {sort: '-created'}).catch(() => ({items: []})),
-    ]);
-    mattersList.value = (mattersRes.items ?? []).map((m: any) => ({id: m.id, name: m.name, caseNumber: m.caseNumber}));
-    engagementsList.value = ((engagementsRes as any)?.items ?? []).map((e: any) => ({
-      id: e.id,
-      name: e.name,
-      sublabel: e.expand?.template?.name ?? (e.status ? `Engagement · ${e.status}` : 'Engagement'),
-    }));
-    deadlinesList.value = (deadlinesRes ?? []).map((d: any) => ({
-      id: d.id,
-      name: d.name,
-      matterName: d.expand?.matter?.name ?? ''
-    }));
-    usersList.value = (usersRes.items ?? []).map((u: any) => ({
-      id: u.id,
-      name: u.name,
-      role: u.organisationRole ?? u.role ?? '',
-      avatar: u.avatar
-    }));
+    skillCatalogue.value = await listSkills();
+  } catch {
+    skillCatalogue.value = []; // no catalogue is a quieter failure than a broken menu
   } finally {
-    contextLoading.value = false;
+    skillsLoading.value = false;
   }
 });
 
-const q = computed(() => contextSearch.value.toLowerCase());
-const filteredMatters = computed(() => q.value ? mattersList.value.filter(m => m.name.toLowerCase().includes(q.value) || m.caseNumber?.toLowerCase().includes(q.value)) : mattersList.value);
-const filteredDeadlines = computed(() => q.value ? deadlinesList.value.filter(d => d.name.toLowerCase().includes(q.value) || d.matterName.toLowerCase().includes(q.value)) : deadlinesList.value);
-const filteredUsers = computed(() => q.value ? usersList.value.filter(u => u.name.toLowerCase().includes(q.value)) : usersList.value);
-const filteredEngagements = computed(() => q.value ? engagementsList.value.filter(e => e.name.toLowerCase().includes(q.value) || e.sublabel.toLowerCase().includes(q.value)) : engagementsList.value);
-
-function isSelected(id: string) {
-  return selectedItems.value.some(i => i.id === id);
+function clearSlash() {
+  draft.value = '';
+  slashCursor.value = 0;
 }
 
-function toggleItem(item: ContextItem) {
-  const idx = selectedItems.value.findIndex(i => i.id === item.id);
-  if (idx >= 0) selectedItems.value.splice(idx, 1);
-  else selectedItems.value.push(item);
+function invokeSkill(skill: SkillSummary) {
+  if (!invokedSkills.value.some(s => s.name === skill.name)) {
+    invokedSkills.value = [...invokedSkills.value, skill];
+  }
+  clearSlash();
 }
 
-function removeItem(id: string) {
-  selectedItems.value = selectedItems.value.filter(i => i.id !== id);
+function runSlashEntry(entry: SlashCommand | SkillSummary) {
+  if ('run' in entry) entry.run();
+  else invokeSkill(entry);
+}
+
+// Arrow keys move the highlight; Enter and Tab pick; Escape closes the menu without
+// touching the draft, so a lawyer who genuinely means to send a "/" can.
+function handleSlashKeydown(e: KeyboardEvent): boolean {
+  if (!slashOpen.value) return false;
+  const n = slashFlat.value.length;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    slashDismissed.value = true;
+    return true;
+  }
+  if (!n) return false;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    slashCursor.value = (slashCursor.value + 1) % n;
+    return true;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    slashCursor.value = (slashCursor.value - 1 + n) % n;
+    return true;
+  }
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    runSlashEntry(slashFlat.value[Math.min(slashCursor.value, n - 1)]!);
+    return true;
+  }
+  return false;
 }
 
 // ── Prompt enhancement ──────────────────────────────────────────────────────
@@ -1622,7 +1941,30 @@ defineExpose({
 </script>
 
 <template>
-  <div class="relative flex h-full flex-col">
+  <component
+      :is="useWorkspacePreview ? ResizablePanelGroup : 'div'"
+      v-bind="useWorkspacePreview ? { direction: 'horizontal' } : {}"
+      class="h-full min-h-0 w-full">
+    <component
+        :is="useWorkspacePreview ? ResizablePanel : 'div'"
+        v-bind="useWorkspacePreview ? { defaultSize: 52, minSize: 30 } : {}"
+        class="relative flex h-full min-w-0 flex-col">
+      <input
+          ref="workspaceFileInput"
+          type="file"
+          multiple
+          accept="application/pdf,image/*,text/*,.md,.markdown,.txt,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          class="hidden"
+          @change="onWorkspaceFilesChosen" />
+      <Button
+          v-if="useWorkspacePreview && !workspacePanelOpen"
+          size="icon-sm"
+          variant="outline"
+          class="absolute right-3 top-3 shadow-sm"
+          title="Open workspace panel"
+          @click="workspacePanelOpen = true">
+        <PanelRightOpen />
+      </Button>
     <!-- Chat toolbar — new chat + history. On main mode, hidden on desktop (the app
          sidebar handles nav); on other modes (research, workflow), always visible.
          hideToolbar suppresses it entirely (host page manages its own history rail). -->
@@ -1850,7 +2192,8 @@ defineExpose({
                   :class="(msg as DisplayAiMessage).failed ? 'text-destructive' : ''"
                   :content="messageText(msg.content)"
                   :citations="(msg as DisplayAiMessage).citations"
-                  :on-locate="props.onLocate"/>
+                  :on-locate="props.onLocate"
+                  :on-open-source="useWorkspacePreview ? openVaultDocPreview : undefined"/>
               <!-- Retry a failed/stopped turn (only the latest — retry drops the active leaf) -->
               <button v-if="((msg as DisplayAiMessage).failed || (msg as DisplayAiMessage).stopped) && i === messages.length - 1 && !loading"
                       type="button"
@@ -1902,7 +2245,7 @@ defineExpose({
         <!-- Pending proposal -->
         <div v-if="pendingProposal" class="max-w-[85%]">
           <ProposalCard :proposal="pendingProposal" variant="panel" :loading="proposalLoading"
-                        @approve="approveProposal" @dismiss="dismissProposal"/>
+                        @approve="approveProposal" @dismiss="dismissProposal" @patch-input="patchProposalInput"/>
         </div>
 
         <div ref="messagesEnd"/>
@@ -1918,18 +2261,19 @@ defineExpose({
 
     <!-- ░░ Composer (widget-style InputGroup) ░░ -->
     <div class="shrink-0 border-t px-4 py-3">
-      <div class="mx-auto flex w-full max-w-3xl flex-col gap-2">
+      <div class="relative mx-auto flex w-full max-w-3xl flex-col gap-2">
         <!-- Host extension point just above the composer (e.g. the Word "including
              selected text" chip). Empty by default. -->
         <slot name="composer-top" />
 
-        <!-- Active context badges -->
-        <div v-if="selectedItems.length" class="flex flex-wrap gap-1">
-          <Badge v-for="item in selectedItems" :key="item.id" variant="secondary" class="flex items-center gap-1 pr-1">
-            <component :is="contextIcons[item.type]" class="size-3 shrink-0"/>
-            <span class="max-w-[160px] truncate text-xs">{{ item.label }}</span>
+        <!-- Skills invoked from the "/" menu — this message only. -->
+        <div v-if="invokedSkills.length" class="flex flex-wrap gap-1">
+          <Badge v-for="sk in invokedSkills" :key="sk.name" variant="secondary" class="flex items-center gap-1 pr-1">
+            <Sparkles class="size-3 shrink-0"/>
+            <span class="max-w-[200px] truncate text-xs">{{ sk.title || sk.name }}</span>
             <button class="ml-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                    @click="removeItem(item.id)">
+                    :aria-label="`Don't use ${sk.title || sk.name}`"
+                    @click="invokedSkills = invokedSkills.filter(s => s.name !== sk.name)">
               <X class="size-3"/>
             </button>
           </Badge>
@@ -1963,7 +2307,13 @@ defineExpose({
         </div>
 
         <!-- Pending attachment chips -->
-        <div v-if="attachments.length" class="flex flex-wrap gap-1.5">
+        <div v-if="attachments.length || extracting.length" class="flex flex-wrap gap-1.5">
+          <div v-for="name in extracting" :key="`reading-${name}`"
+               class="flex items-center gap-1.5 rounded-md border bg-background px-1 py-1 text-xs text-muted-foreground">
+            <FileText class="size-4 shrink-0"/>
+            <span class="max-w-[140px] truncate font-medium">{{ name }}</span>
+            <span>Reading…</span>
+          </div>
           <div v-for="att in attachments" :key="att.id"
                class="flex items-center gap-1.5 rounded-md border bg-background px-1 py-1 text-xs">
             <img v-if="att.mime.startsWith('image/')" :src="att.dataUrl" :alt="att.name"
@@ -1979,8 +2329,89 @@ defineExpose({
         </div>
 
         <input ref="fileInput" type="file" multiple
-               accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log"
+               accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,text/markdown,text/plain,text/*,.md,.markdown,.txt,.text,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                class="hidden" @change="onFilesChosen"/>
+
+        <!-- Pointer devices: a menu on a button. It has no business dimming the page
+             or spanning the window. Anchored to this column rather than to the chip
+             so it can never be wider than the surface — the assistant dock is a
+             narrow panel, and the same popover has to sit inside it. -->
+        <template v-if="isDesktop">
+          <!-- Click-away catcher, behind the panel and in front of everything else. -->
+          <div v-if="scopePickerOpen" class="fixed inset-0 z-20" @click="scopePickerOpen = false"/>
+          <Transition name="scope-pop">
+            <ScopePicker v-if="scopePickerOpen" :current="scope"
+                         class="absolute bottom-full left-0 z-30 mb-2 max-h-[24rem] w-[min(28rem,100%)] overflow-hidden rounded-xl border bg-popover shadow-lg"
+                         @pick="pickScope"/>
+          </Transition>
+        </template>
+
+        <!-- Touch: a drawer. A popover anchored to a chip near the keyboard is a
+             popover the keyboard covers, and a list this long wants the height. -->
+        <Drawer v-else v-model:open="scopePickerOpen">
+          <DrawerContent class="h-[70dvh]">
+            <DrawerHeader class="border-b py-3">
+              <DrawerTitle class="flex items-center gap-2 text-sm font-semibold">
+                <FolderOpen class="size-4 text-muted-foreground"/>
+                Work in…
+              </DrawerTitle>
+            </DrawerHeader>
+            <ScopePicker :current="scope" :autofocus="false" class="min-h-0 flex-1" @pick="pickScope"/>
+          </DrawerContent>
+        </Drawer>
+
+        <!-- ░░ Scope bar — the one thing this conversation is about ░░
+             Sits above the input, Codex-style: the scope is a property of the
+             conversation, not a decoration on one message, so it stays visible
+             while you type instead of hiding behind an icon. -->
+        <div class="flex items-center gap-1">
+          <button type="button"
+                  class="flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors hover:bg-accent"
+                  :class="scope ? 'border-primary/40 bg-primary/5' : 'bg-muted/40'"
+                  @click="scopePickerOpen = true">
+            <component :is="scope ? scopeIcons[scope.type] : FolderOpen"
+                       class="size-4 shrink-0" :class="scope ? 'text-primary' : 'text-muted-foreground'"/>
+            <span v-if="scope" class="truncate font-medium">{{ scope.label }}</span>
+            <span v-else class="text-muted-foreground">Choose a matter, engagement or vault</span>
+            <ChevronDown class="size-3.5 shrink-0 text-muted-foreground"/>
+          </button>
+          <button v-if="scope" type="button" aria-label="Clear scope"
+                  class="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                  @click="scope = null">
+            <X class="size-3.5"/>
+          </button>
+        </div>
+
+        <!-- ░░ "/" command menu ░░ — derived from the draft, so it opens on "/" and
+             closes as soon as what you typed stops looking like a command. -->
+        <div v-if="slashOpen"
+             class="absolute bottom-full left-0 z-30 mb-2 max-h-72 w-[min(32rem,100%)] overflow-y-auto rounded-xl border bg-popover p-1 shadow-lg">
+          <div class="px-2 py-1.5 text-xs font-medium text-muted-foreground">Commands</div>
+          <button v-for="(cmd, i) in slashCommands" :key="cmd.id" type="button"
+                  class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors"
+                  :class="slashCursor === i ? 'bg-accent' : 'hover:bg-accent/60'"
+                  @mouseenter="slashCursor = i" @click="cmd.run()">
+            <component :is="cmd.icon" class="size-4 shrink-0 text-muted-foreground"/>
+            <span class="shrink-0 text-sm font-medium">{{ cmd.label }}</span>
+            <span class="truncate text-xs text-muted-foreground">{{ cmd.hint }}</span>
+          </button>
+
+          <template v-if="skillsLoading || slashSkills.length">
+            <div class="mt-1 px-2 py-1.5 text-xs font-medium text-muted-foreground">Skills</div>
+            <div v-if="skillsLoading" class="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+              <Loader2 class="size-3.5 animate-spin"/>
+              Loading the firm's skills…
+            </div>
+            <button v-for="(sk, i) in slashSkills" :key="sk.id" type="button"
+                    class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors"
+                    :class="slashCursor === slashCommands.length + i ? 'bg-accent' : 'hover:bg-accent/60'"
+                    @mouseenter="slashCursor = slashCommands.length + i" @click="invokeSkill(sk)">
+              <Sparkles class="size-4 shrink-0 text-muted-foreground"/>
+              <span class="shrink-0 text-sm font-medium">{{ sk.title || sk.name }}</span>
+              <span class="truncate text-xs text-muted-foreground">{{ sk.purpose }}</span>
+            </button>
+          </template>
+        </div>
 
         <Transition name="rec" mode="out-in">
         <!-- ── Recording / transcribing state ── -->
@@ -2032,18 +2463,6 @@ defineExpose({
         </div>
 
         <InputGroup v-else key="composer">
-          <InputGroupAddon align="block-start">
-            <Button size="sm" variant="outline"
-                    :class="selectedItems.length ? 'border-primary/50 text-primary' : ''"
-                    @click="contextDrawerOpen = true">
-              <AtSign class="size-4"/>
-              Add Context
-              <Badge v-if="selectedItems.length" variant="secondary" class="ml-1 px-1 text-xs">
-                {{ selectedItems.length }}
-              </Badge>
-            </Button>
-          </InputGroupAddon>
-
           <!-- `:model-value` + a native `@input` rather than `v-model`: the model goes
                through two wrappers (InputGroupTextarea → Textarea) and a passive proxy
                before it lands here, which delayed `hasInput` — and so the send/voice
@@ -2096,109 +2515,6 @@ defineExpose({
       </div>
     </div>
 
-    <!-- ░░ Context picker — inline overlay (no nested modal) ░░ -->
-    <Transition name="context-panel">
-      <div v-if="contextDrawerOpen" class="absolute inset-0 z-30 flex flex-col justify-end">
-        <div class="absolute inset-0 bg-black/40" @click="contextDrawerOpen = false"/>
-        <div class="relative flex max-h-[75vh] min-h-0 flex-col rounded-t-xl border-t bg-background shadow-xl">
-          <div class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
-            <AtSign class="size-4 text-muted-foreground"/>
-            <span class="text-sm font-semibold">Add Context</span>
-            <Button size="icon-sm" variant="ghost" class="ml-auto" @click="contextDrawerOpen = false">
-              <X class="size-4"/>
-            </Button>
-          </div>
-          <div class="shrink-0 border-b px-4 pb-2 pt-3">
-            <input v-model="contextSearch" placeholder="Search matters, deadlines, lawyers…"
-                   class="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"/>
-          </div>
-          <Tabs v-model="contextTab" class="flex min-h-0 flex-1 flex-col">
-            <TabsList class="h-auto shrink-0 justify-start gap-1 rounded-none border-b bg-transparent px-4 py-2">
-              <TabsTrigger value="matter" class="gap-1.5 text-xs">
-                <Building2 class="size-3"/>
-                Matters
-              </TabsTrigger>
-              <TabsTrigger value="deadline" class="gap-1.5 text-xs">
-                <Clock class="size-3"/>
-                Deadlines
-              </TabsTrigger>
-              <TabsTrigger value="user" class="gap-1.5 text-xs">
-                <User class="size-3"/>
-                Lawyers
-              </TabsTrigger>
-              <TabsTrigger value="engagement" class="gap-1.5 text-xs">
-                <Briefcase class="size-3"/>
-                Engagements
-              </TabsTrigger>
-            </TabsList>
-            <div v-if="contextLoading" class="flex items-center justify-center p-8">
-              <Loader2 class="size-5 animate-spin text-muted-foreground"/>
-            </div>
-            <template v-else>
-              <TabsContent value="matter" class="mt-0 flex-1 overflow-y-auto pb-8">
-                <button v-for="m in filteredMatters" :key="m.id"
-                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
-                        :class="isSelected(m.id) ? 'bg-accent' : ''"
-                        @click="toggleItem({ type: 'matter', id: m.id, label: m.name, sublabel: m.caseNumber })">
-                  <div class="flex min-w-0 flex-1 flex-col"><span class="truncate text-sm font-medium">{{
-                      m.name
-                    }}</span><span class="text-xs text-muted-foreground">{{ m.caseNumber }}</span></div>
-                  <Check v-if="isSelected(m.id)" class="size-4 shrink-0 text-primary"/>
-                </button>
-                <p v-if="!filteredMatters.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No matters
-                  found.</p>
-              </TabsContent>
-              <TabsContent value="deadline" class="mt-0 flex-1 overflow-y-auto pb-8">
-                <button v-for="d in filteredDeadlines" :key="d.id"
-                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
-                        :class="isSelected(d.id) ? 'bg-accent' : ''"
-                        @click="toggleItem({ type: 'deadline', id: d.id, label: d.name, sublabel: d.matterName })">
-                  <div class="flex min-w-0 flex-1 flex-col"><span class="truncate text-sm font-medium">{{
-                      d.name
-                    }}</span><span class="truncate text-xs text-muted-foreground">{{ d.matterName }}</span></div>
-                  <Check v-if="isSelected(d.id)" class="size-4 shrink-0 text-primary"/>
-                </button>
-                <p v-if="!filteredDeadlines.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No
-                  pending deadlines found.</p>
-              </TabsContent>
-              <TabsContent value="user" class="mt-0 flex-1 overflow-y-auto pb-8">
-                <button v-for="u in filteredUsers" :key="u.id"
-                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
-                        :class="isSelected(u.id) ? 'bg-accent' : ''"
-                        @click="toggleItem({ type: 'user', id: u.id, label: u.name, sublabel: u.role })">
-                  <Avatar class="size-7 shrink-0">
-                    <AvatarImage :src="u.avatar ?? ''" :alt="u.name"/>
-                    <AvatarFallback class="bg-primary text-[10px] text-primary-foreground">{{
-                        initials(u.name)
-                      }}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div class="flex min-w-0 flex-1 flex-col"><span class="text-sm font-medium">{{ u.name }}</span><span
-                      v-if="u.role" class="text-xs capitalize text-muted-foreground">{{ u.role }}</span></div>
-                  <Check v-if="isSelected(u.id)" class="size-4 shrink-0 text-primary"/>
-                </button>
-                <p v-if="!filteredUsers.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No lawyers
-                  found.</p>
-              </TabsContent>
-              <TabsContent value="engagement" class="mt-0 flex-1 overflow-y-auto pb-8">
-                <button v-for="e in filteredEngagements" :key="e.id"
-                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
-                        :class="isSelected(e.id) ? 'bg-accent' : ''"
-                        @click="toggleItem({ type: 'engagement', id: e.id, label: e.name, sublabel: e.sublabel })">
-                  <div class="flex min-w-0 flex-1 flex-col"><span class="truncate text-sm font-medium">{{
-                      e.name
-                    }}</span><span class="truncate text-xs text-muted-foreground">{{ e.sublabel }}</span></div>
-                  <Check v-if="isSelected(e.id)" class="size-4 shrink-0 text-primary"/>
-                </button>
-                <p v-if="!filteredEngagements.length" class="px-4 py-6 text-center text-sm text-muted-foreground">No
-                  engagements found.</p>
-              </TabsContent>
-            </template>
-          </Tabs>
-        </div>
-      </div>
-    </Transition>
-
     <!-- ░░ Conversational voice mode ░░ -->
     <VoiceMode v-model:open="voiceOpen" :preview="VOICE_PREVIEW" :context-provider="buildVoiceContext"/>
 
@@ -2213,7 +2529,7 @@ defineExpose({
         <SheetTitle class="sr-only">Document preview</SheetTitle>
         <DocumentPreview v-if="previewDoc" :doc="previewDoc"
                          :resolve-url="resolvePreviewUrl"
-                         class="min-h-0 flex-1" @close="previewOpen = false"/>
+                         class="min-h-0 flex-1" @close="closeAllPreviews"/>
       </SheetContent>
     </Sheet>
 
@@ -2307,29 +2623,168 @@ defineExpose({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  </div>
+    </component>
+
+    <!-- Codex-style desktop workspace: every opened file gets a tab, while the
+         splitter lets the user balance the conversation against the work product. -->
+    <template v-if="useWorkspacePreview && workspacePanelOpen">
+      <ResizableHandle />
+      <ResizablePanel :default-size="48" :min-size="30" :max-size="70" class="min-w-0">
+        <Tabs v-model="activePreviewKey" class="flex h-full min-h-0 flex-col bg-background">
+          <div class="flex h-10 shrink-0 items-end border-b bg-muted/30 px-1">
+            <TabsList v-if="previewTabs.length" class="h-9 min-w-0 flex-1 justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
+              <div v-for="tab in previewTabs" :key="tab.key" class="group/tab relative min-w-0 max-w-56 flex-none">
+                <TabsTrigger
+                    :value="tab.key"
+                    class="h-9 w-full justify-start rounded-t-md rounded-b-none border-x border-t border-transparent px-2.5 pr-8 data-[state=active]:border-border data-[state=active]:border-b-background data-[state=active]:shadow-none">
+                  <FileText />
+                  <span class="min-w-0 truncate">{{ tab.doc.filename || 'Document' }}</span>
+                </TabsTrigger>
+                <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    class="absolute right-1 top-1/2 size-6 -translate-y-1/2 opacity-60 group-hover/tab:opacity-100"
+                    :aria-label="`Close ${tab.doc.filename || 'document'}`"
+                    @click="closePreviewTab(tab.key)">
+                  <X />
+                </Button>
+              </div>
+            </TabsList>
+            <span v-if="!previewTabs.length" class="min-w-0 flex-1 truncate px-2.5 pb-2 text-sm font-medium">
+              Workspace
+            </span>
+            <Popover v-model:open="workspaceAddOpen">
+              <PopoverTrigger as-child>
+                <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    class="mb-0.5 shrink-0"
+                    title="Add workspace tab"
+                    @click="workspaceAddView = 'options'">
+                  <Plus />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" class="w-96 p-1">
+                <template v-if="workspaceAddView === 'options'">
+                  <div class="px-2 py-1.5">
+                    <p class="text-sm font-medium">Add a tab</p>
+                    <p class="text-xs text-muted-foreground">Open a document in your workspace.</p>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <Button variant="ghost" class="h-auto justify-start px-2 py-2.5 text-left" @click="openWorkspaceVaultPicker">
+                      <Library data-icon="inline-start" />
+                      <span class="flex min-w-0 flex-col items-start">
+                        <span>Choose from Vault</span>
+                        <span class="text-xs font-normal text-muted-foreground">Search documents your workspace can access</span>
+                      </span>
+                    </Button>
+                    <Button variant="ghost" class="h-auto justify-start px-2 py-2.5 text-left" @click="openWorkspaceFilePicker">
+                      <Paperclip data-icon="inline-start" />
+                      <span class="flex min-w-0 flex-col items-start">
+                        <span>Open local file</span>
+                        <span class="text-xs font-normal text-muted-foreground">Preview a file from this device</span>
+                      </span>
+                    </Button>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="flex items-center gap-1 border-b px-1 pb-1">
+                    <Button size="icon-sm" variant="ghost" title="Back" @click="workspaceAddView = 'options'">
+                      <ChevronLeft />
+                    </Button>
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium">Choose from Vault</p>
+                      <p class="text-xs text-muted-foreground">Recent documents from every accessible library</p>
+                    </div>
+                  </div>
+                  <Command>
+                    <CommandInput placeholder="Search Vault documents…" />
+                    <CommandList class="max-h-72">
+                      <CommandEmpty>
+                        {{ workspaceVaultLoading ? 'Loading Vault…' : 'No matching documents.' }}
+                      </CommandEmpty>
+                      <CommandGroup heading="Documents">
+                        <CommandItem
+                            v-for="doc in workspaceVaultDocs"
+                            :key="doc.id"
+                            :value="`${doc.filename} ${doc.doc_type || ''} ${doc.id}`"
+                            class="items-start"
+                            @select="openVaultDocPreview(doc)">
+                          <FileText />
+                          <span class="flex min-w-0 flex-col">
+                            <span class="truncate">{{ doc.filename }}</span>
+                            <span class="text-xs text-muted-foreground">{{ docTypeLabel(doc.doc_type) }}</span>
+                          </span>
+                        </CommandItem>
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </template>
+              </PopoverContent>
+            </Popover>
+            <Button size="icon-sm" variant="ghost" class="mb-0.5 shrink-0" title="Close workspace panel" @click="closeWorkspacePanel">
+              <X />
+            </Button>
+          </div>
+          <TabsContent
+              v-for="tab in previewTabs"
+              :key="tab.key"
+              :value="tab.key"
+              class="mt-0 min-h-0 overflow-hidden">
+            <DocumentPreview
+                :key="`${tab.key}:${tab.revision ?? 0}`"
+                :doc="tab.doc"
+                :resolve-url="() => resolveTabUrl(tab)"
+                :facts-doc-id="tab.factsDocId"
+                :initial-page="tab.initialPage"
+                class="min-h-0 flex-1"
+                @close="closePreviewTab(tab.key)" />
+          </TabsContent>
+
+          <Empty v-if="!previewTabs.length" class="min-h-0 rounded-none border-0">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Files />
+              </EmptyMedia>
+              <EmptyTitle>Your workspace is ready</EmptyTitle>
+              <EmptyDescription>
+                Open an attachment or a document drafted in this conversation. Each file gets its own tab here.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent class="gap-1">
+              <Button variant="outline" class="w-full" @click="openWorkspaceAddMenu">
+                <Plus data-icon="inline-start" />
+                Add a tab
+              </Button>
+              <Button
+                  v-for="doc in conversationDocs.slice(0, 5)"
+                  :key="doc.id"
+                  variant="ghost"
+                  class="w-full justify-start"
+                  @click="openDocument(doc)">
+                <FileText data-icon="inline-start" />
+                <span class="truncate">{{ doc.title || doc.filename || 'Document' }}</span>
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </Tabs>
+      </ResizablePanel>
+    </template>
+  </component>
 </template>
 
 <style scoped>
-/* Context picker slide-up */
-.context-panel-enter-active,
-.context-panel-leave-active {
-  transition: opacity 0.2s ease;
+/* Scope picker popover */
+.scope-pop-enter-active,
+.scope-pop-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
 
-.context-panel-enter-active > div:last-child,
-.context-panel-leave-active > div:last-child {
-  transition: transform 0.25s ease;
-}
-
-.context-panel-enter-from,
-.context-panel-leave-to {
+.scope-pop-enter-from,
+.scope-pop-leave-to {
   opacity: 0;
-}
-
-.context-panel-enter-from > div:last-child,
-.context-panel-leave-to > div:last-child {
-  transform: translateY(100%);
+  transform: translateY(4px) scale(0.98);
 }
 
 /* Composer ⇄ recording-panel swap */

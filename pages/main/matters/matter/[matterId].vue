@@ -651,7 +651,7 @@ provideDockContext(() => {
     label: m.name || 'Matter',
     sublabel: m.caseNumber || 'Matter',
     icon: Scale,
-    chips: [{ type: 'matter', id: m.id, label: m.name || 'Matter', sublabel: m.caseNumber }],
+    scope: { type: 'matter', id: m.id, label: m.name || 'Matter', sublabel: m.caseNumber },
     contextText: bits.join(' '),
   };
 });

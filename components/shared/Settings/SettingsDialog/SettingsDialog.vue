@@ -34,7 +34,7 @@
               :variant="activeTab === 'ai' ? 'secondary' : 'ghost'"
               @click="activeTab = 'ai'">
             <Sparkles />
-            AI Provider
+            AI Models
           </Button>
 
           <Button

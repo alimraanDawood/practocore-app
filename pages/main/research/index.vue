@@ -1,98 +1,98 @@
 <script lang="ts" setup>
-import { Telescope, Sparkles, PanelRightOpen } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
+import { Telescope } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import type { AiArtifact } from '~/services/ai';
-import type { ResearchPlan, DeepTask, DeepResearchMode } from '~/services/deepTask';
-import { createDeepTask, listDeepTasks, phaseLabel, isLivePhase } from '~/services/deepTask';
+import type { DeepTask, ResearchPlan } from '~/services/deepTask';
+import { createDeepTask, isLivePhase, listDeepTasks, phaseLabel } from '~/services/deepTask';
 
 const surface = ref<InstanceType<typeof ChatSurface> | null>(null);
-
+const isDesktop = useMediaQuery('(min-width: 1024px)');
 const activePlan = ref<ResearchPlan | null>(null);
 const activeTaskId = ref('');
 const activeTask = ref<DeepTask | null>(null);
 const launching = ref(false);
 const launched = ref(false);
-const panelOpen = ref(false);
-
-const hasPanelContent = computed(() => !!activePlan.value || !!activeTaskId.value);
+const planDrawerOpen = ref(false);
+const workspaceOpen = ref(false);
+const manuallyViewingChat = ref(false);
 
 const progressSummary = computed(() => {
   const task = activeTask.value;
   if (!task) return activePlan.value ? 'Research plan ready to launch' : '';
   if (task.phase === 'done') return 'Research complete';
   if (task.phase === 'error') return 'Research failed';
-  if (task.phase === 'outline_review') return 'Outline awaiting your approval';
-  if (isLivePhase(task.phase)) {
-    const pct = task.progress > 0 ? ` — ${task.progress}%` : '';
-    return `${phaseLabel(task.phase)}${pct}`;
-  }
+  if (task.phase === 'plan_review') return 'Research questions awaiting your approval';
+  if (isLivePhase(task.phase)) return `${phaseLabel(task.phase)}${task.progress > 0 ? ` — ${task.progress}%` : ''}`;
   return phaseLabel(task.phase);
 });
 
-function onArtifact(a: AiArtifact) {
-  if (a.kind === 'research_plan' && a.data) {
-    activePlan.value = a.data as ResearchPlan;
-    launched.value = false;
-    activeTaskId.value = '';
-    activeTask.value = null;
-    panelOpen.value = true;
-  }
+function onArtifact(artifact: AiArtifact) {
+  if (artifact.kind !== 'research_plan' || !artifact.data) return;
+  activePlan.value = artifact.data as ResearchPlan;
+  launched.value = false;
+  activeTaskId.value = '';
+  activeTask.value = null;
+  planDrawerOpen.value = true;
+  workspaceOpen.value = false;
+  manuallyViewingChat.value = false;
 }
 
-async function onConversationChange(convId: string) {
-  if (!convId) {
+async function onConversationChange(conversationId: string) {
+  if (!conversationId) {
     activePlan.value = null;
     activeTaskId.value = '';
     activeTask.value = null;
     launched.value = false;
+    workspaceOpen.value = false;
+    manuallyViewingChat.value = false;
     return;
   }
   try {
-    const tasks = await listDeepTasks(convId);
-    const task = tasks[0] ?? null;
+    const task = (await listDeepTasks(conversationId))[0] ?? null;
+    activeTask.value = task;
+    activeTaskId.value = task?.id ?? '';
+    launched.value = !!task;
     if (task) {
-      activeTask.value = task;
-      activeTaskId.value = task.id;
-      launched.value = true;
       activePlan.value = {
         objective: task.instruction,
         title: task.label,
-        outline: task.outline?.sections?.map(s => ({
-          heading: s.heading ?? '',
-          brief: s.brief ?? '',
-          numbered: false,
-        })) ?? [],
+        questions: (task.subquestions ?? []).map(agent => ({ question: agent.question, intent: agent.intent, hints: agent.hints })),
       };
+      if (!manuallyViewingChat.value) workspaceOpen.value = true;
     } else {
-      activeTaskId.value = '';
-      activeTask.value = null;
-      launched.value = false;
       activePlan.value = null;
+      workspaceOpen.value = false;
     }
-  } catch {
-    // Silently ignore — entitlement may not be active
-  }
+  } catch { /* Entitlement may not be active. */ }
 }
 
-async function launchResearch(payload: { plan: ResearchPlan; review: boolean; mode: DeepResearchMode }) {
-  const convId = surface.value?.conversationId as string | undefined;
-  if (!convId) return;
+async function launchResearch(payload: { plan: ResearchPlan; review: boolean }) {
+  const conversationId = surface.value?.conversationId as string | undefined;
+  if (!conversationId) return;
   launching.value = true;
   try {
-    const task = await createDeepTask({
-      plan: payload.plan,
-      conversationId: convId,
-      review: payload.review,
-      mode: payload.mode,
-    });
+    const task = await createDeepTask({ plan: payload.plan, conversationId, review: payload.review });
     activeTaskId.value = task.id;
     activeTask.value = task;
     launched.value = true;
-  } catch (e: any) {
-    console.error('[research] launch failed:', e);
-  } finally {
-    launching.value = false;
-  }
+    planDrawerOpen.value = false;
+    manuallyViewingChat.value = false;
+    workspaceOpen.value = true;
+  } catch (error) {
+    console.error('[research] launch failed:', error);
+  } finally { launching.value = false; }
+}
+
+function returnToConversation() {
+  manuallyViewingChat.value = true;
+  workspaceOpen.value = false;
+}
+
+function openResearchSurface() {
+  manuallyViewingChat.value = false;
+  if (activeTaskId.value) workspaceOpen.value = true;
+  else if (activePlan.value) planDrawerOpen.value = true;
 }
 
 const prompts = [
@@ -104,77 +104,66 @@ const prompts = [
 </script>
 
 <template>
-  <div class="relative h-full">
-    <ChatSurface
-      ref="surface"
-      mode="research"
-      class="h-full"
-      label="Research"
-      @artifact="onArtifact"
-      @conversation-change="onConversationChange"
-    >
-      <template #composer-top v-if="hasPanelContent && !panelOpen">
-        <div class="flex flex-row p-2 justify-between rounded-lg border bg-muted">
-          <span class="text-sm text-muted-foreground">{{ progressSummary }}</span>
-          <Button
-              variant="outline"
-              size="xs"
-              @click="panelOpen = true"
-          >
-            {{ !launched ? 'View plan' : activeTask?.phase === 'done' ? 'View report' : 'See progress' }}
-          </Button>
-        </div>
-      </template>
-      <template #empty="{ send }">
-        <div class="flex w-full flex-col items-center gap-6 pt-8">
-          <div class="flex flex-col items-center gap-2 text-center">
-            <div class="grid size-12 place-items-center rounded-xl bg-muted">
-              <Telescope class="size-6 text-muted-foreground" />
+  <div class="relative h-full min-h-0">
+    <SharedAIDeepTaskWorkspace
+      v-if="activeTaskId && workspaceOpen"
+      :task-id="activeTaskId"
+      @back="returnToConversation"
+      @update="task => activeTask = task"
+    />
+
+    <div v-else class="flex h-full min-h-0">
+      <ChatSurface
+        ref="surface"
+        mode="research"
+        class="h-full min-w-0 flex-1"
+        label="Research"
+        @artifact="onArtifact"
+        @conversation-change="onConversationChange"
+      >
+        <template v-if="activeTaskId || (activePlan && !isDesktop)" #composer-top>
+          <div class="flex items-center justify-between rounded-lg border bg-muted/60 p-2">
+            <span class="text-sm text-muted-foreground">{{ progressSummary }}</span>
+            <Button variant="outline" size="xs" @click="openResearchSurface">
+              {{ activeTaskId ? (activeTask?.phase === 'done' ? 'View report' : 'Open research') : 'View plan' }}
+            </Button>
+          </div>
+        </template>
+        <template #empty="{ send }">
+          <div class="flex w-full flex-col items-center gap-6 pt-8">
+            <div class="flex flex-col items-center gap-2 text-center">
+              <div class="grid size-12 place-items-center rounded-xl bg-muted"><Telescope class="size-6 text-muted-foreground" /></div>
+              <h1 class="ibm-plex-serif text-lg font-semibold">Research</h1>
+              <p class="max-w-md text-sm text-muted-foreground">Describe what you need to research. I'll clarify the question, build a plan, and produce a cited report from specialist research agents.</p>
             </div>
-            <h1 class="text-lg font-semibold ibm-plex-serif">Research</h1>
-            <p class="max-w-md text-sm text-muted-foreground">
-              Describe what you need to research. I'll ask clarifying questions, build a plan,
-              then sweep your vault, case law, and statutes to produce a cited research report.
-            </p>
+            <div class="grid w-full max-w-lg gap-2 sm:grid-cols-2">
+              <button v-for="prompt in prompts" :key="prompt" class="flex items-start rounded-lg border bg-muted/50 p-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent" @click="send(prompt)">
+                {{ prompt }}
+              </button>
+            </div>
           </div>
+        </template>
+      </ChatSurface>
 
-          <div class="grid w-full max-w-lg gap-2 sm:grid-cols-2">
-            <button
-              v-for="p in prompts"
-              :key="p"
-              class="flex items-start gap-2.5 rounded-lg border text-muted-foreground bg-muted/50 p-3 text-left text-sm transition-colors hover:bg-accent"
-              @click="send(p)"
-            >
-              <span class="text-muted-foreground">{{ p }}</span>
-            </button>
-          </div>
+      <aside v-if="activePlan && isDesktop" class="hidden h-full w-[420px] shrink-0 overflow-y-auto border-l bg-background p-5 lg:block">
+        <div class="mb-4">
+          <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Research plan</p>
+          <p class="mt-1 text-sm text-muted-foreground">Review what the agents will investigate before launching.</p>
         </div>
-      </template>
-    </ChatSurface>
+        <SharedAIDeepTaskPlanCard :plan="activePlan" :launched="launched" :launching="launching" borderless @launch="launchResearch" />
+      </aside>
 
-    <!-- Research panel as a right-side Sheet -->
-    <Sheet v-model:open="panelOpen">
-      <SheetContent side="right" class="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle class="flex items-center gap-2">
-            <Telescope class="size-4 text-primary" />
-            Research plan
-          </SheetTitle>
-        </SheetHeader>
-        <div class="space-y-4 p-3">
-          <div class="flex flex-col p-3">
-            <SharedAIDeepTaskPlanCard
-              v-if="activePlan"
-              :plan="activePlan"
-              :launched="launched"
-              :launching="launching"
-              borderless
-              @launch="launchResearch"
-            />
-          </div>
-          <SharedAIDeepTaskCard v-if="activeTaskId" :key="activeTaskId" :task-id="activeTaskId" />
-        </div>
-      </SheetContent>
-    </Sheet>
+      <Drawer v-if="activePlan && !isDesktop" v-model:open="planDrawerOpen" direction="bottom">
+        <DrawerContent class="max-h-[85vh]">
+          <DrawerHeader>
+            <DrawerTitle>Research plan</DrawerTitle>
+            <DrawerDescription>Review what the agents will investigate before launching.</DrawerDescription>
+          </DrawerHeader>
+          <ScrollArea class="px-4 pb-6">
+            <SharedAIDeepTaskPlanCard :plan="activePlan" :launched="launched" :launching="launching" borderless @launch="launchResearch" />
+          </ScrollArea>
+        </DrawerContent>
+      </Drawer>
+    </div>
   </div>
 </template>

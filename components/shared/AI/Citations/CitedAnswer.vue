@@ -14,7 +14,12 @@ import { SERVER_URL } from '~/lib/pocketbase';
 // `onLocate` (set by the Word surface) receives the verbatim snippet behind a
 // `doc:` link so the host can scroll the open document to it. Absent elsewhere, where
 // no doc: links are ever emitted.
-const props = defineProps<{ content: string; citations?: AiCitation[]; onLocate?: (text: string) => void }>();
+const props = defineProps<{
+  content: string;
+  citations?: AiCitation[];
+  onLocate?: (text: string) => void;
+  onOpenSource?: (doc: VaultDocument, initialPage?: number) => void;
+}>();
 
 marked.use({ breaks: true, gfm: true });
 
@@ -30,7 +35,9 @@ function byId(id: string): AiCitation | undefined {
   return citations.value.find(c => c.citeId === id);
 }
 
-const CITE_RE = /\[\[cite:([\w-]+)\]\]/g;
+// Accept annotated envelopes produced by older research runs (for example
+// [[cite:c16 in sq4]]) while resolving only the first actual ledger id.
+const CITE_RE = /\[\[cite:\s*([\w-]+)[^\]\r\n]*\]\]/g;
 
 // Replace markers with inline chip HTML before markdown parsing (marked passes raw
 // inline HTML through). Known ids become a clickable <sup>; unknown ids vanish so a
@@ -131,7 +138,12 @@ async function open(c: AiCitation) {
     try {
       const doc = await getDocument(meta.sourceDocId);
       if (!doc) { toast.error("That source document isn't available to you."); return; }
-      previewPage.value = pageFromLocator(meta.locator);
+      const page = pageFromLocator(meta.locator);
+      if (props.onOpenSource) {
+        props.onOpenSource(doc, page);
+        return;
+      }
+      previewPage.value = page;
       previewDoc.value = doc;
     } finally {
       loadingDoc.value = false;
