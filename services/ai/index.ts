@@ -776,6 +776,25 @@ export interface ForgetMemoryPreview {
   source?: string;
 }
 
+/**
+ * A vault file-manager write (create_vault_folder / manage_vault_folder /
+ * manage_vault_documents). The tools name everything by id, so the card is built
+ * entirely from names the backend resolved: which library, what moves, where to.
+ */
+export interface VaultEditPreview {
+  kind: 'vault_edit';
+  /** Plain-English action, e.g. "Move documents" or "Create folder". */
+  action: string;
+  /** The library by the name the user knows it: a matter, a vault, "Personal library". */
+  library?: string;
+  /** The documents or the folder this acts on, by name. */
+  items: string[];
+  /** Where they land — a folder name, "Top of the library", or a new folder name. */
+  destination?: string;
+  /** What else travels with the action (a subtree), or that binning is reversible. */
+  note?: string;
+}
+
 export interface GenericPreview {
   kind: 'generic';
 }
@@ -794,6 +813,7 @@ export type ProposalPreview =
   | EventEditPreview
   | EventStatusPreview
   | ForgetMemoryPreview
+  | VaultEditPreview
   | GenerateDocumentPreview
   | ProposeSkillPreview
   | ProposeEngagementTemplatePreview

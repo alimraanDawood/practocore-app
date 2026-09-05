@@ -6,7 +6,7 @@ import type {
   AdjournPreview, DateChangePreview, FulfillPreview, EvidencePreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
   EventEditPreview, EventStatusPreview,
   GenerateDocumentPreview, ProposeSkillPreview, ManageSkillPreview, ProposeEngagementTemplatePreview,
-  ForgetMemoryPreview,
+  ForgetMemoryPreview, VaultEditPreview,
 } from '~/services/ai';
 import { proposalTheme, formatToolName, type ProposalVariant } from './proposals/theme';
 import ProposalReassign from './proposals/ProposalReassign.vue';
@@ -26,6 +26,7 @@ import ProposalProposeSkill from './proposals/ProposalProposeSkill.vue';
 import ProposalManageSkill from './proposals/ProposalManageSkill.vue';
 import ProposalProposeEngagementTemplate from './proposals/ProposalProposeEngagementTemplate.vue';
 import ProposalForgetMemory from './proposals/ProposalForgetMemory.vue';
+import ProposalVaultEdit from './proposals/ProposalVaultEdit.vue';
 import ProposalGeneric from './proposals/ProposalGeneric.vue';
 
 const props = withDefaults(defineProps<{
@@ -87,6 +88,7 @@ const iconWrap = computed(() => glass.value
       <ProposalManageSkill v-else-if="kind === 'manage_skill'" :preview="(proposal.preview as ManageSkillPreview)" :variant="variant" />
       <ProposalProposeEngagementTemplate v-else-if="kind === 'propose_engagement_template'" :preview="(proposal.preview as ProposeEngagementTemplatePreview)" :variant="variant" />
       <ProposalForgetMemory v-else-if="kind === 'forget_memory'" :preview="(proposal.preview as ForgetMemoryPreview)" :variant="variant" />
+      <ProposalVaultEdit v-else-if="kind === 'vault_edit'" :preview="(proposal.preview as VaultEditPreview)" :variant="variant" />
       <ProposalCreateMatter
         v-else-if="kind === 'create_matter'"
         :preview="(proposal.preview as CreateMatterPreview)"
