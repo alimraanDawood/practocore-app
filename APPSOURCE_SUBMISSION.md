@@ -20,9 +20,9 @@ appear twice.
 | 4 | Icon URLs resolve over HTTPS | ✅ 200 (verified 2026-08-16) |
 | 5 | `word-manifest.xml` passes acceptance test | ✅ valid (re-run 2026-08-16) |
 | 6 | `outlook-manifest.xml` passes acceptance test | ✅ valid (re-run 2026-08-16) |
-| 7 | Privacy Policy URL reachable | ⏳ built, **not deployed** — `practocore-landing` `/privacy` |
-| 8 | Terms of Use URL reachable | ⏳ built, **not deployed** — `practocore-landing` `/terms` |
-| 9 | Support URL reachable (`<SupportUrl>` target) | ⏳ built, **not deployed** — `practocore-landing` `/contact` |
+| 7 | Privacy Policy URL reachable | ✅ 200 (verified 2026-09-05) — `https://www.practocore.com/privacy` |
+| 8 | Terms of Use URL reachable | ✅ 200 (verified 2026-09-05) — `https://www.practocore.com/terms` |
+| 9 | Support URL reachable (`<SupportUrl>` target) | ✅ 200 (verified 2026-09-05) — `https://www.practocore.com/contact` |
 | 10 | Registered company address confirmed on the legal pages | ✅ updated 2026-08-24 — Kiswa, Zone 2, Nakawa Division, Kampala, Uganda; P.O. Box 216701, Kampala GPO (registered office of PractoCore Technologies Limited) |
 | 11 | Google OAuth redirect registered for `app.practocore.com` | ✅ registered 2026-08-16 — not yet exercised from a real task pane |
 | 12 | Reviewer test account that can actually sign in | ❌ **TODO(owner)** — see §5 |
@@ -145,11 +145,11 @@ Identical for both offers:
 | Website | `https://www.practocore.com` |
 | Support contact | `contact@practocore.com` |
 
-⚠ All three of the first URLs 404 until `practocore-landing` is redeployed. The
-pages exist in the repo (`app/pages/privacy.vue`, `terms.vue`, `contact.vue`);
-they have not shipped. **Verify each returns 200 before submitting** —
-AppSource fails the offer automatically on a dead URL, and a failed submission
-goes back to the end of the review queue.
+All three went live on 2026-09-05 and return 200. `practocore-landing` deploys
+on every push to `main`, so a page can also disappear on a bad push. **Verify
+each returns 200 before submitting** — AppSource fails the offer automatically on
+a dead URL, and a failed submission goes back to the end of the review queue.
+Cloudflare caches at `s-maxage=300`, so allow ~5 minutes after a push.
 
 ```bash
 for u in contact privacy terms; do

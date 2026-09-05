@@ -1,8 +1,8 @@
 # PractoCore Office Add-ins — Production Deployment & AppSource Listing
 
 **Status:** production manifests cut & re-validated — 2026-08-16.
-Legal/support pages built in `practocore-landing` but **not yet deployed**;
-submission package drafted in `APPSOURCE_SUBMISSION.md`.
+Legal/support pages and both manifests are **live on www.practocore.com**
+(2026-09-05); submission package drafted in `APPSOURCE_SUBMISSION.md`.
 **Manifests:** `word-manifest.xml`, `outlook-manifest.xml` (production) · `*-manifest.dev.xml` (localhost, keep for dev)
 
 The task-pane code is already live in production (`app.practocore.com/word/taskpane`,
@@ -41,35 +41,47 @@ the Google Cloud OAuth client and the PocketBase `google` auth provider.
 ⚠ Not yet exercised end-to-end from a real Office task pane — see the
 verification step at the end of section A.
 
-### 2. Deploy the Support / Privacy / Terms pages (required for AppSource, step B)
+### 2. ✅ DONE (2026-09-05) — Support / Privacy / Terms pages are live
 AppSource validation rejects listings without reachable **Support**, **Privacy
 Policy**, and **Terms of Use** URLs.
 
-**2026-08-16 — the pages are now built** in `practocore-landing`:
-`app/pages/contact.vue`, `privacy.vue`, `terms.vue`, with content in
-`app/data/legal.ts` and the footer's Legal column wired to them. The site builds
-and all three routes render (verified against a local preview).
+The pages were built 2026-08-16 in `practocore-landing` (`app/pages/contact.vue`,
+`privacy.vue`, `terms.vue`, content in `app/data/legal.ts`, footer Legal column
+wired to them) and went live on 2026-09-05. `practocore-landing` deploys itself
+on every push to `main` — Render behind Cloudflare, configured outside the repo,
+so there is no workflow file that says so. All three routes return 200, and the
+`SupportUrl` in both manifests now resolves.
 
 Still outstanding:
-- **Deploy `practocore-landing`.** Until then `www.practocore.com/{contact,privacy,terms}`
-  all return **404**, and the `SupportUrl` in both manifests points at a dead page.
 - **Have the legal text reviewed.** It was drafted from what the platform actually
   does (the subprocessor table lists the services the backend really calls) but it
   has not been through counsel.
 
-Verify after deploying:
+Verify (Cloudflare caches pages at `s-maxage=300`, so allow ~5 minutes after a push):
 ```bash
-for u in contact privacy terms; do
-  printf "%-8s %s\n" "$u" "$(curl -s -o /dev/null -w '%{http_code}' -L https://www.practocore.com/$u)"
+for u in contact privacy terms addins/practocore-word.xml addins/practocore-outlook.xml; do
+  printf "%-32s %s\n" "$u" "$(curl -s -o /dev/null -w '%{http_code}' -L https://www.practocore.com/$u)"
 done
 ```
-(Not a blocker for centralized org deployment in step A, only for AppSource.)
 
 ---
 
 ## A. Ship to users NOW (no marketplace needed)
 
 Fastest path to lawyers using it today — no Microsoft review.
+
+**Both manifests are hosted on the marketing site** (2026-09-05), so nobody has
+to be emailed an XML file:
+
+  https://www.practocore.com/addins/practocore-word.xml
+  https://www.practocore.com/addins/practocore-outlook.xml
+
+The admin-centre upload and Outlook's "Add from URL" both take a link, which is
+the form a firm's IT will actually accept. `/download` presents them with the
+menu path for each host. ⚠ Those files are COPIES of the two manifests in this
+repo (`practocore-landing/public/addins/`, listed in `app/data/addins.ts`) —
+nothing validates the pairing, so a manifest change here must be copied there in
+the same commit or firms keep installing the old one.
 
 **Option A1 — Centralized deployment (recommended for firms on M365):**
 1. Microsoft 365 admin center → **Settings → Integrated apps → Upload custom apps**.
@@ -102,7 +114,7 @@ remains as the short version.
 ### Prerequisites
 - A **Partner Center** account enrolled in the **Microsoft 365 and Copilot** program
   (partner.microsoft.com). Business/tax verification can take days — start early.
-- Blocker #2 resolved (Support + Privacy + Terms URLs live).
+- ✅ Blocker #2 resolved — Support + Privacy + Terms URLs are live.
 - **Test credentials** for Microsoft's validators: a working PractoCore login with a
   seeded org + at least one matter, so a reviewer can exercise the add-in. ⚠️ The pane
   is **Google-OAuth only** — a Google-based test account the reviewer can actually sign
