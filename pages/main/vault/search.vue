@@ -193,6 +193,11 @@ function openFolder(f: VaultFolder) {
  */
 const idle = computed(() => !query.value.trim() && !hasFilter.value);
 
+// The vault screens keep the bottom-right corner for their own action bars
+// (select, move, delete), so the dock launcher stays hidden here — the panel
+// and its context registration still work.
+useSuppressDockLauncher(true);
+
 provideDockContext(() => ({
   key: 'vault:search',
   label: 'Vault search',

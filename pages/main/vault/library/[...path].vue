@@ -113,6 +113,11 @@ const explorer = ref<{
 
 const admin = ref<{ manageById: (id: string) => void } | null>(null);
 
+// The vault screens keep the bottom-right corner for their own action bars
+// (select, move, delete), so the dock launcher stays hidden here — the panel
+// and its context registration still work.
+useSuppressDockLauncher(true);
+
 provideDockContext(() => ({
   key: `vault:${scope.value}:${scopeId.value}`,
   label: rootLabel.value,

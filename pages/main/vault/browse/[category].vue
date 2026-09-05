@@ -12,6 +12,11 @@ const category = computed<VaultBrowseMode>(() => {
 });
 const title = computed(() => VAULT_CATEGORY_LABELS[category.value]);
 
+// The vault screens keep the bottom-right corner for their own action bars
+// (select, move, delete), so the dock launcher stays hidden here — the panel
+// and its context registration still work.
+useSuppressDockLauncher(true);
+
 provideDockContext(() => ({
   key: `vault:${category.value}`,
   label: title.value,

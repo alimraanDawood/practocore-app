@@ -4,6 +4,11 @@ import { FolderLock } from 'lucide-vue-next';
 // The vault home. Every other vault screen is its own route beneath this one, so
 // the app's tab history is the folder stack and back walks out the way the user
 // walked in — no view state in the query string, nothing to keep in step.
+// The vault screens keep the bottom-right corner for their own action bars
+// (select, move, delete), so the dock launcher stays hidden here — the panel
+// and its context registration still work.
+useSuppressDockLauncher(true);
+
 provideDockContext(() => ({
   key: 'vault',
   label: 'Vault',

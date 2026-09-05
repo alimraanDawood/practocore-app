@@ -11,12 +11,6 @@ import { useAssistantDock } from '~/composables/useAssistantDock';
 
 const { isOpen, context, suppressed, open, close } = useAssistantDock();
 
-// TEMPORARY (2026-08-29): the floating launcher is switched off while the dock's
-// placement is reconsidered — it sat in the corner every phone file manager uses
-// for its own action bars. Only the launcher is disabled; the panel, its context
-// registration and every programmatic `open()` still work, so flipping this back
-// to `true` restores the FAB with nothing else to change.
-const LAUNCHER_ENABLED = false;
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const PANEL_WIDTH = 420;
 
@@ -58,7 +52,7 @@ function openFull() {
          desktop panel is open (the panel carries its own close), and while a page
          has claimed the bottom-right corner for a bar of its own. -->
     <button
-      v-if="LAUNCHER_ENABLED && context && !(isDesktop && isOpen) && !suppressed"
+      v-if="context && !(isDesktop && isOpen) && !suppressed"
       type="button"
       class="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 active:scale-95"
       title="Ask PractoAI about this page"
