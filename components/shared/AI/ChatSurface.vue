@@ -232,7 +232,15 @@ type PreviewTab = {
 
 const previewTabs = ref<PreviewTab[]>([]);
 const activePreviewKey = ref('');
-const workspacePanelOpen = ref(true);
+// The workspace panel starts closed and stays where the user left it — the
+// preference is per-device and outlives leaving the chat for another page.
+const workspacePanelOpen = ref(false);
+onMounted(() => {
+  if (localStorage.getItem('ai.chat.workspacePanel') === '1') workspacePanelOpen.value = true;
+});
+watch(workspacePanelOpen, (open) => {
+  if (import.meta.client) localStorage.setItem('ai.chat.workspacePanel', open ? '1' : '0');
+});
 const workspaceFileInput = ref<HTMLInputElement | null>(null);
 const workspaceAddOpen = ref(false);
 const workspaceAddView = ref<'options' | 'vault'>('options');
