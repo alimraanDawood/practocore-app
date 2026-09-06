@@ -928,6 +928,109 @@ async function providerFetch(path: string, body: unknown): Promise<AIProviderSta
 }
 
 /**
+ * One recorded action: something the assistant changed, and whether it can be taken
+ * back. `approval` says who allowed it — a person on a permission card, or auto
+ * mode's policy — which is the distinction the ledger exists to preserve.
+ */
+export type AiAction = {
+  id: string;
+  tool: string;
+  risk: string;
+  approval: 'manual' | 'auto';
+  status: 'applied' | 'failed' | 'undone';
+  op: 'create' | 'update' | 'delete' | 'none';
+  entity?: string;
+  entityId?: string;
+  undoable: boolean;
+  reason?: string;
+  error?: string;
+  conversation?: string;
+  created: string;
+  undoneAt?: string;
+};
+
+/** The signed-in member's recorded actions, newest first. */
+export async function getAiActions(conversationId?: string): Promise<AiAction[]> {
+  const qs = conversationId ? `?conversation=${encodeURIComponent(conversationId)}` : '';
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/actions${qs}`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  const body = await res.json();
+  return body?.actions || [];
+}
+
+/** Reverse one recorded action. Returns the updated row. */
+export async function undoAiAction(id: string): Promise<AiAction> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/actions/${id}/undo`, {
+    method: 'POST',
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.message) msg = j.message;
+    } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return (await res.json())?.action;
+}
+
+/**
+ * Auto mode: whether an approval-gated action may run without a permission card.
+ *
+ * Two layers, and each may only narrow the other — the firm can switch it off for
+ * everyone, and a member who has not opted in does not get it even where the firm
+ * allows it. `enabled` is the resolved answer; the other two say why.
+ */
+export type AutoModeState = {
+  enabled: boolean;
+  memberOptedIn: boolean;
+  firmDisabled: boolean;
+  /** How many changes one turn may make on its own before it stops and asks. */
+  maxWrites: number;
+  /** The tools auto mode may run unattended, named rather than implied. */
+  autoApprovable: string[];
+};
+
+/** Read the resolved auto-mode position for the signed-in member. */
+export async function getAutoMode(): Promise<AutoModeState> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/automode`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
+
+/** Opt the signed-in member in or out. */
+export function setMyAutoMode(enabled: boolean): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/me', { enabled });
+}
+
+/** The firm-level veto. Admin-only server-side. */
+export function setFirmAutoModeDisabled(disabled: boolean): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/org', { disabled });
+}
+
+async function autoModeFetch(path: string, body: unknown): Promise<AutoModeState> {
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    method: 'PATCH',
+    headers: { Authorization: pb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.message) msg = j.message;
+    } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+/**
  * Set which providers the FIRM permits. Admin-only server-side; writes
  * feature_overrides.ai_providers on the Organisations record.
  */

@@ -51,8 +51,13 @@ const props = defineProps<{
    * preview stays source-agnostic — chat attachments omit it.
    */
   factsDocId?: string;
+  /** Enables text-selection actions when the host has an assistant beside the preview. */
+  selectionActions?: boolean;
 }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{
+  close: [];
+  askSelection: [selection: { text: string; documentName: string }];
+}>();
 
 marked.use({ breaks: true, gfm: true });
 
@@ -95,6 +100,9 @@ const error = ref('');
 // The .docx is handed to SharedDocxView as a blob — it renders and pages it, the
 // way SharedPdfView is handed a URL.
 const docxBlob = ref<Blob | null>(null);
+// Older chat attachments may contain only extracted UTF-8 text under a .docx
+// display name. Keep those readable instead of passing invalid ZIP bytes onward.
+const legacyDocxText = ref('');
 
 const url = ref('');          // object URL for the downloaded blob (image / pdf)
 const textContent = ref('');  // raw text (markdown / text)
@@ -103,6 +111,85 @@ const htmlContent = ref('');  // sanitized HTML (markdown rendered)
 // Content-Length, so we can't compute a percentage and show a pulsing bar instead.
 const progress = ref(0);
 const indeterminate = ref(false);
+
+// ── Selection action ─────────────────────────────────────────────────────────
+// The document renderers all live in this DOM. PDF selection is provided by its
+// text layer, while Word/Markdown/plain text expose native text nodes. Keeping
+// the affordance here gives every readable format the same interaction.
+const previewRoot = ref<HTMLElement | null>(null);
+const selectionSurface = ref<HTMLElement | null>(null);
+const selectedText = ref('');
+const selectionAction = reactive({ visible: false, left: 0, top: 0, above: true });
+let selectionRaf = 0;
+
+function hideSelectionAction() {
+  selectionAction.visible = false;
+}
+
+function updateSelectionAction() {
+  if (!props.selectionActions || activeTab.value !== 'document' || !previewRoot.value || !selectionSurface.value) {
+    hideSelectionAction();
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.rangeCount) {
+    hideSelectionAction();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const common = range.commonAncestorContainer;
+  const commonElement = common.nodeType === Node.ELEMENT_NODE
+    ? common as Element
+    : common.parentElement;
+  if (!commonElement || !selectionSurface.value.contains(commonElement)) {
+    hideSelectionAction();
+    return;
+  }
+
+  const text = selection.toString().trim();
+  const rect = range.getBoundingClientRect();
+  if (!text || (!rect.width && !rect.height)) {
+    hideSelectionAction();
+    return;
+  }
+
+  // Keep enough context for a legal passage without allowing an accidental
+  // select-all to dominate the next assistant turn.
+  selectedText.value = text.length > 12_000 ? `${text.slice(0, 12_000)}…` : text;
+  const rootRect = previewRoot.value.getBoundingClientRect();
+  const midpoint = rect.left + rect.width / 2 - rootRect.left;
+  selectionAction.left = Math.min(Math.max(midpoint, 76), Math.max(76, rootRect.width - 76));
+  selectionAction.above = rect.top - rootRect.top >= 44;
+  selectionAction.top = selectionAction.above
+    ? rect.top - rootRect.top - 8
+    : rect.bottom - rootRect.top + 8;
+  selectionAction.visible = true;
+}
+
+function scheduleSelectionAction() {
+  if (!props.selectionActions) return;
+  if (selectionRaf) cancelAnimationFrame(selectionRaf);
+  selectionRaf = requestAnimationFrame(() => {
+    selectionRaf = 0;
+    updateSelectionAction();
+  });
+}
+
+function askAboutSelection() {
+  if (!selectedText.value) return;
+  emit('askSelection', {
+    text: selectedText.value,
+    documentName: props.doc.filename || props.doc.file || 'Document',
+  });
+  hideSelectionAction();
+}
+
+onMounted(() => document.addEventListener('selectionchange', scheduleSelectionAction));
+watch(() => props.selectionActions, (enabled) => {
+  if (!enabled) hideSelectionAction();
+});
 
 // Object URLs must be revoked to avoid leaking the downloaded blob in memory.
 let objectUrl: string | null = null;
@@ -131,12 +218,15 @@ function fetchBlob(signed: string, onProgress: (fraction: number, indeterminate:
 }
 
 async function load() {
+  hideSelectionAction();
   revokeObjectUrl();
   loading.value = true;
   error.value = '';
   url.value = '';
   textContent.value = '';
   htmlContent.value = '';
+  docxBlob.value = null;
+  legacyDocxText.value = '';
   progress.value = 0;
   indeterminate.value = false;
 
@@ -160,7 +250,10 @@ async function load() {
     } else if (kind.value === 'text') {
       textContent.value = await blob.text();
     } else if (kind.value === 'docx') {
-      docxBlob.value = blob;
+      const signature = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      const isZip = signature[0] === 0x50 && signature[1] === 0x4b;
+      if (isZip) docxBlob.value = blob;
+      else legacyDocxText.value = await blob.text();
     }
   } catch (e: any) {
     error.value = e?.message || 'Could not load the file.';
@@ -170,7 +263,11 @@ async function load() {
 }
 
 watch(() => props.doc.id, load, { immediate: true });
-onBeforeUnmount(revokeObjectUrl);
+onBeforeUnmount(() => {
+  revokeObjectUrl();
+  document.removeEventListener('selectionchange', scheduleSelectionAction);
+  if (selectionRaf) cancelAnimationFrame(selectionRaf);
+});
 
 // The reading surfaces (page nav / zoom / scroll-vs-paged) are the shared readers
 // also used by case-law citations. Both park a page jump until their content is
@@ -181,7 +278,7 @@ const pdfView = ref<{ goToPage: (page: number) => void } | null>(null);
 const docxView = ref<{ goToPage: (page: number) => void } | null>(null);
 
 /** Formats with real pages, and so with a page locator worth clicking. */
-const hasPages = computed(() => kind.value === 'pdf' || kind.value === 'docx');
+const hasPages = computed(() => kind.value === 'pdf' || (kind.value === 'docx' && !legacyDocxText.value));
 
 function scrollToPage(page: number) {
   if (!page || page < 1) return;
@@ -213,6 +310,7 @@ async function loadFacts() {
 }
 
 function selectTab(t: Tab) {
+  hideSelectionAction();
   activeTab.value = t;
   if (t === 'facts') loadFacts();
 }
@@ -259,7 +357,13 @@ async function download() {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-background">
+  <div
+    ref="previewRoot"
+    class="relative isolate flex h-full min-h-0 flex-col bg-background"
+    @pointerup="scheduleSelectionAction"
+    @keyup="scheduleSelectionAction"
+    @scroll.capture="hideSelectionAction"
+  >
     <!-- ── Title bar ──────────────────────────────────────────────────────── -->
     <div class="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
       <div class="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
@@ -311,6 +415,7 @@ async function download() {
 
     <!-- ── Body: Document tab (kept mounted so page-jumps stay instant) ──────── -->
     <div
+      ref="selectionSurface"
       v-show="activeTab === 'document'"
       class="min-h-0 flex-1"
       :class="hasPages && !loading && !error ? 'overflow-hidden' : 'overflow-auto'">
@@ -352,6 +457,14 @@ async function download() {
           class="prose prose-pink prose-sm dark:prose-invert mx-auto max-w-3xl prose-headings:font-semibold prose-pre:bg-muted prose-pre:text-foreground"
           v-html="htmlContent"
         />
+      </div>
+
+      <!-- Legacy chat Word uploads retained only their extracted text. -->
+      <div v-else-if="kind === 'docx' && legacyDocxText" class="p-4">
+        <div class="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          This older chat attachment contains extracted text only. Reattach the original file for a formatted Word preview.
+        </div>
+        <pre class="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">{{ legacyDocxText }}</pre>
       </div>
 
       <!-- Word — the same reading surface as the PDF above, page nav and all. -->
@@ -433,6 +546,26 @@ async function download() {
           </div>
         </li>
       </ul>
+    </div>
+
+    <div
+      v-if="selectionAction.visible"
+      class="pointer-events-none absolute z-50"
+      :style="{
+        left: `${selectionAction.left}px`,
+        top: `${selectionAction.top}px`,
+        transform: selectionAction.above ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+      }"
+    >
+      <button
+        type="button"
+        class="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-md border bg-popover px-2.5 text-xs font-medium text-popover-foreground shadow-md transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        @pointerdown.prevent
+        @click="askAboutSelection"
+      >
+        <Sparkles class="size-3.5 text-primary" />
+        Ask about this
+      </button>
     </div>
   </div>
 </template>

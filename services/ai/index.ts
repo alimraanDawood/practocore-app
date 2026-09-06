@@ -61,6 +61,8 @@ export interface AiAttachmentMeta {
   mime: string;
   kind: 'binary' | 'text';
   size: number;
+  /** Original bytes when the model-facing block is a derived representation. */
+  originalBase64?: string;
 }
 
 /**
@@ -472,6 +474,26 @@ export interface NotificationPreview {
   bodyHtml?: string;
   channels: string[];
   recipients: NotificationRecipient[];
+  // Recipient IDs that match no user. The send aborts on these server-side, so
+  // the card names them and blocks Approve rather than dropping them quietly and
+  // showing a short recipient list as though it were the whole request.
+  unresolvedRecipients?: string[];
+  blocked?: boolean;
+}
+export interface ProposeMatterTemplatePreview {
+  kind: 'propose_matter_template';
+  name: string;
+  description?: string;
+  /** Name of the PractoCore procedure this builds on, when it extends one. */
+  extendsName?: string;
+  /** The date the whole timeline is counted from, for a standalone procedure. */
+  triggerLabel?: string;
+  steps: { label: string; when?: string; perParty?: string; reminders?: number }[];
+  fields: { label: string; type?: string; required?: boolean }[];
+  roles: string[];
+  /** True when approving REPLACES a procedure the firm already relies on. */
+  isUpdate: boolean;
+  replacesName?: string;
 }
 export interface AdjournPreview {
   kind: 'adjourn';
@@ -803,6 +825,7 @@ export type ProposalPreview =
   | ReassignPreview
   | BulkReassignPreview
   | NotificationPreview
+  | ProposeMatterTemplatePreview
   | AdjournPreview
   | DateChangePreview
   | FulfillPreview

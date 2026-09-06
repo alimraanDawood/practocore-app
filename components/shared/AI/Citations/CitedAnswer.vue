@@ -19,6 +19,7 @@ const props = defineProps<{
   citations?: AiCitation[];
   onLocate?: (text: string) => void;
   onOpenSource?: (doc: VaultDocument, initialPage?: number) => void;
+  onOpenUrl?: (url: string) => void;
 }>();
 
 marked.use({ breaks: true, gfm: true });
@@ -86,11 +87,25 @@ function onProseClick(e: MouseEvent) {
     if (snippet) props.onLocate?.(snippet);
     return;
   }
+  // On desktop, the chat surface supplies a workspace-browser handler so normal
+  // Markdown links stay inside the lawyer's research workspace.
+  const webLink = (e.target as HTMLElement)?.closest('a[href]') as HTMLAnchorElement | null;
+  const webUrl = webLink?.href || '';
+  if (webLink && props.onOpenUrl && /^https?:\/\//i.test(webUrl)) {
+    e.preventDefault();
+    props.onOpenUrl(webUrl);
+    return;
+  }
   const el = (e.target as HTMLElement)?.closest('[data-cite]') as HTMLElement | null;
   if (!el) return;
   e.preventDefault();
   const c = byId(el.dataset.cite || '');
   if (c) openFor(c, el.getBoundingClientRect());
+}
+
+function openWebUrl(url: string) {
+  if (props.onOpenUrl) props.onOpenUrl(url);
+  else window.open(url, '_blank', 'noopener');
 }
 
 // ── Open a source ────────────────────────────────────────────────────────────────
@@ -119,10 +134,10 @@ async function open(c: AiCitation) {
       readerOpen.value = true;
       return;
     }
-    if (meta.url) { window.open(meta.url, '_blank', 'noopener'); return; }
+    if (meta.url) { openWebUrl(meta.url); return; }
   }
   if ((c.kind === 'legal' || c.kind === 'web') && meta.url) {
-    window.open(meta.url, '_blank', 'noopener');
+    openWebUrl(meta.url);
     return;
   }
   if (c.kind === 'matter' && meta.matterId) {

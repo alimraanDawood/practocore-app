@@ -10,26 +10,33 @@ function getPlatform(): 'web' | 'android' | 'ios' {
 }
 
 // SERVER_URL is resolved in priority order:
-//   1. NUXT_PUBLIC_POCKETBASE_URL  (set on the server / CI)
-//   2. POCKETBASE_URL              (legacy env name)
-//   3. localhost fallback for local development
+//   1. VITE_POCKETBASE_URL        (the only one that reaches the BROWSER)
+//   2. NUXT_PUBLIC_POCKETBASE_URL (server / CI)
+//   3. POCKETBASE_URL             (legacy env name)
+//   4. the production default below
 function resolveServerUrl(): string {
-    // In a Nuxt app running in the browser the runtimeConfig values are
-    // injected at build-time via window.__NUXT_CONFIG__ – but we cannot call
-    // useRuntimeConfig() outside of a Vue/Nuxt context.  We therefore fall
-    // back to reading the raw env variable (which Vite inlines at build-time
-    // via define: { 'process.env.POCKETBASE_URL': ... }).
-    if (typeof process !== 'undefined') {
+    // Vite only exposes env vars to client code through `import.meta.env`, and
+    // only those carrying its prefix — so VITE_POCKETBASE_URL is the one name
+    // that actually lands in the bundle the browser runs. It is read from the
+    // process environment as well as .env, so
+    //     VITE_POCKETBASE_URL=http://192.168.1.5:8090 bun run dev
+    // points a dev session at another backend without editing this file.
+    const fromVite = import.meta.env?.VITE_POCKETBASE_URL;
+    if (fromVite) return fromVite;
+
+    // The process.env names below are NOT inlined into the client bundle; they
+    // only resolve where a real process env exists (nitro/SSR, scripts, tests).
+    if (typeof process !== 'undefined' && process.env) {
         const fromEnv =
             process.env.NUXT_PUBLIC_POCKETBASE_URL ||
             process.env.POCKETBASE_URL;
         if (fromEnv) return fromEnv;
     }
 
-    // Production default. For local development set POCKETBASE_URL (or
-    // NUXT_PUBLIC_POCKETBASE_URL) in .env — both are preferred over this, so a
-    // dev backend never needs this line edited. Editing it here is how a
-    // loopback URL reached a published release once already.
+    // Production default. For local development set VITE_POCKETBASE_URL in
+    // .env (or on the command line) — it is preferred over this, so a dev
+    // backend never needs this line edited. Editing it here is how a loopback
+    // URL reached a published release once already.
     return 'https://api.practocore.com';
 }
 

@@ -46,6 +46,8 @@ fn allow_microphone(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 // desktop-only.
 #[cfg(desktop)]
 mod notifications;
+#[cfg(desktop)]
+mod research_reader;
 
 /// Update routing is compiled into the native shell. A downloaded web bundle
 /// can read this value to make a check, but cannot redirect it to another host.
@@ -60,8 +62,12 @@ struct UpdateControlConfig {
 #[tauri::command]
 fn update_control_config() -> UpdateControlConfig {
     UpdateControlConfig {
-        url: option_env!("PRACTOCORE_UPDATE_CONTROL_URL").unwrap_or_default().to_string(),
-        channel: option_env!("PRACTOCORE_UPDATE_CHANNEL").unwrap_or("production").to_string(),
+        url: option_env!("PRACTOCORE_UPDATE_CONTROL_URL")
+            .unwrap_or_default()
+            .to_string(),
+        channel: option_env!("PRACTOCORE_UPDATE_CHANNEL")
+            .unwrap_or("production")
+            .to_string(),
     }
 }
 
@@ -105,13 +111,8 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     };
 
     let open_i = MenuItem::with_id(app, "open", "Open PractoCore", true, None::<&str>)?;
-    let settings_i = MenuItem::with_id(
-        app,
-        "settings",
-        "Notification settings",
-        true,
-        None::<&str>,
-    )?;
+    let settings_i =
+        MenuItem::with_id(app, "settings", "Notification settings", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open_i, &settings_i, &sep, &quit_i])?;
@@ -134,7 +135,9 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                 let _ = app.emit("tray://open-settings", ());
             }
             "quit" => {
-                app.state::<TrayState>().quitting.store(true, Ordering::Relaxed);
+                app.state::<TrayState>()
+                    .quitting
+                    .store(true, Ordering::Relaxed);
                 app.exit(0);
             }
             _ => {}
@@ -211,6 +214,7 @@ pub fn run() {
                 update_control_config,
                 notifications::start_notification_listener,
                 notifications::stop_notification_listener,
+                research_reader::research_page_resolve,
             ])
             .plugin(tauri_plugin_autostart::init(
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent,

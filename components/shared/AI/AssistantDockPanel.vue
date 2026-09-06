@@ -56,6 +56,7 @@ function provideContext(): string {
       :page-context-provider="provideContext"
       :seed="context.seed"
       auto-resume-latest
-      @proposal-approved="(action) => signalWrite(action)" />
+      @proposal-approved="(action) => signalWrite(action)"
+      @action-undone="() => signalWrite(null)" />
   </div>
 </template>

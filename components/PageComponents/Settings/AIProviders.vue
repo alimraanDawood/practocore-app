@@ -210,6 +210,47 @@
       </template>
     </template>
 
+    <!-- ── Automatic actions (auto mode) ──────────────────────────────── -->
+    <Separator/>
+
+    <div class="flex flex-col gap-4">
+      <div class="flex flex-row items-start justify-between gap-4 rounded-lg border p-4">
+        <div class="flex min-w-0 flex-col gap-1">
+          <span class="font-medium">
+            {{ orgScope ? 'Allow automatic actions' : 'Let the assistant act without asking' }}
+          </span>
+          <p class="text-sm text-muted-foreground">
+            {{ orgScope
+              ? 'When this is off, nobody at the firm can turn automatic actions on for themselves.'
+              : 'The assistant stops for permission before every change it makes. Turn this on and it stops asking for the changes it can undo.' }}
+          </p>
+          <p v-if="!orgScope" class="text-xs text-muted-foreground">
+            It still asks before anything it cannot take back — sending a notification,
+            deleting anything, or changing work that already exists — and it only acts
+            on the matters, engagements and vaults open in that conversation.
+            At most {{ autoMode.maxWrites }} changes in one reply, and every one of them is
+            recorded and can be undone.
+          </p>
+        </div>
+        <Switch
+            :model-value="orgScope ? !autoMode.firmDisabled : autoMode.memberOptedIn"
+            :disabled="savingAuto || (!orgScope && autoMode.firmDisabled)"
+            @update:model-value="(val) => toggleAutoMode(val)"/>
+      </div>
+
+      <p v-if="!orgScope && autoMode.firmDisabled" class="text-xs text-muted-foreground">
+        Your firm has turned automatic actions off, so this cannot be enabled.
+      </p>
+
+      <div v-else-if="!orgScope && autoMode.memberOptedIn && autoMode.autoApprovable.length"
+           class="rounded-lg border border-dashed p-4">
+        <p class="text-sm font-medium">What it will do without asking</p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {{ autoMode.autoApprovable.map(prettyToolName).join(' · ') }}
+        </p>
+      </div>
+    </div>
+
     <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
   </div>
 </template>
@@ -223,6 +264,10 @@ import {
   setMyProvider,
   setOrgTaskModels,
   setMyTaskModels,
+  getAutoMode,
+  setMyAutoMode,
+  setFirmAutoModeDisabled,
+  type AutoModeState,
   AI_PROVIDER_INFO,
   type AIProviderState,
   type AIVendor,
@@ -245,6 +290,17 @@ const tasks = ref<AITaskState[]>([])
 const advancedOpen = ref(false)
 const saving = ref(false)
 const error = ref('')
+
+// Auto mode is resolved server-side from both layers, so the panel renders the
+// answer it is given rather than recomputing the rule in a second place.
+const autoMode = ref<AutoModeState>({
+  enabled: false,
+  memberOptedIn: false,
+  firmDisabled: false,
+  maxWrites: 0,
+  autoApprovable: [],
+})
+const savingAuto = ref(false)
 
 // Nothing to present unless the deployment can reach a second provider.
 const hasChoice = computed(() => available.value.length > 1)
@@ -408,5 +464,39 @@ function assign(task: AITaskState, modelID: string) {
   )
 }
 
-onMounted(load)
+/** create_matter_draft -> "Create a matter draft", so the list reads as actions. */
+function prettyToolName(tool: string): string {
+  const words = tool.replace(/_/g, ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+async function loadAutoMode() {
+  try {
+    autoMode.value = await getAutoMode()
+  } catch {
+    // A backend that predates auto mode simply has no such setting; leaving the
+    // defaults in place renders the switch off rather than an error the user can
+    // do nothing about.
+  }
+}
+
+async function toggleAutoMode(enabled: boolean) {
+  savingAuto.value = true
+  error.value = ''
+  try {
+    autoMode.value = props.orgScope
+        ? await setFirmAutoModeDisabled(!enabled)
+        : await setMyAutoMode(enabled)
+  } catch (e: any) {
+    error.value = e?.message || 'Could not save the setting.'
+    await loadAutoMode()
+  } finally {
+    savingAuto.value = false
+  }
+}
+
+onMounted(() => {
+  load()
+  loadAutoMode()
+})
 </script>

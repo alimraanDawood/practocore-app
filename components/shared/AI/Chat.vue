@@ -463,12 +463,18 @@ async function addFiles(files: File[] | FileList) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       if (isWordFile(file)) {
-        // Unzipped server-side; what rides to the model (and what is persisted) is
-        // the extracted text, so the chip carries text/plain under the .docx name.
+        // The model reads extracted text, while the original OOXML bytes are retained
+        // separately for durable preview/download.
         extracting.value.push(file.name);
         try {
-          const doc = await extractDocxAttachment(file);
-          attachments.value.push({ id, name: file.name, mime: 'text/plain', size: file.size, kind: 'text', text: doc.text });
+          const [doc, original] = await Promise.all([
+            extractDocxAttachment(file),
+            fileToBase64(file),
+          ]);
+          attachments.value.push({
+            id, name: file.name, mime: WORD_MIME, size: file.size, kind: 'text',
+            text: doc.text, base64: original.base64, dataUrl: original.dataUrl,
+          });
         } finally {
           const i = extracting.value.indexOf(file.name);
           if (i >= 0) extracting.value.splice(i, 1);
@@ -1057,13 +1063,17 @@ async function send(voiceText?: string) {
         blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mime as AiImageMediaType, data } });
       }
       const sha256 = await attachmentSha256(data);
-      sentAttachmentsMeta.value.push({ sha256, name: a.name, mime: a.mime, kind: a.kind, size: a.size });
-      userAttachments.push({ sha256, name: a.name, mime: a.mime, kind: a.kind, size: a.size });
+      const persistedKind = a.base64 ? 'binary' : a.kind;
+      sentAttachmentsMeta.value.push({
+        sha256, name: a.name, mime: a.mime, kind: persistedKind, size: a.size,
+        originalBase64: a.kind === 'text' ? a.base64 : undefined,
+      });
+      userAttachments.push({ sha256, name: a.name, mime: a.mime, kind: persistedKind, size: a.size });
       // Resolve a usable URL now so chips preview immediately (before any reload).
       // Object URLs (not data: URLs) so the previewer's XHR fetch works reliably.
-      const url = a.kind === 'text'
-        ? URL.createObjectURL(new Blob([a.text ?? ''], { type: a.mime || 'text/plain' }))
-        : base64ToObjectUrl(a.base64 as string, a.mime);
+      const url = a.base64
+        ? base64ToObjectUrl(a.base64, a.mime)
+        : URL.createObjectURL(new Blob([a.text ?? ''], { type: a.mime || 'text/plain' }));
       if (url && sha256) attachmentUrls.value.set(sha256, url);
     }
     blocks.push({ type: 'text', text: text || 'Help me create a matter from this.' });
