@@ -44,6 +44,14 @@ const props = defineProps<{
   doc: PreviewDoc;
   /** Returns an openable (token-signed or blob/object) URL for the current doc. */
   resolveUrl: () => Promise<string>;
+  /**
+   * Returns a URL for KEEPING the file rather than reading it here. The two are
+   * separate rights server-side, and asked for differently: a vault document's
+   * download URL carries ?download=1, which is what the access gate checks the
+   * download capability against and records as a copy taken. Falls back to
+   * resolveUrl for sources with no such distinction (chat attachments, blobs).
+   */
+  resolveDownloadUrl?: () => Promise<string>;
   initialPage?: number;
   /**
    * When set, a "Facts" tab is shown that loads the AI-distilled facts for this
@@ -347,7 +355,7 @@ function confidenceLabel(c: number): string {
 
 async function download() {
   try {
-    const signed = await props.resolveUrl();
+    const signed = await (props.resolveDownloadUrl ?? props.resolveUrl)();
     if (!signed) { toast.error('No file is available for this document.'); return; }
     window.open(signed, '_blank');
   } catch {

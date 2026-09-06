@@ -203,7 +203,8 @@ async function open(c: AiCitation) {
         @click.self="previewDoc = null"
       >
         <div class="ml-auto flex h-full w-full max-w-2xl z-10 flex-col border-l bg-background shadow-xl">
-          <SharedVaultDocumentPreview :doc="previewDoc" :resolve-url="() => vaultFileUrl(previewDoc!)" :initial-page="previewPage" :facts-doc-id="previewDoc.id" @close="previewDoc = null" />
+          <SharedVaultDocumentPreview :doc="previewDoc" :resolve-url="() => vaultFileUrl(previewDoc!)"
+            :resolve-download-url="() => vaultFileUrl(previewDoc!, 'download')" :initial-page="previewPage" :facts-doc-id="previewDoc.id" @close="previewDoc = null" />
         </div>
         <div class="absolute inset-0 bg-black/40 z-5" @click="previewDoc = null" />
       </div>

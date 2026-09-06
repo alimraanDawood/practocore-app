@@ -73,6 +73,11 @@ export interface VaultDocument {
   ocr?: boolean;
   provider: string;
   error: string;
+  /**
+   * Per-document access overrides. Absent/empty inherits the library policy;
+   * each named axis narrows it. Only allow/deny, only these three keys.
+   */
+  restrictions?: Partial<Record<VaultAccessAxis, VaultAccessSetting>>;
   /** Soft-delete flag — true means the document is in the Trash. */
   trashed?: boolean;
   trashed_at?: string;
@@ -202,7 +207,7 @@ export const VAULT_ROLES = ['owner', 'manager', 'contributor', 'viewer'] as cons
 export type VaultRole = (typeof VAULT_ROLES)[number];
 
 export const VAULT_CAPS = [
-  'query', 'add_files', 'remove_files', 'manage_folders',
+  'view', 'download', 'query', 'add_files', 'remove_files', 'manage_folders',
   'toggle_ai', 'invite', 'manage_permissions', 'delete_vault',
 ] as const;
 export type VaultCap = (typeof VAULT_CAPS)[number];
@@ -241,11 +246,17 @@ export interface VaultMember {
 // owner is handled separately (always every capability).
 const ROLE_PRESETS: Record<string, Partial<Record<VaultCap, boolean>>> = {
   manager: {
-    query: true, add_files: true, remove_files: true, manage_folders: true,
+    view: true, download: true, query: true,
+    add_files: true, remove_files: true, manage_folders: true,
     toggle_ai: true, invite: true, manage_permissions: true,
   },
-  contributor: { query: true, add_files: true, remove_files: true, manage_folders: true },
-  viewer: { query: true },
+  contributor: {
+    view: true, download: true, query: true,
+    add_files: true, remove_files: true, manage_folders: true,
+  },
+  // A viewer reads in the app and lets the assistant read for them, but does not
+  // take copies away. Grant `download` as a per-member override to change that.
+  viewer: { view: true, query: true },
 };
 
 /** Resolve a member's effective capabilities (role preset + per-member overrides). */
@@ -459,14 +470,27 @@ export async function subscribeVault(
 }
 
 /**
- * Build a downloadable URL for a document's original file. The collection's
- * view rule requires auth, so the file is protected and needs a short-lived file
- * token appended — hence async. Returns "" if the doc has no stored file.
+ * Build a URL for a document's original file.
+ *
+ * `intent` is not cosmetic. The server gates and logs this route
+ * (ai/vault_access.go), and it reads the two senses of "access" apart from the
+ * `download` query parameter PocketBase already uses for Content-Disposition:
+ * 'download' asks for bytes to keep and needs the download capability, 'preview'
+ * asks for a read in the app and needs only view. Passing the wrong one either
+ * denies a legitimate read or records a copy that was never taken — so a caller
+ * that is opening the reader must say so.
+ *
+ * Returns "" if the doc has no stored file.
  */
-export async function vaultFileUrl(doc: VaultDocument): Promise<string> {
+export async function vaultFileUrl(
+  doc: VaultDocument,
+  intent: 'preview' | 'download' = 'preview',
+): Promise<string> {
   if (!doc.file) return '';
   const token = await pb.files.getToken();
-  return pb.files.getURL(doc as any, doc.file, { token });
+  const query: Record<string, string> = { token };
+  if (intent === 'download') query.download = '1';
+  return pb.files.getURL(doc as any, doc.file, query);
 }
 
 /**
@@ -739,6 +763,90 @@ export function setDocumentIngest(id: string, ingest: boolean): Promise<VaultDoc
 /** Permanently delete a document (retires the facts the AI distilled from it). */
 export function deleteDocument(id: string): Promise<{ deleted: boolean; memories_retired: number }> {
   return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, { method: 'DELETE' });
+}
+
+// ── access policy + history (VAULT_PERMISSIONS_PLAN.md) ─────────────────────
+
+/** The three things a library or a document can be restricted on. */
+export type VaultAccessAxis = 'view' | 'download' | 'ai';
+export type VaultAccessSetting = 'allow' | 'deny';
+
+/**
+ * A library's access policy. Every axis reads back resolved, so the caller never
+ * has to know that an unset setting and "allow" are the same thing.
+ */
+export interface VaultPolicy {
+  downloads: VaultAccessSetting;
+  view: VaultAccessSetting;
+  ai: VaultAccessSetting;
+  default_role: VaultRole | '';
+  /** Whether THIS caller may change the above. */
+  can_manage: boolean;
+}
+
+/** Read a library's access policy. */
+export function getVaultPolicy(scope: VaultScope, scopeId: string): Promise<VaultPolicy> {
+  const q = new URLSearchParams({ scope, scope_id: scopeId });
+  return vaultFetch(`/api/practocore/ai/vault/policy?${q}`, { method: 'GET' });
+}
+
+/**
+ * Write a library's access policy. Omitting an axis leaves it unset, which
+ * resolves as allow — so this is a whole-policy write, not a patch.
+ */
+export function setVaultPolicy(
+  scope: VaultScope,
+  scopeId: string,
+  policy: Partial<Pick<VaultPolicy, 'downloads' | 'view' | 'ai' | 'default_role'>>,
+): Promise<Omit<VaultPolicy, 'can_manage'>> {
+  return vaultFetch('/api/practocore/ai/vault/policy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope, scope_id: scopeId, ...policy }),
+  });
+}
+
+/**
+ * Restrict a single document, or clear its overrides by passing {}. Needs the
+ * same right as setting the library policy — restricting one file is an access
+ * decision, not a filing one.
+ */
+export function setDocumentRestrictions(
+  id: string,
+  restrictions: Partial<Record<VaultAccessAxis, VaultAccessSetting>>,
+): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ restrictions }),
+  });
+}
+
+/** One row of the access log. */
+export interface VaultAccessEvent {
+  id: string;
+  actor: string;
+  document: string;
+  action: 'view' | 'download' | 'zip' | 'ai_read' | 'denied';
+  reason: string;
+  ip: string;
+  user_agent: string;
+  created: string;
+}
+
+/**
+ * Who has read or taken what, newest first. Pass a document id to narrow it to
+ * one file; the library is then inferred from the document. Readable only by
+ * whoever may administer the library — the log is itself confidential.
+ */
+export function getVaultAccessHistory(
+  args: { scope?: VaultScope; scopeId?: string; documentId?: string },
+): Promise<{ events: VaultAccessEvent[] }> {
+  const q = new URLSearchParams();
+  if (args.scope) q.set('scope', args.scope);
+  if (args.scopeId) q.set('scope_id', args.scopeId);
+  if (args.documentId) q.set('document', args.documentId);
+  return vaultFetch(`/api/practocore/ai/vault/access-history?${q}`, { method: 'GET' });
 }
 
 export interface UploadResult {

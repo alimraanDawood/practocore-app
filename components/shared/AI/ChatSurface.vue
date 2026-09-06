@@ -391,6 +391,13 @@ const resolveTabUrl = (tab: PreviewTab) => tab.generated
     ? vaultFileUrl(tab.vaultDocument)
   : Promise.resolve(tab.attachmentUrl ?? '');
 
+// The same tab, asked for as a copy to keep rather than a read on screen. Only a
+// vault document distinguishes the two; a generated file or a chat attachment has
+// no access policy of its own and resolves exactly as above.
+const resolveTabDownloadUrl = (tab: PreviewTab) => tab.vaultDocument
+  ? vaultFileUrl(tab.vaultDocument, 'download')
+  : resolveTabUrl(tab);
+
 async function activeBrowserContext(): Promise<string> {
   const browser = activePreviewTab.value?.browser;
   if (!browser?.url) return '';
@@ -408,6 +415,9 @@ async function activeBrowserContext(): Promise<string> {
 }
 const resolvePreviewUrl = () => activePreviewTab.value
   ? resolveTabUrl(activePreviewTab.value)
+  : Promise.resolve('');
+const resolvePreviewDownloadUrl = () => activePreviewTab.value
+  ? resolveTabDownloadUrl(activePreviewTab.value)
   : Promise.resolve('');
 
 function openWorkspaceFilePicker() {
@@ -2658,6 +2668,7 @@ defineExpose({
         <SheetTitle class="sr-only">Document preview</SheetTitle>
         <DocumentPreview v-if="previewDoc" :doc="previewDoc"
                          :resolve-url="resolvePreviewUrl"
+                         :resolve-download-url="resolvePreviewDownloadUrl"
                          class="min-h-0 flex-1" @close="closeAllPreviews"/>
       </SheetContent>
     </Sheet>
@@ -2882,6 +2893,7 @@ defineExpose({
                 :key="`${tab.key}:${tab.revision ?? 0}`"
                 :doc="tab.doc"
                 :resolve-url="() => resolveTabUrl(tab)"
+                :resolve-download-url="() => resolveTabDownloadUrl(tab)"
                 :facts-doc-id="tab.factsDocId"
                 :initial-page="tab.initialPage"
                 :selection-actions="!loading"
