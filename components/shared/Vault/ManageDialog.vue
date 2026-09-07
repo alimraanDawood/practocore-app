@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Loader2, UserPlus, Trash2, Crown, ShieldCheck, LogOut } from 'lucide-vue-next';
+import { Loader2, UserPlus, Trash2, Crown, ShieldCheck, LogOut, Lock } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { pb } from '~/lib/pocketbase';
 import { getOrganisationMembers } from '~/services/admin';
@@ -28,6 +28,11 @@ const open = computed({
 });
 
 const meId = computed(() => pb.authStore.record?.id || '');
+
+// Downloads / viewing / AI recall for the whole vault, plus who has read what.
+// It lives in its own sheet rather than a third section here because the same
+// surface has to serve matter and org libraries, which have no members list.
+const accessOpen = ref(false);
 
 const members = ref<VaultMember[]>([]);
 const orgMembers = ref<OrgMember[]>([]);
@@ -296,6 +301,9 @@ async function leave() {
           <Button size="sm" class="self-end" :disabled="!settingsDirty || savingSettings || !name.trim()" @click="saveSettings">
             {{ savingSettings ? 'Saving…' : 'Save changes' }}
           </Button>
+          <Button size="sm" variant="outline" class="gap-1.5 self-start" @click="accessOpen = true">
+            <Lock class="size-4" /> Access &amp; history…
+          </Button>
         </section>
 
         <!-- Danger zone -->
@@ -344,4 +352,11 @@ async function leave() {
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>
+
+  <SharedVaultAccessSheet
+    v-if="vault"
+    v-model:open="accessOpen"
+    scope="vault"
+    :scope-id="vault.id"
+    :library-label="vault.name" />
 </template>

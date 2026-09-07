@@ -826,7 +826,11 @@ export function setDocumentRestrictions(
 export interface VaultAccessEvent {
   id: string;
   actor: string;
+  /** Resolved server-side: the log stores ids, but a firm reads it as names. */
+  actor_name: string;
   document: string;
+  /** The filename as the server knows it now — present even once it is deleted. */
+  document_name: string;
   action: 'view' | 'download' | 'zip' | 'ai_read' | 'denied';
   reason: string;
   ip: string;
