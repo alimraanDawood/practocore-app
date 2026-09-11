@@ -1,15 +1,16 @@
 <script lang="ts" setup>
 // Page-aware section of the global sidebar, rendered between the workspace nav
-// and the footer. On the assistant/research it shows recent conversations.
-// Selection is URL-driven (`?c=`) so clicking here drives the page without the
-// sidebar reaching into page state. Hidden when the sidebar is collapsed to
-// icons (the rail stays clean).
+// and the footer. It shows recent conversations on assistant/research pages and
+// stays hidden on matter and engagement pages, whose local navigation lives in
+// the page itself. Hidden when the sidebar is collapsed to icons.
 //
 // The vault used to duplicate its library list here. It no longer does: the
 // vault owns a rail of its own on desktop and a home screen listing the same
 // libraries on a phone, and two sidebars offering the same links — one of which
 // could not show the folder you were in — was one too many.
-import { MessageSquareText, Plus, ChevronDown, Telescope } from 'lucide-vue-next';
+import {
+  MessageSquareText, Plus, ChevronDown, Telescope,
+} from 'lucide-vue-next';
 
 const route = useRoute();
 
@@ -22,6 +23,7 @@ const onResearch = computed(() => route.path === '/main/research' || route.path 
 // The mobile sidebar keeps the inline list.
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const showChats = computed(() => onAssistant.value && !isDesktop.value);
+
 const visible = computed(() => showChats.value || onResearch.value);
 
 // ── Chat: recent conversations ──────────────────────────────────────────────
@@ -130,6 +132,5 @@ watch(visible, (on) => {
         </SidebarMenu>
       </SidebarGroupContent>
     </template>
-
   </SidebarGroup>
 </template>

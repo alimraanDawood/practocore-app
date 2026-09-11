@@ -10,7 +10,11 @@ import {
 } from '~/services/engagements';
 import type { DetailField, DetailFieldSection } from '~/types/detailFields';
 
-const props = defineProps<{ engagement: Engagement; template?: EngagementTemplate }>();
+const props = withDefaults(defineProps<{
+  engagement: Engagement;
+  template?: EngagementTemplate;
+  canEdit?: boolean;
+}>(), { canEdit: true });
 const emit = defineEmits<{ updated: [Engagement] }>();
 
 // Playbook-defined sections (label + fields). Sections with no fields are dropped
@@ -46,6 +50,7 @@ async function save(
     :sections="sections"
     :extra-fields="(engagement.extraFields ?? []) as DetailField[]"
     :values="engagement.fieldValues ?? {}"
+    :can-edit="canEdit"
     empty-hint="capture the facts this engagement needs, or add your own fields."
     @save="save"
   />

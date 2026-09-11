@@ -579,6 +579,7 @@ async function openSource(c: AiCitation) {
           <SharedVaultDocumentPreview
             :doc="previewDoc"
             :resolve-url="() => vaultFileUrl(previewDoc!)"
+            :resolve-download-url="() => vaultFileUrl(previewDoc!, 'download')"
             :facts-doc-id="previewDoc.id"
             @close="previewDoc = null"
           />

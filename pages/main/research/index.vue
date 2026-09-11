@@ -116,6 +116,7 @@ const prompts = [
       <ChatSurface
         ref="surface"
         mode="research"
+        workspace-preview
         class="h-full min-w-0 flex-1"
         label="Research"
         @artifact="onArtifact"

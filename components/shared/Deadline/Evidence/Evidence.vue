@@ -57,6 +57,7 @@
                     v-if="previewDoc"
                     :doc="previewDoc"
                     :resolve-url="resolvePreviewUrl"
+                    :resolve-download-url="resolveDownloadUrl"
                     :facts-doc-id="previewTarget?.id"
                     class="min-h-0 flex-1"
                     @close="previewOpen = false" />
@@ -125,6 +126,11 @@ const previewDoc = computed<PreviewDoc | null>(() => {
 // ChatSurface uses. Signed URLs are short-lived, so it resolves on open.
 const resolvePreviewUrl = () => previewTarget.value
     ? vaultFileUrl(previewTarget.value)
+    : Promise.resolve('');
+// Keeping a copy is a separate right from reading one here, and the server tells
+// them apart by the URL it is asked for — see vaultFileUrl.
+const resolveDownloadUrl = () => previewTarget.value
+    ? vaultFileUrl(previewTarget.value, 'download')
     : Promise.resolve('');
 
 function openDocument(row: DeadlineEvidenceRecord) {

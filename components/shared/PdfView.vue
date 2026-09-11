@@ -12,6 +12,7 @@
 // a case file holds both formats and reading one should not be a different skill
 // from reading the other.
 import { ref, nextTick, onBeforeUnmount } from 'vue';
+import 'vue-pdf-embed/dist/styles/textLayer.css';
 
 // vue-pdf-embed is heavy (pulls in pdfjs) — load it lazily, client-only.
 const VuePdfEmbed = defineAsyncComponent(() => import('vue-pdf-embed'));
@@ -124,7 +125,7 @@ function zoomBy(delta: number) {
           class="mx-auto [&_canvas]:!h-auto [&_canvas]:!w-full"
           :style="{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? maxWidth : 'none' }">
           <VuePdfEmbed
-            :source="source" :page="mode === 'paged' ? page : undefined"
+            :source="source" :page="mode === 'paged' ? page : undefined" text-layer
             @loaded="onLoaded" @rendered="onRendered" />
         </div>
         <template #fallback>

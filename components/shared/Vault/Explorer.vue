@@ -4,7 +4,7 @@ import {
   LayoutGrid, List as ListIcon, ArrowUpDown, ArrowUp, Loader2, Trash2, RotateCcw,
   FolderInput, Download, Pencil, FolderOpen, Eye, Sparkles, EyeOff, CheckCheck,
   MoreHorizontal, Check, Info, FolderRoot, CopyPlus, Scissors, ClipboardPaste, Files, FolderTree,
-  ChevronDown,
+  ChevronDown, ShieldCheck,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { useMediaQuery } from '@vueuse/core';
@@ -813,6 +813,25 @@ async function toggleIngest(row: VaultRow) {
   }
 }
 
+// ── Access rules ────────────────────────────────────────────────────────────
+// One sheet serves both the library and a single file; `accessDoc` is what picks
+// the mode. Whether the caller may actually change anything is the sheet's own
+// question — it asks the server — so the menu offers it unconditionally rather
+// than firing a policy request per library just to decide whether to draw a line.
+const accessOpen = ref(false);
+const accessDoc = ref<VaultDocument | null>(null);
+
+function openAccess(doc: VaultDocument | null) {
+  accessDoc.value = doc;
+  accessOpen.value = true;
+}
+
+/** Keep the open listing in step with a restriction that was just saved. */
+function onAccessSaved(updated: VaultDocument) {
+  const d = lib.documents.value.find((x) => x.id === updated.id);
+  if (d) d.restrictions = updated.restrictions;
+}
+
 // ── The action list, defined once ───────────────────────────────────────────
 // What the bottom bar offers for the whole selection. Same shape as a row's
 // menu, so an action can never look different depending on where it is invoked.
@@ -925,6 +944,10 @@ function actionsFor(row: VaultRow): VaultAction[] {
         icon: row.doc?.ingest ? EyeOff : Sparkles,
         run: () => toggleIngest(row),
       });
+      out.push({
+        id: 'access', label: 'Access & history…', icon: ShieldCheck,
+        run: () => openAccess(row.doc || null),
+      });
     }
     out.push({
       id: 'trash', label: `Move to recycle bin${suffix}`, icon: Trash2, danger: true, divider: true,
@@ -961,6 +984,10 @@ const surfaceActions = computed<VaultAction[]>(() => {
   if (canImportFolder.value) {
     out.push({ id: 'import', label: 'Upload a folder…', icon: FolderTree, run: () => dropzone.value?.pickFolder() });
   }
+  out.push({
+    id: 'access', label: 'Access & history…', icon: ShieldCheck, divider: true,
+    run: () => openAccess(null),
+  });
   return out;
 });
 
@@ -1604,6 +1631,14 @@ defineExpose({
       </DialogContent>
     </Dialog>
 
+    <SharedVaultAccessSheet
+      v-model:open="accessOpen"
+      :scope="scope"
+      :scope-id="scopeId"
+      :doc="accessDoc"
+      :library-label="rootLabel"
+      @updated="onAccessSaved" />
+
     <SharedVaultDetails
       :row="detailsRow"
       :location="detailsLocation"
@@ -1685,6 +1720,7 @@ defineExpose({
             mime: previewDoc.mime, ocr: previewDoc.ocr,
           }"
           :resolve-url="() => vaultFileUrl(previewDoc!)"
+            :resolve-download-url="() => vaultFileUrl(previewDoc!, 'download')"
           :facts-doc-id="previewDoc.id"
           @close="previewRow = null" />
       </SheetContent>

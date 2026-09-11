@@ -10,6 +10,16 @@ const t = computed(() => proposalTheme(props.variant));
 
 // Fallback for tools without a tailored preview: labelled key/value lines,
 // carried over from the original generic proposal card.
+//
+// Record ids are hidden because they are noise NEXT TO readable rows. They used
+// to be hidden unconditionally, which meant a tool whose only argument was one
+// of them — remove_deadline takes just deadline_id — produced an empty list and
+// rendered nothing at all: a bare "Remove Deadline" heading above an Approve
+// button, with no sight of which deadline was about to be deleted. An id the
+// lawyer can question beats a card that says nothing, so they are dropped only
+// when something readable survives them.
+const ID_KEYS = ['deadline_id', 'matter_id', 'engagement_id', 'milestone_id', 'milestoneId', 'engagementId', 'matterId'];
+
 const lines = computed<string[]>(() => {
   const input = props.input;
   if (!input) return [];
@@ -19,13 +29,14 @@ const lines = computed<string[]>(() => {
     force: 'Force',
     assignee_ids: 'Assignees',
   };
-  return Object.entries(input)
-    .filter(([k]) => k !== 'deadline_id' && k !== 'matter_id')
-    .map(([k, v]) => {
-      const label = labels[k] ?? k.replace(/_/g, ' ');
-      const value = Array.isArray(v) ? `${v.length} item(s)` : String(v);
-      return `${label}: ${value}`;
-    });
+  const render = ([k, v]: [string, any]) => {
+    const label = labels[k] ?? k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+    const value = Array.isArray(v) ? `${v.length} item(s)` : String(v);
+    return `${label}: ${value}`;
+  };
+  const entries = Object.entries(input);
+  const readable = entries.filter(([k]) => !ID_KEYS.includes(k));
+  return (readable.length ? readable : entries).map(render);
 });
 </script>
 

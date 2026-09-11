@@ -61,7 +61,7 @@ tauri-plugin-autostart = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 eventsource-stream = "0.2"
 futures-util = "0.3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "net"] }
 
 # Needed to attach a microphone permission handler to the platform webview (see
 # allow_microphone in src/lib.rs). Version-pinned on purpose: this must be the

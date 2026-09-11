@@ -210,6 +210,70 @@
       </template>
     </template>
 
+    <!-- ── Automatic actions (auto mode) ──────────────────────────────── -->
+    <Separator/>
+
+    <div class="flex flex-col gap-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <span class="font-medium">
+          {{ orgScope ? 'How far members may let the assistant act' : 'Let the assistant act without asking' }}
+        </span>
+        <p class="text-sm text-muted-foreground">
+          {{ orgScope
+            ? 'The highest setting anyone at the firm may choose. A member who has picked something lower keeps their own choice.'
+            : 'The assistant stops for permission before every change it makes. Each step below trades away more of that.' }}
+        </p>
+      </div>
+
+      <!-- The ladder. One rung per row, so what each buys is read rather than
+           guessed at from a switch's position. -->
+      <div class="flex flex-col gap-2">
+        <button
+            v-for="opt in levelOptions"
+            :key="opt.value"
+            type="button"
+            class="flex flex-row items-start gap-3 rounded-lg border p-4 text-left transition-colors"
+            :class="[
+              currentLevel === opt.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/40',
+              (savingAuto || isBlocked(opt.value)) ? 'cursor-not-allowed opacity-50' : '',
+            ]"
+            :disabled="savingAuto || isBlocked(opt.value)"
+            @click="chooseLevel(opt.value)">
+          <span
+              class="mt-1 size-3.5 shrink-0 rounded-full border"
+              :class="currentLevel === opt.value ? 'border-primary bg-primary' : 'border-muted-foreground/40'"/>
+          <span class="flex min-w-0 flex-col gap-0.5">
+            <span class="text-sm font-medium">{{ opt.title }}</span>
+            <span class="text-xs text-muted-foreground">{{ opt.blurb }}</span>
+            <span v-if="isBlocked(opt.value)" class="text-xs text-muted-foreground">
+              Above your firm's limit.
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <p v-if="!orgScope" class="text-xs text-muted-foreground">
+        Whatever the setting, it never sends anything outside the firm on its own — a
+        notification to a colleague or opposing counsel always stops and asks. Every
+        automatic change is recorded above the message box for the whole conversation,
+        and a turn stops after
+        {{ currentLevel === 'full' ? autoMode.maxWritesFull : autoMode.maxWrites }}
+        changes so a runaway reply shows itself.
+      </p>
+
+      <p v-if="!orgScope && autoMode.firmCeiling === 'off'" class="text-xs text-muted-foreground">
+        Your firm has turned automatic actions off, so this cannot be enabled.
+      </p>
+
+      <div v-if="!orgScope && autoMode.level !== 'off' && autoMode.autoApprovable.length"
+           class="rounded-lg border border-dashed p-4">
+        <p class="text-sm font-medium">What it will do without asking</p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {{ autoMode.autoApprovable.map(prettyToolName).join(' · ') }}
+        </p>
+      </div>
+    </div>
+
     <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
   </div>
 </template>
@@ -223,6 +287,11 @@ import {
   setMyProvider,
   setOrgTaskModels,
   setMyTaskModels,
+  getAutoMode,
+  setMyAutoMode,
+  setFirmAutoModeCeiling,
+  type AutoLevel,
+  type AutoModeState,
   AI_PROVIDER_INFO,
   type AIProviderState,
   type AIVendor,
@@ -245,6 +314,21 @@ const tasks = ref<AITaskState[]>([])
 const advancedOpen = ref(false)
 const saving = ref(false)
 const error = ref('')
+
+// Auto mode is resolved server-side from both layers, so the panel renders the
+// answer it is given rather than recomputing the rule in a second place.
+const autoMode = ref<AutoModeState>({
+  level: 'off',
+  memberLevel: 'off',
+  firmCeiling: '',
+  conversationLevel: '',
+  levels: ['off', 'safe', 'permissive', 'full'],
+  enabled: false,
+  maxWrites: 0,
+  maxWritesFull: 0,
+  autoApprovable: [],
+})
+const savingAuto = ref(false)
 
 // Nothing to present unless the deployment can reach a second provider.
 const hasChoice = computed(() => available.value.length > 1)
@@ -408,5 +492,81 @@ function assign(task: AITaskState, modelID: string) {
   )
 }
 
-onMounted(load)
+/** create_matter_draft -> "Create a matter draft", so the list reads as actions. */
+function prettyToolName(tool: string): string {
+  const words = tool.replace(/_/g, ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+async function loadAutoMode() {
+  try {
+    autoMode.value = await getAutoMode()
+  } catch {
+    // A backend that predates auto mode simply has no such setting; leaving the
+    // defaults in place renders the switch off rather than an error the user can
+    // do nothing about.
+  }
+}
+
+// What each rung buys, in the words a lawyer would use for it rather than the
+// names the risk table uses.
+const LEVEL_COPY: Record<AutoLevel, { title: string; blurb: string }> = {
+  off: {
+    title: 'Ask me every time',
+    blurb: 'Every change shows a card before it happens.',
+  },
+  safe: {
+    title: 'Act on what it can undo',
+    blurb: 'Creates a matter, a draft, a reminder, a folder without asking — anything it can delete again. Only on what is open in the conversation.',
+  },
+  permissive: {
+    title: 'Act on the day-to-day work',
+    blurb: 'Also files, moves and copies documents, and edits work that already exists. Still only on what is open in the conversation, and it never bins anything.',
+  },
+  full: {
+    title: "Don't ask me",
+    blurb: 'Also bins things, and is no longer limited to what is open in the conversation. Sending anything outside the firm still asks.',
+  },
+}
+
+const levelOptions = computed(() => {
+  const rungs = autoMode.value.levels ?? ['off', 'safe', 'permissive', 'full']
+  return rungs.map((value) => ({ value, ...LEVEL_COPY[value] }))
+})
+
+/** The firm panel edits the ceiling; the member panel edits their own rung. */
+const currentLevel = computed<AutoLevel>(() =>
+    props.orgScope
+        ? ((autoMode.value.firmCeiling || 'full') as AutoLevel)
+        : autoMode.value.memberLevel)
+
+/** A member cannot pick a rung above the firm's ceiling. */
+function isBlocked(level: AutoLevel): boolean {
+  if (props.orgScope) return false
+  const ceiling = autoMode.value.firmCeiling
+  if (!ceiling) return false
+  const order: AutoLevel[] = ['off', 'safe', 'permissive', 'full']
+  return order.indexOf(level) > order.indexOf(ceiling)
+}
+
+async function chooseLevel(level: AutoLevel) {
+  if (currentLevel.value === level) return
+  savingAuto.value = true
+  error.value = ''
+  try {
+    autoMode.value = props.orgScope
+        ? await setFirmAutoModeCeiling(level)
+        : await setMyAutoMode(level)
+  } catch (e: any) {
+    error.value = e?.message || 'Could not save the setting.'
+    await loadAutoMode()
+  } finally {
+    savingAuto.value = false
+  }
+}
+
+onMounted(() => {
+  load()
+  loadAutoMode()
+})
 </script>

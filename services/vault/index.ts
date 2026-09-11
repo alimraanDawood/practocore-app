@@ -73,6 +73,11 @@ export interface VaultDocument {
   ocr?: boolean;
   provider: string;
   error: string;
+  /**
+   * Per-document access overrides. Absent/empty inherits the library policy;
+   * each named axis narrows it. Only allow/deny, only these three keys.
+   */
+  restrictions?: Partial<Record<VaultAccessAxis, VaultAccessSetting>>;
   /** Soft-delete flag — true means the document is in the Trash. */
   trashed?: boolean;
   trashed_at?: string;
@@ -202,7 +207,7 @@ export const VAULT_ROLES = ['owner', 'manager', 'contributor', 'viewer'] as cons
 export type VaultRole = (typeof VAULT_ROLES)[number];
 
 export const VAULT_CAPS = [
-  'query', 'add_files', 'remove_files', 'manage_folders',
+  'view', 'download', 'query', 'add_files', 'remove_files', 'manage_folders',
   'toggle_ai', 'invite', 'manage_permissions', 'delete_vault',
 ] as const;
 export type VaultCap = (typeof VAULT_CAPS)[number];
@@ -241,11 +246,17 @@ export interface VaultMember {
 // owner is handled separately (always every capability).
 const ROLE_PRESETS: Record<string, Partial<Record<VaultCap, boolean>>> = {
   manager: {
-    query: true, add_files: true, remove_files: true, manage_folders: true,
+    view: true, download: true, query: true,
+    add_files: true, remove_files: true, manage_folders: true,
     toggle_ai: true, invite: true, manage_permissions: true,
   },
-  contributor: { query: true, add_files: true, remove_files: true, manage_folders: true },
-  viewer: { query: true },
+  contributor: {
+    view: true, download: true, query: true,
+    add_files: true, remove_files: true, manage_folders: true,
+  },
+  // A viewer reads in the app and lets the assistant read for them, but does not
+  // take copies away. Grant `download` as a per-member override to change that.
+  viewer: { view: true, query: true },
 };
 
 /** Resolve a member's effective capabilities (role preset + per-member overrides). */
@@ -459,14 +470,27 @@ export async function subscribeVault(
 }
 
 /**
- * Build a downloadable URL for a document's original file. The collection's
- * view rule requires auth, so the file is protected and needs a short-lived file
- * token appended — hence async. Returns "" if the doc has no stored file.
+ * Build a URL for a document's original file.
+ *
+ * `intent` is not cosmetic. The server gates and logs this route
+ * (ai/vault_access.go), and it reads the two senses of "access" apart from the
+ * `download` query parameter PocketBase already uses for Content-Disposition:
+ * 'download' asks for bytes to keep and needs the download capability, 'preview'
+ * asks for a read in the app and needs only view. Passing the wrong one either
+ * denies a legitimate read or records a copy that was never taken — so a caller
+ * that is opening the reader must say so.
+ *
+ * Returns "" if the doc has no stored file.
  */
-export async function vaultFileUrl(doc: VaultDocument): Promise<string> {
+export async function vaultFileUrl(
+  doc: VaultDocument,
+  intent: 'preview' | 'download' = 'preview',
+): Promise<string> {
   if (!doc.file) return '';
   const token = await pb.files.getToken();
-  return pb.files.getURL(doc as any, doc.file, { token });
+  const query: Record<string, string> = { token };
+  if (intent === 'download') query.download = '1';
+  return pb.files.getURL(doc as any, doc.file, query);
 }
 
 /**
@@ -741,6 +765,94 @@ export function deleteDocument(id: string): Promise<{ deleted: boolean; memories
   return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, { method: 'DELETE' });
 }
 
+// ── access policy + history (VAULT_PERMISSIONS_PLAN.md) ─────────────────────
+
+/** The three things a library or a document can be restricted on. */
+export type VaultAccessAxis = 'view' | 'download' | 'ai';
+export type VaultAccessSetting = 'allow' | 'deny';
+
+/**
+ * A library's access policy. Every axis reads back resolved, so the caller never
+ * has to know that an unset setting and "allow" are the same thing.
+ */
+export interface VaultPolicy {
+  downloads: VaultAccessSetting;
+  view: VaultAccessSetting;
+  ai: VaultAccessSetting;
+  default_role: VaultRole | '';
+  /** Whether THIS caller may change the above. */
+  can_manage: boolean;
+}
+
+/** Read a library's access policy. */
+export function getVaultPolicy(scope: VaultScope, scopeId: string): Promise<VaultPolicy> {
+  const q = new URLSearchParams({ scope, scope_id: scopeId });
+  return vaultFetch(`/api/practocore/ai/vault/policy?${q}`, { method: 'GET' });
+}
+
+/**
+ * Write a library's access policy. Omitting an axis leaves it unset, which
+ * resolves as allow — so this is a whole-policy write, not a patch.
+ */
+export function setVaultPolicy(
+  scope: VaultScope,
+  scopeId: string,
+  policy: Partial<Pick<VaultPolicy, 'downloads' | 'view' | 'ai' | 'default_role'>>,
+): Promise<Omit<VaultPolicy, 'can_manage'>> {
+  return vaultFetch('/api/practocore/ai/vault/policy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope, scope_id: scopeId, ...policy }),
+  });
+}
+
+/**
+ * Restrict a single document, or clear its overrides by passing {}. Needs the
+ * same right as setting the library policy — restricting one file is an access
+ * decision, not a filing one.
+ */
+export function setDocumentRestrictions(
+  id: string,
+  restrictions: Partial<Record<VaultAccessAxis, VaultAccessSetting>>,
+): Promise<VaultDocument> {
+  return vaultFetch(`/api/practocore/ai/vault/documents/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ restrictions }),
+  });
+}
+
+/** One row of the access log. */
+export interface VaultAccessEvent {
+  id: string;
+  actor: string;
+  /** Resolved server-side: the log stores ids, but a firm reads it as names. */
+  actor_name: string;
+  document: string;
+  /** The filename as the server knows it now — present even once it is deleted. */
+  document_name: string;
+  action: 'view' | 'download' | 'zip' | 'ai_read' | 'denied';
+  reason: string;
+  ip: string;
+  user_agent: string;
+  created: string;
+}
+
+/**
+ * Who has read or taken what, newest first. Pass a document id to narrow it to
+ * one file; the library is then inferred from the document. Readable only by
+ * whoever may administer the library — the log is itself confidential.
+ */
+export function getVaultAccessHistory(
+  args: { scope?: VaultScope; scopeId?: string; documentId?: string },
+): Promise<{ events: VaultAccessEvent[] }> {
+  const q = new URLSearchParams();
+  if (args.scope) q.set('scope', args.scope);
+  if (args.scopeId) q.set('scope_id', args.scopeId);
+  if (args.documentId) q.set('document', args.documentId);
+  return vaultFetch(`/api/practocore/ai/vault/access-history?${q}`, { method: 'GET' });
+}
+
 export interface UploadResult {
   id: string;
   status: VaultStatus;
@@ -911,6 +1023,153 @@ export async function getEntitlements(): Promise<Entitlements> {
  * without the vault-specific special case.
  */
 async function providerFetch(path: string, body: unknown): Promise<AIProviderState> {
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    method: 'PATCH',
+    headers: { Authorization: pb.authStore.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.message) msg = j.message;
+    } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+/**
+ * One recorded action: something the assistant changed, and whether it can be taken
+ * back. `approval` says who allowed it — a person on a permission card, or auto
+ * mode's policy — which is the distinction the ledger exists to preserve.
+ */
+export type AiAction = {
+  id: string;
+  tool: string;
+  risk: string;
+  approval: 'manual' | 'auto';
+  status: 'applied' | 'failed' | 'undone';
+  op: 'create' | 'update' | 'delete' | 'none';
+  entity?: string;
+  entityId?: string;
+  undoable: boolean;
+  reason?: string;
+  error?: string;
+  conversation?: string;
+  created: string;
+  undoneAt?: string;
+};
+
+/** The signed-in member's recorded actions, newest first. */
+export async function getAiActions(conversationId?: string): Promise<AiAction[]> {
+  const qs = conversationId ? `?conversation=${encodeURIComponent(conversationId)}` : '';
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/actions${qs}`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  const body = await res.json();
+  return body?.actions || [];
+}
+
+/** Reverse one recorded action. Returns the updated row. */
+export async function undoAiAction(id: string): Promise<AiAction> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/actions/${id}/undo`, {
+    method: 'POST',
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.message) msg = j.message;
+    } catch { /* noop */ }
+    throw new Error(msg);
+  }
+  return (await res.json())?.action;
+}
+
+/**
+ * How much of the approval step a member has traded away. A ladder rather than a
+ * switch: "may the assistant act unattended?" has one answer, "how far?" has four.
+ */
+export type AutoLevel = 'off' | 'safe' | 'permissive' | 'full';
+
+/**
+ * Auto mode: how far an approval-gated action may go without a permission card.
+ *
+ * Two layers, and each may only narrow the other — the firm caps the ladder for
+ * everyone, and a member below that cap keeps their own, lower choice. `level` is
+ * the resolved answer; `memberLevel` and `firmCeiling` say why it is what it is.
+ */
+export type AutoModeState = {
+  /** What this member's turns actually run at, after the firm's ceiling applies. */
+  level: AutoLevel;
+  /** What the member chose. Differs from `level` when the firm caps them. */
+  memberLevel: AutoLevel;
+  /** The firm's ceiling, or '' when the firm has expressed no limit. */
+  firmCeiling: AutoLevel | '';
+  /**
+   * The rung the conversation named in the request runs at, or '' when it has never
+   * been set (and so runs on `memberLevel`). Only meaningful when `getAutoMode` was
+   * given a conversation.
+   */
+  conversationLevel: AutoLevel | '';
+  /** The ladder in order, so the screen never hard-codes the rungs. */
+  levels: AutoLevel[];
+  /** Convenience: level !== 'off'. */
+  enabled: boolean;
+  /** How many changes one turn may make on its own before it stops and asks. */
+  maxWrites: number;
+  /** The same cap at the top of the ladder, where it is a runaway guard only. */
+  maxWritesFull: number;
+  /** The tools this level may run unattended, named rather than implied. */
+  autoApprovable: string[];
+};
+
+/**
+ * Read the resolved auto-mode position for the signed-in member. Pass a
+ * conversation to ask what THAT thread runs at — the composer's question — rather
+ * than what the member's default is.
+ */
+export async function getAutoMode(conversation?: string): Promise<AutoModeState> {
+  const q = conversation ? `?conversation=${encodeURIComponent(conversation)}` : '';
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/automode${q}`, {
+    headers: { Authorization: pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
+
+/** Set the signed-in member's rung on the ladder. */
+export function setMyAutoMode(level: AutoLevel): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/me', { level });
+}
+
+/**
+ * Set the rung ONE conversation runs at — the composer control. '' clears it and
+ * returns the thread to the member's default.
+ *
+ * A separate authenticated write rather than a field on the chat request: a level
+ * travelling in the body of the request it governs would be the client granting
+ * itself permission for that request.
+ */
+export function setConversationAutoMode(
+  conversation: string,
+  level: AutoLevel | '',
+): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/conversation', { conversation, level });
+}
+
+/**
+ * The firm's ceiling. Admin-only server-side. '' lifts the cap; 'off' is a blanket
+ * veto for every member.
+ */
+export function setFirmAutoModeCeiling(ceiling: AutoLevel | ''): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/org', { ceiling });
+}
+
+async function autoModeFetch(path: string, body: unknown): Promise<AutoModeState> {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method: 'PATCH',
     headers: { Authorization: pb.authStore.token, 'Content-Type': 'application/json' },

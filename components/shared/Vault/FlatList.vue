@@ -519,6 +519,7 @@ const emptyCopy = computed(() => {
             mime: previewDoc.mime, ocr: previewDoc.ocr,
           }"
           :resolve-url="() => vaultFileUrl(previewDoc!)"
+            :resolve-download-url="() => vaultFileUrl(previewDoc!, 'download')"
           :facts-doc-id="previewDoc.id"
           @close="previewRow = null" />
       </SheetContent>

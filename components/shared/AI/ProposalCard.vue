@@ -6,6 +6,7 @@ import type {
   AdjournPreview, DateChangePreview, FulfillPreview, EvidencePreview, MatterEditPreview, CreateMatterPreview, ReminderPreview,
   EventEditPreview, EventStatusPreview,
   GenerateDocumentPreview, ProposeSkillPreview, ManageSkillPreview, ProposeEngagementTemplatePreview,
+  ProposeMatterTemplatePreview,
   ForgetMemoryPreview, VaultEditPreview,
 } from '~/services/ai';
 import { proposalTheme, formatToolName, type ProposalVariant } from './proposals/theme';
@@ -25,6 +26,7 @@ import ProposalGenerateDocument from './proposals/ProposalGenerateDocument.vue';
 import ProposalProposeSkill from './proposals/ProposalProposeSkill.vue';
 import ProposalManageSkill from './proposals/ProposalManageSkill.vue';
 import ProposalProposeEngagementTemplate from './proposals/ProposalProposeEngagementTemplate.vue';
+import ProposalProposeMatterTemplate from './proposals/ProposalProposeMatterTemplate.vue';
 import ProposalForgetMemory from './proposals/ProposalForgetMemory.vue';
 import ProposalVaultEdit from './proposals/ProposalVaultEdit.vue';
 import ProposalGeneric from './proposals/ProposalGeneric.vue';
@@ -44,6 +46,11 @@ const t = computed(() => proposalTheme(props.variant));
 const glass = computed(() => props.variant === 'glass');
 const kind = computed(() => props.proposal.preview?.kind ?? 'generic');
 const title = computed(() => formatToolName(props.proposal.tool));
+
+// A preview may declare itself unapprovable — today when a notification names
+// recipients that resolve to no user. The action would abort server-side anyway;
+// approving it reads as confirmation that it went out.
+const blocked = computed(() => (props.proposal.preview as { blocked?: boolean } | undefined)?.blocked === true);
 
 const rootClass = computed(() => glass.value
   ? 'border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl'
@@ -87,6 +94,7 @@ const iconWrap = computed(() => glass.value
       <ProposalProposeSkill v-else-if="kind === 'propose_skill'" :preview="(proposal.preview as ProposeSkillPreview)" :variant="variant" />
       <ProposalManageSkill v-else-if="kind === 'manage_skill'" :preview="(proposal.preview as ManageSkillPreview)" :variant="variant" />
       <ProposalProposeEngagementTemplate v-else-if="kind === 'propose_engagement_template'" :preview="(proposal.preview as ProposeEngagementTemplatePreview)" :variant="variant" />
+      <ProposalProposeMatterTemplate v-else-if="kind === 'propose_matter_template'" :preview="(proposal.preview as ProposeMatterTemplatePreview)" :variant="variant" />
       <ProposalForgetMemory v-else-if="kind === 'forget_memory'" :preview="(proposal.preview as ForgetMemoryPreview)" :variant="variant" />
       <ProposalVaultEdit v-else-if="kind === 'vault_edit'" :preview="(proposal.preview as VaultEditPreview)" :variant="variant" />
       <ProposalCreateMatter
@@ -103,7 +111,7 @@ const iconWrap = computed(() => glass.value
 
     <!-- Actions -->
     <div class="flex gap-2">
-      <Button size="sm" class="flex-1 gap-1.5" :disabled="loading || !usePlanActive()?.value?.active" @click="$emit('approve')">
+      <Button size="sm" class="flex-1 gap-1.5" :disabled="loading || blocked || !usePlanActive()?.value?.active" @click="$emit('approve')">
         <Loader2 v-if="loading" class="size-3.5 animate-spin" />
         <Check v-else class="size-3.5" />
         Approve

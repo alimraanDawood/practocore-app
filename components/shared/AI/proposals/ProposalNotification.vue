@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Mail, Smartphone, MessageSquare, BellOff } from 'lucide-vue-next';
+import { Mail, Smartphone, MessageSquare, BellOff, AlertTriangle } from 'lucide-vue-next';
 import type { NotificationPreview, NotificationRecipient } from '~/services/ai';
 import ProposalUser from './ProposalUser.vue';
 import { proposalTheme, type ProposalVariant } from './theme';
@@ -15,6 +15,11 @@ const channelIcon = (ch: string) => ({ EMAIL: Mail, PUSH: Smartphone, SMS: Messa
 
 // Channels this recipient won't receive because they've disabled them.
 const skipped = (r: NotificationRecipient) => props.preview.channels.filter((c) => !r.effectiveChannels?.includes(c));
+
+// Recipient IDs matching no user. The send aborts on these server-side; naming
+// them is the difference between "approve a send to nobody" and knowing the
+// assistant got a person wrong.
+const unresolved = computed(() => props.preview.unresolvedRecipients ?? []);
 </script>
 
 <template>
@@ -42,8 +47,43 @@ const skipped = (r: NotificationRecipient) => props.preview.channels.filter((c) 
       <div v-else class="px-3 py-2 text-sm whitespace-pre-wrap" :class="t.muted">{{ preview.body }}</div>
     </div>
 
+    <!-- Unresolvable recipients: the send cannot proceed while any remain -->
+    <div
+      v-if="unresolved.length"
+      class="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+    >
+      <AlertTriangle class="size-4 shrink-0 mt-0.5 text-amber-500" />
+      <div class="flex flex-col gap-0.5 min-w-0">
+        <p class="text-xs font-medium" :class="t.strong">
+          {{ unresolved.length }} recipient{{ unresolved.length === 1 ? '' : 's' }} could not be identified
+        </p>
+        <p class="text-[11px] break-all" :class="t.subtle">
+          No user matches {{ unresolved.join(', ') }}. Nothing will be sent — ask the assistant who you meant.
+        </p>
+      </div>
+    </div>
+
+    <!-- No recipients at all. Distinct from the unresolved case above: nobody was
+         NAMED, rather than named and not found. Approve is disabled either way, and
+         without this the card showed a title, a body and a dead button with no clue
+         why — which reads as the app being broken rather than the request being
+         incomplete. -->
+    <div
+      v-if="!preview.recipients.length && !unresolved.length"
+      class="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+    >
+      <AlertTriangle class="size-4 shrink-0 mt-0.5 text-amber-500" />
+      <div class="flex flex-col gap-0.5 min-w-0">
+        <p class="text-xs font-medium" :class="t.strong">No recipient</p>
+        <p class="text-[11px]" :class="t.subtle">
+          This notification names nobody to send to, so it cannot be sent. Tell the
+          assistant who should receive it — including yourself.
+        </p>
+      </div>
+    </div>
+
     <!-- Recipients -->
-    <div class="flex flex-col gap-1.5">
+    <div v-if="preview.recipients.length" class="flex flex-col gap-1.5">
       <span class="text-[11px] uppercase tracking-wide" :class="t.subtle">
         To {{ preview.recipients.length }} recipient{{ preview.recipients.length === 1 ? '' : 's' }}
       </span>

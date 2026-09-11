@@ -43,10 +43,14 @@ export function humanBytes(n: number): string {
 }
 
 export function useVaultDownload() {
-  /** A single stored document, straight from storage. */
+  /**
+   * A single stored document, straight from storage. Declared as a download so
+   * the server gates it against the download capability and records a copy
+   * leaving, rather than logging it as a read on screen.
+   */
   async function downloadOne(doc: VaultDocument) {
     try {
-      const url = await vaultFileUrl(doc);
+      const url = await vaultFileUrl(doc, 'download');
       if (!url) { toast.error('No file is available for this document.'); return; }
       window.open(url, '_blank');
     } catch { toast.error('Could not open the file.'); }
