@@ -104,6 +104,7 @@
 
       <!-- Billing link (inside the popover / drawer) -->
       <button
+        v-if="canManageBilling"
         type="button"
         class="w-full flex items-center justify-between px-4 py-3 border-t text-sm hover:bg-muted transition-colors"
         @click="goBilling"
@@ -119,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import dayjs from 'dayjs';
 import { useMediaQuery } from '@vueuse/core';
 import { Zap, Lock, ArrowRight } from 'lucide-vue-next';
@@ -151,7 +152,16 @@ const props = withDefaults(defineProps<{
 const { usage, refresh } = useAiUsage();
 onMounted(() => { if (!usage.value) refresh(); });
 
+// Organisation billing is an admin-only surface. Solo practitioners manage their
+// own account and therefore keep the action. This uses the resolved permission
+// signal rather than trusting a professional title or a client-stored role.
+const { isAdmin, isIndividual } = usePermissions();
+const canManageBilling = computed(() => isIndividual.value || isAdmin.value);
+
 const open = ref(false);
+// Background research can finish while no chat component is mounted. Refresh when
+// the user opens the details so the number they inspect is never a stale snapshot.
+watch(open, (isOpen) => { if (isOpen) void refresh(); });
 
 const fmt = (n?: number) => Math.round(n ?? 0).toLocaleString();
 
