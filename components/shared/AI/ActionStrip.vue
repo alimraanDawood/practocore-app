@@ -141,6 +141,13 @@ const VERBS: Record<string, string> = {
   generate_document: 'Drafted a document',
   schedule_reminder: 'Scheduled a reminder',
   create_vault_folder: 'Created a vault folder',
+  // The permissive level runs these unattended, which makes the ledger the only
+  // place they are visible — so they get real sentences rather than the fallback's
+  // de-underscored tool name.
+  manage_vault_documents: 'Filed documents in the vault',
+  manage_vault_folder: 'Changed a vault folder',
+  add_vault_document: 'Added a document to the vault',
+  save_document_to_vault: 'Saved a draft to the vault',
   undo: 'Undid an earlier action',
 };
 

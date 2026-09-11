@@ -1090,39 +1090,83 @@ export async function undoAiAction(id: string): Promise<AiAction> {
 }
 
 /**
- * Auto mode: whether an approval-gated action may run without a permission card.
+ * How much of the approval step a member has traded away. A ladder rather than a
+ * switch: "may the assistant act unattended?" has one answer, "how far?" has four.
+ */
+export type AutoLevel = 'off' | 'safe' | 'permissive' | 'full';
+
+/**
+ * Auto mode: how far an approval-gated action may go without a permission card.
  *
- * Two layers, and each may only narrow the other — the firm can switch it off for
- * everyone, and a member who has not opted in does not get it even where the firm
- * allows it. `enabled` is the resolved answer; the other two say why.
+ * Two layers, and each may only narrow the other — the firm caps the ladder for
+ * everyone, and a member below that cap keeps their own, lower choice. `level` is
+ * the resolved answer; `memberLevel` and `firmCeiling` say why it is what it is.
  */
 export type AutoModeState = {
+  /** What this member's turns actually run at, after the firm's ceiling applies. */
+  level: AutoLevel;
+  /** What the member chose. Differs from `level` when the firm caps them. */
+  memberLevel: AutoLevel;
+  /** The firm's ceiling, or '' when the firm has expressed no limit. */
+  firmCeiling: AutoLevel | '';
+  /**
+   * The rung the conversation named in the request runs at, or '' when it has never
+   * been set (and so runs on `memberLevel`). Only meaningful when `getAutoMode` was
+   * given a conversation.
+   */
+  conversationLevel: AutoLevel | '';
+  /** The ladder in order, so the screen never hard-codes the rungs. */
+  levels: AutoLevel[];
+  /** Convenience: level !== 'off'. */
   enabled: boolean;
-  memberOptedIn: boolean;
-  firmDisabled: boolean;
   /** How many changes one turn may make on its own before it stops and asks. */
   maxWrites: number;
-  /** The tools auto mode may run unattended, named rather than implied. */
+  /** The same cap at the top of the ladder, where it is a runaway guard only. */
+  maxWritesFull: number;
+  /** The tools this level may run unattended, named rather than implied. */
   autoApprovable: string[];
 };
 
-/** Read the resolved auto-mode position for the signed-in member. */
-export async function getAutoMode(): Promise<AutoModeState> {
-  const res = await fetch(`${SERVER_URL}/api/practocore/ai/automode`, {
+/**
+ * Read the resolved auto-mode position for the signed-in member. Pass a
+ * conversation to ask what THAT thread runs at — the composer's question — rather
+ * than what the member's default is.
+ */
+export async function getAutoMode(conversation?: string): Promise<AutoModeState> {
+  const q = conversation ? `?conversation=${encodeURIComponent(conversation)}` : '';
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/automode${q}`, {
     headers: { Authorization: pb.authStore.token },
   });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json();
 }
 
-/** Opt the signed-in member in or out. */
-export function setMyAutoMode(enabled: boolean): Promise<AutoModeState> {
-  return autoModeFetch('/api/practocore/ai/automode/me', { enabled });
+/** Set the signed-in member's rung on the ladder. */
+export function setMyAutoMode(level: AutoLevel): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/me', { level });
 }
 
-/** The firm-level veto. Admin-only server-side. */
-export function setFirmAutoModeDisabled(disabled: boolean): Promise<AutoModeState> {
-  return autoModeFetch('/api/practocore/ai/automode/org', { disabled });
+/**
+ * Set the rung ONE conversation runs at — the composer control. '' clears it and
+ * returns the thread to the member's default.
+ *
+ * A separate authenticated write rather than a field on the chat request: a level
+ * travelling in the body of the request it governs would be the client granting
+ * itself permission for that request.
+ */
+export function setConversationAutoMode(
+  conversation: string,
+  level: AutoLevel | '',
+): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/conversation', { conversation, level });
+}
+
+/**
+ * The firm's ceiling. Admin-only server-side. '' lifts the cap; 'off' is a blanket
+ * veto for every member.
+ */
+export function setFirmAutoModeCeiling(ceiling: AutoLevel | ''): Promise<AutoModeState> {
+  return autoModeFetch('/api/practocore/ai/automode/org', { ceiling });
 }
 
 async function autoModeFetch(path: string, body: unknown): Promise<AutoModeState> {
