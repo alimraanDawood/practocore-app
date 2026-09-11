@@ -599,6 +599,93 @@ export async function renameDeadline(deadlineId: string, label: string) {
     }).then((e) => e.json())
 }
 
+/**
+ * Normalise a fetch Response into the `{ error }` shape the callers check.
+ *
+ * The callers cannot just read a field off the body. Our own handlers answer a
+ * refusal as `{error}` (deadlinev2 badRequest), but anything that fails BEFORE
+ * reaching them — a route that is not registered on the running binary, an auth
+ * rejection, a panic — is answered by PocketBase as
+ * `{"data":{},"message":"…","status":404}`, with no `error` key at all. Checking
+ * only `res.error` therefore reads a 404 as success, which is exactly how a hide
+ * against a backend without these routes reported "Hearing hidden" and left the
+ * hearing on the timeline.
+ */
+async function asResult(res: Response) {
+    let body: any = null;
+    try {
+        body = await res.json();
+    } catch {
+        // A non-JSON body (a proxy error page, an empty 204) is still a result.
+    }
+    if (!res.ok) {
+        return { error: body?.error || body?.message || `Request failed (${res.status})` };
+    }
+    return body ?? {};
+}
+
+/**
+ * Annotate any deadline — statutory, court or ad-hoc alike.
+ *
+ * Same reasoning as renameDeadline: a note changes no date and nothing computes
+ * with it, so it is safe on a row the firm does not own. Until this existed the
+ * only way to write `note` was the ad-hoc PATCH, which refuses precisely the
+ * rows a lawyer most wants to annotate. Pass an empty string to clear it.
+ */
+export async function annotateDeadline(deadlineId: string, note: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/note/${deadlineId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then(asResult)
+}
+
+/**
+ * Court hearings (origin: 'court') the firm has hidden.
+ *
+ * Hiding, not deleting: ECCMIS re-sends its sittings twice a day, so removing
+ * the row on its own would last until the next sync. The backend records a
+ * tombstone against the sitting's identity and the sync skips it — which is
+ * what makes the removal mean anything, and what makes it reversible.
+ */
+export interface HiddenHearing {
+    id: string
+    name: string
+    date: string
+    hiddenBy: string
+    hiddenAt: string
+}
+
+export async function hideCourtDeadline(deadlineId: string, note = '') {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/court/${deadlineId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ note }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then(asResult)
+}
+
+export async function listHiddenHearings(matterId: string): Promise<{ hidden: HiddenHearing[] }> {
+    return await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/hidden-hearings`, {
+        headers: { 'Authorization': pocketbase.authStore.token }
+    }).then(asResult)
+}
+
+export async function restoreHiddenHearing(matterId: string, hiddenId: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/hidden-hearings/${hiddenId}/restore`, {
+        method: 'POST',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then(asResult)
+}
+
 export function subscribeToDeadlines(fn: (data: RecordSubscription<RecordModel>) => void) {
     return pocketbase.collection('Deadlines').subscribe('*', fn);
 }
