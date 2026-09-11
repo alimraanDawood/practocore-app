@@ -65,6 +65,15 @@ export function isAdhoc(deadline: any): boolean {
 }
 
 /**
+ * A hearing imported from the court registry (ECCMIS). The one row on the
+ * timeline the firm does not own: the court set the date and the sync will send
+ * it again, so it can be renamed, annotated and hidden, but never re-dated here.
+ */
+export function isCourt(deadline: any): boolean {
+  return deadline?.origin === 'court';
+}
+
+/**
  * A deadline is projected when its owning matter/application's trigger date is
  * still provisional. Projected dates are a planning view: even when computed into
  * the past they must NOT render as overdue, and no reminders exist for them yet.

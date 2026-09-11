@@ -64,6 +64,54 @@
       </div>
     </div>
 
+    <!-- Hidden hearings. Hiding a court row is a real removal — the sync is
+         told to stop re-sending it — which is precisely why it has to be
+         visible and undoable from here. Without this strip a hearing the firm
+         hid is indistinguishable from a sync that stopped working. -->
+    <div
+      v-if="hiddenHearings.length > 0"
+      class="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
+    >
+      <button
+        class="flex flex-row items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        @click="showHidden = !showHidden"
+      >
+        <EyeOff class="size-3.5 shrink-0"/>
+        <span class="font-medium">
+          {{ hiddenHearings.length }}
+          {{ hiddenHearings.length === 1 ? 'hidden hearing' : 'hidden hearings' }}
+        </span>
+        <span class="underline underline-offset-2">{{ showHidden ? 'Hide' : 'Show' }}</span>
+      </button>
+
+      <div v-if="showHidden" class="flex flex-col gap-1.5">
+        <div
+          v-for="hidden in hiddenHearings"
+          :key="hidden.id"
+          class="flex flex-row items-center gap-2 flex-wrap text-xs"
+        >
+          <Landmark class="size-3.5 shrink-0 text-muted-foreground"/>
+          <span class="font-medium">{{ hidden.name || 'Hearing' }}</span>
+          <span v-if="hidden.date" class="text-muted-foreground tabular-nums">
+            {{ dayjs(hidden.date).format('D MMM YYYY') }}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="ml-auto h-7"
+            :disabled="hiddenBusy === hidden.id"
+            @click="restoreHearing(hidden)"
+          >
+            <Eye class="size-3"/>
+            Restore
+          </Button>
+        </div>
+        <p class="text-[10px] text-muted-foreground">
+          The court sync will not add these back while they are hidden.
+        </p>
+      </div>
+    </div>
+
     <AdhocDeadlineDialog
       v-if="canAddDeadline"
       v-model:open="adhocDialogOpen"
@@ -445,6 +493,56 @@
               </div>
             </div>
 
+            <!-- The firm's own remark on the row. Safe on every origin for the
+                 same reason the label is: nothing computes with it. On a court
+                 hearing it is often the only thing the firm can add — "registry
+                 confirmed by phone", "counsel away that week". -->
+            <div
+              v-if="canAddDeadline && deadline.collectionName === 'Deadlines'"
+              class="flex flex-col gap-1.5 border-t border-border/60 pt-2"
+            >
+              <template v-if="notingId === deadline.id">
+                <Textarea
+                  v-model="noteDraft"
+                  :maxlength="5000"
+                  rows="3"
+                  placeholder="Your note on this deadline"
+                  class="text-sm"
+                />
+                <div class="flex flex-row gap-2">
+                  <Button size="sm" :disabled="noteBusy" @click="saveNote(deadline)">Save</Button>
+                  <Button size="sm" variant="ghost" :disabled="noteBusy" @click="cancelNote()">Cancel</Button>
+                </div>
+              </template>
+              <template v-else>
+                <p v-if="hasNote(deadline)" class="text-xs text-muted-foreground whitespace-pre-line">
+                  {{ deadline.note }}
+                </p>
+                <div class="flex flex-row gap-2 flex-wrap">
+                  <Button size="sm" variant="outline" @click="startNote(deadline)">
+                    <PencilLine class="size-3"/>
+                    {{ hasNote(deadline) ? 'Edit note' : 'Add note' }}
+                  </Button>
+                  <Button
+                    v-if="isCourt(deadline)"
+                    size="sm"
+                    variant="ghost"
+                    class="text-destructive"
+                    :disabled="hiddenBusy === deadline.id"
+                    @click="hideHearing(deadline)"
+                  >
+                    <EyeOff class="size-3"/>
+                    Hide hearing
+                  </Button>
+                </div>
+                <p v-if="isCourt(deadline)" class="text-[10px] text-muted-foreground">
+                  This hearing came from the court registry. Its date is the
+                  court&rsquo;s — you can rename it, note it, or hide it, but it
+                  can only be moved by the court.
+                </p>
+              </template>
+            </div>
+
             <!-- Assignees -->
             <SharedDeadlineAssignees
               v-if="matterMembers.length > 0 && deadline.collectionName === 'Deadlines'"
@@ -543,7 +641,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   CalendarIcon,
   CalendarPlus,
@@ -565,16 +663,24 @@ import {
   Trash2,
   RotateCcw,
   ListFilter,
+  EyeOff,
+  Eye,
+  Landmark,
 } from "lucide-vue-next";
 import { useMediaQuery } from "@vueuse/core";
 import AdjournDeadline from "../../Deadline/AdjournDeadline/AdjournDeadline.vue";
 import OverrideDeadline from "../../Deadline/OverrideDeadline/OverrideDeadline.vue";
 import AdhocDeadlineDialog from "../../Deadline/AdhocDeadline/AdhocDeadlineDialog.vue";
 import { pb } from "~/lib/pocketbase";
-import { resetDeadline, completeAdhocDeadline, deleteAdhocDeadline, renameDeadline, listDeadlineEvidence } from "~/services/matters";
+import {
+  resetDeadline, completeAdhocDeadline, deleteAdhocDeadline, renameDeadline,
+  listDeadlineEvidence, annotateDeadline, hideCourtDeadline, listHiddenHearings,
+  restoreHiddenHearing,
+} from "~/services/matters";
 import {
   deadlineUrgency,
   isAdhoc as isAdhocDeadline,
+  isCourt as isCourtDeadline,
   isOtherSide as isOtherSideDeadline,
   isProjected as isProjectedDeadline,
 } from "~/services/deadlines/urgency";
@@ -791,6 +897,11 @@ watch(
 // t_id — see the ad-hoc block below and internal/deadlinev2/adhoc.go. Declared
 // here because isProjected/urgencyOf depend on it.
 const isAdhoc = (deadline) => isAdhocDeadline(deadline);
+
+// A hearing the court sent (origin 'court'). Not the firm's row and not the
+// engine's: the registry owns the date, so the timeline offers the edits that do
+// not touch it — rename, note, hide — and none that do.
+const isCourt = (deadline) => isCourtDeadline(deadline);
 
 // L7: what the row is CALLED, as opposed to what the rule calls it.
 //
@@ -1036,6 +1147,35 @@ function rowActions(deadline) {
     return out;
   }
 
+  if (isCourt(deadline)) {
+    // The registry owns this date. Adjourning or correcting it here would be the
+    // firm overwriting the court's own diary in their copy of it, so the menu
+    // offers only what is safe on somebody else's row — and hiding, which is a
+    // statement about this matter rather than about the sitting.
+    if (canAddDeadline.value) {
+      out.push({
+        id: "rename", label: isRenamed(deadline) ? "Change name" : "Rename", icon: Pencil, divider: true,
+        run: () => { expandRow(deadline.id); startRename(deadline); },
+      });
+      if (isRenamed(deadline)) {
+        out.push({
+          id: "unrename", label: "Use the original name", icon: RotateCcw,
+          disabled: renameBusy.value, run: () => clearRename(deadline),
+        });
+      }
+      out.push({
+        id: "note", label: hasNote(deadline) ? "Edit note…" : "Add note…", icon: PencilLine,
+        run: () => { expandRow(deadline.id); startNote(deadline); },
+      });
+      out.push({
+        id: "hide", label: "Hide hearing", icon: EyeOff, danger: true, divider: true,
+        disabled: hiddenBusy.value === deadline.id,
+        run: () => hideHearing(deadline),
+      });
+    }
+    return out;
+  }
+
   if (deadline.collectionName !== "Deadlines") {
     // A milestone/event row — its date is recorded, nothing is computed from it.
     out.push({
@@ -1081,6 +1221,11 @@ function rowActions(deadline) {
         disabled: renameBusy.value, run: () => clearRename(deadline),
       });
     }
+    // A note is safe for the same reason a label is: nothing computes with it.
+    out.push({
+      id: "note", label: hasNote(deadline) ? "Edit note…" : "Add note…", icon: PencilLine,
+      run: () => { expandRow(deadline.id); startNote(deadline); },
+    });
   }
   return out;
 }
@@ -1207,6 +1352,117 @@ function saveRename(deadline) {
 function clearRename(deadline) {
   applyRename(deadline, "");
 }
+
+// ── Notes, on any row ─────────────────────────────────────────────────────────
+// The same reasoning as rename: a note changes no date and nothing computes with
+// it, so it is safe on a row the firm does not own. Until the /note/ endpoint
+// existed the only way to write one was the ad-hoc PATCH, which refuses exactly
+// the rows a lawyer most wants to annotate — the statutory ones and the court's.
+
+const notingId = ref(null);
+const noteDraft = ref("");
+const noteBusy = ref(false);
+
+const hasNote = (deadline) => Boolean((deadline?.note || "").trim());
+
+function startNote(deadline) {
+  notingId.value = deadline.id;
+  noteDraft.value = deadline?.note || "";
+}
+
+function cancelNote() {
+  notingId.value = null;
+  noteDraft.value = "";
+}
+
+async function saveNote(deadline) {
+  noteBusy.value = true;
+  try {
+    const next = noteDraft.value.trim();
+    const res = await annotateDeadline(deadline.id, next);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    cancelNote();
+    toast.success(next ? "Note saved" : "Note removed");
+    emits("updated");
+  } catch (err) {
+    toast.error(err?.message || "Could not save the note");
+  } finally {
+    noteBusy.value = false;
+  }
+}
+
+// ── Hidden court hearings ─────────────────────────────────────────────────────
+// Deleting a court row on its own would last until the next sync, which runs
+// twice a day: ECCMIS would simply send the sitting again. So the backend
+// records a tombstone against the sitting's identity and the sync skips it.
+//
+// That makes the removal real, which is exactly why the list below has to exist.
+// A hidden hearing nobody can see or undo is not hidden, it is lost — and the
+// firm would have no way to tell a deliberate removal from a sync that quietly
+// stopped working.
+
+const hiddenHearings = ref([]);
+const hiddenBusy = ref(null);
+const showHidden = ref(false);
+
+async function loadHiddenHearings() {
+  if (!props.matter?.id) return;
+  try {
+    const res = await listHiddenHearings(props.matter.id);
+    hiddenHearings.value = res?.hidden || [];
+  } catch {
+    // A matter page must still render when this call fails; the worst case is
+    // that the restore affordance is missing until the next load.
+    hiddenHearings.value = [];
+  }
+}
+
+async function hideHearing(deadline) {
+  const confirmed = confirm(
+    `Hide "${displayName(deadline)}"? It comes off this matter and the court sync will stop adding it back. You can restore it from "Hidden hearings".`
+  );
+  if (!confirmed) return;
+
+  hiddenBusy.value = deadline.id;
+  try {
+    const res = await hideCourtDeadline(deadline.id);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Hearing hidden", { description: "Restore it from Hidden hearings." });
+    await loadHiddenHearings();
+    emits("updated");
+  } catch (err) {
+    toast.error(err?.message || "Could not hide the hearing");
+  } finally {
+    hiddenBusy.value = null;
+  }
+}
+
+async function restoreHearing(hidden) {
+  hiddenBusy.value = hidden.id;
+  try {
+    const res = await restoreHiddenHearing(props.matter.id, hidden.id);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Hearing restored");
+    await loadHiddenHearings();
+    emits("updated");
+  } catch (err) {
+    toast.error(err?.message || "Could not restore the hearing");
+  } finally {
+    hiddenBusy.value = null;
+  }
+}
+
+onMounted(loadHiddenHearings);
+watch(() => props.matter?.id, loadHiddenHearings);
 
 // Kept for future use when reset is re-enabled
 async function handleResetDeadline(deadline) {

@@ -599,6 +599,68 @@ export async function renameDeadline(deadlineId: string, label: string) {
     }).then((e) => e.json())
 }
 
+/**
+ * Annotate any deadline — statutory, court or ad-hoc alike.
+ *
+ * Same reasoning as renameDeadline: a note changes no date and nothing computes
+ * with it, so it is safe on a row the firm does not own. Until this existed the
+ * only way to write `note` was the ad-hoc PATCH, which refuses precisely the
+ * rows a lawyer most wants to annotate. Pass an empty string to clear it.
+ */
+export async function annotateDeadline(deadlineId: string, note: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/note/${deadlineId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+/**
+ * Court hearings (origin: 'court') the firm has hidden.
+ *
+ * Hiding, not deleting: ECCMIS re-sends its sittings twice a day, so removing
+ * the row on its own would last until the next sync. The backend records a
+ * tombstone against the sitting's identity and the sync skips it — which is
+ * what makes the removal mean anything, and what makes it reversible.
+ */
+export interface HiddenHearing {
+    id: string
+    name: string
+    date: string
+    hiddenBy: string
+    hiddenAt: string
+}
+
+export async function hideCourtDeadline(deadlineId: string, note = '') {
+    return await fetch(`${SERVER_URL}/api/practocore/deadlines/court/${deadlineId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ note }),
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
+export async function listHiddenHearings(matterId: string): Promise<{ hidden: HiddenHearing[] }> {
+    return await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/hidden-hearings`, {
+        headers: { 'Authorization': pocketbase.authStore.token }
+    }).then((e) => e.json())
+}
+
+export async function restoreHiddenHearing(matterId: string, hiddenId: string) {
+    return await fetch(`${SERVER_URL}/api/practocore/matters/${matterId}/hidden-hearings/${hiddenId}/restore`, {
+        method: 'POST',
+        headers: {
+            'Authorization': pocketbase.authStore.token,
+            'Content-Type': 'application/json'
+        }
+    }).then((e) => e.json())
+}
+
 export function subscribeToDeadlines(fn: (data: RecordSubscription<RecordModel>) => void) {
     return pocketbase.collection('Deadlines').subscribe('*', fn);
 }
