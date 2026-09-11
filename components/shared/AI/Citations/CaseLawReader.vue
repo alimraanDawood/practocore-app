@@ -7,7 +7,7 @@
 // It addresses content by the local source id today; the citation also carries a stable
 // `globalId` so that when the corpus becomes a centralized service, this same reader can
 // resolve against it without changing the citation shape.
-import { ref, watch, nextTick, computed, onBeforeUnmount } from 'vue';
+import { ref, watch, computed, onBeforeUnmount } from 'vue';
 import { toast } from 'vue-sonner';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -28,8 +28,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'update:open': [boolean] }>();
 
-type Tab = 'paragraphs' | 'markdown' | 'pdf';
-const tab = ref<Tab>('paragraphs');
+type Tab = 'document' | 'markdown' | 'pdf';
+const tab = ref<Tab>('document');
 
 const detail = ref<CaseLawDetail | null>(null);
 const loading = ref(false);
@@ -47,17 +47,8 @@ const pdfIndeterminate = ref(false);
 const pdfError = ref('');
 // Page/zoom/scroll-mode state lives in the shared <SharedPdfView> reader.
 
-const paraRefs = new Map<string, HTMLElement>();
-function setParaRef(anchor: string, el: any) {
-  if (el) paraRefs.set(anchor, el as HTMLElement);
-}
-
 const header = computed(() =>
   props.title || detail.value?.title || props.citation || detail.value?.citation || 'Judgment');
-
-function isCited(anchor: string): boolean {
-  return !!props.anchor && anchor.trim().toLowerCase() === props.anchor.trim().toLowerCase();
-}
 
 async function load() {
   loading.value = true;
@@ -65,23 +56,14 @@ async function load() {
   markdown.value = '';
   markdownLoaded.value = false;
   revokePdf();
-  tab.value = 'paragraphs';
+  tab.value = 'document';
   try {
     detail.value = await getSource(props.sourceId);
-    // Jump to the cited paragraph once rendered.
-    await nextTick();
-    scrollToCited();
   } catch {
     toast.error("That judgment isn't available to you.");
   } finally {
     loading.value = false;
   }
-}
-
-function scrollToCited() {
-  if (!props.anchor) return;
-  const el = paraRefs.get(props.anchor.trim());
-  el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 async function showMarkdown() {
@@ -91,7 +73,7 @@ async function showMarkdown() {
     markdown.value = (await getCaseLawMarkdown(props.sourceId)).markdown;
   } catch {
     toast.error('Markdown is not available for this source.');
-    tab.value = 'paragraphs';
+    tab.value = 'document';
     return;
   }
   markdownLoaded.value = true;
@@ -144,22 +126,23 @@ watch(() => props.open, (o) => { if (o && props.sourceId) load(); });
 
 <template>
   <Sheet :open="open" @update:open="(v) => emit('update:open', v)">
-    <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+    <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-3xl">
       <SheetHeader class="border-b p-4">
         <SheetTitle class="pr-6 text-base">{{ cleanCitationLabel(header) }}</SheetTitle>
         <SheetDescription class="flex flex-wrap items-center gap-x-2 text-xs">
           <span v-if="detail?.citation">{{ detail.citation }}</span>
+          <span v-if="detail?.cap && detail.cap !== detail.citation">· {{ detail.cap }}</span>
           <span v-if="detail?.court">· {{ courtLabel(detail.court) }}</span>
           <span v-if="detail?.decision_date">· {{ detail.decision_date }}</span>
         </SheetDescription>
 
         <!-- View switch + original -->
         <div class="mt-2 flex flex-wrap items-center gap-1.5">
-          <Button size="sm" :variant="tab === 'paragraphs' ? 'default' : 'outline'" @click="tab = 'paragraphs'">
-            <Icon name="lucide:quote" class="size-3.5" /> Paragraphs
+          <Button size="sm" :variant="tab === 'document' ? 'default' : 'outline'" @click="tab = 'document'">
+            <Icon name="lucide:book-open" class="size-3.5" /> Document
           </Button>
           <Button v-if="detail?.has_markdown !== false" size="sm" :variant="tab === 'markdown' ? 'default' : 'outline'" @click="showMarkdown">
-            <Icon name="lucide:file-text" class="size-3.5" /> Markdown
+            <Icon name="lucide:file-text" class="size-3.5" /> Extracted text
           </Button>
           <Button v-if="detail?.has_pdf !== false" size="sm" :variant="tab === 'pdf' ? 'default' : 'outline'" @click="showPdf">
             <Icon name="lucide:file" class="size-3.5" /> PDF
@@ -173,25 +156,17 @@ watch(() => props.open, (o) => { if (o && props.sourceId) load(); });
         </div>
       </SheetHeader>
 
-      <div class="min-h-0 flex-1 overflow-y-auto p-4">
+      <div
+        class="min-h-0 flex-1 overflow-y-auto"
+        :class="tab === 'document' ? 'bg-muted/40' : 'p-4'"
+      >
         <div v-if="loading" class="flex justify-center py-12">
           <Icon name="lucide:loader-circle" class="size-6 animate-spin text-muted-foreground" />
         </div>
 
-        <!-- Verbatim paragraphs, cited one highlighted -->
-        <div v-else-if="tab === 'paragraphs' && detail" class="space-y-3">
-          <p v-if="anchor" class="text-xs text-muted-foreground">
-            Cited at <span class="font-medium text-foreground">{{ anchor }}</span> — highlighted below.
-          </p>
-          <div
-            v-for="p in detail.paragraphs" :key="p.id"
-            :ref="(el) => setParaRef(p.anchor, el)"
-            :class="['scroll-mt-4 rounded-md border-l-2 py-1 pl-3 transition-colors',
-                     isCited(p.anchor) ? 'border-primary bg-primary/5' : 'border-muted']"
-          >
-            <div class="mb-0.5 text-[11px] font-medium text-primary">{{ p.anchor }}</div>
-            <p class="whitespace-pre-wrap text-sm leading-relaxed">{{ cleanCitationLabel(p.text) }}</p>
-          </div>
+        <!-- Structured legal document; citation anchor is highlighted and scrolled into view. -->
+        <div v-else-if="tab === 'document' && detail" class="mx-auto min-h-full max-w-[56rem] bg-white shadow-sm">
+          <SharedAICitationsLegalDocumentView :detail="detail" :anchor="anchor" />
         </div>
 
         <!-- Rendered markdown -->

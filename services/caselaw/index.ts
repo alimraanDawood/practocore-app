@@ -24,6 +24,11 @@ export interface CaseLawSource {
   court: string;
   case_number: string;
   decision_date: string; // YYYY-MM-DD or ""
+  cap?: string;
+  act_number?: string;
+  volume?: string;
+  commencement_date?: string;
+  as_at?: string;
   subjects: string[];
   headnote: string;
   status: CaseLawStatus;
@@ -37,6 +42,8 @@ export interface CaseLawSource {
 export interface CaseLawParagraph {
   id: string;
   anchor: string;
+  /** Structural breadcrumb for legislation, e.g. "PART I—PRELIMINARY > s.1 Short title". */
+  path?: string;
   text: string;
   derived_summary?: string;
 }
