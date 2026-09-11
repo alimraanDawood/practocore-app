@@ -120,6 +120,48 @@
       @saved="emits('updated')"
     />
 
+    <!-- One destructive confirm for the timeline: hiding a court hearing, and
+         deleting a firm's own deadline. Both were window.confirm, which is
+         titled with the origin, traps no focus and cannot be styled. Drawer
+         under tablet and AlertDialog above, matching EccmisLink's unlink. -->
+    <Drawer v-if="$viewport.isLessThan('tablet')" v-model:open="confirmOpen" :close-threshold="0.95">
+      <DrawerContent>
+        <DrawerHeader class="text-left">
+          <DrawerTitle>{{ confirmAction?.title }}</DrawerTitle>
+          <DrawerDescription>{{ confirmAction?.description }}</DrawerDescription>
+        </DrawerHeader>
+        <DrawerFooter>
+          <Button
+            class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            :disabled="confirmBusy"
+            @click="runConfirmed"
+          >
+            {{ confirmAction?.actionLabel }}
+          </Button>
+          <Button variant="outline" :disabled="confirmBusy" @click="confirmOpen = false">Cancel</Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+
+    <AlertDialog v-else v-model:open="confirmOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmAction?.title }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ confirmAction?.description }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="confirmBusy">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            :disabled="confirmBusy"
+            @click="runConfirmed"
+          >
+            {{ confirmAction?.actionLabel }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <!-- Timeline. One right-click menu for the whole list: the row under the
          pointer sets the aim in the target phase, the list clears it here in the
          capture phase, so empty space gets the timeline's own menu. -->
@@ -379,7 +421,12 @@
                 {{ deadline.input_prompt }}
               </p>
 
-              <div class="flex flex-row gap-2 flex-wrap">
+              <!-- The date verbs, on rows whose date is ours to move. A court
+                   hearing is excluded: the registry set that date and will send
+                   it again, so completing, adjourning or correcting it here
+                   would be the firm editing the court's diary in their own copy
+                   of it. The row-actions menu takes the same branch. -->
+              <div v-if="!isCourt(deadline)" class="flex flex-row gap-2 flex-wrap">
                 <SharedDeadlineCompleteDeadline
                   v-if="!deadline.disableFulfill"
                   @updated="emits('updated')"
@@ -529,7 +576,7 @@
                     variant="ghost"
                     class="text-destructive"
                     :disabled="hiddenBusy === deadline.id"
-                    @click="hideHearing(deadline)"
+                    @click="askHideHearing(deadline)"
                   >
                     <EyeOff class="size-3"/>
                     Hide hearing
@@ -1142,7 +1189,7 @@ function rowActions(deadline) {
     out.push({
       id: "remove", label: "Delete", icon: Trash2, danger: true, divider: true,
       disabled: adhocBusy.value === deadline.id,
-      run: () => removeAdhoc(deadline),
+      run: () => defer(() => askRemoveAdhoc(deadline)),
     });
     return out;
   }
@@ -1170,7 +1217,7 @@ function rowActions(deadline) {
       out.push({
         id: "hide", label: "Hide hearing", icon: EyeOff, danger: true, divider: true,
         disabled: hiddenBusy.value === deadline.id,
-        run: () => hideHearing(deadline),
+        run: () => defer(() => askHideHearing(deadline)),
       });
     }
     return out;
@@ -1275,12 +1322,59 @@ async function completeAdhoc(deadline, undo = false) {
   }
 }
 
-async function removeAdhoc(deadline) {
-  const confirmed = confirm(
-    `Delete "${deadline.name}"? This removes it and its reminders. Court deadlines are unaffected.`
-  );
-  if (!confirmed) return;
+// Destructive confirmations, in the app's own voice.
+//
+// window.confirm was doing this job for both deletes, and it is the one dialog
+// that cannot: it is titled with the origin ("localhost:3001 says"), it traps
+// no focus, it cannot be styled, and on a phone it is the browser's chrome
+// rather than the app's. EccmisLink already settled the pattern for the
+// unlink — Drawer under tablet, AlertDialog above — so this is the same, with
+// the copy driven by state because two different actions share it.
+const confirmOpen = ref(false);
+const confirmAction = ref(null);
 
+function askConfirm({ title, description, actionLabel, busyId, run }) {
+  confirmAction.value = { title, description, actionLabel, busyId, run };
+  confirmOpen.value = true;
+}
+
+const confirmBusy = computed(() => {
+  const id = confirmAction.value?.busyId;
+  return Boolean(id) && (adhocBusy.value === id || hiddenBusy.value === id);
+});
+
+async function runConfirmed() {
+  const action = confirmAction.value;
+  if (!action) return;
+  try {
+    await action.run();
+  } finally {
+    confirmOpen.value = false;
+    confirmAction.value = null;
+  }
+}
+
+function askHideHearing(deadline) {
+  askConfirm({
+    title: "Hide this hearing?",
+    description: `“${displayName(deadline)}” comes off this matter, and the court sync will stop adding it back. You can restore it from “Hidden hearings” at any time.`,
+    actionLabel: "Hide hearing",
+    busyId: deadline.id,
+    run: () => hideHearing(deadline),
+  });
+}
+
+function askRemoveAdhoc(deadline) {
+  askConfirm({
+    title: "Delete this deadline?",
+    description: `“${displayName(deadline)}” and its reminders are removed. The matter's procedure deadlines and the court's own dates are not affected.`,
+    actionLabel: "Delete",
+    busyId: deadline.id,
+    run: () => removeAdhoc(deadline),
+  });
+}
+
+async function removeAdhoc(deadline) {
   adhocBusy.value = deadline.id;
   try {
     const res = await deleteAdhocDeadline(deadline.id);
@@ -1421,11 +1515,7 @@ async function loadHiddenHearings() {
 }
 
 async function hideHearing(deadline) {
-  const confirmed = confirm(
-    `Hide "${displayName(deadline)}"? It comes off this matter and the court sync will stop adding it back. You can restore it from "Hidden hearings".`
-  );
-  if (!confirmed) return;
-
+  if (!deadline) return;
   hiddenBusy.value = deadline.id;
   try {
     const res = await hideCourtDeadline(deadline.id);
