@@ -2,12 +2,12 @@
 // The inner body of the floating assistant dock: a compact context header over the
 // shared <ChatSurface>. Rendered inside the desktop push-panel AND the mobile bottom
 // sheet (only one exists at a time), so ChatSurface is configured in exactly one place.
-import { X, Maximize2, Sparkles } from 'lucide-vue-next';
+import { X, Sparkles } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import { useAssistantDock, type DockContext } from '~/composables/useAssistantDock';
 
 const props = defineProps<{ context: DockContext }>();
-defineEmits<{ (e: 'close'): void; (e: 'openFull'): void }>();
+defineEmits<{ (e: 'close'): void }>();
 
 // When the assistant approves/fulfils a write proposal (e.g. schedules a reminder),
 // bump the global write signal so the page under the dock refreshes its data — the
@@ -33,10 +33,6 @@ function provideContext(): string {
         <p class="truncate text-sm font-semibold">{{ context.label }}</p>
         <p v-if="context.sublabel" class="truncate text-xs text-muted-foreground">{{ context.sublabel }}</p>
       </div>
-      <Button size="icon" variant="ghost" class="size-8 text-muted-foreground"
-              title="Open the full assistant" @click="$emit('openFull')">
-        <Maximize2 class="size-4" />
-      </Button>
       <Button size="icon" variant="ghost" class="size-8 text-muted-foreground"
               title="Close" @click="$emit('close')">
         <X class="size-4" />

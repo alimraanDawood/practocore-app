@@ -212,8 +212,8 @@ watch(onAssistant, (on) => { if (!on) historyOpen.value = false; });
             </SidebarGroupContent>
           </SidebarGroup>
 
-          <!-- Page-aware quick-access: recent chats on the assistant, document
-               libraries on the vault. -->
+          <!-- Page-aware quick access: conversation history, research history,
+               or navigation for the matter/engagement currently being worked. -->
           <LayoutSidebarContextPanel />
         </SidebarContent>
 
