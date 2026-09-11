@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Bot, BookOpen, CheckCircle2, CircleDot, FileSearch, Search, Sparkles, Wrench } from 'lucide-vue-next';
 import type { ResearchEvent } from '~/services/deepTask';
+import { cn } from '~/lib/utils';
 
 const props = defineProps<{
   events: ResearchEvent[];
@@ -20,15 +21,10 @@ function iconFor(event: ResearchEvent) {
   return CheckCircle2;
 }
 
-function time(value: string) {
-  if (!value) return '';
-  const d = new Date(value.replace(' ', 'T'));
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
 </script>
 
 <template>
-  <ol class="relative space-y-0" aria-label="Research activity">
+  <ol class="relative flex flex-col" aria-label="Research activity">
     <li v-for="(event, index) in visible" :key="event.id" class="group relative flex gap-3 pb-4">
       <div
         v-if="index < visible.length - 1"
@@ -38,19 +34,31 @@ function time(value: string) {
         <component :is="iconFor(event)" class="size-3.5" />
       </span>
       <div class="min-w-0 flex-1 pt-0.5">
-        <div class="flex items-baseline justify-between gap-3">
-          <p class="text-sm leading-5 text-foreground">{{ event.label }}</p>
-          <time v-if="event.created" class="shrink-0 text-[11px] text-muted-foreground">{{ time(event.created) }}</time>
-        </div>
+        <p
+          class="text-sm leading-5 text-foreground"
+          :class="cn(live && index === visible.length - 1 && 'work-activity-shimmer')"
+        >{{ event.label }}</p>
         <p v-if="event.detail" class="mt-0.5 line-clamp-3 text-xs leading-5 text-muted-foreground">{{ event.detail }}</p>
-        <span v-if="event.tool" class="mt-1 inline-flex rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-          {{ event.tool }}
-        </span>
       </div>
     </li>
     <li v-if="live" class="flex items-center gap-3 text-sm text-muted-foreground">
-      <span class="grid size-6 place-items-center"><span class="size-2 animate-pulse rounded-full bg-primary" /></span>
-      Waiting for the next research action…
+      <span class="grid size-6 place-items-center"><span class="size-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none" /></span>
+      <span class="work-activity-shimmer">Waiting for the next research action…</span>
     </li>
   </ol>
 </template>
+
+<style scoped>
+.work-activity-shimmer {
+  animation: work-activity-shimmer 2.4s ease-in-out infinite;
+}
+
+@keyframes work-activity-shimmer {
+  0%, 100% { opacity: 0.58; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-activity-shimmer { animation: none; }
+}
+</style>

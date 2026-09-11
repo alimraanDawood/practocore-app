@@ -408,6 +408,8 @@ export interface AiResponse {
   // explain why a round cost more or fewer credits.
   model?: string;
   tier?: 'auto' | 'fast' | 'deep';
+  /** Active development Expert carried across an approval continuation. */
+  expertId?: string;
   // Synthetic flag (HTTP 402): the credit limit was reached and AI is locked.
   // Not sent by the server as JSON — aiPost sets it so callers can lock the UI.
   blocked?: boolean;
@@ -925,10 +927,48 @@ export function sendAiMessage(
 /** One activity step surfaced mid-turn, e.g. { label: "Searching matters", detail: "Sebbi v Kato" }. */
 export interface AiStreamStep {
   id: number;
+  kind?: 'phase' | 'progress' | 'tool' | 'agent';
   /** Underlying tool name ("" for synthetic bookend steps like "Assessing"/"Drafting"). */
   tool: string;
   label: string;
   detail?: string;
+  /** Public metadata for a named Expert that was actually consulted this turn. */
+  agent?: AiConsultedAgent;
+}
+
+export interface AiConsultedAgent {
+  id: string;
+  name: string;
+  version?: string;
+  jurisdiction?: string;
+  effectiveLawDate?: string;
+  practiceAreas?: string[];
+  supports?: string[];
+  procedureIds?: string[];
+  /** Exact user task the Expert-enhanced model received. */
+  task?: string;
+  /** Safe summary of contextual inputs, never raw system prompts or credentials. */
+  context?: string[];
+}
+
+/** Public metadata for an active Expert the signed-in user may explicitly invoke. */
+export interface AiExpertSummary {
+  id: string;
+  name: string;
+  version?: string;
+  jurisdiction?: string;
+  effectiveLawDate?: string;
+  practiceAreas?: string[];
+  supports?: string[];
+}
+
+export async function listAiExperts(): Promise<AiExpertSummary[]> {
+  const res = await fetch(`${SERVER_URL}/api/practocore/ai/experts`, {
+    headers: { 'Authorization': pb.authStore.token },
+  });
+  if (!res.ok) throw new Error(`Could not load Experts (${res.status})`);
+  const body = await res.json() as { items?: AiExpertSummary[] };
+  return body.items ?? [];
 }
 
 interface SseFrame {
@@ -987,6 +1027,8 @@ export function sendAiMessageStream(
      *  injects their instructions verbatim and skips its own semantic guess for
      *  the turn, so a named skill is followed rather than competed with. */
     skillNames?: string[];
+    /** Explicit Expert selected in the composer. Empty keeps automatic matching. */
+    expertId?: string;
     /** Client-generated id for THIS turn, so it can be stopped explicitly.
      *  Generation on the server no longer dies when the connection does (closing
      *  the tab used to abort the answer and lose the whole exchange), so aborting
@@ -1027,6 +1069,7 @@ export function sendAiMessageStream(
       workflowContext: opts.workflowContext ?? null,
       editTemplateId: opts.editTemplateId ?? '',
       skillNames: opts.skillNames ?? [],
+      expertId: opts.expertId ?? '',
       turnId: opts.turnId ?? '',
     },
     opts.onStep,
@@ -1203,57 +1246,8 @@ export function confirmAiProposal(
     attachmentsMeta: attachmentsMeta ?? [],
     mode: mode ?? '',
     contextKey: contextKey ?? '',
+    expertId: proposal.expertId ?? '',
   });
-}
-
-// ── Prompt improvement ────────────────────────────────────────────────────────
-// Takes the user's rough composer draft and rewrites it into a clearer, more
-// effective prompt that steers the assistant toward the right tools. Mirrors
-// practocore-backend/ai/improve_prompt.go. Runs on the lighter model and counts
-// against the same AI credit pool.
-
-export interface ImprovePromptResult {
-  /** The rewritten prompt, or the original on any soft failure. */
-  improved: string;
-  /** Set when the credit pool is exhausted (HTTP 402) so the UI can prompt a top-up. */
-  blocked?: boolean;
-  /** Set on a hard failure so the caller can surface a toast and leave the draft as-is. */
-  error?: string;
-}
-
-export async function improvePrompt(
-  prompt: string,
-  context?: AiContext,
-): Promise<ImprovePromptResult> {
-  try {
-    let timezone = '';
-    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
-    const res = await fetch(`${SERVER_URL}/api/practocore/ai/improve-prompt`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': pb.authStore.token,
-      },
-      body: JSON.stringify({
-        timezone,
-        prompt,
-        matterIds: context?.matterIds,
-        deadlineIds: context?.deadlineIds,
-        userIds: context?.userIds,
-      }),
-    });
-    if (res.status === 402) {
-      return { improved: prompt, blocked: true, error: 'AI credit limit reached. Top up to keep using AI.' };
-    }
-    if (!res.ok) return { improved: prompt, error: `Request failed (${res.status})` };
-    const j = await res.json() as { type: string; improved?: string; error?: string };
-    if (j.type === 'error' || !j.improved) {
-      return { improved: prompt, error: j.error || 'Couldn\'t enhance the prompt.' };
-    }
-    return { improved: j.improved };
-  } catch (e: any) {
-    return { improved: prompt, error: e?.message ?? 'Network error' };
-  }
 }
 
 // ── Conversation history ──────────────────────────────────────────────────────

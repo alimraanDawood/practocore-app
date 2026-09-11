@@ -19,7 +19,7 @@ import { initials } from './proposals/theme';
 import type { VoiceEntry } from '~/composables/useSpeech';
 import { getSignedInUser } from '~/services/auth';
 import {
-  sendAiMessageStream, confirmAiProposal, improvePrompt, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
+  sendAiMessageStream, confirmAiProposal, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress, extractDocxAttachment,
   listConversations, getConversation, deleteConversation, saveConversationTree,
   buildCopyText,
@@ -254,7 +254,14 @@ const convMessages = computed<ConvDisplayMessage[]>(() =>
         // Persisted history is text-only: flatten any multimodal content to a
         // string with bracketed placeholders for attachments. Attachment refs ride
         // alongside so the chips survive a reload (resolved via AiChatAttachments).
-        : { role: m.role, content: messageText(m.content), attachments: (m as DisplayAiMessage).attachments },
+        : {
+            role: m.role,
+            content: messageText(m.content),
+            attachments: (m as DisplayAiMessage).attachments,
+            steps: (m as DisplayAiMessage).steps,
+            durationMs: (m as DisplayAiMessage).durationMs,
+            citations: (m as DisplayAiMessage).citations,
+          },
     ),
 );
 const conversationId = ref<string>('');
@@ -319,41 +326,6 @@ function persistTree() {
 // lands — at which point the real tool steps are attached to the assistant message.
 const activeSteps = ref<AiStreamStep[]>([]);
 const workStartedAt = ref(0);
-
-/** Map a tool name to a small status icon for the activity list. */
-function stepIcon(tool: string) {
-  switch (tool) {
-    case 'search_matters':
-    case 'search_procedure':
-    case 'find_applicable_procedure':
-      return Search;
-    case 'web_search':
-      return Globe;
-    case 'get_procedure_overview':
-    case 'get_procedure_step':
-    case 'get_procedure_citation':
-    case 'list_legal_knowledge':
-      return BookOpen;
-    case 'load_skill':
-    case 'list_skills':
-      return Sparkles;
-    case 'fetch_url':
-      return FileText;
-    case '':
-      return Sparkles; // synthetic "Assessing"/"Drafting" bookends
-    default:
-      return Briefcase; // matter/deadline/template reads
-  }
-}
-
-/** Human "Worked for 6s" / "Worked for 1m 12s" from a millisecond duration. */
-function formatDuration(ms: number): string {
-  const secs = Math.max(1, Math.round(ms / 1000));
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return s ? `${m}m ${s}s` : `${m}m`;
-}
 
 // ── Attachments (PDF + images) ────────────────────────────────────────────────
 // Attached files ride along on the next send as image/document content blocks.
@@ -745,7 +717,7 @@ async function loadConversation(id: string) {
     }
     // Rehydrate the collapsed "Worked for Ns" activity summary and the citation
     // trail persisted with the turn, so both survive a conversation reload.
-    if (m.role === 'assistant' && ((m.steps && m.steps.length) || (m.citations && m.citations.length))) {
+    if (m.role === 'assistant' && (m.durationMs !== undefined || (m.steps && m.steps.length) || (m.citations && m.citations.length))) {
       return {
         role: 'assistant',
         content: m.content,
@@ -857,45 +829,6 @@ function buildContext(): AiContext | undefined {
     deadlineIds: selectedItems.value.filter(i => i.type === 'deadline').map(i => i.id),
     userIds:     selectedItems.value.filter(i => i.type === 'user').map(i => i.id),
   };
-}
-
-// ── Prompt enhancement ─────────────────────────────────────────────────────────
-// "Enhance" rewrites the user's draft into a sharper prompt that steers the
-// assistant toward the right tools. The toast offers a one-click Undo back to the
-// original text.
-const enhancing = ref(false);
-
-const canEnhance = computed(() =>
-  inputText.value.trim().length > 0 && !enhancing.value && !loading.value && aiEnabled.value,
-);
-
-async function enhancePrompt() {
-  const original = inputText.value.trim();
-  if (!original || enhancing.value || loading.value || !aiEnabled.value) return;
-
-  enhancing.value = true;
-  try {
-    const result = await improvePrompt(original, buildContext());
-    if (result.blocked) {
-      creditBlocked.value = true;
-      toast.error(result.error ?? 'AI credit limit reached.');
-      return;
-    }
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    if (result.improved.trim() === original) {
-      toast('Prompt already looks clear — left it as is.');
-      return;
-    }
-    inputText.value = result.improved;
-    toast('Prompt enhanced', {
-      action: { label: 'Undo', onClick: () => { inputText.value = original; } },
-    });
-  } finally {
-    enhancing.value = false;
-  }
 }
 
 function isSelected(id: string) {
@@ -1107,10 +1040,7 @@ async function send(voiceText?: string) {
   });
   turnAbort = null;
   const elapsedMs = Date.now() - workStartedAt.value;
-  // Only the real tool steps are worth keeping as a summary; the synthetic
-  // "Assessing"/"Drafting" bookends (tool === '') are dropped so a trivial reply
-  // shows no summary at all.
-  const turnSteps = activeSteps.value.filter(s => s.tool);
+  const turnSteps = [...activeSteps.value];
   activeSteps.value = [];
   loading.value = false;
 
@@ -1135,7 +1065,7 @@ async function send(voiceText?: string) {
       role: 'assistant',
       content: response.content ?? '',
       steps: turnSteps.length ? turnSteps : undefined,
-      durationMs: turnSteps.length ? elapsedMs : undefined,
+      durationMs: elapsedMs,
       stepsOpen: false,
       citations: response.citations?.length ? response.citations : undefined,
       tier: response.tier,
@@ -1189,7 +1119,7 @@ async function saveEdit(index: number) {
   });
   turnAbort = null;
   const elapsedMs = Date.now() - workStartedAt.value;
-  const turnSteps = activeSteps.value.filter(s => s.tool);
+  const turnSteps = [...activeSteps.value];
   activeSteps.value = [];
   loading.value = false;
 
@@ -1210,7 +1140,7 @@ async function saveEdit(index: number) {
       role: 'assistant',
       content: response.content ?? '',
       steps: turnSteps.length ? turnSteps : undefined,
-      durationMs: turnSteps.length ? elapsedMs : undefined,
+      durationMs: elapsedMs,
       stepsOpen: false,
       citations: response.citations?.length ? response.citations : undefined,
       tier: response.tier,
@@ -1257,7 +1187,7 @@ async function retryTurn() {
   });
   turnAbort = null;
   const elapsedMs = Date.now() - workStartedAt.value;
-  const turnSteps = activeSteps.value.filter(s => s.tool);
+  const turnSteps = [...activeSteps.value];
   activeSteps.value = [];
   loading.value = false;
 
@@ -1278,7 +1208,7 @@ async function retryTurn() {
       role: 'assistant',
       content: response.content ?? '',
       steps: turnSteps.length ? turnSteps : undefined,
-      durationMs: turnSteps.length ? elapsedMs : undefined,
+      durationMs: elapsedMs,
       stepsOpen: false,
       citations: response.citations?.length ? response.citations : undefined,
       tier: response.tier,
@@ -1893,23 +1823,14 @@ function formatToolName(tool: string): string {
                 <div class="flex flex-col gap-0.5 max-w-[80%]">
                   <!-- Collapsed activity summary for turns that ran tools. Click to
                        expand the steps that produced this answer. -->
-                  <div v-if="msg.steps && msg.steps.length" class="mb-1">
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      @click="msg.stepsOpen = !msg.stepsOpen"
-                    >
-                      <Check class="size-3 text-emerald-500" />
-                      <span>Worked for {{ formatDuration(msg.durationMs ?? 0) }}</span>
-                      <component :is="msg.stepsOpen ? ChevronDown : ChevronRight" class="size-3" />
-                    </button>
-                    <ul v-if="msg.stepsOpen" class="mt-1.5 ml-1 flex flex-col gap-1 border-l border-border pl-3">
-                      <li v-for="step in msg.steps" :key="step.id" class="flex items-center gap-2 text-xs text-muted-foreground">
-                        <component :is="stepIcon(step.tool)" class="size-3 shrink-0 opacity-70" />
-                        <span class="min-w-0 truncate">{{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span></span>
-                      </li>
-                    </ul>
-                  </div>
+                  <SharedAIWorkTrace
+                    v-if="msg.durationMs !== undefined"
+                    class="mb-1"
+                    :steps="msg.steps ?? []"
+                    :duration-ms="msg.durationMs"
+                    :open="msg.stepsOpen"
+                    @update:open="msg.stepsOpen = $event"
+                  />
                   <!-- A user-stopped turn reads as a neutral note, not an answer/error. -->
                   <div v-if="(msg as DisplayAiMessage).stopped"
                        class="text-sm italic text-muted-foreground px-0.5 py-1">
@@ -1969,28 +1890,12 @@ function formatToolName(tool: string): string {
               <div class="size-6 bg-primary text-primary-foreground dark:bg-secondary dark:text-secondary-foreground grid place-items-center rounded-full shrink-0 mt-0.5">
                 <Sparkles class="size-3" />
               </div>
-              <div class="min-w-0 flex-1 pt-1">
-                <div class="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                  <Loader2 class="size-3.5 animate-spin text-muted-foreground" />
-                  <span>Working…</span>
-                </div>
-                <ul v-if="activeSteps.length" class="mt-2 flex flex-col gap-1.5">
-                  <li
-                    v-for="(step, idx) in activeSteps"
-                    :key="step.id"
-                    class="flex items-center gap-2 text-xs"
-                  >
-                    <Loader2 v-if="idx === activeSteps.length - 1" class="size-3 shrink-0 animate-spin text-muted-foreground" />
-                    <Check v-else class="size-3 shrink-0 text-emerald-500" />
-                    <span
-                      class="min-w-0 truncate"
-                      :class="idx === activeSteps.length - 1 ? 'text-foreground' : 'text-muted-foreground'"
-                    >
-                      {{ step.label }}<span v-if="step.detail" class="opacity-60"> · {{ step.detail }}</span>
-                    </span>
-                  </li>
-                </ul>
-              </div>
+              <SharedAIWorkTrace
+                class="min-w-0 flex-1 pt-0.5"
+                :steps="activeSteps"
+                :started-at="workStartedAt"
+                active
+              />
             </div>
             
             <div class="max-w-[80%]">
@@ -2173,17 +2078,6 @@ function formatToolName(tool: string): string {
                 >
                   <component :is="tierIcon" class="size-4" />
                   {{ tierLabel }}
-                </InputGroupButton>
-                <InputGroupButton
-                  variant="outline"
-                  size="sm"
-                  :disabled="!canEnhance"
-                  title="Enhance prompt — rewrite it to get better results"
-                  @click="enhancePrompt"
-                >
-                  <Loader2 v-if="enhancing" class="size-4 animate-spin" />
-                  <Sparkles v-else class="size-4" />
-                  {{ enhancing ? 'Enhancing…' : 'Enhance' }}
                 </InputGroupButton>
                 <Separator orientation="vertical" class="!h-4 ml-auto" />
                 <InputGroupButton

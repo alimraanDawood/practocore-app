@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
 import {
-  ArrowLeft, Bot, CheckCircle2, ChevronDown, Clock3, Download,
+  ArrowLeft, ChevronDown, Clock3, Download,
   History, Loader2, Pause, Play, Plus, Square, XCircle,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
@@ -18,6 +18,7 @@ import { pb } from '~/lib/pocketbase';
 
 const props = defineProps<{ taskId: string }>();
 const emit = defineEmits<{ back: []; update: [task: DeepTask] }>();
+const { refresh: refreshAiUsage } = useAiUsage();
 
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const task = ref<DeepTask | null>(null);
@@ -31,6 +32,9 @@ const selectedRevisionId = ref('');
 let timer: ReturnType<typeof setTimeout> | undefined;
 let unsubscribeEvents: (() => void) | undefined;
 let stopped = false;
+let lastUsageRefresh = '';
+
+const usageFlushPhases = new Set(['plan_review', 'paused', 'cancelled', 'done', 'error']);
 
 const agents = computed(() => task.value?.subquestions ?? []);
 const selectedAgent = computed(() => agents.value.find(a => a.id === selectedAgentId.value) ?? null);
@@ -50,6 +54,14 @@ async function refresh() {
   task.value = nextTask;
   events.value = nextEvents;
   emit('update', nextTask);
+  // The worker meters asynchronously. Its parked and terminal phases are only
+  // published after the corresponding usage flush, so this snapshot is the safe
+  // point to refresh the shared gauge. `updated` lets a retried task refresh again.
+  const usageRefreshKey = `${nextTask.id}:${nextTask.phase}:${nextTask.updated}`;
+  if (usageFlushPhases.has(nextTask.phase) && usageRefreshKey !== lastUsageRefresh) {
+    lastUsageRefresh = usageRefreshKey;
+    void refreshAiUsage();
+  }
   if (nextTask.findingsCount || nextTask.phase === 'done') {
     const [nextFindings, nextRevisions] = await Promise.all([
       getTaskFindings(props.taskId),
@@ -84,13 +96,6 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); unsubscribeEvents?.
 
 function openAgent(agent: SubQuestion) {
   selectedAgentId.value = agent.id;
-}
-
-function agentIcon(agent: SubQuestion) {
-  if (agent.status === 'running') return Loader2;
-  if (agent.status === 'done') return CheckCircle2;
-  if (agent.status === 'failed') return XCircle;
-  return Bot;
 }
 
 async function approve() {
@@ -208,16 +213,13 @@ function openSource(citation: AiCitation) {
               <span class="text-xs text-muted-foreground">{{ agents.filter(a => a.status === 'done').length }} of {{ agents.length }} complete</span>
             </div>
             <div class="flex flex-wrap gap-2">
-              <button
-                v-for="agent in agents" :key="agent.id" type="button"
-                class="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50"
-                :class="selectedAgentId === agent.id ? 'border-primary/50 bg-primary/5' : ''"
-                @click="openAgent(agent)"
-              >
-                <component :is="agentIcon(agent)" class="size-3.5 shrink-0" :class="agent.status === 'running' ? 'animate-spin text-primary' : ''" />
-                <span class="truncate">{{ agent.title || agent.question }}</span>
-                <span v-if="agent.model" class="hidden max-w-36 truncate text-muted-foreground sm:inline">· {{ agent.model }}</span>
-              </button>
+              <SharedAIDeepTaskAgentPill
+                v-for="agent in agents"
+                :key="agent.id"
+                :agent="agent"
+                :selected="selectedAgentId === agent.id"
+                @select="openAgent(agent)"
+              />
             </div>
           </section>
 
@@ -316,12 +318,20 @@ function openSource(citation: AiCitation) {
       </ScrollArea>
     </main>
 
-    <aside v-if="isDesktop && selectedAgent" class="hidden h-full w-[min(38vw,480px)] shrink-0 border-l lg:block">
+    <aside
+      v-if="isDesktop && selectedAgent"
+      class="hidden h-full w-[min(38vw,480px)] shrink-0 border-l lg:block"
+      :aria-label="`${selectedAgent.title || 'Research agent'} workspace`"
+    >
       <SharedAIDeepTaskAgentInspector :agent="selectedAgent" :events="events" :citations="sources" :findings="findings" @close="selectedAgentId = ''" @source="openCitation" />
     </aside>
 
     <Drawer v-if="!isDesktop" :open="!!selectedAgent" direction="bottom" @update:open="open => { if (!open) selectedAgentId = '' }">
       <DrawerContent v-if="selectedAgent" class="h-[82vh]">
+        <DrawerHeader class="sr-only">
+          <DrawerTitle>{{ selectedAgent.title || 'Research agent' }}</DrawerTitle>
+          <DrawerDescription>Inspectable research activity, sources, and findings.</DrawerDescription>
+        </DrawerHeader>
         <SharedAIDeepTaskAgentInspector :agent="selectedAgent" :events="events" :citations="sources" :findings="findings" @close="selectedAgentId = ''" @source="openCitation" />
       </DrawerContent>
     </Drawer>
