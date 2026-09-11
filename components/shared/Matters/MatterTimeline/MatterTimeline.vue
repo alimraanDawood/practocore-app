@@ -1506,11 +1506,14 @@ async function loadHiddenHearings() {
   if (!props.matter?.id) return;
   try {
     const res = await listHiddenHearings(props.matter.id);
+    // A failed read is not "nothing is hidden". Keeping the last known list is
+    // the safer wrong answer: blanking it would quietly remove the only route
+    // back to a hidden hearing.
+    if (res?.error) return;
     hiddenHearings.value = res?.hidden || [];
   } catch {
     // A matter page must still render when this call fails; the worst case is
-    // that the restore affordance is missing until the next load.
-    hiddenHearings.value = [];
+    // that the strip shows what it last knew until the next load.
   }
 }
 
