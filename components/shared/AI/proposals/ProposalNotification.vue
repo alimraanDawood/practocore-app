@@ -63,6 +63,25 @@ const unresolved = computed(() => props.preview.unresolvedRecipients ?? []);
       </div>
     </div>
 
+    <!-- No recipients at all. Distinct from the unresolved case above: nobody was
+         NAMED, rather than named and not found. Approve is disabled either way, and
+         without this the card showed a title, a body and a dead button with no clue
+         why — which reads as the app being broken rather than the request being
+         incomplete. -->
+    <div
+      v-if="!preview.recipients.length && !unresolved.length"
+      class="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+    >
+      <AlertTriangle class="size-4 shrink-0 mt-0.5 text-amber-500" />
+      <div class="flex flex-col gap-0.5 min-w-0">
+        <p class="text-xs font-medium" :class="t.strong">No recipient</p>
+        <p class="text-[11px]" :class="t.subtle">
+          This notification names nobody to send to, so it cannot be sent. Tell the
+          assistant who should receive it — including yourself.
+        </p>
+      </div>
+    </div>
+
     <!-- Recipients -->
     <div v-if="preview.recipients.length" class="flex flex-col gap-1.5">
       <span class="text-[11px] uppercase tracking-wide" :class="t.subtle">
