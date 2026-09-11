@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { useMediaQuery } from '@vueuse/core';
-import { Telescope } from 'lucide-vue-next';
+import { Telescope, X } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import type { AiArtifact } from '~/services/ai';
 import type { DeepTask, ResearchPlan } from '~/services/deepTask';
@@ -14,8 +14,11 @@ const activeTask = ref<DeepTask | null>(null);
 const launching = ref(false);
 const launched = ref(false);
 const planDrawerOpen = ref(false);
+const planPanelOpen = ref(false);
 const workspaceOpen = ref(false);
 const manuallyViewingChat = ref(false);
+
+const planVisible = computed(() => !!activePlan.value && !launched.value && planPanelOpen.value && isDesktop.value);
 
 const progressSummary = computed(() => {
   const task = activeTask.value;
@@ -34,6 +37,7 @@ function onArtifact(artifact: AiArtifact) {
   activeTaskId.value = '';
   activeTask.value = null;
   planDrawerOpen.value = true;
+  planPanelOpen.value = true;
   workspaceOpen.value = false;
   manuallyViewingChat.value = false;
 }
@@ -44,6 +48,7 @@ async function onConversationChange(conversationId: string) {
     activeTaskId.value = '';
     activeTask.value = null;
     launched.value = false;
+    planPanelOpen.value = false;
     workspaceOpen.value = false;
     manuallyViewingChat.value = false;
     return;
@@ -59,9 +64,11 @@ async function onConversationChange(conversationId: string) {
         title: task.label,
         questions: (task.subquestions ?? []).map(agent => ({ question: agent.question, intent: agent.intent, hints: agent.hints })),
       };
+      planPanelOpen.value = false;
       if (!manuallyViewingChat.value) workspaceOpen.value = true;
     } else {
       activePlan.value = null;
+      planPanelOpen.value = false;
       workspaceOpen.value = false;
     }
   } catch { /* Entitlement may not be active. */ }
@@ -77,6 +84,7 @@ async function launchResearch(payload: { plan: ResearchPlan; review: boolean }) 
     activeTask.value = task;
     launched.value = true;
     planDrawerOpen.value = false;
+    planPanelOpen.value = false;
     manuallyViewingChat.value = false;
     workspaceOpen.value = true;
   } catch (error) {
@@ -92,7 +100,10 @@ function returnToConversation() {
 function openResearchSurface() {
   manuallyViewingChat.value = false;
   if (activeTaskId.value) workspaceOpen.value = true;
-  else if (activePlan.value) planDrawerOpen.value = true;
+  else if (activePlan.value) {
+    if (isDesktop.value) planPanelOpen.value = true;
+    else planDrawerOpen.value = true;
+  }
 }
 
 const prompts = [
@@ -122,7 +133,7 @@ const prompts = [
         @artifact="onArtifact"
         @conversation-change="onConversationChange"
       >
-        <template v-if="activeTaskId || (activePlan && !isDesktop)" #composer-top>
+        <template v-if="activeTaskId || (activePlan && !planVisible)" #composer-top>
           <div class="flex items-center justify-between rounded-lg border bg-muted/60 p-2">
             <span class="text-sm text-muted-foreground">{{ progressSummary }}</span>
             <Button variant="outline" size="xs" @click="openResearchSurface">
@@ -146,15 +157,20 @@ const prompts = [
         </template>
       </ChatSurface>
 
-      <aside v-if="activePlan && isDesktop" class="hidden h-full w-[420px] shrink-0 overflow-y-auto border-l bg-background p-5 lg:block">
-        <div class="mb-4">
-          <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Research plan</p>
-          <p class="mt-1 text-sm text-muted-foreground">Review what the agents will investigate before launching.</p>
+      <aside v-if="planVisible" class="hidden h-full w-[420px] shrink-0 overflow-y-auto border-l bg-background p-5 lg:block">
+        <div class="mb-4 flex items-start justify-between gap-2">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Research plan</p>
+            <p class="mt-1 text-sm text-muted-foreground">Review what the agents will investigate before launching.</p>
+          </div>
+          <Button variant="ghost" size="icon" class="-mr-2 -mt-1 size-7 shrink-0" aria-label="Hide research plan" @click="planPanelOpen = false">
+            <X class="size-4" />
+          </Button>
         </div>
         <SharedAIDeepTaskPlanCard :plan="activePlan" :launched="launched" :launching="launching" borderless @launch="launchResearch" />
       </aside>
 
-      <Drawer v-if="activePlan && !isDesktop" v-model:open="planDrawerOpen" direction="bottom">
+      <Drawer v-if="activePlan && !launched && !isDesktop" v-model:open="planDrawerOpen" direction="bottom">
         <DrawerContent class="max-h-[85vh]">
           <DrawerHeader>
             <DrawerTitle>Research plan</DrawerTitle>

@@ -156,6 +156,10 @@ const emit = defineEmits<{
 const isMain = computed(() => !props.mode);
 const isResearch = computed(() => props.mode === 'research');
 const isShared = computed(() => isMain.value || isResearch.value);
+// The chat toolbar is suppressed entirely by `hideToolbar`, and hidden on desktop
+// /main (where the app sidebar owns navigation). Anything that wants to live IN the
+// toolbar needs a fallback for those cases.
+const toolbarVisible = computed(() => !props.hideToolbar && !(isMain.value && isDesktop.value));
 const supportsExperts = computed(() => ![
   'skill_studio', 'workflow_studio', 'engagement_studio', 'matter_studio',
   'deep_plan', 'research',
@@ -777,6 +781,21 @@ async function loadConversationDocs(id: string) {
 watch(conversationId, (id) => { loadConversationDocs(id); }, { immediate: true });
 onBeforeUnmount(() => { if (docsUnsub) { docsUnsub(); docsUnsub = null; } });
 
+// Publish the list to the global sidebar (assistant + research only — the studios
+// and the Office panes have no app sidebar to render it in), and open whatever it
+// asks for in this surface's own preview sheet. See useChatDocuments.
+const chatDocuments = useChatDocuments();
+watch([conversationDocs, docsLoading], ([docs, busy]) => {
+  if (isShared.value) chatDocuments.publish(docs as GeneratedDocument[], busy as boolean);
+}, { immediate: true, deep: true });
+watch(() => chatDocuments.openSignal.value, (signal) => {
+  if (signal && isShared.value) void viewGeneratedDocument(signal.id);
+});
+watch(() => chatDocuments.panelSignal.value, () => {
+  if (isShared.value) documentsOpen.value = true;
+});
+onBeforeUnmount(() => { if (isShared.value) chatDocuments.clear(); });
+
 function openDocument(doc: GeneratedDocument) { openGenDocPreview(doc); documentsOpen.value = false; }
 
 async function downloadDoc(doc: GeneratedDocument) {
@@ -825,6 +844,8 @@ const pendingProposal = ref<AiResponse | null>(null);
 const loading = ref(false);
 const proposalLoading = ref(false);
 const messagesEnd = ref<HTMLElement | null>(null);
+const scrollArea = ref<HTMLElement | null>(null);
+const stickToBottom = ref(true);
 
 // Stop button. Aborting the fetch only stops us LISTENING: the server keeps
 // generating after a disconnect on purpose, so that closing the tab mid-answer no
@@ -919,8 +940,29 @@ function buildContext(): AiContext | undefined {
   };
 }
 
-function scrollToBottom() {
-  nextTick(() => messagesEnd.value?.scrollIntoView({behavior: 'smooth'}));
+// Scroll the TRANSCRIPT, never an ancestor. `messagesEnd.scrollIntoView()` walks up
+// and scrolls every scrollable ancestor it finds — including the layout shell's
+// `overflow-hidden` panels, which are programmatically scrollable even though the
+// user cannot scroll them. A turn's step frames fire this repeatedly, so the whole
+// page shell crept upwards mid-answer and carried the composer off the top of the
+// viewport. Scrolling the column itself cannot move anything outside it.
+function scrollToBottom(force = false) {
+  if (force) stickToBottom.value = true;
+  else if (!stickToBottom.value) return;
+  nextTick(() => {
+    const el = scrollArea.value;
+    if (!el) return;
+    el.scrollTo({top: el.scrollHeight, behavior: 'smooth'});
+  });
+}
+
+// Reading back through a long answer while it is still being written must not be
+// fought by the next step frame: auto-scroll resumes only once the user returns to
+// (near) the bottom themselves.
+function onTranscriptScroll() {
+  const el = scrollArea.value;
+  if (!el) return;
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 }
 
 function formatToolName(tool: string): string {
@@ -998,7 +1040,7 @@ async function send(explicit?: string, extraContext?: string) {
   loading.value = true;
   activeSteps.value = [];
   workStartedAt.value = Date.now();
-  scrollToBottom();
+  scrollToBottom(true);
 
   turnAbort = new AbortController();
   turnId = newTurnId();
@@ -1144,7 +1186,7 @@ async function retryTurn() {
   loading.value = true;
   activeSteps.value = [];
   workStartedAt.value = Date.now();
-  scrollToBottom();
+  scrollToBottom(true);
 
   turnAbort = new AbortController();
   turnId = newTurnId();
@@ -1198,7 +1240,7 @@ async function saveEdit(index: number) {
   loading.value = true;
   activeSteps.value = [];
   workStartedAt.value = Date.now();
-  scrollToBottom();
+  scrollToBottom(true);
 
   turnAbort = new AbortController();
   turnId = newTurnId();
@@ -1449,7 +1491,7 @@ async function approveProposal() {
 
   branches.append({role: 'tool-event', content: formatToolName(proposal.tool ?? ''), status: 'approved'});
   loading.value = true;
-  scrollToBottom();
+  scrollToBottom(true);
 
   const response = await confirmAiProposal(
       proposal, true, buildContext(),
@@ -1486,7 +1528,7 @@ async function autoFulfillProposal(proposal: AiResponse) {
     status: ok ? 'approved' : 'rejected',
   });
   loading.value = true;
-  scrollToBottom();
+  scrollToBottom(true);
 
   const response = await confirmAiProposal(
       proposal, ok, buildContext(),
@@ -1961,7 +2003,7 @@ async function loadConversation(id: string) {
   sentAttachmentsMeta.value = [];
   promotionDismissed.value = false;
   stopIngestPoll();
-  scrollToBottom();
+  scrollToBottom(true);
   // Resolve token URLs for any persisted attachments so reloaded chips open/preview.
   const urls = await resolveAttachmentUrls(id);
   if (conversationId.value === id) { attachmentUrls.value = urls; refreshPromotion(); }
@@ -2235,8 +2277,12 @@ defineExpose({
           accept="application/pdf,image/*,text/*,.md,.markdown,.txt,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           class="hidden"
           @change="onWorkspaceFilesChosen" />
+      <!-- Workspace toggle, for the surfaces that have no toolbar to put it in
+           (desktop /main, and any host passing hideToolbar). Where there IS a
+           toolbar it lives there instead — floating it over the corner landed it
+           on top of the toolbar's own buttons. -->
       <Button
-          v-if="useWorkspacePreview && !workspacePanelOpen"
+          v-if="useWorkspacePreview && !workspacePanelOpen && !toolbarVisible"
           size="icon-sm"
           variant="outline"
           class="absolute right-3 top-3 shadow-sm"
@@ -2254,6 +2300,11 @@ defineExpose({
       <SidebarTrigger v-if="isMain" class="lg:hidden" />
       <span class="text-sm font-semibold">{{ label }}</span>
       <div class="ml-auto flex items-center gap-1">
+        <!-- Workspace panel (documents/preview column) -->
+        <Button v-if="useWorkspacePreview && !workspacePanelOpen" size="icon-sm" variant="ghost"
+                title="Open workspace panel" @click="workspacePanelOpen = true">
+          <PanelRightOpen class="size-4"/>
+        </Button>
         <!-- Documents (chat-level artifacts) — only when the conversation has any -->
         <Button v-if="conversationDocs.length" size="icon-sm" variant="ghost" class="relative"
                 :class="documentsOpen ? 'text-primary' : ''" title="Documents"
@@ -2322,21 +2373,14 @@ defineExpose({
       </div>
     </div>
 
-    <!-- Floating Documents pill: on desktop /main the toolbar is hidden (the app
-         sidebar owns nav), so surface the chat-level artifacts here instead. -->
-    <button
-        v-if="isMain && isDesktop && conversationDocs.length"
-        type="button"
-        class="absolute right-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border bg-background/90 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-colors hover:bg-muted"
-        title="Documents drafted in this chat"
-        @click="documentsOpen = true">
-      <Files class="size-3.5 text-primary"/>
-      Documents
-      <span class="min-w-4 rounded-full bg-primary px-1 text-center text-[10px] leading-4 text-primary-foreground tabular-nums">{{ conversationDocs.length }}</span>
-    </button>
+    <!-- The chat's documents used to hang off a floating pill in this corner on
+         desktop /main (where the toolbar is hidden). They are listed in the app
+         sidebar now — see LayoutSidebarContextPanel + useChatDocuments — which
+         leaves the corner to the workspace toggle instead of stacking two
+         floating buttons on the same 12px of page. -->
 
     <!-- ░░ Scrollable content ░░ -->
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div ref="scrollArea" class="min-h-0 flex-1 overflow-y-auto" @scroll.passive="onTranscriptScroll">
       <!-- Empty (no-thread) state — owned by the host page via the #empty slot, so
            /main shows its home dashboard and the builder shows workflow examples.
            `ask` seeds the composer; `send` fires a prompt straight away. -->
@@ -2963,8 +3007,13 @@ defineExpose({
       <ResizableHandle />
       <ResizablePanel :default-size="48" :min-size="30" :max-size="70" class="min-w-0">
         <Tabs v-model="activePreviewKey" class="flex h-full min-h-0 flex-col bg-background">
-          <div class="flex h-10 shrink-0 items-end border-b bg-muted/30 px-1">
-            <TabsList v-if="previewTabs.length" class="h-9 min-w-0 flex-1 justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
+          <!-- Same height as the chat toolbar (h-12) so the two header rows and
+               their bottom borders read as one continuous bar across the splitter. -->
+          <div class="flex h-12 shrink-0 items-center border-b bg-muted/30 px-1">
+            <!-- The tab strip alone sits ON the bottom border (its active tab bleeds
+                 into the panel below); the label and the add button centre like the
+                 toolbar's buttons do. -->
+            <TabsList v-if="previewTabs.length" class="h-9 min-w-0 flex-1 justify-start gap-0 self-end overflow-x-auto rounded-none bg-transparent p-0">
               <div v-for="tab in previewTabs" :key="tab.key" class="group/tab relative min-w-0 max-w-56 flex-none">
                 <TabsTrigger
                     :value="tab.key"
@@ -2985,7 +3034,7 @@ defineExpose({
                 </Button>
               </div>
             </TabsList>
-            <span v-if="!previewTabs.length" class="min-w-0 flex-1 truncate px-2.5 pb-2 text-sm font-medium">
+            <span v-if="!previewTabs.length" class="min-w-0 flex-1 truncate px-2.5 text-sm font-medium">
               Workspace
             </span>
             <Popover v-model:open="workspaceAddOpen">
@@ -2993,7 +3042,7 @@ defineExpose({
                 <Button
                     size="icon-sm"
                     variant="ghost"
-                    class="mb-0.5 shrink-0"
+                    class="shrink-0"
                     title="Add workspace tab"
                     @click="workspaceAddView = 'options'">
                   <Plus />

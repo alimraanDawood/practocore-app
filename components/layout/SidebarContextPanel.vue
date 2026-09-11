@@ -9,8 +9,10 @@
 // libraries on a phone, and two sidebars offering the same links — one of which
 // could not show the folder you were in — was one too many.
 import {
-  MessageSquareText, Plus, ChevronDown, Telescope,
+  MessageSquareText, Plus, ChevronDown, Telescope, FileType2, Files,
 } from 'lucide-vue-next';
+
+import { useSidebar } from '~/components/ui/sidebar';
 
 const route = useRoute();
 
@@ -24,7 +26,7 @@ const onResearch = computed(() => route.path === '/main/research' || route.path 
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const showChats = computed(() => onAssistant.value && !isDesktop.value);
 
-const visible = computed(() => showChats.value || onResearch.value);
+const visible = computed(() => showChats.value || onResearch.value || showDocs.value);
 
 // ── Chat: recent conversations ──────────────────────────────────────────────
 const { conversations, loading: chatLoading, refresh: refreshChats } = useAssistantHistory();
@@ -42,6 +44,31 @@ const visibleResearch = computed(() =>
   researchExpanded.value ? researchConvs.value : researchConvs.value.slice(0, RECENT_LIMIT));
 const hasMoreResearch = computed(() => researchConvs.value.length > RECENT_LIMIT);
 
+// ── Documents drafted in the open chat ──────────────────────────────────────
+// Published by <ChatSurface> (it owns the conversation and the preview sheet);
+// this only lists them and asks the surface to open one. Shown on both shared
+// surfaces, desktop and mobile, so a drafted .docx stays one click away after its
+// in-thread card has scrolled off.
+const { setOpenMobile } = useSidebar();
+const chatDocuments = useChatDocuments();
+const docs = chatDocuments.documents;
+const docsExpanded = ref(false);
+const visibleDocs = computed(() => docsExpanded.value ? docs.value : docs.value.slice(0, RECENT_LIMIT));
+const hasMoreDocs = computed(() => docs.value.length > RECENT_LIMIT);
+const showDocs = computed(() => (onAssistant.value || onResearch.value) && docs.value.length > 0);
+
+// The preview opens as a sheet over the page, which the mobile sidebar would sit
+// on top of — so get out of the way on the way through.
+function openDoc(id: string) {
+  setOpenMobile(false);
+  chatDocuments.requestOpen(id);
+}
+
+function openDocsPanel() {
+  setOpenMobile(false);
+  chatDocuments.requestPanel();
+}
+
 
 // Lazily load each section's data the first time its page is opened.
 watch(visible, (on) => {
@@ -52,7 +79,7 @@ watch(visible, (on) => {
 </script>
 
 <template>
-  <SidebarGroup v-if="visible" class="group-data-[collapsible=icon]:hidden">
+  <SidebarGroup v-if="showChats || onResearch" class="group-data-[collapsible=icon]:hidden">
     <!-- ── Assistant: recent chats ──────────────────────────────────────── -->
     <template v-if="showChats">
       <SidebarGroupLabel>Recent chats</SidebarGroupLabel>
@@ -132,5 +159,35 @@ watch(visible, (on) => {
         </SidebarMenu>
       </SidebarGroupContent>
     </template>
+  </SidebarGroup>
+
+  <!-- ── Documents drafted in the open chat ───────────────────────────────── -->
+  <SidebarGroup v-if="showDocs" class="group-data-[collapsible=icon]:hidden">
+    <SidebarGroupLabel>Documents</SidebarGroupLabel>
+    <SidebarGroupContent>
+      <SidebarMenu>
+        <SidebarMenuItem v-for="doc in visibleDocs" :key="doc.id">
+          <SidebarMenuButton :tooltip="doc.title || doc.filename || 'Document'" @click="openDoc(doc.id)">
+            <FileType2 />
+            <span class="truncate">{{ doc.title || doc.filename || 'Document' }}</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
+        <SidebarMenuItem v-if="hasMoreDocs">
+          <SidebarMenuButton class="text-muted-foreground" @click="docsExpanded = !docsExpanded">
+            <ChevronDown :class="['transition-transform', docsExpanded ? 'rotate-180' : '']" />
+            <span>{{ docsExpanded ? 'Show less' : `All ${docs.length} documents` }}</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
+        <!-- Download, rename and delete live in the surface's own panel. -->
+        <SidebarMenuItem>
+          <SidebarMenuButton class="text-muted-foreground" @click="openDocsPanel">
+            <Files />
+            <span>Manage documents</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarGroupContent>
   </SidebarGroup>
 </template>

@@ -932,6 +932,9 @@ export interface AiStreamStep {
   tool: string;
   label: string;
   detail?: string;
+  /** The public http(s) address `detail` stands for, when the step read one, so the
+   *  card can link to the source. The backend emits http/https only. */
+  href?: string;
   /** Public metadata for a named Expert that was actually consulted this turn. */
   agent?: AiConsultedAgent;
 }

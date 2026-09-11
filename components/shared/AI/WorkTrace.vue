@@ -171,7 +171,19 @@ onBeforeUnmount(() => clearInterval(timer));
             <span :class="cn(active && index === visibleSteps.length - 1 && 'text-foreground')">
               {{ step.tool ? activityLabel(step) : narrativeLabel(step.label) }}
             </span>
-            <span v-if="step.detail" class="opacity-70"> · {{ step.detail }}</span>
+            <template v-if="step.detail">
+              <span class="opacity-70"> · </span>
+              <a
+                v-if="step.href"
+                :href="step.href"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="underline decoration-dotted underline-offset-2 opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                :title="step.href"
+                @click.stop
+              >{{ step.detail }}</a>
+              <span v-else class="opacity-70">{{ step.detail }}</span>
+            </template>
           </span>
         </li>
         <li v-if="active && !visibleSteps.length" class="text-xs leading-5 text-muted-foreground">
