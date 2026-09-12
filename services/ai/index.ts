@@ -119,6 +119,9 @@ export interface ConvDisplayMessage {
   citations?: AiCitation[];
   /** Attachment refs for a user turn, so chips survive a reload. */
   attachments?: ConvAttachment[];
+  /** Client-rendered side-channel object the turn produced (e.g. a drafted research
+   *  plan), persisted so it survives a reload rather than living only in the page. */
+  artifact?: AiArtifact;
 }
 
 // ── Persisted chat attachments (AiChatAttachments) ─────────────────────────────
@@ -1037,6 +1040,9 @@ export function sendAiMessageStream(
      *  the tab used to abort the answer and lose the whole exchange), so aborting
      *  the fetch only stops us LISTENING — call stopAiTurn to actually stop it. */
     turnId?: string;
+    /** Called when the connection dropped and we fell back to collecting the turn's
+     *  result by id, so the UI can say it is reconnecting rather than failing. */
+    onReconnect?: () => void;
   } = {},
 ): Promise<AiResponse> {
   track('ai_chat_message_sent', {
@@ -1078,6 +1084,7 @@ export function sendAiMessageStream(
     opts.onStep,
     undefined,
     opts.signal,
+    { turnId: opts.turnId, onWaiting: opts.onReconnect },
   );
 }
 
@@ -1107,6 +1114,61 @@ export async function stopAiTurn(turnId: string): Promise<boolean> {
     return !!(await res.json())?.stopped;
   } catch {
     return false;
+  }
+}
+
+/** What became of a turn, per GET /ai/chat/turn/{id}. "unknown" means the server no
+ *  longer holds a result for it (it finished long ago, or restarted) — the answer,
+ *  if there was one, is in the saved conversation. */
+export type AiTurnStatus =
+  | { status: 'running' }
+  | { status: 'done'; response: AiResponse }
+  | { status: 'unknown' };
+
+/** Ask what became of a turn. Network failures read as "unknown" so callers treat a
+ *  flaky poll the same as a turn the server no longer remembers. */
+export async function fetchAiTurn(turnId: string): Promise<AiTurnStatus> {
+  if (!turnId) return { status: 'unknown' };
+  try {
+    const res = await fetch(`${SERVER_URL}/api/practocore/ai/chat/turn/${encodeURIComponent(turnId)}`, {
+      headers: { Authorization: pb.authStore.token },
+    });
+    if (!res.ok) return { status: 'unknown' };
+    return await res.json() as AiTurnStatus;
+  } catch {
+    return { status: 'unknown' };
+  }
+}
+
+/**
+ * Wait for a turn we are no longer listening to.
+ *
+ * The server keeps generating after the connection dies — that is deliberate, so a
+ * lawyer who switches apps does not lose the answer. But the CLIENT still had no way
+ * to find out how it went, so a backgrounded iPhone (iOS freezes and then discards
+ * the tab, killing the stream) showed a failure for an answer that had completed and
+ * been saved. This polls until the turn resolves.
+ *
+ * Returns null when the turn can no longer be collected — the caller's fallback is
+ * the saved conversation, not an error.
+ */
+export async function awaitAiTurn(
+  turnId: string,
+  opts: { timeoutMs?: number; intervalMs?: number; onWaiting?: () => void; signal?: AbortSignal } = {},
+): Promise<AiResponse | null> {
+  const timeoutMs = opts.timeoutMs ?? 10 * 60_000;
+  const intervalMs = opts.intervalMs ?? 2_000;
+  const deadline = Date.now() + timeoutMs;
+  opts.onWaiting?.();
+  for (;;) {
+    if (opts.signal?.aborted) return null;
+    const state = await fetchAiTurn(turnId);
+    if (state.status === 'done') return state.response;
+    // "unknown" while we were mid-poll means the result aged out or the server
+    // restarted; either way there is nothing more to wait for.
+    if (state.status === 'unknown') return null;
+    if (Date.now() >= deadline) return null;
+    await new Promise(r => setTimeout(r, intervalMs));
   }
 }
 
@@ -1161,7 +1223,19 @@ async function aiStreamPost(
   onStep?: (step: AiStreamStep) => void,
   onText?: (delta: string) => void,
   signal?: AbortSignal,
+  resume?: { turnId?: string; onWaiting?: () => void },
 ): Promise<AiResponse> {
+  // The stream died but the turn did not: generation is detached from the connection
+  // server-side, so the answer is still coming (or already saved). Collect it by turn
+  // id rather than reporting a failure the user would have to retry. This is the iOS
+  // case — a backgrounded tab is frozen and then discarded, taking the SSE
+  // connection with it — but it covers any dropped connection.
+  const recover = async (fallback: AiResponse): Promise<AiResponse> => {
+    const turnId = resume?.turnId;
+    if (!turnId || signal?.aborted) return fallback;
+    const late = await awaitAiTurn(turnId, { onWaiting: resume?.onWaiting, signal });
+    return late ?? fallback;
+  };
   try {
     let timezone = '';
     try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
@@ -1210,14 +1284,16 @@ async function aiStreamPost(
         else if (frame.kind === 'result' && frame.response) result = frame.response;
       }
     }
-    return result ?? { type: 'error', error: 'The response ended unexpectedly. Please try again.' };
+    // No result frame: the connection ended before the turn did.
+    if (result) return result;
+    return await recover({ type: 'error', error: 'The response ended unexpectedly. Please try again.' });
   } catch (e: any) {
     // The caller hit Stop — surface a quiet, dedicated outcome so the UI can drop
     // the turn without flashing an error bubble.
     if (e?.name === 'AbortError' || signal?.aborted) {
       return { type: 'error', error: '', aborted: true };
     }
-    return { type: 'error', error: e?.message ?? 'Network error' };
+    return await recover({ type: 'error', error: e?.message ?? 'Network error' });
   }
 }
 

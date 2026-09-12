@@ -17,7 +17,7 @@ import {
   sendAiMessageStream, confirmAiProposal,
   getConversation, deleteConversation, renameConversation, listConversations, saveConversationTree, attachmentSha256, resolveAttachmentUrls, base64ToObjectUrl,
   listConversationAttachments, promoteConversationAttachments, vaultIngestProgress, extractDocxAttachment,
-  newTurnId, stopAiTurn, buildCopyText,
+  newTurnId, stopAiTurn, buildCopyText, fetchAiTurn, awaitAiTurn,
   type AiMessage, type AiContentBlock,
   type AiImageMediaType, type AiResponse, type AiContext, type AiAttachmentMeta,
   type ConvDisplayMessage, type ConvAttachment, type AiStreamStep, type AiCitation,
@@ -140,7 +140,7 @@ const props = withDefaults(defineProps<{
 }>(), { mode: '', surface: '', seed: '', label: 'Assistant' });
 
 const emit = defineEmits<{
-  (e: 'artifact', artifact: AiArtifact): void;
+  (e: 'artifact', artifact: AiArtifact, meta?: { conversationId?: string; restored?: boolean }): void;
   (e: 'conversationChange', id: string): void;
   // Carries the executed write-tool's structured result (tool + data) when there is
   // one, so hosts can react to what was just done (e.g. jump the calendar to a newly
@@ -201,6 +201,10 @@ type ToolEvent = { role: 'tool-event'; content: string; status: 'approved' | 're
 type DisplayAiMessage = AiMessage & {
   steps?: AiStreamStep[]; durationMs?: number; stepsOpen?: boolean; citations?: AiCitation[];
   attachments?: ConvAttachment[]; sendContent?: string; failed?: boolean; stopped?: boolean;
+  /** Client-only side-channel object this turn produced (e.g. a drafted research
+   *  plan). Kept on the turn so it is persisted with the conversation and can be
+   *  re-offered to the host on reload. */
+  artifact?: AiArtifact;
 };
 // UI-only affordance card: a freshly generated .docx the user can preview/download.
 // Carries the GeneratedDocuments row id; never sent to the model or the flat
@@ -856,7 +860,69 @@ let turnId = '';
 function stopTurn() {
   if (turnId) stopAiTurn(turnId);
   turnAbort?.abort();
+  forgetTurn();
 }
+
+// ── Surviving a lost connection ─────────────────────────────────────────────
+// The server keeps generating after the connection dies, and saves the exchange
+// either way. What was missing was the way BACK to it: iOS freezes a backgrounded
+// tab and then discards it, so a lawyer who switched apps mid-answer came back to a
+// turn marked failed — for an answer that had finished and been saved minutes
+// earlier. The turn id is therefore parked in storage for the life of the turn. A
+// stream that merely drops is recovered inside sendAiMessageStream (it polls by the
+// same id); this covers the harder case where the page itself is gone and comes back
+// with no memory of the turn at all.
+const reconnecting = ref(false);
+const pendingTurnStorageKey = computed(() => `ai.chat.pendingTurn:${threadKey.value}`);
+type PendingTurn = { turnId: string; conversationId: string; at: number };
+
+function rememberTurn(id: string) {
+  if (!import.meta.client) return;
+  try {
+    localStorage.setItem(pendingTurnStorageKey.value, JSON.stringify(
+      { turnId: id, conversationId: conversationId.value, at: Date.now() } as PendingTurn));
+  } catch { /* private mode / quota — resume is best-effort */ }
+}
+function forgetTurn() {
+  if (!import.meta.client) return;
+  try { localStorage.removeItem(pendingTurnStorageKey.value); } catch { /* noop */ }
+}
+
+/**
+ * Re-attach to a turn this surface was running when the page went away.
+ *
+ * The answer is collected by id, so the wait continues from wherever it got to. When
+ * it lands, the conversation is RELOADED rather than appended to: the exchange was
+ * already persisted server-side, and re-reading it is the only way to be sure the
+ * transcript matches what was saved rather than gaining a duplicate turn.
+ */
+async function resumePendingTurn() {
+  let pending: PendingTurn | null = null;
+  try { pending = JSON.parse(localStorage.getItem(pendingTurnStorageKey.value) || 'null'); } catch { /* noop */ }
+  forgetTurn();
+  if (!pending?.turnId) return;
+  // Older than the server holds a finished result for: whatever happened is in the
+  // saved conversation, which this surface loads by its usual route anyway.
+  if (Date.now() - (pending.at ?? 0) > 30 * 60_000) return;
+  const state = await fetchAiTurn(pending.turnId);
+  if (state.status === 'unknown') return;
+
+  loading.value = true;
+  reconnecting.value = true;
+  activeSteps.value = [];
+  workStartedAt.value = pending.at || Date.now();
+  const late = state.status === 'done' ? state.response : await awaitAiTurn(pending.turnId);
+  loading.value = false;
+  reconnecting.value = false;
+  if (!late || late.aborted) return;
+
+  const id = late.conversationId || pending.conversationId;
+  if (id) await loadConversation(id, true);
+  if (late.type === 'proposal') applyResponse(late);
+  else if (!id) applyResponse(late);
+  scrollToBottom();
+}
+onMounted(() => { void resumePendingTurn(); });
 
 // Inline edit of an earlier user turn → forks a new branch and resends.
 const editingIndex = ref<number | null>(null);
@@ -1044,6 +1110,7 @@ async function send(explicit?: string, extraContext?: string) {
 
   turnAbort = new AbortController();
   turnId = newTurnId();
+  rememberTurn(turnId);
   // Read and clear together: the skills apply to THIS message only, and the chips
   // must go the moment it is sent rather than when the answer lands.
   const turnSkillNames = invokedSkills.value.map(sk => sk.name);
@@ -1066,8 +1133,11 @@ async function send(explicit?: string, extraContext?: string) {
     expertId: selectedExpert.value?.id,
     signal: turnAbort.signal,
     turnId,
+    onReconnect: () => { reconnecting.value = true; },
   });
   turnAbort = null;
+  forgetTurn();
+  reconnecting.value = false;
 
   const elapsedMs = Date.now() - workStartedAt.value;
   const turnSteps = [...activeSteps.value];
@@ -1092,7 +1162,7 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
   void refreshAiUsage();
   // Surface any tool-produced client artifact (e.g. the builder canvas's drafted
   // workflow) to the parent, regardless of reply type.
-  if (response.artifact) emit('artifact', response.artifact);
+  if (response.artifact) emit('artifact', response.artifact, { conversationId: response.conversationId || conversationId.value });
   // Surface a just-executed write-tool's structured result (e.g. a drafted document)
   // as an in-thread affordance card — independent of whether the reply is text or
   // another proposal, so it never gets dropped.
@@ -1110,6 +1180,7 @@ function applyResponse(response: AiResponse, turnSteps: AiStreamStep[] = [], ela
       durationMs: elapsedMs,
       stepsOpen: false,
       citations: response.citations?.length ? response.citations : undefined,
+      artifact: response.artifact,
     });
     if (response.conversationId) {
       const isNew = !conversationId.value;
@@ -1190,6 +1261,7 @@ async function retryTurn() {
 
   turnAbort = new AbortController();
   turnId = newTurnId();
+  rememberTurn(turnId);
   const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
@@ -1203,8 +1275,11 @@ async function retryTurn() {
     expertId: selectedExpert.value?.id,
     signal: turnAbort.signal,
     turnId,
+    onReconnect: () => { reconnecting.value = true; },
   });
   turnAbort = null;
+  forgetTurn();
+  reconnecting.value = false;
 
   const elapsedMs = Date.now() - workStartedAt.value;
   const turnSteps = [...activeSteps.value];
@@ -1244,6 +1319,7 @@ async function saveEdit(index: number) {
 
   turnAbort = new AbortController();
   turnId = newTurnId();
+  rememberTurn(turnId);
   const pageContext = await resolvePageContext();
   const response = await sendAiMessageStream(apiMessages.value, buildContext(), conversationId.value || undefined, {
     onStep: (s) => { activeSteps.value = [...activeSteps.value, s]; scrollToBottom(); },
@@ -1256,8 +1332,11 @@ async function saveEdit(index: number) {
     expertId: selectedExpert.value?.id,
     signal: turnAbort.signal,
     turnId,
+    onReconnect: () => { reconnecting.value = true; },
   });
   turnAbort = null;
+  forgetTurn();
+  reconnecting.value = false;
 
   const elapsedMs = Date.now() - workStartedAt.value;
   const turnSteps = [...activeSteps.value];
@@ -1965,8 +2044,8 @@ function selectConversation(id: string) {
   else loadConversation(id);
 }
 
-async function loadConversation(id: string) {
-  if (conversationId.value === id) return;
+async function loadConversation(id: string, force = false) {
+  if (conversationId.value === id && !force) return;
   selectedExpert.value = null;
   expertPickerOpen.value = false;
   const conv = await getConversation(id);
@@ -1982,7 +2061,7 @@ async function loadConversation(id: string) {
       const status = m.role.slice('tool-event:'.length) as 'approved' | 'rejected';
       return {role: 'tool-event', content: m.content, status};
     }
-    if (m.role === 'assistant' && (m.durationMs !== undefined || m.steps?.length || m.citations?.length)) {
+    if (m.role === 'assistant' && (m.durationMs !== undefined || m.steps?.length || m.citations?.length || m.artifact)) {
       return {
         role: 'assistant',
         content: m.content,
@@ -1990,6 +2069,7 @@ async function loadConversation(id: string) {
         durationMs: m.durationMs,
         stepsOpen: false,
         citations: m.citations?.length ? m.citations : undefined,
+        artifact: m.artifact,
       } as DisplayAiMessage;
     }
     return {role: m.role, content: m.content, attachments: m.attachments} as DisplayAiMessage;
@@ -2004,6 +2084,12 @@ async function loadConversation(id: string) {
   promotionDismissed.value = false;
   stopIngestPoll();
   scrollToBottom(true);
+  // Re-offer the thread's latest artifact (e.g. the drafted research plan) to the
+  // host. It is client-rendered state the page held in memory alone, so without this
+  // a reload — or an iPhone discarding the tab — left the user with no way back to a
+  // plan they had not launched yet except asking the assistant to show it again.
+  const restored = [...(conv.messages ?? [])].reverse().find(m => m.artifact)?.artifact;
+  if (restored) emit('artifact', restored, { conversationId: id, restored: true });
   // Resolve token URLs for any persisted attachments so reloaded chips open/preview.
   const urls = await resolveAttachmentUrls(id);
   if (conversationId.value === id) { attachmentUrls.value = urls; refreshPromotion(); }
@@ -2534,12 +2620,20 @@ defineExpose({
           <div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
             <Sparkles class="size-3.5"/>
           </div>
-          <SharedAIWorkTrace
-            class="min-w-0 flex-1 pt-0.5"
-            :steps="activeSteps"
-            :started-at="workStartedAt"
-            active
-          />
+          <div class="min-w-0 flex-1">
+            <SharedAIWorkTrace
+              class="min-w-0 pt-0.5"
+              :steps="activeSteps"
+              :started-at="workStartedAt"
+              active
+            />
+            <!-- The connection went, the answer did not: the turn is still running
+                 (or already finished) on the server and we are collecting it. Said
+                 plainly, because the alternative the user used to get was a failure. -->
+            <p v-if="reconnecting" class="mt-1 text-xs text-muted-foreground">
+              Connection lost — still working on your answer. It will appear here.
+            </p>
+          </div>
         </div>
 
         <!-- Pending proposal -->

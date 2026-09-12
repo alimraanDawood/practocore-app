@@ -9,6 +9,12 @@ import { createDeepTask, isLivePhase, listDeepTasks, phaseLabel } from '~/servic
 const surface = ref<InstanceType<typeof ChatSurface> | null>(null);
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const activePlan = ref<ResearchPlan | null>(null);
+// The conversation a drafted (unlaunched) plan belongs to. The plan arrives on the
+// turn that CREATES the conversation, so at artifact time there is no id yet — null
+// means "not yet adopted", and the first conversation-change claims it. Without this
+// the adoption looks like a switch to a thread with no deep task, and the plan the
+// user is about to launch gets wiped a moment after it appears.
+const planConversationId = ref<string | null>(null);
 const activeTaskId = ref('');
 const activeTask = ref<DeepTask | null>(null);
 const launching = ref(false);
@@ -30,13 +36,17 @@ const progressSummary = computed(() => {
   return phaseLabel(task.phase);
 });
 
-function onArtifact(artifact: AiArtifact) {
+function onArtifact(artifact: AiArtifact, meta?: { conversationId?: string; restored?: boolean }) {
   if (artifact.kind !== 'research_plan' || !artifact.data) return;
   activePlan.value = artifact.data as ResearchPlan;
+  planConversationId.value = meta?.conversationId || (surface.value?.conversationId as string | undefined) || null;
   launched.value = false;
   activeTaskId.value = '';
   activeTask.value = null;
-  planDrawerOpen.value = true;
+  // A plan restored on load opens the desktop panel (it costs nothing and is what
+  // the user left behind), but never throws up the mobile drawer unasked — there the
+  // "View plan" button above the composer is the way back in.
+  if (!meta?.restored) planDrawerOpen.value = true;
   planPanelOpen.value = true;
   workspaceOpen.value = false;
   manuallyViewingChat.value = false;
@@ -45,6 +55,7 @@ function onArtifact(artifact: AiArtifact) {
 async function onConversationChange(conversationId: string) {
   if (!conversationId) {
     activePlan.value = null;
+    planConversationId.value = null;
     activeTaskId.value = '';
     activeTask.value = null;
     launched.value = false;
@@ -53,6 +64,13 @@ async function onConversationChange(conversationId: string) {
     manuallyViewingChat.value = false;
     return;
   }
+  // Does the plan on screen belong to this conversation? A plan drafted on the turn
+  // that CREATED it has no id yet (null) and is adopted here. Re-checked after the
+  // lookup below, because a plan restored from the loaded conversation can arrive
+  // while that request is still in flight.
+  const claimsPlan = () => !!activePlan.value && !launched.value
+    && (planConversationId.value === null || planConversationId.value === conversationId);
+  if (claimsPlan()) planConversationId.value = conversationId;
   try {
     const task = (await listDeepTasks(conversationId))[0] ?? null;
     activeTask.value = task;
@@ -64,10 +82,14 @@ async function onConversationChange(conversationId: string) {
         title: task.label,
         questions: (task.subquestions ?? []).map(agent => ({ question: agent.question, intent: agent.intent, hints: agent.hints })),
       };
+      planConversationId.value = null;
       planPanelOpen.value = false;
       if (!manuallyViewingChat.value) workspaceOpen.value = true;
+    } else if (claimsPlan()) {
+      planConversationId.value = conversationId;
     } else {
       activePlan.value = null;
+      planConversationId.value = null;
       planPanelOpen.value = false;
       workspaceOpen.value = false;
     }
@@ -83,6 +105,7 @@ async function launchResearch(payload: { plan: ResearchPlan; review: boolean }) 
     activeTaskId.value = task.id;
     activeTask.value = task;
     launched.value = true;
+    planConversationId.value = null;
     planDrawerOpen.value = false;
     planPanelOpen.value = false;
     manuallyViewingChat.value = false;
