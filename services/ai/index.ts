@@ -1446,6 +1446,75 @@ export async function getAiUsage(): Promise<AiUsage> {
   return res.json();
 }
 
+// ── AI spend breakdown ──────────────────────────────────────────────────────
+// Mirrors practocore-backend/ai/usage_breakdown.go. /ai/usage answers "how much
+// is left"; this answers "where did it go" — a day-by-day series plus the three
+// attribution axes (activity, model, matter) and, for admins, per member.
+//
+// Everything here is in CREDITS. The backend deliberately does not expose the
+// underlying provider cost, so there is no shilling figure to render.
+
+export type AiSpendPeriod = 'month' | '7d' | '30d' | '90d';
+
+export interface AiSpendSlice {
+  key: string;
+  label: string;
+  credits: number;
+  events: number;
+}
+
+export interface AiSpendDay {
+  date: string; // YYYY-MM-DD
+  credits: number;
+  yours: number;
+}
+
+export interface AiSpendMember {
+  userId: string;
+  name: string;
+  email: string;
+  credits: number;
+  events: number;
+  share: number; // percent of the range total
+}
+
+export interface AiSpendBreakdown {
+  period: AiSpendPeriod;
+  period_label: string;
+  range_start: string;
+  range_end: string;
+
+  total: number;
+  your_total: number;
+  events: number;
+  daily_avg: number;
+  peak_day?: string;
+
+  series: AiSpendDay[];
+  by_activity: AiSpendSlice[];
+  by_model: AiSpendSlice[];
+  by_matter: AiSpendSlice[];
+  by_member?: AiSpendMember[];
+
+  is_admin: boolean;
+  is_solo: boolean;
+  /** True when the matter list covers only the caller's own work, not the firm's. */
+  matter_scope_is_self: boolean;
+}
+
+export async function getAiSpendBreakdown(
+  period: AiSpendPeriod = 'month',
+): Promise<AiSpendBreakdown> {
+  const res = await fetch(
+    `${SERVER_URL}/api/practocore/ai/usage/breakdown?period=${encodeURIComponent(period)}`,
+    { method: 'GET', headers: { 'Authorization': pb.authStore.token } },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to load AI spend breakdown (${res.status})`);
+  }
+  return res.json();
+}
+
 // Buying AI credits lives in `services/billing` now — see purchaseCredits().
 //
 // It used to be here as topUpCredits(), which POSTed {credits, paid} to

@@ -42,6 +42,7 @@
             <SharedBillingAiCredits/>
 
           </div>
+          <PageComponentsSettingsAIUsage v-if="activeTab === 'usage'" />
           <PageComponentsSettingsEccmis v-if="activeTab === 'eccmis'" />
           <PageComponentsSettingsDocumentation v-if="activeTab === 'documentation'" />
           <PageComponentsSettingsSupport v-if="activeTab === 'support'" />
@@ -95,6 +96,16 @@
                   <div class="flex flex-row justify-center items-center gap-2">
                     <Sparkles/>
                     AI Models
+                  </div>
+                  <ChevronRight class="size-5 text-muted-foreground"/>
+                </Button>
+              </NuxtLink>
+
+              <NuxtLink to="/main/settings/usage" class="w-full">
+                <Button variant="ghost" class="justify-between items-center w-full">
+                  <div class="flex flex-row justify-center items-center gap-2">
+                    <ChartColumn/>
+                    AI Spending
                   </div>
                   <ChevronRight class="size-5 text-muted-foreground"/>
                 </Button>
@@ -209,7 +220,7 @@ import {
   Globe,
   Users,
   UserPlus,
-  Moon, Sparkles, WifiOff, Download
+  Moon, Sparkles, WifiOff, Download, ChartColumn
 } from "lucide-vue-next"
 import {getSignedInUser, signOut} from "~/services/auth"
 
@@ -222,7 +233,7 @@ const router = useRouter()
 
 // Tab selection is URL-backed (`?tab=`) so links can land on a specific panel
 // (e.g. the AI can send a user straight to Billing). Unknown/missing → profile.
-const VALID_TABS = ['profile', 'notifications', 'ai', 'billing', 'updates', 'eccmis', 'documentation', 'support']
+const VALID_TABS = ['profile', 'notifications', 'ai', 'usage', 'billing', 'updates', 'eccmis', 'documentation', 'support']
 const activeTab = computed({
   get() {
     const t = route.query.tab
@@ -256,6 +267,10 @@ const visibleTabs = computed(() => [
   { key: 'profile', label: 'Profile', show: true },
   { key: 'notifications', label: 'Notifications', show: true },
   { key: 'ai', label: 'AI Models', show: true },
+  // Visible to every member, not just whoever can see Billing: a member who
+  // shares the firm's credit pool needs to see what is drawing it down, even
+  // though they cannot pay for more.
+  { key: 'usage', label: 'AI Spending', show: true },
   { key: 'billing', label: 'Billing', show: canSeeBilling.value },
   { key: 'updates', label: 'Updates', show: true },
   { key: 'eccmis', label: 'ECCMIS Sync', show: true, startsGroup: true },

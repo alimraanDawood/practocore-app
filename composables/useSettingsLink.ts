@@ -9,6 +9,7 @@ export type SettingsSection =
   | 'profile'
   | 'notifications'
   | 'ai'
+  | 'usage'
   | 'billing'
   | 'eccmis'
   | 'documentation'

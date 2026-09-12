@@ -102,7 +102,20 @@
         </div>
       </div>
 
-      <!-- Billing link (inside the popover / drawer) -->
+      <!-- Actions (inside the popover / drawer). Spending is listed first and
+           shown to everyone: this panel answers "how much is left", and the
+           question it immediately provokes is "what used it" — which every
+           member who shares the pool needs, admin or not. Billing sits below
+           and stays admin-only, because acting on the answer costs money. -->
+      <button
+        type="button"
+        class="w-full flex items-center justify-between px-4 py-3 border-t text-sm hover:bg-muted transition-colors"
+        @click="goSpending"
+      >
+        <span>View spending</span>
+        <ChartColumn class="size-4 text-muted-foreground" />
+      </button>
+
       <button
         v-if="canManageBilling"
         type="button"
@@ -123,7 +136,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import dayjs from 'dayjs';
 import { useMediaQuery } from '@vueuse/core';
-import { Zap, Lock, ArrowRight } from 'lucide-vue-next';
+import { Zap, Lock, ArrowRight, ChartColumn } from 'lucide-vue-next';
 import { Popover, PopoverTrigger, PopoverContent } from '~/components/ui/popover';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle, SheetDescription } from '~/components/ui/sheet';
 import { useAiUsage } from '~/composables/useAiUsage';
@@ -220,5 +233,10 @@ const { settingsPath } = useSettingsLink();
 function goBilling() {
   open.value = false;
   navigateTo(settingsPath('billing'));
+}
+
+function goSpending() {
+  open.value = false;
+  navigateTo(settingsPath('usage'));
 }
 </script>
