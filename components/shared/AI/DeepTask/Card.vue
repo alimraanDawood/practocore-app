@@ -47,6 +47,7 @@ const INTENT_LABELS: Record<ResearchIntent, string> = {
   compare: 'Comparison',
   catalogue: 'Catalogue',
   summary: 'Summary',
+  current: 'Live web',
 };
 
 // The lanes, and what each one has to show for itself. `thin` is deliberately visible:

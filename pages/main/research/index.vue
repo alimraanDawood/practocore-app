@@ -1,10 +1,13 @@
 <script lang="ts" setup>
 import { useMediaQuery } from '@vueuse/core';
-import { Telescope, X } from 'lucide-vue-next';
+import { CheckCircle2, CircleAlert, CircleSlash, Loader2, Pause, Telescope, X } from 'lucide-vue-next';
 import ChatSurface from '~/components/shared/AI/ChatSurface.vue';
 import type { AiArtifact } from '~/services/ai';
 import type { DeepTask, ResearchPlan } from '~/services/deepTask';
-import { createDeepTask, isLivePhase, listDeepTasks, phaseLabel } from '~/services/deepTask';
+import {
+  createDeepTask, isLivePhase, listDeepTasks,
+  researchElapsed, researchStageIndex, researchStatusLine, RESEARCH_STAGES,
+} from '~/services/deepTask';
 
 const surface = ref<InstanceType<typeof ChatSurface> | null>(null);
 const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -22,18 +25,50 @@ const launched = ref(false);
 const planDrawerOpen = ref(false);
 const planPanelOpen = ref(false);
 const workspaceOpen = ref(false);
-const manuallyViewingChat = ref(false);
 
 const planVisible = computed(() => !!activePlan.value && !launched.value && planPanelOpen.value && isDesktop.value);
 
-const progressSummary = computed(() => {
-  const task = activeTask.value;
-  if (!task) return activePlan.value ? 'Research plan ready to launch' : '';
-  if (task.phase === 'done') return 'Research complete';
-  if (task.phase === 'error') return 'Research failed';
-  if (task.phase === 'plan_review') return 'Research questions awaiting your approval';
-  if (isLivePhase(task.phase)) return `${phaseLabel(task.phase)}${task.progress > 0 ? ` — ${task.progress}%` : ''}`;
-  return phaseLabel(task.phase);
+// ── Composer status strip ─────────────────────────────────────────────────────
+// The run's row sits at the point in the thread where it was launched, and a
+// conversation that carries on scrolls it away — exactly when the user is most
+// likely to wonder where the research has got to. So the strip above the composer
+// stays pinned to the live run: which stage it is in, what it is doing, how long it
+// has been going, and one click into the workspace. It reads the snapshot the row
+// already polled (researchUpdate), so nothing here polls a second time.
+const liveTask = computed(() => (activeTaskId.value ? activeTask.value : null));
+const stageIndex = computed(() => (liveTask.value ? researchStageIndex(liveTask.value.phase) : 0));
+const statusLine = computed(() => (liveTask.value ? researchStatusLine(liveTask.value) : ''));
+const isRunning = computed(() => !!liveTask.value && isLivePhase(liveTask.value.phase));
+const isFinished = computed(() => liveTask.value?.phase === 'done');
+const hasFailed = computed(() => liveTask.value?.phase === 'error' || liveTask.value?.phase === 'cancelled');
+// Parked on the user, not on the worker — it reads as waiting, and must not wear the
+// same face as a run the user paused.
+const needsUser = computed(() => liveTask.value?.phase === 'plan_review');
+
+// Elapsed ticks locally so the strip reads like a stopwatch between polls. The timer
+// only runs while something is actually running.
+const now = ref(Date.now());
+let elapsedTimer: ReturnType<typeof setInterval> | undefined;
+watch(isRunning, (running) => {
+  if (running && !elapsedTimer) {
+    elapsedTimer = setInterval(() => (now.value = Date.now()), 1000);
+  } else if (!running && elapsedTimer) {
+    clearInterval(elapsedTimer);
+    elapsedTimer = undefined;
+  }
+}, { immediate: true });
+onBeforeUnmount(() => { if (elapsedTimer) clearInterval(elapsedTimer); });
+
+const elapsed = computed(() => (liveTask.value ? researchElapsed(liveTask.value, now.value) : ''));
+
+const openLabel = computed(() => (isFinished.value ? 'View report' : 'Open research'));
+
+// The stage track is colour only, which a screen reader cannot read out.
+const stageAria = computed(() => {
+  const stage = RESEARCH_STAGES[stageIndex.value];
+  return stage
+    ? `Stage ${stageIndex.value + 1} of ${RESEARCH_STAGES.length}: ${stage.label}`
+    : 'All stages complete';
 });
 
 function onArtifact(artifact: AiArtifact, meta?: { conversationId?: string; restored?: boolean }) {
@@ -49,7 +84,6 @@ function onArtifact(artifact: AiArtifact, meta?: { conversationId?: string; rest
   if (!meta?.restored) planDrawerOpen.value = true;
   planPanelOpen.value = true;
   workspaceOpen.value = false;
-  manuallyViewingChat.value = false;
 }
 
 async function onConversationChange(conversationId: string) {
@@ -61,7 +95,6 @@ async function onConversationChange(conversationId: string) {
     launched.value = false;
     planPanelOpen.value = false;
     workspaceOpen.value = false;
-    manuallyViewingChat.value = false;
     return;
   }
   // Does the plan on screen belong to this conversation? A plan drafted on the turn
@@ -84,7 +117,11 @@ async function onConversationChange(conversationId: string) {
       };
       planConversationId.value = null;
       planPanelOpen.value = false;
-      if (!manuallyViewingChat.value) workspaceOpen.value = true;
+      // The run's own row lives in the thread; reopening a conversation must not
+      // take over the screen with the workspace. Threads launched before the row
+      // existed (or loaded from the flat transcript, which cannot carry UI-only
+      // cards) get one appended so there is still a way in.
+      surface.value?.appendResearchCard(task.id);
     } else if (claimsPlan()) {
       planConversationId.value = conversationId;
     } else {
@@ -108,25 +145,29 @@ async function launchResearch(payload: { plan: ResearchPlan; review: boolean }) 
     planConversationId.value = null;
     planDrawerOpen.value = false;
     planPanelOpen.value = false;
-    manuallyViewingChat.value = false;
-    workspaceOpen.value = true;
+    // The run reports itself in the thread from here on, so the conversation carries
+    // straight on instead of being replaced by the workspace.
+    workspaceOpen.value = false;
+    surface.value?.appendResearchCard(task.id);
   } catch (error) {
     console.error('[research] launch failed:', error);
   } finally { launching.value = false; }
 }
 
 function returnToConversation() {
-  manuallyViewingChat.value = true;
   workspaceOpen.value = false;
 }
 
-function openResearchSurface() {
-  manuallyViewingChat.value = false;
-  if (activeTaskId.value) workspaceOpen.value = true;
-  else if (activePlan.value) {
-    if (isDesktop.value) planPanelOpen.value = true;
-    else planDrawerOpen.value = true;
-  }
+/** Back to a drafted plan: the side panel on desktop, the drawer on mobile. */
+function openPlan() {
+  if (isDesktop.value) planPanelOpen.value = true;
+  else planDrawerOpen.value = true;
+}
+
+/** The in-thread research row was clicked: open that run's workspace. */
+function openResearch(taskId: string) {
+  activeTaskId.value = taskId;
+  workspaceOpen.value = true;
 }
 
 const prompts = [
@@ -154,14 +195,54 @@ const prompts = [
         class="h-full min-w-0 flex-1"
         label="Research"
         @artifact="onArtifact"
+        @research-open="openResearch"
+        @research-update="task => activeTask = task"
         @conversation-change="onConversationChange"
       >
-        <template v-if="activeTaskId || (activePlan && !planVisible)" #composer-top>
-          <div class="flex items-center justify-between rounded-lg border bg-muted/60 p-2">
-            <span class="text-sm text-muted-foreground">{{ progressSummary }}</span>
-            <Button variant="outline" size="xs" @click="openResearchSurface">
-              {{ activeTaskId ? (activeTask?.phase === 'done' ? 'View report' : 'Open research') : 'View plan' }}
+        <template v-if="activeTaskId || (activePlan && !launched && !planVisible)" #composer-top>
+          <!-- A launched run: the stage it is in, pinned where the user is typing. -->
+          <!-- ONE line. The status text already names the stage it is in ("Checking
+               the research"), so labelling the stage track as well said the same word
+               twice and cost a second row above a composer that already carries the
+               actions strip and the context picker. The track keeps only what the
+               sentence cannot give: how far through the four stages the run is. -->
+          <div v-if="activeTaskId && liveTask" class="flex items-center gap-3 rounded-lg border bg-muted/60 px-2.5 py-1.5">
+            <Loader2 v-if="isRunning" class="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+            <CheckCircle2 v-else-if="isFinished" class="size-3.5 shrink-0 text-muted-foreground" />
+            <CircleSlash v-else-if="hasFailed" class="size-3.5 shrink-0 text-muted-foreground" />
+            <CircleAlert v-else-if="needsUser" class="size-3.5 shrink-0 text-amber-600" />
+            <Pause v-else class="size-3.5 shrink-0 text-muted-foreground" />
+
+            <span class="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+              {{ statusLine }}<span v-if="elapsed"> · {{ elapsed }}</span>
+            </span>
+
+            <!-- Stage track: four segments, no labels. Named for screen readers,
+                 which lose the colour the sighted reader is using. -->
+            <span
+              v-if="!hasFailed"
+              class="hidden shrink-0 items-center gap-1 sm:flex"
+              role="img"
+              :aria-label="stageAria"
+            >
+              <span
+                v-for="(stage, i) in RESEARCH_STAGES"
+                :key="stage.label"
+                class="h-1 w-5 rounded-full transition-colors"
+                :class="i < stageIndex ? 'bg-primary' : i === stageIndex && isRunning ? 'bg-primary/40' : 'bg-border'"
+              />
+            </span>
+
+            <Button :variant="needsUser ? 'default' : 'outline'" size="xs" class="shrink-0" @click="openResearch(activeTaskId)">
+              {{ needsUser ? 'Review questions' : openLabel }}
             </Button>
+          </div>
+
+          <!-- A drafted plan still needs a way back to its card on mobile, where the
+               side panel does not exist. -->
+          <div v-else-if="activePlan && !launched" class="flex items-center justify-between rounded-lg border bg-muted/60 p-2">
+            <span class="text-sm text-muted-foreground">Research plan ready to launch</span>
+            <Button variant="outline" size="xs" @click="openPlan">View plan</Button>
           </div>
         </template>
         <template #empty="{ send }">

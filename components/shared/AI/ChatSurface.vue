@@ -54,7 +54,8 @@ import {
 import {listSkills, type SkillSummary} from '~/services/skills';
 import ScopePicker from '~/components/shared/AI/ScopePicker.vue';
 import ExpertPicker from '~/components/shared/AI/ExpertPicker.vue';
-import ActionStrip from '~/components/shared/AI/ActionStrip.vue';
+// ActionStrip is hidden for now; see the composer block below.
+// import ActionStrip from '~/components/shared/AI/ActionStrip.vue';
 import type {AiAction} from '~/services/vault';
 import {loadScopeCandidates, scopeIcons} from '~/components/shared/AI/scope';
 import {
@@ -72,6 +73,7 @@ import {
   type VaultDocument,
 } from '~/services/vault';
 import type { ResearchBrowserState } from '~/services/research-browser';
+import type { DeepTask } from '~/services/deepTask';
 import { isDesktop as isDesktopApp } from '~/utils/isDesktop';
 
 // ChatSurface is the single, reusable PractoAI chat — the whole conversational engine
@@ -148,6 +150,11 @@ const emit = defineEmits<{
   (e: 'proposalApproved', action?: AiActionResult | null): void;
   /** An action was undone from the strip; the host should refresh what showed it. */
   (e: 'actionUndone', action: AiAction): void;
+  /** The in-thread deep-research row was clicked; the host opens its workspace. */
+  (e: 'researchOpen', taskId: string): void;
+  /** The in-thread row polled the run; the host gets the snapshot it already paid
+   *  for, so a status strip elsewhere on the page needs no second poller. */
+  (e: 'researchUpdate', task: DeepTask): void;
 }>();
 
 // "Shared" modes share conversation history with the global sidebar and drive the
@@ -213,11 +220,18 @@ type DisplayAiMessage = AiMessage & {
 type DocumentGenerated = {
   role: 'document-generated'; documentId: string; title?: string; kind?: string; filename?: string;
 };
-type ChatMessage = DisplayAiMessage | ToolEvent | DocumentGenerated;
+// UI-only affordance card: a launched deep-research run, shown in the thread as one
+// row that reports what the run is doing and opens its workspace. The task itself is
+// a server-side row; only the pointer lives here, so the card survives a reload with
+// the branch tree and the conversation stays usable while the research runs.
+type ResearchTask = {
+  role: 'research-task'; taskId: string;
+};
+type ChatMessage = DisplayAiMessage | ToolEvent | DocumentGenerated | ResearchTask;
 
 // Affordance-card roles that are never part of the model's context or the saved
 // flat transcript (they live only in the UI / branch tree).
-const UI_ONLY_ROLES = ['document-generated'];
+const UI_ONLY_ROLES = ['document-generated', 'research-task'];
 
 // sha256 → resolved open/download URL for attachments in the open conversation. Blob
 // URLs for files sent this session; token URLs resolved from AiChatAttachments on reload.
@@ -1239,6 +1253,23 @@ function applyActionResult(action: AiActionResult) {
     });
     persistTree();
   }
+}
+
+/** Is this run already represented in the open thread? */
+function hasResearchCard(taskId: string): boolean {
+  return messages.value.some(m => m.role === 'research-task' && m.taskId === taskId);
+}
+
+/**
+ * Put a launched research run into the thread as a card. Called by the host page at
+ * launch, and again when a conversation is reopened whose task predates the card (or
+ * was loaded from the flat transcript, which cannot carry UI-only rows).
+ */
+function appendResearchCard(taskId: string) {
+  if (!taskId || hasResearchCard(taskId)) return;
+  branches.append({ role: 'research-task', taskId });
+  persistTree();
+  scrollToBottom(true);
 }
 
 // If the latest turn is a session-only failed/stopped placeholder, drop it before
@@ -2338,6 +2369,8 @@ onMounted(async () => {
 defineExpose({
   ask: askAbout,
   send: (text: string) => send(text),
+  appendResearchCard,
+  hasResearchCard,
   conversationId,
   loadConversation,
   newChat,
@@ -2515,6 +2548,17 @@ defineExpose({
             </div>
           </div>
 
+          <!-- Deep-research row: one line for a background run — what it is doing now
+               and a way into its workspace (lanes, evidence, report). Deliberately not
+               the whole card: the thread stays a conversation the user can keep
+               talking in while the research runs. -->
+          <SharedAIDeepTaskInlineRow
+            v-else-if="msg.role === 'research-task'"
+            :task-id="msg.taskId"
+            @open="id => emit('researchOpen', id)"
+            @update="task => emit('researchUpdate', task)"
+          />
+
           <!-- User -->
           <div v-else-if="msg.role === 'user'" class="group flex justify-end">
             <!-- Inline editor (editing this turn forks a new branch on save) -->
@@ -2658,11 +2702,12 @@ defineExpose({
       <div class="relative mx-auto flex w-full max-w-3xl flex-col gap-2">
         <!-- What the assistant changed in this conversation. Sits above the composer
              rather than in the transcript: it is the standing record of the thread,
-             not one more message in it. -->
-        <ActionStrip
+             not one more message in it.
+             HIDDEN for now — re-enable by uncommenting this block and the import. -->
+        <!-- <ActionStrip
             :conversation-id="conversationId"
             :refresh-key="actionsVersion"
-            @undone="onActionUndone"/>
+            @undone="onActionUndone"/> -->
 
         <!-- Host extension point just above the composer (e.g. the Word "including
              selected text" chip). Empty by default. -->

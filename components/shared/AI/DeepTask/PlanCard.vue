@@ -37,6 +37,7 @@ const INTENTS: { value: ResearchIntent; label: string; hint: string }[] = [
   { value: 'compare', label: 'Compare', hint: 'Compare authorities, documents, or facts on common criteria' },
   { value: 'catalogue', label: 'Catalogue', hint: 'Systematically inventory responsive material' },
   { value: 'summary', label: 'Summary', hint: 'Condense a defined source set without widening it' },
+  { value: 'current', label: 'Live web', hint: "Read what a regulator's or government site publishes now — the only lane that leaves the corpus" },
 ];
 
 function intentLabel(i: ResearchIntent): string {

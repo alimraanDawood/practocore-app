@@ -40,9 +40,14 @@ export interface DeepTaskStep {
 }
 
 /** What kind of research answers a question — it decides which tools the lane gets. */
+// `current` is the only lane that leaves the legal corpus: it reads the live web
+// (regulator and government sites, gazettes, announcements). It was missing here while
+// the backend had supported it for months, so nothing in the app could ask for a web
+// lane — and ResolveIntent silently rewrote the request to `case_law`, which searches
+// the judgment corpus instead.
 export type ResearchIntent =
   | 'statute' | 'case_law' | 'treatment' | 'firm_fact' | 'procedure'
-  | 'argument' | 'compare' | 'catalogue' | 'summary';
+  | 'argument' | 'compare' | 'catalogue' | 'summary' | 'current';
 
 /** A lane's position in the run. `thin` is distinct from `done`: the lane recorded
  * nothing and did not even report an absence, so reconcile re-dispatched it once. */
@@ -164,7 +169,10 @@ export interface SourceSpan {
 
 export interface DeepTask {
   id: string;
+  /** The run's objective, in full — a paragraph, not a heading. */
   instruction: string;
+  /** The planner's short name for the run; "" when it never wrote one. */
+  title: string;
   phase: DeepTaskPhase;
   label: string;
   progress: number;
@@ -227,6 +235,70 @@ const LIVE_PHASES: DeepTaskPhase[] = [
 
 export function isLivePhase(p: DeepTaskPhase): boolean {
   return LIVE_PHASES.includes(p);
+}
+
+// ── Stages ───────────────────────────────────────────────────────────────────
+// The run's phases collapsed into the four stages a reader cares about, in order.
+// A percentage tells someone how much is left; a stage tells them what is happening
+// to their question right now, which is what they actually ask.
+export const RESEARCH_STAGES: { label: string; phases: DeepTaskPhase[] }[] = [
+  { label: 'Planning', phases: ['pending', 'planning', 'plan_review'] },
+  { label: 'Researching', phases: ['gathering'] },
+  { label: 'Checking', phases: ['reconciling'] },
+  { label: 'Writing', phases: ['synthesising'] },
+];
+
+/**
+ * Which stage a phase sits in. `done` is past the last stage (every stage complete);
+ * a parked or failed run keeps the stage it stopped in, because "where did it get to"
+ * is the question a paused or failed run raises.
+ */
+export function researchStageIndex(p: DeepTaskPhase): number {
+  if (p === 'done') return RESEARCH_STAGES.length;
+  const i = RESEARCH_STAGES.findIndex(s => s.phases.includes(p));
+  return i >= 0 ? i : 0;
+}
+
+/**
+ * One present-tense line for a run, shared by the in-thread row and the composer
+ * strip so the two can never disagree about what is happening.
+ *
+ * While the lanes run it counts them: a phase label alone says nothing over the
+ * minutes when nine questions are moving in parallel, which is most of a run.
+ */
+export function researchStatusLine(task: DeepTask): string {
+  if (isLivePhase(task.phase)) {
+    if (task.control === 'cancel') return 'Stopping…';
+    if (task.control === 'pause') return 'Pausing…';
+  }
+  switch (task.phase) {
+    case 'error': return task.error || 'Research failed';
+    case 'cancelled': return 'Research cancelled';
+    case 'paused': return 'Paused — your progress is saved';
+    case 'plan_review': return 'Review the research questions';
+    case 'done': {
+      const n = task.findingsCount ?? 0;
+      return n ? `Report ready · ${n} finding${n === 1 ? '' : 's'}` : 'Report ready';
+    }
+  }
+  const lanes = task.subquestions ?? [];
+  if (task.phase === 'gathering' && lanes.length) {
+    const answered = lanes.filter(l => l.status !== 'pending' && l.status !== 'running').length;
+    return `Researching ${lanes.length} question${lanes.length === 1 ? '' : 's'} — ${answered} of ${lanes.length} answered`;
+  }
+  return phaseLabel(task.phase);
+}
+
+/** Elapsed wall time, as a stopwatch reads it: seconds, then minutes, then hours. */
+export function researchElapsed(task: DeepTask, now = Date.now()): string {
+  const from = Date.parse(task.created);
+  const to = isLivePhase(task.phase) ? now : Date.parse(task.updated);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return '';
+  const secs = Math.round((to - from) / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
 /** Human label for a phase, for badges/headers. */

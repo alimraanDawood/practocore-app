@@ -33,6 +33,13 @@ watch(() => props.agent.status, (status) => {
 }, { immediate: true });
 onBeforeUnmount(() => clearInterval(timer));
 
+// The question is the agent's brief, not its heading: a catalogue lane's can run to
+// eight clauses, and rendered in full it pushed the tabs — and every finding and
+// source under them — off the panel. Two lines by default, the rest on request, and
+// it re-collapses when the panel is pointed at a different agent.
+const questionOpen = ref(false);
+watch(() => props.agent.id, () => { questionOpen.value = false; });
+
 function sourceClick(citation: AiCitation, event: MouseEvent) {
   emit('source', citation, (event.currentTarget as HTMLElement).getBoundingClientRect());
 }
@@ -49,7 +56,18 @@ function sourceClick(citation: AiCitation, event: MouseEvent) {
         </div>
         <Button variant="ghost" size="icon" class="size-8" aria-label="Close agent inspector" @click="emit('close')">×</Button>
       </div>
-      <p class="mt-3 text-sm leading-6 text-muted-foreground">{{ agent.question }}</p>
+      <div class="mt-3">
+        <p
+          class="text-sm leading-6 text-muted-foreground"
+          :class="questionOpen ? '' : 'line-clamp-2'"
+        >{{ agent.question }}</p>
+        <button
+          type="button"
+          class="mt-1 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          :aria-expanded="questionOpen"
+          @click="questionOpen = !questionOpen"
+        >{{ questionOpen ? 'Show less' : 'Show the full question' }}</button>
+      </div>
     </header>
 
     <Tabs :default-value="defaultTab" class="flex min-h-0 flex-1 flex-col">

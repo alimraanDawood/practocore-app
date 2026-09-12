@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
+import type { Component } from 'vue';
 import {
-  ArrowLeft, ChevronDown, Clock3, Download,
-  History, Loader2, Pause, Play, Plus, Square, XCircle,
+  ArrowLeft, Check, ChevronDown, Clock3, Download, FileText, FolderSearch, GitCompare,
+  Globe, History, Landmark, Library, Loader2, Pause, Play, Plus, Route, Scale,
+  ShieldCheck, Square, Swords, XCircle,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import type { AiCitation } from '~/services/ai';
@@ -21,6 +23,8 @@ const emit = defineEmits<{ back: []; update: [task: DeepTask] }>();
 const { refresh: refreshAiUsage } = useAiUsage();
 
 const isDesktop = useMediaQuery('(min-width: 1024px)');
+// Phone-width layouts get a drawer instead of a dropdown.
+const isWideScreen = useMediaQuery('(min-width: 640px)');
 const task = ref<DeepTask | null>(null);
 const events = ref<ResearchEvent[]>([]);
 const findings = ref<ResearchFinding[]>([]);
@@ -121,17 +125,31 @@ async function control(action: 'pause' | 'cancel' | 'continue' | 'retry') {
 const amendment = ref('');
 const amendmentIntent = ref<ResearchIntent>('case_law');
 const amending = ref(false);
-const specialistOptions: { value: ResearchIntent; label: string }[] = [
-  { value: 'case_law', label: 'Research authorities' },
-  { value: 'argument', label: 'Build or challenge an argument' },
-  { value: 'compare', label: 'Compare authorities or facts' },
-  { value: 'catalogue', label: 'Catalogue responsive material' },
-  { value: 'summary', label: 'Summarise a source set' },
-  { value: 'treatment', label: 'Check whether authority is good law' },
-  { value: 'statute', label: 'Pin the governing statute' },
-  { value: 'procedure', label: 'Research procedure' },
-  { value: 'firm_fact', label: 'Research firm files' },
+const specialistOptions: { value: ResearchIntent; label: string; icon: Component }[] = [
+  // First, because it is the one an amendment most often needs and the one nothing
+  // else in the run can do: every other specialist is confined to the legal corpus.
+  { value: 'current', label: 'Check a website or regulator (live web)', icon: Globe },
+  { value: 'case_law', label: 'Research authorities', icon: Scale },
+  { value: 'argument', label: 'Build or challenge an argument', icon: Swords },
+  { value: 'compare', label: 'Compare authorities or facts', icon: GitCompare },
+  { value: 'catalogue', label: 'Catalogue responsive material', icon: Library },
+  { value: 'summary', label: 'Summarise a source set', icon: FileText },
+  { value: 'treatment', label: 'Check whether authority is good law', icon: ShieldCheck },
+  { value: 'statute', label: 'Pin the governing statute', icon: Landmark },
+  { value: 'procedure', label: 'Research procedure', icon: Route },
+  { value: 'firm_fact', label: 'Research firm files', icon: FolderSearch },
 ];
+
+const selectedSpecialist = computed(
+  () => specialistOptions.find(o => o.value === amendmentIntent.value) ?? specialistOptions[0],
+);
+// The picker is a Select on a pointer, a Drawer on a phone: ten long labels in a
+// native dropdown are unreadable on a small screen.
+const intentDrawerOpen = ref(false);
+function pickIntent(value: ResearchIntent) {
+  amendmentIntent.value = value;
+  intentDrawerOpen.value = false;
+}
 
 async function submitAmendment() {
   if (!task.value || !amendment.value.trim()) return;
@@ -245,9 +263,18 @@ function openSource(citation: AiCitation) {
           <template v-else-if="isDone || task.report">
             <section class="mx-auto max-w-4xl">
               <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <!-- The objective is a paragraph — often sixty words — so it is not a
+                     heading. When the planner named the run, that name is the heading
+                     and the objective reads underneath as what it is: the brief. With
+                     no name, the eyebrow carries the identity and the objective is set
+                     as body text rather than blown up to display size. -->
+                <div class="min-w-0 max-w-2xl">
                   <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Research report</p>
-                  <h1 class="ibm-plex-serif mt-1 text-3xl font-semibold tracking-tight">{{ task.instruction }}</h1>
+                  <h1 v-if="task.title" class="ibm-plex-serif mt-1 text-2xl font-semibold tracking-tight">{{ task.title }}</h1>
+                  <p
+                    class="text-muted-foreground"
+                    :class="task.title ? 'mt-1.5 text-sm' : 'ibm-plex-serif mt-1 text-base leading-relaxed text-foreground'"
+                  >{{ task.instruction }}</p>
                   <p v-if="showingOlderRevision" class="mt-2 text-xs text-amber-700">Viewing an earlier revision. The latest report is unchanged.</p>
                 </div>
                 <div class="flex gap-2">
@@ -290,9 +317,46 @@ function openSource(citation: AiCitation) {
                 <p class="mt-1 text-xs text-muted-foreground">Add a focused specialist. Existing findings and report versions stay in history.</p>
                 <textarea v-model="amendment" rows="3" class="mt-3 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring" placeholder="For example: argue against the limitation defence using the strongest contrary authorities…" />
                 <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <select v-model="amendmentIntent" class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring">
-                    <option v-for="option in specialistOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </select>
+                  <Select v-if="isWideScreen" v-model="amendmentIntent">
+                    <SelectTrigger class="w-full sm:w-[19rem]">
+                      <SelectValue placeholder="Choose a specialist" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="option in specialistOptions" :key="option.value" :value="option.value">
+                        <component :is="option.icon" class="size-4" />
+                        {{ option.label }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Drawer v-else v-model:open="intentDrawerOpen">
+                    <DrawerTrigger as-child>
+                      <button type="button" class="flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                        <span class="flex min-w-0 items-center gap-2">
+                          <component :is="selectedSpecialist.icon" class="size-4 shrink-0 text-muted-foreground" />
+                          <span class="truncate">{{ selectedSpecialist.label }}</span>
+                        </span>
+                        <ChevronDown class="size-4 shrink-0 opacity-50" />
+                      </button>
+                    </DrawerTrigger>
+                    <DrawerContent>
+                      <DrawerHeader class="text-left">
+                        <DrawerTitle>Choose a specialist</DrawerTitle>
+                        <DrawerDescription>What the new research agent should do.</DrawerDescription>
+                      </DrawerHeader>
+                      <div class="max-h-[60vh] overflow-y-auto px-4 pb-6">
+                        <button
+                          v-for="option in specialistOptions" :key="option.value" type="button"
+                          class="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left text-sm hover:bg-accent"
+                          :class="option.value === amendmentIntent ? 'bg-accent/60 font-medium' : ''"
+                          @click="pickIntent(option.value)">
+                          <component :is="option.icon" class="size-4 shrink-0 text-muted-foreground" />
+                          <span class="flex-1">{{ option.label }}</span>
+                          <Check v-if="option.value === amendmentIntent" class="size-4 shrink-0 text-primary" />
+                        </button>
+                      </div>
+                    </DrawerContent>
+                  </Drawer>
                   <Button size="sm" :disabled="amending || !amendment.trim()" @click="submitAmendment"><Loader2 v-if="amending" class="mr-1 size-3.5 animate-spin" /> Add research agent</Button>
                 </div>
               </section>
